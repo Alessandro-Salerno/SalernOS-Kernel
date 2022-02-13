@@ -56,16 +56,3 @@ link:
 setup:
 	@mkdir $(BUILDDIR)
 	@mkdir $(OBJDIR)
-
-buildimg:
-	dd if=/dev/zero of=$(BUILDDIR)/$(OSNAME).img bs=512 count=93750
-	mformat -i $(BUILDDIR)/$(OSNAME).img -f 1440 ::
-	mmd -i 	   $(BUILDDIR)/$(OSNAME).img ::/EFI
-	mmd -i 	   $(BUILDDIR)/$(OSNAME).img ::/EFI/BOOT
-	mmd -i     $(BUILDDIR)/$(OSNAME).img ::/openbit
-	mmd -i 	   $(BUILDDIR)/$(OSNAME).img ::/openbit/bin
-	mmd -i 	   $(BUILDDIR)/$(OSNAME).img ::/openbit/assets
-	mcopy -i   $(BUILDDIR)/$(OSNAME).img $(BOOTEFI) ::/EFI/BOOT
-	mcopy -i   $(BUILDDIR)/$(OSNAME).img startup.nsh ::
-	mcopy -i   $(BUILDDIR)/$(OSNAME).img $(BUILDDIR)/kernel.elf ::openbit/bin
-	mcopy -i   $(BUILDDIR)/$(OSNAME).img $(BUILDDIR)/kernelfont.psf ::openbit/assets
