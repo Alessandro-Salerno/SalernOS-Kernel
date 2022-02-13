@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "bmp.h": "c",
+        "dispatcher.h": "c",
+        "palloc.h": "c",
+        "paging.h": "c",
+        "kernelpanic.h": "c",
+        "textrenderer.h": "c",
+        "pic.h": "c",
+        "keyboard.h": "c",
+        "kernelshell.h": "c",
+        "efimem.h": "c",
+        "syscalls.h": "c",
+        "idt.h": "c"
+    }
+}
