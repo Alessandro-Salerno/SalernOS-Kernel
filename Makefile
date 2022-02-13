@@ -55,7 +55,6 @@ link:
 
 setup:
 	@mkdir $(BUILDDIR)
-	@mkdir $(SRCDIR)
 	@mkdir $(OBJDIR)
 
 buildimg:

@@ -25,7 +25,7 @@
           void              kernel_memory_init                  (meminfo_t __meminfo);
           void              kernel_memory_get_sizes             (uint64_t* __memsize, uint64_t* __usablemem, uint64_t* __bootmem);
           void              kernel_memory_get_largest_segment   (uint64_t* __sz, void** __seg);
-          void              kernel_memory_set                   (void* __buff, const uint64_t __buffsize, const uint8_t __val);
+          void              kernel_memory_set                   (void* __buff, const uint64_t __BUFFSIZE, const uint8_t __VAL);
           efimemdesc_t*     kernel_memory_get_map_entry         (const uint64_t __idx);
     const int               kernel_memory_get_map_entries       ();
 
