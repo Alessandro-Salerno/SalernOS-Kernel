@@ -54,10 +54,9 @@ void kernel_idt_set_offset(idtdescent_t* __ent, uint64_t __offset) {
 }
 
 uint64_t kernel_idt_get_offset(idtdescent_t* __ent) {
-    uint64_t _offset = 0x0000000000000000;
-    _offset |= (uint64_t)(__ent->_OffsetZero);
-    _offset |= (uint64_t)(__ent->_OffsetOne) << 16;
-    _offset |= (uint64_t)(__ent->_OffsetTwo) << 32;
-
-    return _offset;
+    return (uint64_t) (
+        (uint64_t)(__ent->_OffsetZero)      |
+        (uint64_t)(__ent->_OffsetOne) << 16 |
+        (uint64_t)(__ent->_OffsetTwo) << 32
+    );
 }
