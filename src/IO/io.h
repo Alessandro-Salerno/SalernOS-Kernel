@@ -1,8 +1,8 @@
 #ifndef SALERNOS_CORE_KERNEL_IO
 #define SALERNOS_CORE_KERNEL_IO
 
-    #include "kerntypes.h"
-    
+    #include <kerntypes.h>
+
 
     /**************************************************************************************************
     RET TYPE        FUNCTION NAME       FUNCTION ARGUMENTS

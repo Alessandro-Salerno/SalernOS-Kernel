@@ -1,5 +1,5 @@
 #include "Interrupts/pic.h"
-#include "io.h"
+#include "IO/io.h"
 
 
 void kernel_interrupts_pic_remap() {

@@ -18,7 +18,7 @@
 #include "Interrupts/idt.h"                     /*   Includes the Kernel's definition of the IDT        */
 #include "Interrupts/pic.h"                     /*   Includes the basic Kernel PIC Driver               */
 #include "GDT/gdt.h"                            /*   Includes the Kernel's definition of the GTD        */
-#include "io.h"                                 /*   Includes the basic Kernel I/O functions            */
+#include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
 // Syscall includes
 #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
