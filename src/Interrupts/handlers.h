@@ -13,9 +13,9 @@
     /********************************************************************************************
          RET TYPE        FUNCTION NAME                          FUNCTION ARGUMENTS
     ********************************************************************************************/
-    ISR  void            kernel_interrupt_handlers_pgfault      (struct InterruptFrame* __frame);
-    ISR  void            kernel_interrupt_handlers_dfault       (struct InterruptFrame* __frame);
-    ISR  void            kernel_interrupt_handlers_gpfault      (struct InterruptFrame* __frame);
-    ISR  void            kernel_interrupt_handlers_kbhit        (struct InterruptFrame* __frame);
+    ISR  void            kernel_interrupt_handlers_pgfault      (intframe_t* __frame);
+    ISR  void            kernel_interrupt_handlers_dfault       (intframe_t* __frame);
+    ISR  void            kernel_interrupt_handlers_gpfault      (intframe_t* __frame);
+    ISR  void            kernel_interrupt_handlers_kbhit        (intframe_t* __frame);
 
 #endif

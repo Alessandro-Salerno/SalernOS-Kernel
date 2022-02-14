@@ -6,19 +6,19 @@
 #include "io.h"
 
 
-void kernel_interrupt_handlers_pgfault(struct InterruptFrame* __frame) {
+void kernel_interrupt_handlers_pgfault(intframe_t* __frame) {
     kernel_panic_throw("Page Fault Detected!");
 }
 
-void kernel_interrupt_handlers_dfault(struct InterruptFrame* __frame) {
+void kernel_interrupt_handlers_dfault(intframe_t* __frame) {
     kernel_panic_throw("Double Fault Detected!");
 }
 
-void kernel_interrupt_handlers_gpfault(struct InterruptFrame* __frame) {
+void kernel_interrupt_handlers_gpfault(intframe_t* __frame) {
     kernel_panic_throw("General Protection Fault Detected!");
 }
 
-void kernel_interrupt_handlers_kbhit(struct InterruptFrame* __frame) {
+void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
     uint64_t _scode = kernel_io_in(0x60);
 
     kernel_io_keyboard_handle_mods(_scode);
