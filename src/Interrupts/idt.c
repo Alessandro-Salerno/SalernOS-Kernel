@@ -11,36 +11,25 @@ static idtr_t idtr;
 static bool_t idtInitialized;
 
 
+static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
+    idtdescent_t* _handler        = (idtdescent_t*)(idtr._Offset + __offset * sizeof(idtdescent_t));
+    _handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
+    _handler->_Selector           = 0x08;
+
+    kernel_idt_set_offset(_handler, (uint64_t)(__isr));
+}
+
 void kernel_idt_initialize() {
     kernel_panic_assert(!idtInitialized, IDT_DINIT);
 
     idtr._Limit  = 0x0fff;
     idtr._Offset = (uint64_t)(kernel_allocator_allocate_page()); 
-
-    idtdescent_t* _pgfault_handler = (idtdescent_t*)(idtr._Offset + 0xE * sizeof(idtdescent_t));
-    kernel_idt_set_offset(_pgfault_handler, (uint64_t)(kernel_interrupt_handlers_pgfault));
-    _pgfault_handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
-    _pgfault_handler->_Selector           = 0x08;
-
-    idtdescent_t* _dfault_handler = (idtdescent_t*)(idtr._Offset + 0x8 * sizeof(idtdescent_t));
-    kernel_idt_set_offset(_dfault_handler, (uint64_t)(kernel_interrupt_handlers_dfault));
-    _dfault_handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
-    _dfault_handler->_Selector           = 0x08;
-
-    idtdescent_t* _gpfault_handler = (idtdescent_t*)(idtr._Offset + 0xD * sizeof(idtdescent_t));
-    kernel_idt_set_offset(_gpfault_handler, (uint64_t)(kernel_interrupt_handlers_gpfault));
-    _gpfault_handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
-    _gpfault_handler->_Selector           = 0x08;
-
-    idtdescent_t* _kbhit_handler = (idtdescent_t*)(idtr._Offset + 0x21 * sizeof(idtdescent_t));
-    kernel_idt_set_offset(_kbhit_handler, (uint64_t)(kernel_interrupt_handlers_kbhit));
-    _kbhit_handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
-    _kbhit_handler->_Selector           = 0x08;
-
-    idtdescent_t* _syscall_handler = (idtdescent_t*)(idtr._Offset + 0x81 * sizeof(idtdescent_t));
-    kernel_idt_set_offset(_syscall_handler, (uint64_t)(kernel_syscall_dispatch));
-    _syscall_handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
-    _syscall_handler->_Selector           = 0x08;
+    
+    idtdescent_t* _pgfault_handler = __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);
+    idtdescent_t* _dfault_handler  = __create_entry__(0x08, kernel_interrupt_handlers_dfault);
+    idtdescent_t* _gpfault_handler = __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);
+    idtdescent_t* _kbhit_handler   = __create_entry__(0x21, kernel_interrupt_handlers_kbhit);
+    idtdescent_t* _syscall_handler = __create_entry__(0x81, kernel_syscall_dispatch);
 
     asm ("lidt %0" : : "m" (idtr));
 
