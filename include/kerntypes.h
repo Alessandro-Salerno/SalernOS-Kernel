@@ -1,5 +1,5 @@
-#ifndef SALERNOS_CORE_KERNEL_TYPES
-#define SALERNOS_CORE_KERNEL_TYPES
+#ifndef SALERNOS_INC_KERNEL_TYPES
+#define SALERNOS_INC_KERNEL_TYPES
 
     #include <stddef.h>
     #include <stdint.h>

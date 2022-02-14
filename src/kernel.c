@@ -1,52 +1,7 @@
-// User Input includes
-#include "User/Input/Keyboard/keyboard.h"       /*   Includes the basic Kernel Keyboard Driver          */
+#include <kerninc.h>
 
-// User Output includes
-#include "User/Output/Text/textrenderer.h"      /*   Includes the basic Kernel Text Renderer            */
-#include "User/Output/Text/kernelshell.h"       /*   Includes the basic Kernel Text Formatter           */
-#include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
-#include "User/Output/Text/cstr.h"              /*   Includes the basic Kernel String Utilities         */
-
-// Memory includes
-#include "Memory/efimem.h"                      /*   Includes the Kernel EFI Memory Map Interface       */
-#include "Memory/palloc.h"                      /*   Includes the Kernel Page Frame Allocator           */
-#include "Memory/paging.h"                      /*   Includes the Kernel Page Table Manager             */
-#include "Memory/bmp.h"                         /*   Includes the Kernel's definition of a Bitmap       */
-
-// System includes
-#include "Interrupts/handlers.h"                /*   Includes the Kernel's Interrupt Service Routines   */
-#include "Interrupts/idt.h"                     /*   Includes the Kernel's definition of the IDT        */
-#include "Interrupts/pic.h"                     /*   Includes the basic Kernel PIC Driver               */
-#include "GDT/gdt.h"                            /*   Includes the Kernel's definition of the GTD        */
-#include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
-
-// Syscall includes
-#include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
-#include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
-
-// Macros and constants
-#define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-#define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 50, 255)
-
-
-typedef struct BootInfo {
-    framebuffer_t* _Framebuffer;
-    bmpfont_t*     _Font;
-    meminfo_t      _Memory;
-
-    uint8_t        _SEBMajorVersion;
-    uint16_t       _SEBMinorVersion;
-} boot_t;
-
-extern uint64_t _KERNEL_START,
-                _KERNEL_END;
 
 void kernel_main(boot_t __bootinfo) {
-    gdtdesc_t _gdt_desc = (gdtdesc_t) {
-        ._Size   = sizeof(gdt_t) - 1,
-        ._Offset = (uint64_t)(&gdt)
-    };
-
     framebuffer_t* _buff = __bootinfo._Framebuffer;
     bmpfont_t*     _font = __bootinfo._Font;
 
@@ -59,52 +14,11 @@ void kernel_main(boot_t __bootinfo) {
              _used_mem,
              _unusable_mem;
 
-    kernel_kdd_fbo_bind(_buff);
-
-    kernel_text_initialize(
-        FGCOLOR, BGCOLOR,
-        0, 0, _font
-    );
-
-    kernel_shell_printf("DEBUG: Initializing GDT...\n");
-    kernel_gdt_load(&_gdt_desc);
-
-    kernel_shell_printf("DEBUG: Initializing EFI Memory Map...\n");
-    kernel_memory_init(__bootinfo._Memory);
+    kernel_kutils_kdd_setup(__bootinfo);
+    kernel_kutils_gdt_setup();
+    kernel_kutils_mem_setup(__bootinfo);
+    kernel_kutils_int_setup();
     kernel_memory_get_sizes(&_mem_size, &_usable_mem, NULL);
-
-    kernel_shell_printf("DEBUG: Initializing Kernel Page Frame Allocator...\n");
-    kernel_allocator_initialize();
-
-    kernel_shell_printf("DEBUG: Locking Kernel Pages...\n");
-    uint64_t _kernel_size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
-    uint64_t _kernel_pages = (uint64_t)(_kernel_size) / 4096 + 1;
-    kernel_allocator_lock_pages(&_KERNEL_START, _kernel_pages);
-
-    kernel_shell_printf("DEBUG: Initializing Page Table Manager...\n");
-    pgtable_t* _lvl4 = (pgtable_t*)(kernel_allocator_allocate_page());
-    kernel_memory_set((void*)(_lvl4), 4096, 0);
-
-    pgtm_t _page_table_manager = (pgtm_t) { ._PML4Address = _lvl4  };
-
-    for (uint64_t t = 0; t < _mem_size; t += 4096)
-        kernel_paging_map_address(&_page_table_manager, (void*)(t), (void*)(t));
-
-    uint64_t _fbbase = (uint64_t)(_buff->_BaseAddress);
-    size_t   _fbsize = _buff->_BufferSize + 4096;
-
-    for (uint64_t t = _fbbase; t < _fbbase + _fbsize; t += 4096)
-        kernel_paging_map_address(&_page_table_manager, (void*)(t), (void*)(t));
-
-    asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
-    
-    kernel_shell_printf("DEBUG: Locking Font and Framebuffer Pages...\n");
-    kernel_allocator_lock_pages((void*)(_fbbase), _fbsize / 4096 + 1);
-    kernel_allocator_lock_pages((void*)(_font->_Buffer), (_font->_Header->_CharSize * 256) / 4096);
-
-    kernel_shell_printf("DEBUG: Initializing Interrupts...\n");
-    kernel_idt_initialize();
-    kernel_interrupts_pic_remap();
 
     kernel_shell_printf("DEBUG: Testing...\n");
     void*      _test_page    = kernel_allocator_allocate_page();
@@ -135,9 +49,9 @@ void kernel_main(boot_t __bootinfo) {
     kernel_shell_printf("Reserved Memory: %u bytes\n", _unusable_mem);
     kernel_shell_printf("Test Page Address: %u\n", (uint64_t)(_test_page));
     kernel_shell_printf("Page Indexer Test: %d-%d-%d-%d\n\n\n", _indexer_test._PageIndex,
-                                                            _indexer_test._PageTableIndex,
-                                                            _indexer_test._PageDirectoryIndex,
-                                                            _indexer_test._PageDirectoryPointerIndex);
+                                                                _indexer_test._PageTableIndex,
+                                                                _indexer_test._PageDirectoryIndex,
+                                                                _indexer_test._PageDirectoryPointerIndex);
 
     // What follows is just debug code
     // This will be removed in a later version
