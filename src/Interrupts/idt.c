@@ -22,7 +22,7 @@ static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
 void kernel_idt_initialize() {
     kernel_panic_assert(!idtInitialized, IDT_DINIT);
 
-    idtr._Limit  = 0x0fff;
+    idtr._Limit  = 0x1000 - 1;
     idtr._Offset = (uint64_t)(kernel_allocator_allocate_page()); 
     
     idtdescent_t* _pgfault_handler = __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);
