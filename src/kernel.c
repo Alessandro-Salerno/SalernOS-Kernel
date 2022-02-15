@@ -53,6 +53,8 @@ void kernel_main(boot_t __bootinfo) {
                                                                 _indexer_test._PageDirectoryIndex,
                                                                 _indexer_test._PageDirectoryPointerIndex);
 
+    kernel_shell_printf("Kernel Ready!\n\n!");
+    
     // What follows is just debug code
     // This will be removed in a later version
     uint8_t _kcode, _nkcode, _ascii;
