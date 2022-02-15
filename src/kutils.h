@@ -22,9 +22,12 @@
     extern uint64_t _KERNEL_START,
                     _KERNEL_END;
 
-    void kernel_kutils_kdd_setup(boot_t __bootinfo);
-    void kernel_kutils_gdt_setup();
-    void kernel_kutils_mem_setup(boot_t __bootinfo);
-    void kernel_kutils_int_setup();
+    /*****************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    *****************************************************************/
+    void            kernel_kutils_kdd_setup       (boot_t __bootinfo);
+    void            kernel_kutils_gdt_setup       ();
+    void            kernel_kutils_mem_setup       (boot_t __bootinfo);
+    void            kernel_kutils_int_setup       ();
 
 #endif
