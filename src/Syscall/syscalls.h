@@ -3,7 +3,7 @@
 
     #include "kerntypes.h"
 
-    #define SYSCALL_PRINT_STR 1
+    #define SYSCALL_PRINT_STR 0
 
 
     /***********************************************************************
