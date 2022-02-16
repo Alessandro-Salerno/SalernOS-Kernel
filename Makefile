@@ -12,10 +12,10 @@ CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
 
-SRCDIR 	 := src
-OBJDIR 	 := lib
-BUILDDIR  = bin
-BOOTEFI  := $(GNUEFI)/x86_64/bootloader/main.efi
+SRCDIR 	 = src
+OBJDIR 	 = lib
+BUILDDIR = bin
+BOOTEFI  = $(GNUEFI)/x86_64/bootloader/main.efi
 
 rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 
