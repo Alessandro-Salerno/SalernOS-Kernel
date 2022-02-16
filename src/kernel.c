@@ -53,7 +53,7 @@ void kernel_main(boot_t __bootinfo) {
                                                                 _indexer_test._PageDirectoryIndex,
                                                                 _indexer_test._PageDirectoryPointerIndex);
 
-    kernel_shell_printf("Kernel Ready!\n\n!");
+    kernel_shell_printf("Kernel Ready [16 Feb 2022 H2]!\n\n");
     
     // What follows is just debug code
     // This will be removed in a later version

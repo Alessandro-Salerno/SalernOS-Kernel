@@ -8,11 +8,11 @@ static framebuffer_t* boundFBO;
 static uint32_t* __kdd_pxptr_get__(uint64_t __x, uint64_t __y) {
     SOFTASSERT(boundFBO != NULL, NULL);
     
-    return (uint32_t*) (
+    return (uint32_t*) {
         (__x * boundFBO->_BytesPerPixel                               ) +
         (__y * boundFBO->_BytesPerPixel * boundFBO->_PixelsPerScanLine) +
         boundFBO->_BaseAddress
-    );
+    };
 }
 
 void kernel_kdd_fbo_bind(framebuffer_t* __fbo) {

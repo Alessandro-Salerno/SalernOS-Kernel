@@ -22,14 +22,12 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
 }
 
 pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
-    pgmapidx_t _indexer = (pgmapidx_t) {
+    return (pgmapidx_t) {
         ._PageDirectoryPointerIndex = (__virtaddr >> 39) & 0x1ff,
         ._PageDirectoryIndex        = (__virtaddr >> 30) & 0x1ff,
         ._PageTableIndex            = (__virtaddr >> 21) & 0x1ff,
         ._PageIndex                 = (__virtaddr >> 12) & 0x1ff
     };
-
-    return _indexer;
 }
 
 void kernel_paging_map_address(pgtm_t* __manager, void* __virtaddr, void* __physaddr) {
