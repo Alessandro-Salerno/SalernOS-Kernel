@@ -45,11 +45,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
         ._PML4Address = _lvl4
     };
 
-    for (uint64_t t = 0; t < _mem_size; t += 4096)
-        kernel_paging_map_address(&_page_table_manager, (void*)(t), (void*)(t));
-
-    for (uint64_t t = _fbbase; t < _fbbase + _fbsize; t += 4096)
-        kernel_paging_map_address(&_page_table_manager, (void*)(t), (void*)(t));
+    kernel_paging_map_addresses(&_page_table_manager, (void*)(0), _mem_size);
+    kernel_paging_map_addresses(&_page_table_manager, (void*)(_fbbase), _fbsize);
 
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     

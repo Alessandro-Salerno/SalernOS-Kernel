@@ -39,5 +39,6 @@
     *****************************************************************************************************/
     pgmapidx_t      kernel_paging_index           (uint64_t __virtaddr);
     void            kernel_paging_map_address     (pgtm_t* __manager, void* __virtaddr, void* __physaddr);
+    void            kernel_paging_map_addresses   (pgtm_t* __manager, void* __base, size_t __sz);
 
 #endif

@@ -44,3 +44,8 @@ void kernel_paging_map_address(pgtm_t* __manager, void* __virtaddr, void* __phys
     
     _page_table->_Entries[_indexer._PageIndex] = _entry;
 }
+
+void kernel_paging_map_addresses(pgtm_t* __manager, void* __base, size_t __sz) {
+     for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz; _addr += 4096)
+        kernel_paging_map_address(__manager, (void*)(_addr), (void*)(_addr));
+}
