@@ -1,7 +1,5 @@
 OSNAME 	= SalernOS
 
-GNUEFI 	= ../gnu-efi
-OVMFDIR = ../OVMFbin
 LDS 	= kernel.ld
 CC 		= gcc
 ASMC 	= nasm
@@ -12,26 +10,28 @@ CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
 
+INCDIR   = include
 SRCDIR 	 = src
 OBJDIR 	 = lib
 BUILDDIR = bin
-BOOTEFI  = $(GNUEFI)/x86_64/bootloader/main.efi
 
-rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
 
-SRC    = $(call rwildcard,$(SRCDIR),*.c)          
-ASMSRC = $(call rwildcard,$(SRCDIR),*.asm)
+INC    = $(call rwildcard, $(INCDIR), *.h)
+SRC    = $(call rwildcard, $(SRCDIR), *.c)
+ASMSRC = $(call rwildcard, $(SRCDIR), *.asm)
 OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRC))
 OBJS  += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/%_asm.o, $(ASMSRC)) 
 DIRS   = $(wildcard $(SRCDIR)/*)
 
+
 kernel: $(OBJS) link
+
 
 $(OBJDIR)/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
 	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
 	@ mkdir -p $(@D)
 	$(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
-
 
 $(OBJDIR)/Syscall/%.o: $(SRCDIR)/Syscall/%.c
 	@ echo !==== COMPILING UNOPTIMIZED $^
@@ -48,10 +48,11 @@ $(OBJDIR)/%_asm.o: $(SRCDIR)/%.asm
 	@ mkdir -p $(@D)
 	$(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@
 
-	
+
 link:
 	@ echo !==== LINKING
 	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
+
 
 setup:
 	@mkdir $(BUILDDIR)
