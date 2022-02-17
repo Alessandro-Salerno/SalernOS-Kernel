@@ -6,8 +6,8 @@
     #include "Memory/efimem.h"
 
     // Macros and constants
-    #define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-    #define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 50, 255)
+    #define FGCOLOR kernel_kdd_pxcolor_translate(255, 200, 0, 255)
+    #define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 
 
     typedef struct BootInfo {

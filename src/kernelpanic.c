@@ -6,7 +6,7 @@
 void kernel_panic_throw(const char* __message) {
     kernel_text_reinitialize(
         kernel_kdd_pxcolor_translate(255, 255, 255, 255),
-        kernel_kdd_pxcolor_translate(45, 0, 0, 255),
+        kernel_kdd_pxcolor_translate(47, 1, 97, 255),
         0, 0
     );
     
