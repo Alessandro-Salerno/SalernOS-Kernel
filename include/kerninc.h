@@ -8,7 +8,6 @@
     #include "User/Output/Text/textrenderer.h"      /*   Includes the basic Kernel Text Renderer            */
     #include "User/Output/Text/kernelshell.h"       /*   Includes the basic Kernel Text Formatter           */
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
-    #include "User/Output/Text/cstr.h"              /*   Includes the basic Kernel String Utilities         */
 
     // Memory includes
     #include "Memory/efimem.h"                      /*   Includes the Kernel EFI Memory Map Interface       */
