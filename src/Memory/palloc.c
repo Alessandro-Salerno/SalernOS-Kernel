@@ -1,5 +1,6 @@
 #include "Memory/palloc.h"
 #include "kernelpanic.h"
+#include <kmem.h>
 
 #define PALLOC_FAULT "Page Allocator Fault:\nAllocator Function called before initialization."
 #define PALLOC_DBMP  "Page Allocator Fault:\nAllocator tried to reinitialize page bitmap."
@@ -57,7 +58,7 @@ static void __unreserve_pages__(void* __address, uint64_t __pagecount) {
 static void __init__bitmap__() {
     kernel_panic_assert(pallocInitialized == 1, PALLOC_DBMP);
     
-    kernel_memory_set(BMPSEG, BMPSEGSZ, 0);
+    memset(BMPSEG, BMPSEGSZ, 0);
 
     bitmap = (bmp_t) {
         ._Size = freeMemory / 4096 / 8 + 1,

@@ -74,29 +74,6 @@ void kernel_memory_get_largest_segment(uint64_t* __sz, void** __seg) {
     ARGRET(__seg, LARGEST_MEM_SEG);
 }
 
-void kernel_memory_set(void* __buff, uint64_t __buffsize, uint8_t __val) {
-    kernel_panic_assert(memoryInitialized, MEM_OPNINIT);
-    __uint128_t _128bit_val = __val;
-
-    if (__buffsize < 16) {
-        for (uint8_t _i = 0; _i < __buffsize; _i++)
-            *(uint8_t*)((uint64_t)(__buff) + _i) = __val;
-        
-        return;
-    }
-
-    if (__val != 0) {
-        for (uint8_t _i = 8; _i < 128; _i += 8)
-            _128bit_val |= (__uint128_t)(__val) << _i;
-    }
-
-    for (uint64_t _i = 0; _i < __buffsize; _i += 16)
-        *(__uint128_t*)((uint64_t)(__buff) + _i) = _128bit_val;
-
-    for (uint64_t _i = __buffsize - (__buffsize % 16); _i < __buffsize; _i++)
-        *(uint8_t*)((uint64_t)(__buff) + _i) = _128bit_val;
-}
-
 const int kernel_memory_get_map_entries() {
     kernel_panic_assert(memoryInitialized, MEM_OPNINIT);
     return MEMORY_MAP_ENTRIES;

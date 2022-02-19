@@ -1,4 +1,5 @@
 #include <kerninc.h>
+#include <kmem.h>
 
 
 void kernel_kutils_kdd_setup(boot_t __bootinfo) {
@@ -39,7 +40,7 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
 
     kernel_shell_printf("DEBUG: Initializing Page Table Manager...\n");
     pgtable_t* _lvl4 = (pgtable_t*)(kernel_allocator_allocate_page());
-    kernel_memory_set((void*)(_lvl4), 4096, 0);
+    memset((void*)(_lvl4), 4096, 0);
 
     pgtm_t _page_table_manager = (pgtm_t) { 
         ._PML4Address = _lvl4

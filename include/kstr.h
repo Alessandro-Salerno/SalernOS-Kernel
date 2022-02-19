@@ -5,7 +5,7 @@
 
 
     static char uintOutput[24];
-    const char* uitoa(uint64_t __val) {
+    static const char* uitoa(uint64_t __val) {
         uint64_t _size_test = 10;
         uint8_t  _size      = 0;
         uint8_t  _idx       = 0;
@@ -31,7 +31,7 @@
     }
 
     static char intOutput[24];
-    const char* itoa(int64_t __val) {
+    static const char* itoa(int64_t __val) {
         uint64_t _size_test   = 10;
         uint8_t  _size        = 0;
         uint8_t  _idx         = 0;
