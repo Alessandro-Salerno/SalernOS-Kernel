@@ -16,7 +16,7 @@ static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
     _handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
     _handler->_Selector           = 0x08;
 
-    kernel_idt_set_offset(_handler, (uint64_t)(__isr));
+    kernel_idt_offset_set(_handler, (uint64_t)(__isr));
 }
 
 void kernel_idt_initialize() {
@@ -36,13 +36,13 @@ void kernel_idt_initialize() {
     idtInitialized = 1;
 }
 
-void kernel_idt_set_offset(idtdescent_t* __ent, uint64_t __offset) {
+void kernel_idt_offset_set(idtdescent_t* __ent, uint64_t __offset) {
     __ent->_OffsetZero = (uint16_t)(__offset  & 0x000000000000ffff);
     __ent->_OffsetOne  = (uint16_t)((__offset & 0x00000000ffff0000) >> 16);
     __ent->_OffsetTwo  = (uint32_t)((__offset & 0xffffffff00000000) >> 32);
 }
 
-uint64_t kernel_idt_get_offset(idtdescent_t* __ent) {
+uint64_t kernel_idt_offset_get(idtdescent_t* __ent) {
     return (uint64_t) {
         (uint64_t)(__ent->_OffsetZero)      |
         (uint64_t)(__ent->_OffsetOne) << 16 |
