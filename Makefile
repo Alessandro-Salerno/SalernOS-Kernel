@@ -10,14 +10,12 @@ CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
 
-INCDIR   = include
 SRCDIR 	 = src
 OBJDIR 	 = obj
 BUILDDIR = bin
 
 rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
 
-INC    = $(call rwildcard, $(INCDIR), *.h)
 SRC    = $(call rwildcard, $(SRCDIR), *.c)
 ASMSRC = $(call rwildcard, $(SRCDIR), *.asm)
 OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRC))
@@ -26,7 +24,6 @@ DIRS   = $(wildcard $(SRCDIR)/*)
 
 
 kernel: $(OBJS) link
-
 
 $(OBJDIR)/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
 	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
