@@ -18,7 +18,7 @@
     RET TYPE        FUNCTION NAME                       FUNCTION ARGUMENTS
     **********************************************************************/
     void            kernel_interrupts_pic_remap         ();
-    void            kernel_interrupts_pic_end_master    ();
-    void            kernel_interrupts_pic_end_slave     ();
+    void            kernel_interrupts_pic_master_end    ();
+    void            kernel_interrupts_pic_slave_end     ();
 
 #endif
