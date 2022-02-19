@@ -71,15 +71,19 @@ static void __init__bitmap__() {
 
 void kernel_allocator_initialize() {
     SOFTASSERT(pallocInitialized == 0, RETVOID);
-    
-    kernel_memory_get_sizes(&freeMemory, NULL, NULL);
-    kernel_memory_get_largest_segment(&BMPSEGSZ, &BMPSEG);
 
-    pallocInitialized = 1;
+    // Temporary code
+    memseg_t  _bmpseg;
+    meminfo_t _meminfo;
+    kernel_mmap_info_get(&freeMemory, NULL, &_bmpseg, &_meminfo);
+    BMPSEG   = _bmpseg._Segment;
+    BMPSEGSZ = _bmpseg._Size;
+
+    pallocInitialized = TRUE;
     __init__bitmap__();
     
-    for (uint64_t _i = 0; _i < kernel_memory_get_map_entries(); _i++) {
-        efimemdesc_t* _mem_desc = kernel_memory_get_map_entry(_i);
+    for (uint64_t _i = 0; _i < _meminfo._MemoryMapSize / _meminfo._DescriptorSize; _i++) {
+        efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 
         if (_mem_desc->_Type != 7)
             __reserve_pages__(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 

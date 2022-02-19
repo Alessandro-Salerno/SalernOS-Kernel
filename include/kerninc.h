@@ -10,9 +10,9 @@
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
 
     // Memory includes
-    #include "Memory/efimem.h"                      /*   Includes the Kernel EFI Memory Map Interface       */
     #include "Memory/palloc.h"                      /*   Includes the Kernel Page Frame Allocator           */
     #include "Memory/paging.h"                      /*   Includes the Kernel Page Table Manager             */
+    #include "Memory/mmap.h"                        /*   Includes the Kernel EFI Memory Map Interface       */
     #include "Memory/bmp.h"                         /*   Includes the Kernel's definition of a Bitmap       */
 
     // System includes

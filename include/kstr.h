@@ -38,7 +38,7 @@
         uint8_t  _is_negative = 0;
 
         if (__val < 0) {
-            _is_negative = 1;
+            _is_negative = TRUE;
             __val *= -1;
             intOutput[0] = '-';
         }

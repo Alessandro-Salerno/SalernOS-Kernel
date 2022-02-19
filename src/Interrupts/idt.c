@@ -33,7 +33,7 @@ void kernel_idt_initialize() {
 
     asm ("lidt %0" : : "m" (idtr));
 
-    idtInitialized = 1;
+    idtInitialized = TRUE;
 }
 
 void kernel_idt_offset_set(idtdescent_t* __ent, uint64_t __offset) {

@@ -13,7 +13,7 @@ void kernel_io_keyboard_mods_handle(uint8_t __scancode) {
     switch (keyboardScancoide) {
         case KEY_LSHIFT:
         case KEY_RSHIFT:
-            isShiftPressed = 1;
+            isShiftPressed = TRUE;
             break;
         
         case KEY_LSHIFT + 0x80:

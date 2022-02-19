@@ -18,7 +18,7 @@ void kernel_main(boot_t __bootinfo) {
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
     kernel_kutils_int_setup();
-    kernel_memory_get_sizes(&_mem_size, &_usable_mem, NULL);
+    kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kernel_shell_printf("DEBUG: Testing...\n");
     void*      _test_page    = kernel_allocator_allocate_page();

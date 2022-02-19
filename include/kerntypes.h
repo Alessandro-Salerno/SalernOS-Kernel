@@ -4,6 +4,9 @@
     #include <stddef.h>
     #include <stdint.h>
 
+    #define TRUE 1
+    #define FALSE 0
+
     #define RETVOID
     #define ARGRET(__arg, __val) if (__arg != NULL) *__arg = __val
     

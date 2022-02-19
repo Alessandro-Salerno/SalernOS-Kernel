@@ -2,8 +2,6 @@
 #define SALERNOS_CORE_KERNEL_UTILITIES
 
     #include <kerntypes.h>
-    #include "user/Output/Display/kdd.h"
-    #include "Memory/efimem.h"
 
     // Macros and constants
     #define FGCOLOR kernel_kdd_pxcolor_translate(255, 200, 0, 255)

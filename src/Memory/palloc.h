@@ -2,7 +2,7 @@
 #define SALERNOS_CORE_KERNEL_PAGE_FRAME_ALLOCATOR
 
     #include "kerntypes.h"
-    #include "Memory/efimem.h"
+    #include "Memory/mmap.h"
     #include "Memory/bmp.h"
 
 

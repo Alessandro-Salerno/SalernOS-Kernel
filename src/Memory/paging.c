@@ -12,8 +12,8 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
         memset((void*)(_pgtable), 4096, 0);
         
         _entry._Address   = (uint64_t)(_pgtable) >> 12;
-        _entry._Present   = 1;
-        _entry._ReadWrite = 1;
+        _entry._Present   = TRUE;
+        _entry._ReadWrite = TRUE;
 
         __dir->_Entries[__idx] = _entry;
         return _pgtable;
@@ -40,8 +40,8 @@ void kernel_paging_map_address(pgtm_t* __manager, void* __virtaddr, void* __phys
 
     pgdirent_t _entry = _page_table->_Entries[_indexer._PageIndex];
     _entry._Address   = (uint64_t)(__physaddr) >> 12;
-    _entry._Present   = 1;
-    _entry._ReadWrite = 1;
+    _entry._Present   = TRUE;
+    _entry._ReadWrite = TRUE;
     
     _page_table->_Entries[_indexer._PageIndex] = _entry;
 }

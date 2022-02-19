@@ -145,7 +145,7 @@ void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __x
 
     kernel_kdd_fbo_clear(backcolor);
 
-    textInitialized = 1;
+    textInitialized = TRUE;
 }
 
 void kernel_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff) {

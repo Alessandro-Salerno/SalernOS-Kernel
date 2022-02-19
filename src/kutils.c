@@ -27,8 +27,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     size_t   _fbsize = __bootinfo._Framebuffer->_BufferSize + 4096;
      
     kernel_shell_printf("DEBUG: Initializing EFI Memory Map...\n");
-    kernel_memory_init(__bootinfo._Memory);
-    kernel_memory_get_sizes(&_mem_size, NULL, NULL);
+    kernel_mmap_initialize(__bootinfo._Memory);
+    kernel_mmap_info_get(&_mem_size, NULL, NULL, NULL);
 
     kernel_shell_printf("DEBUG: Initializing Kernel Page Frame Allocator...\n");
     kernel_allocator_initialize();
