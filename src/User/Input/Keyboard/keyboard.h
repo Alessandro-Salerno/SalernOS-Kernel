@@ -13,8 +13,8 @@
     /*******************************************************************************************
     RET TYPE        FUNCTION NAME                       FUNCTION ARGUMENTS
     *******************************************************************************************/
-    void            kernel_io_keyboard_handle_mods      (uint8_t __scancode);
-    void            kernel_io_keyboard_read_keys        ();
-    void            kernel_io_keyboard_get_info         (uint8_t* __scancode, uint8_t* __ascii);
+    void            kernel_io_keyboard_mods_handle      (uint8_t __scancode);
+    void            kernel_io_keyboard_keys_handle      ();
+    void            kernel_io_keyboard_keys_get         (uint8_t* __scancode, uint8_t* __ascii);
 
 #endif

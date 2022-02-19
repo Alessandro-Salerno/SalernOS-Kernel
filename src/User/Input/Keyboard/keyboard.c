@@ -9,7 +9,7 @@ static uint8_t keyboardASCII;
 static bool_t  isShiftPressed;
 
 
-void kernel_io_keyboard_handle_mods(uint8_t __scancode) {
+void kernel_io_keyboard_mods_handle(uint8_t __scancode) {
     switch (keyboardScancoide) {
         case KEY_LSHIFT:
         case KEY_RSHIFT:
@@ -23,7 +23,7 @@ void kernel_io_keyboard_handle_mods(uint8_t __scancode) {
     }
 }
 
-void kernel_io_keyboard_read_keys() {
+void kernel_io_keyboard_keys_handle() {
     const char _ascii_table[] = {
          0 ,  0 , '1', '2',
         '3', '4', '5', '6',
@@ -61,7 +61,7 @@ void kernel_io_keyboard_read_keys() {
     };
     
     keyboardScancoide = kernel_io_in(0x60);
-    keyboardASCII = 0;
+    keyboardASCII     = 0;
     
     SOFTASSERT(
         keyboardScancoide <= 58         &&
@@ -72,11 +72,11 @@ void kernel_io_keyboard_read_keys() {
         RETVOID 
     );
 
-    keyboardASCII = (isShiftPressed) ? _shift_ascii_table[keyboardScancoide] : 
-                                       _ascii_table[keyboardScancoide]       ;
+    keyboardASCII = (isShiftPressed) ? _shift_ascii_table   [keyboardScancoide] : 
+                                       _ascii_table         [keyboardScancoide] ;
 }
 
-void kernel_io_keyboard_get_info(uint8_t* __scancode, uint8_t* __ascii) {
+void kernel_io_keyboard_keys_get(uint8_t* __scancode, uint8_t* __ascii) {
     ARGRET(__scancode, keyboardScancoide);
     ARGRET(__ascii, keyboardASCII);
 }

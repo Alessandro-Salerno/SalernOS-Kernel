@@ -59,8 +59,8 @@ void kernel_main(boot_t __bootinfo) {
     // This will be removed in a later version
     uint8_t _kcode, _nkcode, _ascii;
     while (1) {
-        kernel_io_keyboard_read_keys();
-        kernel_io_keyboard_get_info(&_nkcode, &_ascii);
+        kernel_io_keyboard_keys_handle();
+        kernel_io_keyboard_keys_get(&_nkcode, &_ascii);
         
         if (_nkcode == _kcode)
             continue;
