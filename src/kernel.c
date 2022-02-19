@@ -21,8 +21,7 @@ void kernel_main(boot_t __bootinfo) {
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kprintf("DEBUG: Testing...\n");
-    void*      _test_page    = kernel_allocator_allocate_page();
-    pgmapidx_t _indexer_test = kernel_paging_index(0x1000 * 52 + 0x50000 * 7);
+    void* _test_page = kernel_allocator_allocate_page();
 
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
@@ -47,11 +46,7 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Free Memory: %u bytes\n", _free_mem);
     kprintf("Used Memory: %u bytes\n", _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Test Page Address: %u\n", (uint64_t)(_test_page));
-    kprintf("Page Indexer Test: %d-%d-%d-%d\n\n\n", _indexer_test._PageIndex,
-                                                                _indexer_test._PageTableIndex,
-                                                                _indexer_test._PageDirectoryIndex,
-                                                                _indexer_test._PageDirectoryPointerIndex);
+    kprintf("Test Page Address: %u\n\n\n", (uint64_t)(_test_page));
 
     kprintf("Kernel Ready!\n\n");
     
