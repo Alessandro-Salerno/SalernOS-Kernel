@@ -1,12 +1,12 @@
-#ifndef SALERNOS_CORE_KERNEL_SHELL
-#define SALERNOS_CORE_KERNEL_SHELL
+#ifndef SALERNOS_STD_KERNEL_STDIO
+#define SALERNOS_STD_KERNEL_STDIO
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     /****************************************************************
     RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
     ****************************************************************/
-    void            kernel_shell_printf     (const char* __fmt, ...);
+    void            kprintf                  (const char* __fmt, ...);
 
 #endif

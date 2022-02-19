@@ -1,10 +1,10 @@
-#include "User/Output/Text/kernelshell.h"
+#include "kstdio.h"
 #include "user/Output/Text/textrenderer.h"
 #include <kstr.h>
 #include <stdarg.h>
 
 
-void kernel_shell_printf(const char* __fmt, ...) {
+void kprintf(const char* __fmt, ...) {
     char* _ptr = (char*)(__fmt);
 
     va_list _arguments;

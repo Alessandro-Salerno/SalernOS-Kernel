@@ -1,6 +1,5 @@
 #include "Interrupts/handlers.h"
 #include "Interrupts/pic.h"
-#include "User/Output/Text/kernelshell.h"
 #include "kernelpanic.h"
 #include "User/Input/Keyboard/keyboard.h"
 #include "IO/io.h"

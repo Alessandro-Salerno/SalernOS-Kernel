@@ -1,6 +1,6 @@
 #include "kernelpanic.h"
-#include "User/Output/Text/kernelshell.h"
 #include "User/Output/Text/textrenderer.h"
+#include <kstdio.h>
 
 
 void kernel_panic_throw(const char* __message) {
@@ -10,9 +10,9 @@ void kernel_panic_throw(const char* __message) {
         0, 0
     );
     
-    kernel_shell_printf(":-( SalernOS Kernel Panic\n");
-    kernel_shell_printf("Execution of the SalernOS Kernel has been halted due to a critical system fault, please read the following lines for more information.\n\n");
-    kernel_shell_printf(__message);
+    kprintf(":-( SalernOS Kernel Panic\n");
+    kprintf("Execution of the SalernOS Kernel has been halted due to a critical system fault, please read the following lines for more information.\n\n");
+    kprintf(__message);
 
     while (1);
 }

@@ -6,7 +6,6 @@
 
     // User Output includes
     #include "User/Output/Text/textrenderer.h"      /*   Includes the basic Kernel Text Renderer            */
-    #include "User/Output/Text/kernelshell.h"       /*   Includes the basic Kernel Text Formatter           */
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
 
     // Memory includes
@@ -28,5 +27,8 @@
 
     // Utils includes
     #include "kutils.h"                             /*   Includes all kernel initialization functions      */
+
+    // Kernel Library Includes
+    #include <kstdio.h>
 
 #endif

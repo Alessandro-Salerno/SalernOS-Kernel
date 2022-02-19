@@ -1,7 +1,7 @@
 #include "Syscall/dispatcher.h"
 #include "Syscall/syscalls.h"
-#include "User/Output/Text/kernelshell.h"
 #include "kernelpanic.h"
+#include <kstdio.h>
 
 
 static const void (*syscallHandlers[])(void* __frmae) = {
@@ -15,6 +15,6 @@ void kernel_syscall_dispatch(void* __frame, int __syscall) {
         "Syscall invoked with invalid ID!"
     );
 
-    kernel_shell_printf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
+    kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
     syscallHandlers[__syscall](__frame);
 }
