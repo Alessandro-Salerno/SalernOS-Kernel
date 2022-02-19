@@ -39,11 +39,6 @@ $(OBJDIR)/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
 	@ mkdir -p $(@D)
 	$(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
 
-$(OBJDIR)/Syscall/%.o: $(SRCDIR)/Syscall/%.c
-	@ echo !==== COMPILING UNOPTIMIZED $^
-	@ mkdir -p $(@D)
-	$(CC) $(CINCLUDE)  -c $^ -o $@
-
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@ echo !==== COMPILING $^
 	@ mkdir -p $(@D)
