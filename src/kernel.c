@@ -50,13 +50,11 @@ void kernel_main(boot_t __bootinfo) {
     // What follows is just debug code
     // This will be removed in a later version
     uint8_t _kcode, _nkcode, _ascii;
-    while (1) {
+    while (TRUE) {
         kernel_io_keyboard_keys_handle();
         kernel_io_keyboard_keys_get(&_nkcode, &_ascii);
         
-        if (_nkcode == _kcode)
-            continue;
-        
+        if (_nkcode == _kcode) continue;
         _kcode = _nkcode;
 
         switch (_kcode) {
