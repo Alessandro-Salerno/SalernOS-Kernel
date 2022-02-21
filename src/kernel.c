@@ -2,9 +2,6 @@
 
 
 void kernel_main(boot_t __bootinfo) {
-    framebuffer_t* _buff = __bootinfo._Framebuffer;
-    bmpfont_t*     _font = __bootinfo._Font;
-    
     uint8_t _seb_minver_day   = __bootinfo._SEBMinorVersion ^ ((__bootinfo._SEBMinorVersion >> 8) << 8);
     uint8_t _seb_minver_month = (__bootinfo._SEBMinorVersion ^ _seb_minver_day) >> 8;
 
@@ -32,19 +29,19 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("SalernOS EFI Bootloader %u-%c%u\n", __bootinfo._SEBMajorVersion, _seb_minver_month, _seb_minver_day);
     kprintf("SalernOS Kernel 0.0.5 (Florence)\n\n");
 
-    kprintf("Framebuffer Resolution: %u x %u\n", _buff->_PixelsPerScanLine, _buff->_Height);
-    kprintf("Framebuffer Base Address: %u\n", _buff->_BaseAddress);
-    kprintf("Framebuffer Size: %u bytes\n", _buff->_BufferSize);
-    kprintf("Framebuffer BPP: %u bytes\n\n", _buff->_BytesPerPixel);
+    kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo._Framebuffer->_PixelsPerScanLine, __bootinfo._Framebuffer->_Height);
+    kprintf("Framebuffer Base Address: %u\n",    __bootinfo._Framebuffer->_BaseAddress);
+    kprintf("Framebuffer Size: %u bytes\n",      __bootinfo._Framebuffer->_BufferSize);
+    kprintf("Framebuffer BPP: %u bytes\n\n",     __bootinfo._Framebuffer->_BytesPerPixel);
 
-    kprintf("Memory Map Size: %u bytes\n", __bootinfo._Memory._MemoryMapSize);
+    kprintf("Memory Map Size: %u bytes\n",              __bootinfo._Memory._MemoryMapSize);
     kprintf("Memory Map Descriptor Size: %u bytes\n\n", __bootinfo._Memory._DescriptorSize);
 
     kernel_allocator_get_infO(&_free_mem, &_used_mem, &_unusable_mem);
-    kprintf("System Memory: %u bytes\n", _mem_size);
-    kprintf("Usable Memory: %u bytes\n", _usable_mem);
-    kprintf("Free Memory: %u bytes\n", _free_mem);
-    kprintf("Used Memory: %u bytes\n", _used_mem);
+    kprintf("System Memory: %u bytes\n",   _mem_size);
+    kprintf("Usable Memory: %u bytes\n",   _usable_mem);
+    kprintf("Free Memory: %u bytes\n",     _free_mem);
+    kprintf("Used Memory: %u bytes\n",     _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
     kprintf("Test Page Address: %u\n\n\n", (uint64_t)(_test_page));
 
