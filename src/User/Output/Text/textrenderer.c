@@ -22,7 +22,7 @@ static void __putchar__(bmpfont_t* __font, uint32_t __color, char __char, uint32
         for (uint64_t _x = __xoff; _x < __xoff + 8; _x++)
             if ((*_font_ptr & (0b10000000 >> (_x - __xoff))) > 0)
                 kernel_kdd_pxcolor_set(_x, _y, __color);
-        
+
         _font_ptr++;
     }
 }

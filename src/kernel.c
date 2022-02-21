@@ -4,7 +4,7 @@
 void kernel_main(boot_t __bootinfo) {
     framebuffer_t* _buff = __bootinfo._Framebuffer;
     bmpfont_t*     _font = __bootinfo._Font;
-
+    
     uint8_t _seb_minver_day   = __bootinfo._SEBMinorVersion ^ ((__bootinfo._SEBMinorVersion >> 8) << 8);
     uint8_t _seb_minver_month = (__bootinfo._SEBMinorVersion ^ _seb_minver_day) >> 8;
 
