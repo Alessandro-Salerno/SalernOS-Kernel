@@ -4,6 +4,9 @@
     #include <kerntypes.h>
 
 
-    void klogdebug(const char* __msg);
+    /***********************************************************
+    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
+    ***********************************************************/
+    void            klogdebug               (const char* __msg);
 
 #endif
