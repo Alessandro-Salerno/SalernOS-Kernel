@@ -23,9 +23,9 @@ void kernel_kutils_gdt_setup() {
 
 void kernel_kutils_mem_setup(boot_t __bootinfo) {
     uint64_t _mem_size;
-    uint64_t _fbbase = (uint64_t)(__bootinfo._Framebuffer->_BaseAddress);
+    void*    _fbbase = __bootinfo._Framebuffer->_BaseAddress;
     size_t   _fbsize = __bootinfo._Framebuffer->_BufferSize + 4096;
-     
+    
     kprintf("DEBUG: Initializing EFI Memory Map...\n");
     kernel_mmap_initialize(__bootinfo._Memory);
     kernel_mmap_info_get(&_mem_size, NULL, NULL, NULL);
@@ -40,7 +40,7 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
 
     kprintf("DEBUG: Initializing Page Table Manager...\n");
     pgtable_t* _lvl4 = (pgtable_t*)(kernel_allocator_allocate_page());
-    memset((void*)(_lvl4), 4096, 0);
+    memset(_lvl4, 4096, 0);
 
     pgtm_t _page_table_manager = (pgtm_t) { 
         ._PML4Address = _lvl4
@@ -52,8 +52,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     
     kprintf("DEBUG: Locking Font and Framebuffer Pages...\n");
-    kernel_allocator_lock_pages((void*)(_fbbase), _fbsize / 4096 + 1);
-    kernel_allocator_lock_pages((void*)(__bootinfo._Font->_Buffer), (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
+    kernel_allocator_lock_pages(_fbbase, _fbsize / 4096 + 1);
+    kernel_allocator_lock_pages(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
 }
 
 void kernel_kutils_int_setup() {
