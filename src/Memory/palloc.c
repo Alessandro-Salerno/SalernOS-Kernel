@@ -2,32 +2,32 @@
 #include "kernelpanic.h"
 #include <kmem.h>
 
-#define PALLOC_FAULT "Page Allocator Fault:\nAllocator Function called before initialization."
-#define PALLOC_DBMP  "Page Allocator Fault:\nAllocator tried to reinitialize page bitmap."
+#define PGFALLOC_FAULT "Page Frame Allocator Fault:\nAllocator Function called before initialization."
+#define PGFALLOC_DBMP  "Page Frame Allocator Fault:\nAllocator tried to reinitialize page bitmap."
 
 
-static uint64_t freeMemory      = 0,
-                reservedMemory  = 0,
-                usedMemory      = 0,
-                pgBmpIndex      = 0;
+static uint64_t mFreeSize,
+                mReservedSize,
+                usedMemory;
 
-static bmp_t    bitmap;
-static uint64_t BMPSEGSZ;
-static void*    BMPSEG;
+static uint64_t pgBmpIndex;
 
-static uint8_t pallocInitialized;
+static bmp_t    pgBitmap;
+static memseg_t mSegment;
+
+static uint8_t pgfInitialized;
 
 
 static void __reserve_page__(void* __address) {
-    kernel_panic_assert(pallocInitialized >= 2, PALLOC_FAULT);
+    kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
     
     uint64_t _idx = (uint64_t)(__address) / 4096;
 
-    SOFTASSERT(!(kernel_bmp_get(&bitmap, _idx)), RETVOID)
+    SOFTASSERT(!(kernel_bmp_get(&pgBitmap, _idx)), RETVOID)
     
-    kernel_bmp_set(&bitmap, _idx, 1);
-    freeMemory     -= 4096;
-    reservedMemory += 4096;
+    kernel_bmp_set(&pgBitmap, _idx, 1);
+    mFreeSize     -= 4096;
+    mReservedSize += 4096;
 }
 
 static void __reserve_pages__(void* __address, uint64_t __pagecount) {
@@ -36,18 +36,18 @@ static void __reserve_pages__(void* __address, uint64_t __pagecount) {
 }
 
 static void __unreserve_page__(void* __address) {
-    kernel_panic_assert(pallocInitialized >= 2, PALLOC_FAULT);
+    kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
     
     uint64_t _idx = (uint64_t)(__address) / 4096;
 
-    SOFTASSERT(kernel_bmp_get(&bitmap, _idx), RETVOID)
+    SOFTASSERT(kernel_bmp_get(&pgBitmap, _idx), RETVOID)
     
-    kernel_bmp_set(&bitmap, _idx, 0);
-    freeMemory     += 4096;
-    reservedMemory -= 4096;
+    kernel_bmp_set(&pgBitmap, _idx, 0);
+    mFreeSize     += 4096;
+    mReservedSize -= 4096;
 
-    if (pgBmpIndex > _idx)
-        pgBmpIndex = _idx;
+    pgBmpIndex = (pgBmpIndex > _idx) ? _idx :
+                                       pgBmpIndex;
 }
 
 static void __unreserve_pages__(void* __address, uint64_t __pagecount) {
@@ -56,30 +56,29 @@ static void __unreserve_pages__(void* __address, uint64_t __pagecount) {
 }
 
 static void __init__bitmap__() {
-    kernel_panic_assert(pallocInitialized == 1, PALLOC_DBMP);
+    kernel_panic_assert(pgfInitialized == 1, PGFALLOC_DBMP);
     
-    memset(BMPSEG, BMPSEGSZ, 0);
+    memset(mSegment._Segment, mSegment._Size, 0);
 
-    bitmap = (bmp_t) {
-        ._Size = freeMemory / 4096 / 8 + 1,
-        ._Buffer = (uint8_t*)(BMPSEG)
+    pgBitmap = (bmp_t) {
+        ._Size = mFreeSize / 4096 / 8 + 1,
+        ._Buffer = (uint8_t*)(mSegment._Segment)
     };
 
-    pallocInitialized = 2;
-    kernel_allocator_lock_pages(bitmap._Buffer, bitmap._Size / 4096 + 1);
+    pgfInitialized = 2;
+    kernel_allocator_lock_pages(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
 }
 
 void kernel_allocator_initialize() {
-    SOFTASSERT(pallocInitialized == 0, RETVOID);
+    SOFTASSERT(pgfInitialized == 0, RETVOID);
 
     // Temporary code
-    memseg_t  _bmpseg;
+    memseg_t  _bmp_seg;
     meminfo_t _meminfo;
-    kernel_mmap_info_get(&freeMemory, NULL, &_bmpseg, &_meminfo);
-    BMPSEG   = _bmpseg._Segment;
-    BMPSEGSZ = _bmpseg._Size;
+    kernel_mmap_info_get(&mFreeSize, NULL, &_bmp_seg, &_meminfo);
+    mSegment = _bmp_seg;
 
-    pallocInitialized = TRUE;
+    pgfInitialized = TRUE;
     __init__bitmap__();
     
     for (uint64_t _i = 0; _i < _meminfo._MemoryMapSize / _meminfo._DescriptorSize; _i++) {
@@ -89,33 +88,33 @@ void kernel_allocator_initialize() {
             __reserve_pages__(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 
-    pallocInitialized = 3;
+    pgfInitialized = 3;
 }
 
 void kernel_allocator_free_page(void* __address) {
-    kernel_panic_assert(pallocInitialized >= 2, PALLOC_FAULT);
+    kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
 
     uint64_t _idx = (uint64_t)(__address) / 4096;
 
-    SOFTASSERT(kernel_bmp_get(&bitmap, _idx), RETVOID)
+    SOFTASSERT(kernel_bmp_get(&pgBitmap, _idx), RETVOID)
     
-    kernel_bmp_set(&bitmap, _idx, 0);
-    freeMemory += 4096;
+    kernel_bmp_set(&pgBitmap, _idx, 0);
+    mFreeSize += 4096;
     usedMemory -= 4096;
 
-    if (pgBmpIndex > _idx)
-        pgBmpIndex = _idx;
+    pgBmpIndex = (pgBmpIndex > _idx) ? _idx :
+                                       pgBmpIndex;
 }
 
 void kernel_allocator_lock_page(void* __address) {
-    kernel_panic_assert(pallocInitialized >= 2, PALLOC_FAULT);
+    kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
 
     uint64_t _idx = (uint64_t)(__address) / 4096;
 
-    SOFTASSERT(!(kernel_bmp_get(&bitmap, _idx)), RETVOID)
+    SOFTASSERT(!(kernel_bmp_get(&pgBitmap, _idx)), RETVOID)
     
-    kernel_bmp_set(&bitmap, _idx, 1);
-    freeMemory -= 4096;
+    kernel_bmp_set(&pgBitmap, _idx, 1);
+    mFreeSize -= 4096;
     usedMemory += 4096;
 }
 
@@ -130,16 +129,16 @@ void kernel_allocator_lock_pages(void* __address, uint64_t __pagecount) {
 }
 
 void kernel_allocator_get_infO(uint64_t* __freemem, uint64_t* __usedmem, uint64_t* __reservedmem) { 
-    ARGRET(__freemem, freeMemory);
+    ARGRET(__freemem, mFreeSize);
     ARGRET(__usedmem, usedMemory);
-    ARGRET(__reservedmem, reservedMemory);
+    ARGRET(__reservedmem, mReservedSize);
 }
 
 void* kernel_allocator_allocate_page() {
-    kernel_panic_assert(pallocInitialized >= 2, PALLOC_FAULT);
+    kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
 
-    for (; pgBmpIndex < bitmap._Size * 8; pgBmpIndex++) {
-        if (kernel_bmp_get(&bitmap, pgBmpIndex) == 0) {
+    for (; pgBmpIndex < pgBitmap._Size * 8; pgBmpIndex++) {
+        if (kernel_bmp_get(&pgBitmap, pgBmpIndex) == 0) {
             void* _page = (void*)(pgBmpIndex * 4096);
             kernel_allocator_lock_page(_page);
             return _page;
