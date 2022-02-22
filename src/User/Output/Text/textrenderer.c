@@ -124,8 +124,8 @@ void kernel_text_print_str(char* __str) {
 void kernel_text_set_color(uint32_t __color, uint32_t __backcolor) {
     SOFTASSERT(textInitialized, RETVOID);
     
-    if (__color != 0)     color     = __color;
-    if (__backcolor != 0) backcolor = __backcolor; 
+    color     = __color;
+    backcolor = __backcolor; 
 }
 
 void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t* __font) {
