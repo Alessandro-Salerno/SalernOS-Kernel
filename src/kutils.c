@@ -37,10 +37,10 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     klogdebug("Locking Kernel Pages...\n");
     uint64_t _kernel_size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
     uint64_t _kernel_pages = (uint64_t)(_kernel_size) / 4096 + 1;
-    kernel_allocator_lock_pages(&_KERNEL_START, _kernel_pages);
+    kernel_allocator_lock(&_KERNEL_START, _kernel_pages);
 
     klogdebug("Initializing Page Table Manager...\n");
-    pgtable_t* _lvl4 = (pgtable_t*)(kernel_allocator_allocate_page());
+    pgtable_t* _lvl4 = (pgtable_t*)(kernel_allocator_page_new());
     memset(_lvl4, 4096, 0);
 
     pgtm_t _page_table_manager = (pgtm_t) { 
@@ -53,8 +53,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     
     klogdebug("Locking Font and Framebuffer Pages...\n");
-    kernel_allocator_lock_pages(_fbbase, _fbsize / 4096 + 1);
-    kernel_allocator_lock_pages(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
+    kernel_allocator_lock(_fbbase, _fbsize / 4096 + 1);
+    kernel_allocator_lock(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
 }
 
 void kernel_kutils_int_setup() {

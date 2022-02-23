@@ -1,6 +1,6 @@
 #include "Interrupts/idt.h"
 #include "Interrupts/handlers.h"
-#include "Memory/palloc.h"
+#include "Memory/pgfalloc.h"
 #include "kernelpanic.h"
 #include "Syscall/dispatcher.h"
 
@@ -23,7 +23,7 @@ void kernel_idt_initialize() {
     kernel_panic_assert(!idtInitialized, IDT_DINIT);
 
     idtr._Limit  = 0x1000 - 1;
-    idtr._Offset = (uint64_t)(kernel_allocator_allocate_page()); 
+    idtr._Offset = (uint64_t)(kernel_allocator_page_new()); 
     
     idtdescent_t* _pgfault_handler = __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);
     idtdescent_t* _dfault_handler  = __create_entry__(0x08, kernel_interrupt_handlers_dfault);
