@@ -50,11 +50,6 @@ static void __unreserve_page__(void* __address) {
                                        pgBmpIndex;
 }
 
-static void __unreserve_pages__(void* __address, uint64_t __pagecount) {
-    for (uint64_t _i = 0; _i < __pagecount; _i++)
-        __unreserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
-}
-
 static void __init__bitmap__() {
     kernel_panic_assert(pgfInitialized == 1, PGFALLOC_DBMP);
     
@@ -112,7 +107,7 @@ void kernel_allocator_initialize() {
         efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 
         if (_mem_desc->_Type != 7)
-            __reserve_pages__(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
+            kernel_allocator_reserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 
     pgfInitialized = 3;
@@ -126,6 +121,16 @@ void kernel_allocator_free(void* __address, uint64_t __pagecount) {
 void kernel_allocator_lock(void* __address, uint64_t __pagecount) {
     for (uint64_t _i = 0; _i < __pagecount; _i++)
         __lock__page__((void*)((uint64_t)(__address) + (_i * 4096))); 
+}
+
+void kernel_allocator_unreserve(void* __address, uint64_t __pagecount) {
+    for (uint64_t _i = 0; _i < __pagecount; _i++)
+        __unreserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
+}
+
+void kernel_allocator_reserve(void* __address, uint64_t __pagecount) {
+    for (uint64_t _i = 0; _i < __pagecount; _i++)
+        __reserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
 }
 
 void kernel_allocator_info_get(uint64_t* __freemem, uint64_t* __usedmem, uint64_t* __reservedmem) { 
