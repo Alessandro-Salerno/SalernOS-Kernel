@@ -31,7 +31,7 @@ pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
     };
 }
 
-void kernel_paging_map_address(pgtm_t* __manager, void* __virtaddr, void* __physaddr) {
+void kernel_paging_address_map(pgtm_t* __manager, void* __virtaddr, void* __physaddr) {
     pgmapidx_t _indexer = kernel_paging_index((uint64_t)(__virtaddr));
     
     pgtable_t* _page_directory_pointer = __init_page_table__(__manager->_PML4Address, _indexer._PageDirectoryPointerIndex);
@@ -46,7 +46,7 @@ void kernel_paging_map_address(pgtm_t* __manager, void* __virtaddr, void* __phys
     _page_table->_Entries[_indexer._PageIndex] = _entry;
 }
 
-void kernel_paging_map_addresses(pgtm_t* __manager, void* __base, size_t __sz) {
+void kernel_paging_address_mapn(pgtm_t* __manager, void* __base, size_t __sz) {
      for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz; _addr += 4096)
-        kernel_paging_map_address(__manager, (void*)(_addr), (void*)(_addr));
+        kernel_paging_address_map(__manager, (void*)(_addr), (void*)(_addr));
 }

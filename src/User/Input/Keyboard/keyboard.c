@@ -3,8 +3,8 @@
 #include "IO/io.h"
 
 
-static uint8_t keyboardScancoide;
-static uint8_t keyboardASCII;
+static uint8_t keyboardScancoide,
+               keyboardASCII;
 
 static bool_t  isShiftPressed;
 
