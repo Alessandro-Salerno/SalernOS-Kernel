@@ -53,8 +53,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     
     klogdebug("Locking Font and Framebuffer Pages...\n");
-    kernel_allocator_lock(_fbbase, _fbsize / 4096 + 1);
-    kernel_allocator_lock(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
+    kernel_allocator_reserve(_fbbase, _fbsize / 4096 + 1);
+    kernel_allocator_reserve(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
 }
 
 void kernel_kutils_int_setup() {
