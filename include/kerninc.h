@@ -27,7 +27,7 @@
     #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
 
     // Utils includes
-    #include "kutils.h"                             /*   Includes all kernel initialization functions      */
+    #include "kutils.h"                             /*   Includes all kernel initialization functions       */
 
     // Kernel Library Includes
     #include <kstdio.h>
