@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
 #define SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     /****************************************************************************

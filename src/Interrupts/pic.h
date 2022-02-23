@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_PIC
 #define SALERNOS_CORE_KERNEL_PIC
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define PIC1_COMMAND 0x20
     #define PIC2_COMMAND 0xA0

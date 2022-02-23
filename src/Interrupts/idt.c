@@ -1,8 +1,8 @@
-#include "Interrupts/idt.h"
 #include "Interrupts/handlers.h"
-#include "Memory/pgfalloc.h"
-#include "kernelpanic.h"
 #include "Syscall/dispatcher.h"
+#include "Memory/pgfalloc.h"
+#include "Interrupts/idt.h"
+#include "kernelpanic.h"
 
 #define IDT_DINIT "Interrupt Descriptor Table Fault:\nKernel tried to reinitialize IDT."
 

@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_BMP
 #define SALERNOS_CORE_KERNEL_BMP
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     typedef struct Bitmap {

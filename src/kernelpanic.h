@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_PANIC
 #define SALERNOS_CORE_KERNEL_PANIC
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define SOFTASSERT(__cond, __ret) if (!(__cond)) return __ret;
 

@@ -1,7 +1,7 @@
-#include "kstdio.h"
 #include "user/Output/Text/textrenderer.h"
-#include <kstr.h>
+#include "kstdio.h"
 #include <stdarg.h>
+#include <kstr.h>
 
 
 void kprintf(const char* __fmt, ...) {

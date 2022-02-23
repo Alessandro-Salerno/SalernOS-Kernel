@@ -1,7 +1,7 @@
+#include "User/Input/Keyboard/keyboard.h"
 #include "Interrupts/handlers.h"
 #include "Interrupts/pic.h"
 #include "kernelpanic.h"
-#include "User/Input/Keyboard/keyboard.h"
 #include "IO/io.h"
 
 

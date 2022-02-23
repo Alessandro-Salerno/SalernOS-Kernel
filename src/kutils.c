@@ -1,6 +1,6 @@
 #include <kerninc.h>
-#include <kmem.h>
 #include <kdebug.h>
+#include <kmem.h>
 
 
 void kernel_kutils_kdd_setup(boot_t __bootinfo) {

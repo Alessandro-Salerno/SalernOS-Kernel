@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_SYSCALLS
 #define SALERNOS_CORE_KERNEL_SYSCALLS
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define SYSCALL_PRINT_STR 0
 

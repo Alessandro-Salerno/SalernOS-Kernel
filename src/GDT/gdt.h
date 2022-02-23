@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_GDT
 #define SALERNOS_CORE_KERNEL_GDT
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     typedef struct GDTDescriptor {

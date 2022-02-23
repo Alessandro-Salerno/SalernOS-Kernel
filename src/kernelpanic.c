@@ -1,5 +1,5 @@
-#include "kernelpanic.h"
 #include "User/Output/Text/textrenderer.h"
+#include "kernelpanic.h"
 #include <kstdio.h>
 
 

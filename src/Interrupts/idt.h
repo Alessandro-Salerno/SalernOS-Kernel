@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_IDT
 #define SALERNOS_CORE_KERNEL_IDT
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define IDT_TA_INTERRUPT_GATE 0b10001110
     #define IDT_TA_CALL_GATE      0b10001100

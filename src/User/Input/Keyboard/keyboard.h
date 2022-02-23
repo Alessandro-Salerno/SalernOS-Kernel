@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_USER_INPUT_KEYBOARD
 #define SALERNOS_CORE_KERNEL_USER_INPUT_KEYBOARD
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define KEY_LSHIFT    0x2A
     #define KEY_RSHIFT    0x36

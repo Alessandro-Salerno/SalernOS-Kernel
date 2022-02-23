@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_PAGING
 #define SALERNOS_CORE_KERNEL_PAGING
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     typedef struct PageDirectoryEntry {

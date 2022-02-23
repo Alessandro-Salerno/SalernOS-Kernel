@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_DISPLAY_DRIVER
 #define SALERNOS_CORE_KERNEL_DISPLAY_DRIVER
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     typedef struct Framebuffer {

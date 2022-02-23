@@ -2,7 +2,7 @@
 #define SALERNOS_CORE_KERNEL_TEXT
 
     #include "User/Output/Display/kdd.h"
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
 
     void kernel_text_print_char    (char __char);
