@@ -30,11 +30,6 @@ static void __reserve_page__(void* __address) {
     mReservedSize += 4096;
 }
 
-static void __reserve_pages__(void* __address, uint64_t __pagecount) {
-    for (uint64_t _i = 0; _i < __pagecount; _i++)
-        __reserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
-}
-
 static void __unreserve_page__(void* __address) {
     kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
     
