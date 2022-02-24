@@ -18,7 +18,7 @@ void kernel_main(boot_t __bootinfo) {
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kprintf("DEBUG: Testing...\n");
-    void* _test_page = kernel_allocator_page_new();
+    void* _test_page = kernel_pgfa_page_new();
 
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
@@ -37,7 +37,7 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Memory Map Size: %u bytes\n",              __bootinfo._Memory._MemoryMapSize);
     kprintf("Memory Map Descriptor Size: %u bytes\n\n", __bootinfo._Memory._DescriptorSize);
 
-    kernel_allocator_info_get(&_free_mem, &_used_mem, &_unusable_mem);
+    kernel_pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
     kprintf("System Memory: %u bytes\n",   _mem_size);
     kprintf("Usable Memory: %u bytes\n",   _usable_mem);
     kprintf("Free Memory: %u bytes\n",     _free_mem);

@@ -56,7 +56,7 @@ static void __init__bitmap__() {
     };
 
     pgfInitialized = 2;
-    kernel_allocator_lock(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
+    kernel_pgfa_lock(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
 }
 
 void __free_page__(void* __address) {
@@ -86,7 +86,7 @@ void __lock__page__(void* __address) {
     mUsedSize += 4096;
 }
 
-void kernel_allocator_initialize() {
+void kernel_pgfa_initialize() {
     SOFTASSERT(pgfInitialized == 0, RETVOID);
 
     // Temporary code
@@ -102,39 +102,39 @@ void kernel_allocator_initialize() {
         efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 
         if (_mem_desc->_Type != 7)
-            kernel_allocator_reserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
+            kernel_pgfa_reserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 
     pgfInitialized = 3;
 }
 
-void kernel_allocator_free(void* __address, uint64_t __pagecount) {
+void kernel_pgfa_free(void* __address, uint64_t __pagecount) {
     for (uint64_t _i = 0; _i < __pagecount; _i++)
         __free_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
 }
 
-void kernel_allocator_lock(void* __address, uint64_t __pagecount) {
+void kernel_pgfa_lock(void* __address, uint64_t __pagecount) {
     for (uint64_t _i = 0; _i < __pagecount; _i++)
         __lock__page__((void*)((uint64_t)(__address) + (_i * 4096))); 
 }
 
-void kernel_allocator_unreserve(void* __address, uint64_t __pagecount) {
+void kernel_pgfa_unreserve(void* __address, uint64_t __pagecount) {
     for (uint64_t _i = 0; _i < __pagecount; _i++)
         __unreserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
 }
 
-void kernel_allocator_reserve(void* __address, uint64_t __pagecount) {
+void kernel_pgfa_reserve(void* __address, uint64_t __pagecount) {
     for (uint64_t _i = 0; _i < __pagecount; _i++)
         __reserve_page__((void*)((uint64_t)(__address) + (_i * 4096))); 
 }
 
-void kernel_allocator_info_get(uint64_t* __freemem, uint64_t* __usedmem, uint64_t* __reservedmem) { 
+void kernel_pgfa_info_get(uint64_t* __freemem, uint64_t* __usedmem, uint64_t* __reservedmem) { 
     ARGRET(__freemem, mFreeSize);
     ARGRET(__usedmem, mUsedSize);
     ARGRET(__reservedmem, mReservedSize);
 }
 
-void* kernel_allocator_page_new() {
+void* kernel_pgfa_page_new() {
     kernel_panic_assert(pgfInitialized >= 2, PGFALLOC_FAULT);
 
     for (; pgBmpIndex < pgBitmap._Size * 8; pgBmpIndex++) {

@@ -8,7 +8,7 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
     pgtable_t* _pgtable;
     
     if (!_entry._Present) {
-        _pgtable = (pgtable_t*)(kernel_allocator_page_new());
+        _pgtable = (pgtable_t*)(kernel_pgfa_page_new());
         memset((void*)(_pgtable), 4096, 0);
         
         _entry._Address   = (uint64_t)(_pgtable) >> 12;
