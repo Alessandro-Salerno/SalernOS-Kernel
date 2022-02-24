@@ -1,4 +1,4 @@
-#include "user/Output/Text/textman.h"
+#include "User/Output/Text/textman.h"
 #include "kernelpanic.h"
 #include <kmem.h>
 
