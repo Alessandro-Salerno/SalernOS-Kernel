@@ -1,7 +1,7 @@
 #ifndef SALERNOS_CORE_KERNEL_INTERRUPT_HANDLERS
 #define SALERNOS_CORE_KERNEL_INTERRUPT_HANDLERS
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
 
     #define ISR __attribute__((interrupt))
 
