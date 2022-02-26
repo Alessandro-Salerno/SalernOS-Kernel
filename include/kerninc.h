@@ -6,7 +6,6 @@
 
     // User Output includes
     #include "User/Output/Text/textrenderer.h"      /*   Includes the basic Kernel Text Renderer            */
-    #include "User/Output/Text/textman.h"           /*   Includes the basic Kernel Text Buffering utils     */
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
 
     // Memory includes
