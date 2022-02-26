@@ -5,7 +5,7 @@
 static framebuffer_t* boundFBO;
 
 
-static uint32_t* __kdd_pxptr_get__(uint64_t __x, uint64_t __y) {
+static uint32_t* __get_pxptr__(uint64_t __x, uint64_t __y) {
     SOFTASSERT(boundFBO != NULL, NULL);
     
     return (uint32_t*) {
@@ -39,9 +39,9 @@ uint32_t kernel_kdd_pxcolor_translate(uint8_t __r, uint8_t __g, uint8_t __b, uin
 }
 
 uint32_t kernel_kdd_pxcolor_get(uint32_t __x, uint32_t __y) {
-    return *(__kdd_pxptr_get__(__x, __y));
+    return *(__get_pxptr__(__x, __y));
 }
 
 void kernel_kdd_pxcolor_set(uint32_t __x, uint32_t __y, uint32_t __color) {
-    *(__kdd_pxptr_get__(__x, __y)) = __color;
+    *(__get_pxptr__(__x, __y)) = __color;
 }
