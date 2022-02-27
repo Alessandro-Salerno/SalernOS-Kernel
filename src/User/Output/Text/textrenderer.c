@@ -27,7 +27,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
     startPosition = (point_t) {
         .x = __xoff,
         .y = __yoff
-    }; 
+    };
 
     endPosition = (point_t) {
         .x = _buff_w - (_buff_w %  8),
@@ -55,8 +55,8 @@ static void __putchar__(char __char) {
         for (uint64_t _x = _start_x; _x < _end_x; _x++) {
             kernel_kdd_pxcolor_set(
                 _x, _y, 
-                ((*_font_ptr & (0b10000000 >> (_x - _start_x))) > 0) ? foregroundColor :
-                                                                       backgroundColor
+                ((*_font_ptr & ((1 << 7) >> (_x - _start_x))))
+                    ? foregroundColor : backgroundColor
             );
         }
 
