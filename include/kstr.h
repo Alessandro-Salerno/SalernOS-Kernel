@@ -1,7 +1,8 @@
 #ifndef SALERNOS_INC_KERNEL_STR
 #define SALERNOS_INC_KERNEL_STR
 
-    #include "kerntypes.h"
+    #include <kerntypes.h>
+    #include <kmath.h>
 
 
     static char uintOutput[24];
@@ -37,11 +38,9 @@
         uint8_t  _idx         = 0;
         uint8_t  _is_negative = 0;
 
-        if (__val < 0) {
-            _is_negative = TRUE;
-            __val *= -1;
-            intOutput[0] = '-';
-        }
+        _is_negative = __val < 0;
+        intOutput[0] = (__val < 0) ? '-' : '+';
+        __val        = kabs(__val);
 
         while (__val / _size_test > 0) {
             _size_test *= 10;
