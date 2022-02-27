@@ -14,12 +14,12 @@ void kprintf(const char* __fmt, ...) {
         switch (*_ptr) {
             case '%': {
                 switch (*(_ptr + 1)) {
-                    case 'u': { kernel_text_print_str((char*)(uitoa(va_arg(_arguments, uint64_t)))); } break;
+                    case 'u'    :   kernel_text_print((char*)(uitoa(va_arg(_arguments, uint64_t))));  break;
                     
-                    case 'd':
-                    case 'i': { kernel_text_print_str((char*)(itoa(va_arg(_arguments, int64_t))));   } break;
+                    case 'd'    :
+                    case 'i'    :   kernel_text_print((char*)(itoa(va_arg(_arguments, int64_t))));    break;
 
-                    case 'c': { kernel_text_print_char((char)(va_arg(_arguments, signed)));                       } break;
+                    case 'c'    :   kernel_text_putch((char)(va_arg(_arguments, signed)));            break;
                 }
 
                 _ptr++;
@@ -27,7 +27,7 @@ void kprintf(const char* __fmt, ...) {
             }
 
             default:
-                kernel_text_print_char(*_ptr);
+                kernel_text_putch(*_ptr);
                 break;
         }
 

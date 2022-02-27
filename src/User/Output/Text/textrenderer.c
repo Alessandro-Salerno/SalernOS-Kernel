@@ -70,10 +70,10 @@ static void __newline__() {
 
     SOFTASSERT(!(curPosition.y < endPosition.y), RETVOID);
 
-    kernel_text_scroll_up(1);
+    kernel_text_scroll(1);
 }
 
-void kernel_text_scroll_up(uint32_t __lines) {
+void kernel_text_scroll(uint32_t __lines) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__lines != 0, RETVOID);
     SOFTASSERT(__lines < numRows, RETVOID);
@@ -106,13 +106,13 @@ void kernel_text_line_clear(uint32_t __line) {
     }
 }
 
-void kernel_text_print_char(char __char) {
+void kernel_text_putch(char __char) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__char != 0, RETVOID);
 
     switch (__char) {
-        case '\n': __newline__(); return;
-        case '\t': return;
+        case '\n': __newline__();             return;
+        case '\t': kernel_text_print("    "); return;
     }
 
     if (curPosition.x == endPosition.x)
@@ -122,13 +122,13 @@ void kernel_text_print_char(char __char) {
     curPosition.x += 8;
 }
 
-void kernel_text_print_str(char* __str) {
+void kernel_text_print(char* __str) {
     SOFTASSERT(trendrInitialized, RETVOID);
     
     char* _chr = __str;
 
     while (*_chr != 0) {
-        kernel_text_print_char(*_chr);
+        kernel_text_putch(*_chr);
         *_chr++;
     }
 }
