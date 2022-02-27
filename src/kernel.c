@@ -11,6 +11,9 @@ void kernel_main(boot_t __bootinfo) {
              _used_mem,
              _unusable_mem;
 
+    uint64_t _kernel_size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
+    uint64_t _kernel_pages = (uint64_t)(_kernel_size) / 4096 + 1;
+
     kernel_kutils_kdd_setup(__bootinfo);
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
@@ -28,6 +31,10 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Copyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
     kprintf("SalernOS EFI Bootloader %u-%c%u\n", __bootinfo._SEBMajorVersion, _seb_minver_month, _seb_minver_day);
     kprintf("SalernOS Kernel 0.0.5 (Florence)\n\n");
+
+    kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
+    kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
+    kprintf("Kernel Size: %u bytes (%u pages)\n\n", _kernel_size, _kernel_pages);
 
     kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo._Framebuffer->_PixelsPerScanLine, __bootinfo._Framebuffer->_Height);
     kprintf("Framebuffer Base Address: %u\n",    __bootinfo._Framebuffer->_BaseAddress);
