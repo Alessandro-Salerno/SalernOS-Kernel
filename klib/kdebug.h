@@ -7,6 +7,9 @@
     /***********************************************************
     RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
     ***********************************************************/
-    void            klogdebug               (const char* __msg);
+    void            kloginfo                (const char* __msg);
+    void            klogerr                 (const char* __msg);
+    void            klogwarn                (const char* __msg);
+    void            klogok                  (const char* __msg);
 
 #endif

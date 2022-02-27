@@ -1,4 +1,5 @@
 #include <kerninc.h>
+#include <kdebug.h>
 
 
 void kernel_main(boot_t __bootinfo) {
@@ -52,8 +53,11 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
     kprintf("Test Page Address: %u\n\n\n", (uint64_t)(_test_page));
 
-    kprintf("Kernel Ready!\n\n");
-    
+    kloginfo("Info Test");
+    klogerr("Error Test");
+    klogwarn("Warning Test");
+    klogok("Kernel Ready!\n");
+
     // What follows is just debug code
     // This will be removed in a later version
     uint8_t _kcode, _nkcode, _ascii;

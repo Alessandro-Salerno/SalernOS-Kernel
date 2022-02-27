@@ -133,11 +133,14 @@ void kernel_text_print(char* __str) {
     }
 }
 
-void kernel_text_info_set(uint32_t __color, uint32_t __backcolor) {
+void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff) {
     SOFTASSERT(trendrInitialized, RETVOID);
     
     foregroundColor = __color;
-    backgroundColor = __backcolor; 
+    backgroundColor = __backcolor;
+
+    curPosition.x   = __xoff;
+    curPosition.y   = __yoff;
 }
 
 void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t* __font) {
