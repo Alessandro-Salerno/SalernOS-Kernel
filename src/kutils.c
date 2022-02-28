@@ -31,6 +31,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     kernel_mmap_initialize(__bootinfo._Memory);
     kernel_mmap_info_get(&_mem_size, NULL, NULL, NULL);
 
+    kernel_panic_assert(_mem_size > 64000000, "Insufficient System Memory!");
+
     kloginfo("Initializing Kernel Page Frame Allocator...");
     kernel_pgfa_initialize();
 
