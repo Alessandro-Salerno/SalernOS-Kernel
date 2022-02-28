@@ -26,6 +26,7 @@
     #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
 
     // Utils includes
+    #include "kernelpanic.h"                        /*   Includes the Kernel panic handler                  */
     #include "kutils.h"                             /*   Includes all kernel initialization functions       */
 
     // Kernel Library Includes
