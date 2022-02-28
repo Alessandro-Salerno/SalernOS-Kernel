@@ -5,19 +5,19 @@
 
 #define INFO_FGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 #define INFO_BGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-#define INFO_TEXT    "DEBUG"
+#define INFO_TEXT    "[  DEBUG  ]"
 
 #define ERR_FGCOLOR  kernel_kdd_pxcolor_translate(255, 255, 255, 255)
 #define ERR_BGCOLOR  kernel_kdd_pxcolor_translate(255, 0, 0, 255)
-#define ERR_TEXT     "ERROR"
+#define ERR_TEXT     "[  ERROR  ]"
 
 #define WARN_FGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 #define WARN_BGCOLOR kernel_kdd_pxcolor_translate(255, 255, 0, 255)
-#define WARN_TEXT    "WARNING"
+#define WARN_TEXT    "[ WARNING ]"
 
 #define OK_FGCOLOR   kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 #define OK_BGCOLOR   kernel_kdd_pxcolor_translate(0, 255, 0, 255)
-#define OK_TEXT      "OK"
+#define OK_TEXT      "[ SUCCESS ]"
 
 
 static void __putmsg__(uint32_t __color, uint32_t __backcolor, const char* __type, const char* __msg) {
@@ -31,7 +31,7 @@ static void __putmsg__(uint32_t __color, uint32_t __backcolor, const char* __typ
     kernel_text_info_set(__color, __backcolor, _xoff, _yoff);
 
     kprintf(__type);
-    kprintf(": ");
+    kprintf("\t");
     kprintf(__msg);
     kprintf("\n");
 
