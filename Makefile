@@ -5,16 +5,17 @@ CC 		= gcc
 ASMC 	= nasm
 LD 		= ld
 
-CINCLUDE = -I "include" -I "src" -I "kstd" -I "klib"
-CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
-ASMFLAGS = 
-LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
-
+INCDIR   = include
 KSTDDIR  = kstd
 KLIBDIR  = klib
 SRCDIR 	 = src
 OBJDIR 	 = obj
 BUILDDIR = bin
+
+CINCLUDE = -I "$(INCDIR)" -I "$(SRCDIR)" -I "$(KSTDDIR)" -I "$(KLIBDIR)"
+CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
+ASMFLAGS = 
+LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
 
 rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
 
