@@ -12,10 +12,10 @@
     typedef struct GDTEntry {
         uint16_t _LimitZero;
         uint16_t _BaseZero;
-        uint8_t _BaseOne;
-        uint8_t _AccessByte;
-        uint8_t _LimitOne_Flags;
-        uint8_t _BaseTwo;
+        uint8_t  _BaseOne;
+        uint8_t  _AccessByte;
+        uint8_t  _LimitOne_Flags;
+        uint8_t  _BaseTwo;
     } __attribute__((__packed__)) gdtent_t;
 
     typedef struct __attribute__((__aligned__(0x1000)))  GlobalDescriptorTable {
