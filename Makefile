@@ -1,9 +1,9 @@
 OSNAME 	= SalernOS
 
 LDS 	= kernel.ld
-CC 		= gcc
+CC 		= x86_64-linux-gnu-gcc
 ASMC 	= nasm
-LD 		= ld
+LD 		= x86_64-linux-gnu-ld
 
 INCDIR   = include
 KSTDDIR  = kstd
