@@ -33,10 +33,10 @@ static void __putmsg__(uint32_t __color, uint32_t __backcolor, const char* __typ
     kprintf(__type);
     kprintf("\t");
     kprintf(__msg);
-    kprintf("\n");
 
     kernel_text_info_get(NULL, NULL, &_xoff, &_yoff, NULL);
     kernel_text_info_set(_color, _backcolor, _xoff, _yoff);
+    kprintf("\n");
 }
 
 void kloginfo(const char* __msg) {

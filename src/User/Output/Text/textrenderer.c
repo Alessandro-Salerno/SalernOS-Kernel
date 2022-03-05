@@ -42,7 +42,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
     kernel_kdd_fbo_clear(backgroundColor);
 }
 
-static void __putchar__(char __char) {
+static void __drawchar__(char __char) {
     char* _font_ptr = font->_Buffer + (__char * font->_Header->_CharSize);
 
     uint64_t _start_x = curPosition.x;
@@ -71,6 +71,16 @@ static void __newline__() {
     SOFTASSERT(!(curPosition.y < endPosition.y), RETVOID);
 
     kernel_text_scroll(1);
+}
+
+static void __putch__(char __char) {
+    switch (__char) {
+        case '\n': kernel_text_blitch(' ');   __newline__();    return;
+        case '\t': kernel_text_print("    ");                   return;
+    }
+
+    kernel_text_blitch(__char);
+    curPosition.x += 8;
 }
 
 void kernel_text_scroll(uint32_t __lines) {
@@ -106,20 +116,22 @@ void kernel_text_line_clear(uint32_t __line) {
     }
 }
 
+void kernel_text_blitch(char __char) {
+    SOFTASSERT(trendrInitialized, RETVOID);
+    SOFTASSERT(__char != 0, RETVOID);
+    
+    if (curPosition.x == endPosition.x)
+        __newline__();
+    
+    __drawchar__(__char);
+}
+
 void kernel_text_putch(char __char) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__char != 0, RETVOID);
 
-    switch (__char) {
-        case '\n': __newline__();             return;
-        case '\t': kernel_text_print("    "); return;
-    }
-
-    if (curPosition.x == endPosition.x)
-        __newline__();
-    
-    __putchar__(__char);
-    curPosition.x += 8;
+    __putch__(__char);
+    kernel_text_blitch(CURSOR_CHARACTER);
 }
 
 void kernel_text_print(char* __str) {

@@ -4,10 +4,13 @@
     #include "User/Output/Display/kdd.h"
     #include <kerntypes.h>
 
+    #define CURSOR_CHARACTER '_'
+
 
     /************************************************************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ************************************************************************************************************************************************/
+    void            kernel_text_blitch            (char __char);
     void            kernel_text_putch             (char __char);
     void            kernel_text_print             (char* __str);
 
