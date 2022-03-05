@@ -15,6 +15,9 @@ void kernel_syscall_dispatch(void* __frame, int __syscall) {
         "Syscall invoked with invalid ID!"
     );
 
-    kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
+    #ifdef DEBUG
+        kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
+    #endif
+    
     syscallHandlers[__syscall](__frame);
 }
