@@ -16,8 +16,10 @@ void kprintf(const char* __fmt, ...) {
                     
                     case 'd'    :
                     case 'i'    :   kernel_text_print((char*)(itoa(va_arg(_arguments, int64_t))));    break;
-
+                    
                     case 'c'    :   kernel_text_putch((char)(va_arg(_arguments, signed)));            break;
+
+                    case 's'    :   kernel_text_print((char*)(va_arg(_arguments, char*)));         break;
                 }
                 
                 break;

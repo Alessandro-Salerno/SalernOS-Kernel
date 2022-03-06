@@ -30,9 +30,7 @@ static void __putmsg__(uint32_t __color, uint32_t __backcolor, const char* __typ
     kernel_text_info_get(&_color, &_backcolor, &_xoff, &_yoff, NULL);
     kernel_text_info_set(__color, __backcolor, _xoff, _yoff);
 
-    kprintf(__type);
-    kprintf("\t");
-    kprintf(__msg);
+    kprintf("%s\t%s", __type, __msg);
 
     kernel_text_info_get(NULL, NULL, &_xoff, &_yoff, NULL);
     kernel_text_info_set(_color, _backcolor, _xoff, _yoff);
