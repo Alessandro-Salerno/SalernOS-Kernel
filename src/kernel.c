@@ -38,7 +38,7 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Kernel Size: %u bytes (%u pages)\n\n", _kernel_size, _kernel_pages);
 
     kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo._Framebuffer->_PixelsPerScanLine, __bootinfo._Framebuffer->_Height);
-    kprintf("Framebuffer Base Address: %u\n",    __bootinfo._Framebuffer->_BaseAddress);
+    kprintf("Framebuffer Base: %u\n",            __bootinfo._Framebuffer->_BaseAddress);
     kprintf("Framebuffer Size: %u bytes\n",      __bootinfo._Framebuffer->_BufferSize);
     kprintf("Framebuffer BPP: %u bytes\n\n",     __bootinfo._Framebuffer->_BytesPerPixel);
 
