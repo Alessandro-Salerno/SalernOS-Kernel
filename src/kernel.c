@@ -51,12 +51,13 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Free Memory: %u bytes\n",     _free_mem);
     kprintf("Used Memory: %u bytes\n",     _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Test Page Address: %u\n\n\n", (uint64_t)(_test_page));
+    kprintf("Test Page Address: %u\n\n",   (uint64_t)(_test_page));
 
     kloginfo("Info Test");
     klogerr("Error Test");
     klogwarn("Warning Test");
-    klogok("Kernel Ready!\n");
+    klogok("Kernel Ready!");
+    kprintf("\n\n");
 
     // What follows is just debug code
     // This will be removed in a later version
