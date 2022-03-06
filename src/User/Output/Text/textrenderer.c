@@ -140,28 +140,28 @@ void kernel_text_putch(char __char) {
 
 void kernel_text_print(char* __str) {
     SOFTASSERT(trendrInitialized, RETVOID);
-    
+
     char* _chr = __str;
 
-    while (*_chr != 0) {
+    while (*_chr) {
         kernel_text_putch(*_chr);
         *_chr++;
     }
 }
 
-void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff) {
+void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __pos) {
     SOFTASSERT(trendrInitialized, RETVOID);
     
     foregroundColor = __color;
     backgroundColor = __backcolor;
 
-    curPosition.x   = __xoff;
-    curPosition.y   = __yoff;
+    curPosition     = __pos;
+    lastPosition    = curPosition;
 }
 
 void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t* __font) {
     SOFTASSERT(!trendrInitialized, RETVOID);
-    
+
     __initialize__(__color, __backcolor, __xoff, __yoff);
     font = __font;
 
@@ -173,13 +173,13 @@ void kernel_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_t _
     __initialize__(__color, __backcolor, __xoff, __yoff);
 }
 
-void kernel_text_info_get(uint32_t* __color, uint32_t* __backcolor, uint32_t* __xoff, uint32_t* __yoff, bmpfont_t** __font) {
+void kernel_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t** __font) {
     SOFTASSERT(trendrInitialized, RETVOID);
-    
+
     ARGRET(__color, foregroundColor);
     ARGRET(__backcolor, backgroundColor);
-    
-    ARGRET(__xoff, curPosition.x);
-    ARGRET(__yoff, curPosition.y);
+
+    ARGRET(__curpos, curPosition);
+    ARGRET(__lpos, lastPosition);
     ARGRET(__font, font);
 }
