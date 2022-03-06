@@ -5,15 +5,13 @@
 
 
 void kprintf(const char* __fmt, ...) {
-    char* _ptr = (char*)(__fmt);
-
     va_list _arguments;
     va_start(_arguments, __fmt);
 
-    while (*_ptr) {
+    for (char* _ptr = (char*)(__fmt); *_ptr; _ptr++) {
         switch (*_ptr) {
             case '%': {
-                switch (*(_ptr + 1)) {
+                switch (*(++_ptr)) {
                     case 'u'    :   kernel_text_print((char*)(uitoa(va_arg(_arguments, uint64_t))));  break;
                     
                     case 'd'    :
@@ -21,8 +19,7 @@ void kprintf(const char* __fmt, ...) {
 
                     case 'c'    :   kernel_text_putch((char)(va_arg(_arguments, signed)));            break;
                 }
-
-                _ptr++;
+                
                 break;
             }
 
@@ -30,8 +27,6 @@ void kprintf(const char* __fmt, ...) {
                 kernel_text_putch(*_ptr);
                 break;
         }
-
-        _ptr++;
     }
 
     va_end(_arguments);
