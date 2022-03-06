@@ -72,8 +72,7 @@ void kernel_main(boot_t __bootinfo) {
         switch (_kcode) {
             case KEY_ENTER     : kprintf("\n"); break;
             case KEY_SPACE     : kprintf(" ");  break;
-            case KEY_BACKSPACE : kernel_syscall_dispatch("\n\nHello System call!\0", SYSCALL_PRINT_STR); break;
-
+            
             default:
                 kprintf("%c", _ascii);
                 break;

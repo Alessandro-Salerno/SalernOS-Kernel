@@ -12,6 +12,7 @@ static uint32_t backgroundColor;
 
 static point_t startPosition;
 static point_t endPosition;
+static point_t lastPosition;
 static point_t curPosition;
 
 static bool_t  trendrInitialized;
@@ -34,7 +35,8 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
         .y = _buff_h - (_buff_h % 16)
     };
 
-    curPosition = startPosition;
+    curPosition  = startPosition;
+    lastPosition = curPosition;
 
     numColumns = endPosition.x / 8;
     numRows    = endPosition.y / 16;
@@ -74,6 +76,8 @@ static void __newline__() {
 }
 
 static void __putch__(char __char) {
+    lastPosition = curPosition;
+
     switch (__char) {
         case '\n': kernel_text_blitch(' ');   __newline__();    return;
         case '\t': kernel_text_print("    ");                   return;
