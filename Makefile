@@ -17,8 +17,7 @@ DIRS     += $(wildcard $(KSTDDIR)/*)
 DIRS     += $(wildcard $(KLIBDIR)/*)
 
 
-kernel:
-	$(OBJS) link
+kernel: $(OBJS) link
 
 $(OBJDIR)/%_std.o: $(KSTDDIR)/%.c
 	@ echo !==== COMPILING STD  $^
