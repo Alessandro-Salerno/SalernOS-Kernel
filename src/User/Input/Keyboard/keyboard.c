@@ -64,9 +64,9 @@ void kernel_io_keyboard_keys_handle() {
     keyboardASCII     = 0;
     
     SOFTASSERT(
-        keyboardScancoide <= 58         &&
-        keyboardScancoide != KEY_LSHIFT &&
-        keyboardScancoide != KEY_RSHIFT &&
+        keyboardScancoide <= sizeof(_ascii_table) &&
+        keyboardScancoide != KEY_LSHIFT           &&
+        keyboardScancoide != KEY_RSHIFT           &&
         keyboardScancoide != KEY_ENTER,
 
         RETVOID 
