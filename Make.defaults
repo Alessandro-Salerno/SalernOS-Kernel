@@ -1,10 +1,9 @@
-OSNAME 	 = SalernOS
+OSNAME 	= SalernOS
 
-LDS 	 = kernel.ld
-
-CC 		 = $(CROSS_COMPILE)gcc
-ASMC 	 = nasm
-LD 		 = $(CROSS_COMPILE)ld
+LDS 	= kernel.ld
+CC 		= $(CROSS_COMPILE)gcc
+ASMC 	= nasm
+LD 		= $(CROSS_COMPILE)ld
 
 INCDIR   = include
 KSTDDIR  = kstd
