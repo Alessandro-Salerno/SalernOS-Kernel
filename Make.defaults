@@ -1,0 +1,19 @@
+OSNAME 	 = SalernOS
+
+LDS 	 = kernel.ld
+
+CC 		 = $(CROSS_COMPILE)gcc
+ASMC 	 = nasm
+LD 		 = $(CROSS_COMPILE)ld
+
+INCDIR   = include
+KSTDDIR  = kstd
+KLIBDIR  = klib
+SRCDIR 	 = src
+OBJDIR 	 = obj
+BUILDDIR = bin
+
+CINCLUDE = -I "$(INCDIR)" -I "$(SRCDIR)" -I "$(KSTDDIR)" -I "$(KLIBDIR)"
+CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
+ASMFLAGS = 
+LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib

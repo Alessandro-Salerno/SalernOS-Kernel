@@ -1,41 +1,24 @@
-OSNAME 	= SalernOS
+include Make.defaults
 
-LDS 	= kernel.ld
-CC 		= $(CROSS_COMPILE)gcc
-ASMC 	= nasm
-LD 		= $(CROSS_COMPILE)ld
+rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard, $d, $2) $(filter $(subst *, %, $2), $d))
 
-INCDIR   = include
-KSTDDIR  = kstd
-KLIBDIR  = klib
-SRCDIR 	 = src
-OBJDIR 	 = obj
-BUILDDIR = bin
+KSTD      = $(call rwildcard, $(KSTDDIR), *.c)
+KLIB      = $(call rwildcard, $(KLIBDIR), *.c)
+SRC       = $(call rwildcard, $(SRCDIR), *.c)
+ASMSRC.   = $(call rwildcard, $(SRCDIR), *.asm)
 
-CINCLUDE = -I "$(INCDIR)" -I "$(SRCDIR)" -I "$(KSTDDIR)" -I "$(KLIBDIR)"
-CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
-ASMFLAGS = 
-LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
+OBJS      = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRC))
+OBJS     += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/%_asm.o, $(ASMSRC)) 
+OBJS     += $(patsubst $(KSTDDIR)/%.c, $(OBJDIR)/%_std.o, $(KSTD))
+OBJS     += $(patsubst $(KLIBDIR)/%.c, $(OBJDIR)/%_lib.o, $(KLIB))
 
-
-rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
-
-KSTD   = $(call rwildcard, $(KSTDDIR), *.c)
-KLIB   = $(call rwildcard, $(KLIBDIR), *.c)
-SRC    = $(call rwildcard, $(SRCDIR), *.c)
-ASMSRC = $(call rwildcard, $(SRCDIR), *.asm)
-
-OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRC))
-OBJS  += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/%_asm.o, $(ASMSRC)) 
-OBJS  += $(patsubst $(KSTDDIR)/%.c, $(OBJDIR)/%_std.o, $(KSTD))
-OBJS  += $(patsubst $(KLIBDIR)/%.c, $(OBJDIR)/%_lib.o, $(KLIB))
-
-DIRS   = $(wildcard $(SRCDIR)/*)
-DIRS  += $(wildcard $(KSTDDIR)/*)
-DIRS  += $(wildcard $(KLIBDIR)/*)
+DIRS      = $(wildcard $(SRCDIR)/*)
+DIRS     += $(wildcard $(KSTDDIR)/*)
+DIRS     += $(wildcard $(KLIBDIR)/*)
 
 
-kernel: $(OBJS) link
+kernel:
+	$(OBJS) link
 
 $(OBJDIR)/%_std.o: $(KSTDDIR)/%.c
 	@ echo !==== COMPILING STD  $^
