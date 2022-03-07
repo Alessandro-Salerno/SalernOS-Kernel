@@ -1,8 +1,9 @@
 OSNAME 	= SalernOS
+MAKEDIR = make
 
-include Make.files
-include Make.commands
-include Make.flags
+include $(MAKEDIR)/Make.files
+include $(MAKEDIR)/Make.commands
+include $(MAKEDIR)/Make.flags
 
 include $(KSTDDIR)/Make.rules
 include $(KLIBDIR)/Make.rules
