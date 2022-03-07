@@ -1,0 +1,8 @@
+LDS 	 = kernel.ld
+
+INCDIR   = include
+KSTDDIR  = kstd
+KLIBDIR  = klib
+SRCDIR 	 = src
+OBJDIR 	 = obj
+BUILDDIR = bin

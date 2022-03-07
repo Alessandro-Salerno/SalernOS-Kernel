@@ -1,7 +1,13 @@
-include Make.defaults
+OSNAME 	= SalernOS
+
+include Make.files
+include Make.commands
+include Make.flags
+
 include $(KSTDDIR)/Make.rules
 include $(KLIBDIR)/Make.rules
 include $(SRCDIR)/Make.rules
+
 
 rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
 
