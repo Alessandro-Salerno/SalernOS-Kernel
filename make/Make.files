@@ -6,3 +6,6 @@ KLIBDIR  = klib
 SRCDIR 	 = src
 OBJDIR 	 = obj
 BUILDDIR = bin
+
+KFNAME   = Kernel
+LFNAME   = Libraries

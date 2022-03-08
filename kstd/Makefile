@@ -1,4 +1,4 @@
-$(OBJDIR)/%_std.o: $(KSTDDIR)/%.c
+$(OBJDIR)/$(LFNAME)/%.o: $(KSTDDIR)/%.c
 	@ echo !==== COMPILING STD  $^
 	@ mkdir -p $(@D)
 	$(CC) $(CFLAGS) -O3 -c $^ -o $@
