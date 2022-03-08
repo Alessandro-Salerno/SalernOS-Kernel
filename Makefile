@@ -6,9 +6,9 @@ include $(MAKEDIR)/Make.commands
 include $(MAKEDIR)/Make.flags
 include $(MAKEDIR)/Make.data
 
-include $(KSTDDIR)/Make.rules
-include $(KLIBDIR)/Make.rules
-include $(SRCDIR)/Make.rules
+include $(KSTDDIR)/Makefile
+include $(KLIBDIR)/Makefile
+include $(SRCDIR)/Makefile
 
 
 kernel: $(OBJS) link
