@@ -10,6 +10,10 @@
     <p align="center"> The SalernOS Kernel is a fundamental component of SalernOS: a toy OS I'm working on. </p>
 </p>
 
+<div align="center">
+    <img src=".github/SalernOS-Kernel.png", width="800">
+</div>
+
 ## Source Tree Strucutre
 The source tree is structured as follows:
 * `src` Contains all the source code for the core parts of the kernel
