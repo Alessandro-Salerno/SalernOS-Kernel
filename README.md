@@ -124,17 +124,20 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Function names must follow the scheme `kernel_category_target_action`, such as `kernel_kdd_pxcolor_set` and `kernel_kdd_pxcolor_get`. If the category is the target, such as `kernel_mmap_initialize`, the `target` section can be dropped
 * Static function names must follow the scheme `__action_target__`, such as `__get_pxptr__`
 * Static global variables and global variables must usa `pascalCase` notation
-* Struct member variables must use `CamelCase` notation and start with `_`
+* Static local variables and loacl variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`
+* Function arguments must be comprised of lowercase characters and must start with `__` as in `__function_argument`
+* Struct member variables must use `CamelCase` notation and must start with `_`
 
 ## Best Practices
 * Use 4-space indentation
-* Use `{` on the same line as the declaration
-* Avoid `if` statements when possible
+* Put brackets on the same line as the declaration
+* Put `*` next to the type in pointer declarations (`int* p` not `int *p`)
+* Avoid `if` statements whenever possible
 * Try to use case-specific types (Such as `uint16_t`) instead of generic types like `int`
-* Try to leave spaces inside scopes to separate code areas
-* Try to be as precise as possible with alignment and spaces. Any request containing `(){` or `a=b` instead of `() {` and `a = b` **WILL BE REJECTED WITHOUT FURTHER INSPECTION**
+* Try to leave blank lines inside scopes to separate code areas
+* Try to be as precise as possible with padding and spaces. Any request containing `(){` or `a=b` instead of `() {` and `a = b` **WILL BE REJECTED WITHOUT FURTHER INSPECTION**
 
 ## Contributing
-For you Pull Request to be accepted, you must follow **ALL** the above mentioned conventions and standards.
+For your Pull Request to be accepted, you must follow **ALL** the above mentioned conventions and standards.
 You must also describe the changes you made in a simple and organized way, otherwise your request may take longer than usual to process and is more likelly to be rejected.
 Expect to wait days or weeks for your request to be processed.
