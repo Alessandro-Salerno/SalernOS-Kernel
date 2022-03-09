@@ -5,8 +5,10 @@
 [![MIT License][license-shield]][license-url]
 
 
-## SalernOS Kernel
-The SalernOS Kernel is a fundamental component of SalernOS: a toy OS I'm working on.
+<p align="center">
+    <h1 align="center">SalernOS Kernel</h1>
+    <p align="center"> The SalernOS Kernel is a fundamental component of SalernOS: a toy OS I'm working on. </p>
+</p>
 
 ## Source Tree Strucutre
 The source tree is structured as follows:
