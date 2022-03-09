@@ -5,8 +5,10 @@
 [![MIT License][license-shield]][license-url]
 
 
-## SalernOS Kernel
-The SalernOS Kernel is a fundamental component of SalernOS: a toy OS I'm working on.
+<p align="center">
+    <h1 align="center">SalernOS Kernel</h1>
+    <p align="center"> The SalernOS Kernel is a fundamental component of SalernOS: a toy OS I'm working on. </p>
+</p>
 
 ## Source Tree Strucutre
 The source tree is structured as follows:
@@ -124,7 +126,7 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Function names must follow the scheme `kernel_category_target_action`, such as `kernel_kdd_pxcolor_set` and `kernel_kdd_pxcolor_get`. If the category is the target, such as `kernel_mmap_initialize`, the `target` section can be dropped
 * Static function names must follow the scheme `__action_target__`, such as `__get_pxptr__`
 * Static global variables and global variables must usa `pascalCase` notation
-* Static local variables and loacl variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`
+* Static local variables and local variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`
 * Function arguments must be comprised of lowercase characters and must start with `__` as in `__function_argument`
 * Struct member variables must use `CamelCase` notation and must start with `_`
 
