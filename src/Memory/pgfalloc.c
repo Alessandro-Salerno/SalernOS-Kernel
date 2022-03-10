@@ -101,7 +101,7 @@ void kernel_pgfa_initialize() {
     for (uint64_t _i = 0; _i < _meminfo._MemoryMapSize / _meminfo._DescriptorSize; _i++) {
         efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 
-        if (_mem_desc->_Type != 7)
+        if (_mem_desc->_Type != USABLE_MEM_TYPE)
             kernel_pgfa_reserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 

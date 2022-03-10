@@ -3,6 +3,8 @@
 
     #include <kerntypes.h>
 
+    #define USABLE_MEM_TYPE 7
+
 
     typedef struct EfiMemoryDescriptor {
         uint32_t _Type;

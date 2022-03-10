@@ -34,7 +34,7 @@ void kernel_mmap_initialize(meminfo_t __meminfo) {
         efimemdesc_t* _entry       = kernel_mmap_entry_get(_idx);
         uint64_t      _seg_sz      = _entry->_Pages * 4096;
                       mSize       += _seg_sz;
-                      mUsableSize += (_entry->_Type == 7) ? _seg_sz : 0;
+                      mUsableSize += (_entry->_Type == USABLE_MEM_TYPE) * _seg_sz;
 
         if (_entry->_Type == 7 && _seg_sz > mLargestSegment._Size) {
             mLargestSegment = (memseg_t) {
