@@ -17,11 +17,6 @@ void kernel_panic_throw(const char* __message) {
     while (1);
 }
 
-static char formatMessage[128];
-void kernel_panic_format(panicinfo_t __info) {
-    
-}
-
 void kernel_panic_assert(uint8_t __cond, const char* __message) {
     SOFTASSERT(!(__cond), RETVOID);
     kernel_panic_throw(__message);
