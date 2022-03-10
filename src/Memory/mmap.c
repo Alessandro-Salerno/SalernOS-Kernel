@@ -31,7 +31,7 @@ void kernel_mmap_initialize(meminfo_t __meminfo) {
     mMapEntries  = mMapSize / mMapDescSize;
 
     for (uint64_t _idx = 0; _idx < mMapEntries; _idx++) {
-        efimemdesc_t* _entry       = (efimemdesc_t*)((uint64_t)(mMap) + (_idx * mMapDescSize));
+        efimemdesc_t* _entry       = kernel_mmap_entry_get(_idx);
         uint64_t      _seg_sz      = _entry->_Pages * 4096;
                       mSize       += _seg_sz;
                       mUsableSize += (_entry->_Type == 7) ? _seg_sz : 0;
@@ -57,6 +57,6 @@ void kernel_mmap_info_get(uint64_t* __memsz, uint64_t* __usablemem, memseg_t* __
 }
 
 efimemdesc_t* kernel_mmap_entry_get(uint64_t __idx) {
-    kernel_panic_assert(mMapInitialized, MMAP_NINIT);
+    kernel_panic_assert(mMap != NULL, MMAP_NINIT);
     return (efimemdesc_t*)((uint64_t)(mMap) + (__idx * mMapDescSize));
 }
