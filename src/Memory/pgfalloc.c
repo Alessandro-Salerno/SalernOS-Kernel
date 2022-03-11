@@ -80,7 +80,7 @@ void __lock__page__(void* __address) {
     uint64_t _idx = (uint64_t)(__address) / 4096;
 
     SOFTASSERT(!(kernel_bmp_get(&pgBitmap, _idx)), RETVOID)
-    
+
     kernel_bmp_set(&pgBitmap, _idx, 1);
     mFreeSize -= 4096;
     mUsedSize += 4096;
@@ -98,7 +98,7 @@ void kernel_pgfa_initialize() {
 
     pgfInitialized = TRUE;
     __init__bitmap__();
-    
+
     for (uint64_t _i = 0; _i < _meminfo._MemoryMapSize / _meminfo._DescriptorSize; _i++) {
         efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 

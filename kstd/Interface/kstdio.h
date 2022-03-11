@@ -7,6 +7,6 @@
     /****************************************************************
     RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
     ****************************************************************/
-    void            kprintf                  (const char* __fmt, ...);
+    void            kprintf                 (const char* __fmt, ...);
 
 #endif
