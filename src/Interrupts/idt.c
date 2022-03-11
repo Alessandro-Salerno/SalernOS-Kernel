@@ -19,6 +19,7 @@ static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
     kernel_idt_offset_set(_handler, (uint64_t)(__isr));
 }
 
+
 void kernel_idt_initialize() {
     kernel_panic_assert(!idtInitialized, IDT_DINIT);
 

@@ -86,6 +86,7 @@ void __lock__page__(void* __address) {
     mUsedSize += 4096;
 }
 
+
 void kernel_pgfa_initialize() {
     SOFTASSERT(pgfInitialized == 0, RETVOID);
 

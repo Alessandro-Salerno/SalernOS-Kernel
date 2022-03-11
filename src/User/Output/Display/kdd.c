@@ -15,6 +15,7 @@ static uint32_t* __get_pxptr__(uint64_t __x, uint64_t __y) {
     };
 }
 
+
 void kernel_kdd_fbo_bind(framebuffer_t* __fbo) {
     boundFBO = __fbo;
 }

@@ -22,6 +22,7 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
     return (pgtable_t*)((uint64_t)(_entry._Address) << 12);
 }
 
+
 pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
     return (pgmapidx_t) {
         ._PageDirectoryPointerIndex = (__virtaddr >> 39) & 0x1ff,

@@ -87,6 +87,7 @@ static void __putch__(char __char) {
     curPosition.x += 8;
 }
 
+
 void kernel_text_scroll(uint32_t __lines) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__lines != 0, RETVOID);
