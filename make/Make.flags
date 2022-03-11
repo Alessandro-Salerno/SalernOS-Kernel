@@ -1,4 +1,4 @@
-CINCLUDE = -I "$(INCDIR)" -I "$(SRCDIR)" -I "$(KSTDDIR)" -I "$(KLIBDIR)"
+CINCLUDE = -I "$(INCDIR)/Interface" -I "$(SRCDIR)" -I "$(KSTDDIR)" -I "$(KLIBDIR)"
 CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib
