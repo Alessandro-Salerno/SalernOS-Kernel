@@ -4,6 +4,9 @@
     #include <kerntypes.h>
 
 
-    uint64_t kabs(int64_t __val);
+    /****************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ****************************************************************/
+    uint64_t        kabs                          (int64_t __val);
 
 #endif

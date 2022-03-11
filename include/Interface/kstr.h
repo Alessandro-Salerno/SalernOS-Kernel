@@ -5,7 +5,10 @@
     #include <kmath.h>
 
 
-    const char* uitoa(uint64_t __val);
-    const char* itoa(int64_t __val);
+    /****************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ****************************************************************/
+    const char*     uitoa                         (uint64_t __val);
+    const char*     itoa                          (int64_t __val);
 
 #endif
