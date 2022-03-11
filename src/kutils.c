@@ -43,7 +43,7 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
 
     kloginfo("Initializing Page Table Manager...");
     pgtable_t* _lvl4 = (pgtable_t*)(kernel_pgfa_page_new());
-    memset(_lvl4, 4096, 0);
+    kmemset(_lvl4, 4096, 0);
 
     pgtm_t _page_table_manager = (pgtm_t) { 
         ._PML4Address = _lvl4

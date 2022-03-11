@@ -48,7 +48,7 @@ static void __unreserve_page__(void* __address) {
 static void __init__bitmap__() {
     kernel_panic_assert(pgfInitialized == 1, PGFALLOC_DBMP);
     
-    memset(mSegment._Segment, mSegment._Size, 0);
+    kmemset(mSegment._Segment, mSegment._Size, 0);
 
     pgBitmap = (bmp_t) {
         ._Size = mFreeSize / 4096 / 8 + 1,

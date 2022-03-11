@@ -1,5 +1,6 @@
 rwildcard = $(foreach d, $(wildcard $(1:=/*)), $(call rwildcard ,$d, $2) $(filter $(subst *, %, $2), $d))
 
+KINC   = $(call rwildcard, $(INCDIR), *.c)
 KSTD   = $(call rwildcard, $(KSTDDIR), *.c)
 KLIB   = $(call rwildcard, $(KLIBDIR), *.c)
 SRC    = $(call rwildcard, $(SRCDIR), *.c)
@@ -9,7 +10,9 @@ OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/$(KFNAME)/C/%.o, $(SRC))
 OBJS  += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/$(KFNAME)/Assembly/%.o, $(ASMSRC)) 
 OBJS  += $(patsubst $(KSTDDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KSTD))
 OBJS  += $(patsubst $(KLIBDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KLIB))
+OBJS  += $(patsubst $(INCDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KINC))
 
 DIRS   = $(wildcard $(SRCDIR)/*)
 DIRS  += $(wildcard $(KSTDDIR)/*)
 DIRS  += $(wildcard $(KLIBDIR)/*)
+DIRS  += $(wildcard $(INCDIR)/*)
