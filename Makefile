@@ -30,14 +30,15 @@ include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
 
 
-kernel: $(OBJS) link
+setup:
+	@mkdir $(BUILDDIR)
+	@mkdir $(OBJDIR)
 
+kernel: $(OBJS) link
 
 link:
 	@ echo !==== LINKING
 	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
 
-
-setup:
-	@mkdir $(BUILDDIR)
-	@mkdir $(OBJDIR)
+clean:
+	rm $(OBJS)
