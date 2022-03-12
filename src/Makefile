@@ -1,15 +1,6 @@
-$(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
-	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
-	@ mkdir -p $(@D)
-	$(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
-
-$(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
-	@ echo !==== COMPILING $^
-	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -O3 -c $^ -o $@
 # SalernOS Kernel
 # Copyright (C) 2021 - 2022 Alessandro Salerno
-# 
+
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -24,6 +15,16 @@ $(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+
+$(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
+	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
+	@ mkdir -p $(@D)
+	$(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
+
+$(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
+	@ echo !==== COMPILING $^
+	@ mkdir -p $(@D)
+	$(CC) $(CFLAGS) -O3 -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/Assembly/%.o: $(SRCDIR)/%.asm
 	@ echo !==== COMPILING ASM $^
