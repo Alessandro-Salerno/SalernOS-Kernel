@@ -18,7 +18,7 @@
 The source tree is structured as follows:
 * `src` Contains all the source code for the core parts of the kernel
 * `include` Contains "libraries" ahd headers that are mostly independent from other kernel components (`kerninc.h` is an exception)
-* `kstd` Contains a pseudo C tandard Library for the kernel
+* `kstd` Contains a pseudo C Standard Library for the kernel
 * `klib` Contains code that is dependent on other parts of the kernel (Such as `kstd`, `include` and `src`), but are not important enough to keep inside the core source
 * `make` Contains files included by the main `Makefile`
 * `obj` Is created by the `Makefile` and contains the object files (`.o`) derived from the compilation of the kernel
@@ -30,7 +30,15 @@ Finally, `kernel.ld` is the Linker Script for the kernel.
 To set the environment up, just type `make setup` and hit enter.
 
 ## Building the Kernel
-To compile the entire kernel, just type `make` and hit enter. If you want, you can use the [SalernOS-Buildenv](https://github.com/Alessandro-Salerno/SalernOS-Buildenv).
+To compile the entire kernel, just type `make` and hit enter.
+
+### Requirements
+* A C Compiler (GCC) for x86_64
+* An assembler (NASM) for x86_64
+* A linker (LD)
+* Make
+
+All required software is bundled with the [SalernOS-Buildenv](https://github.com/Alessandro-Salerno/SalernOS-Buildenv)
 
 ## Source Tree Naming Conventions
 * Folders in the main directory must be named using short series of lowercase characters
@@ -149,3 +157,6 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 For your Pull Request to be accepted, it must follow **ALL** the above mentioned conventions and standards.
 You must also describe the changes you made in a simple and organized way, otherwise your request may take longer than usual to process and is more likelly to be rejected.
 Expect to wait days or weeks for your request to be processed.
+
+## Roadmap
+You can find the roadmap [here](https://trello.com/b/w0bPHjo6/roadmap)
