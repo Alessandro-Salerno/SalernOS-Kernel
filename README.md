@@ -30,7 +30,7 @@ Finally, `kernel.ld` is the Linker Script for the kernel.
 To set the environment up, just type `make setup` and hit enter.
 
 ## Building the Kernel
-To compile the entire kernel, just type `make` and hit enter. If you want, you can use the SalernOS-Buildenv.
+To compile the entire kernel, just type `make` and hit enter. If you want, you can use the [SalernOS-Buildenv](https://github.com/Alessandro-Salerno/SalernOS-Buildenv).
 
 ## Source Tree Naming Conventions
 * Folders in the main directory must be named using short series of lowercase characters
@@ -39,7 +39,7 @@ To compile the entire kernel, just type `make` and hit enter. If you want, you c
 
 These rules do not apply to special files and folders such as Makefiles.
 
-## C Source File Structure (For `src/`)
+## C Source File Structure
 * Source Files must contain commented notices, such as licenses, warnings and comments as their first sections.
 * Source Files must contain Compiler Directives in order:
   * Include statements (From longest to shortest)
@@ -81,7 +81,7 @@ uint32_t kernel_other_implementation() {
 }
 ```
 
-## C Header File Structure (For all subdirectories)
+## C Header File Structure
 * Header Files must contain commented notices, such as licenses, warnings and comments as their first sections.
 * Header Files must contain Compiler Directives in order:
   * Include guards
@@ -132,7 +132,9 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Static global variables and global variables must usa `pascalCase` notation
 * Static local variables and local variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`
 * Function arguments must be comprised of lowercase characters and must start with `__` as in `__function_argument`
-* Struct member variables must use `CamelCase` notation and must start with `_`
+* Struct fields must use `CamelCase` notation and must start with `_`
+* Constants and macros defined using `#define` must be comprised of UPPERCASE characters, with words separated by `_` such as in `ARGRET(__arg, __val)` or `PIC1_COMMAND`
+* Constants declared with `const` must be comprised of UPPERCASE characters, with words separated by `_` and must start with `_`, such as in `_KERNEL_START`
 
 ## Best Practices
 * Use 4-space indentation
@@ -144,6 +146,6 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Try to be as precise as possible with padding and spaces. Any request containing `(){` or `a=b` instead of `() {` and `a = b` **WILL BE REJECTED WITHOUT FURTHER INSPECTION**
 
 ## Contributing
-For your Pull Request to be accepted, you must follow **ALL** the above mentioned conventions and standards.
+For your Pull Request to be accepted, it must follow **ALL** the above mentioned conventions and standards.
 You must also describe the changes you made in a simple and organized way, otherwise your request may take longer than usual to process and is more likelly to be rejected.
 Expect to wait days or weeks for your request to be processed.
