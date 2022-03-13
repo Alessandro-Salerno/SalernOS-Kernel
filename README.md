@@ -1,3 +1,14 @@
+[contributors-shield]: https://img.shields.io/github/contributors/Alessandro-Salerno/SalernOS-Kernel.svg?style=flat-square
+[contributors-url]: https://github.com/Alessandro-Salerno/SalernOS-Kernel/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Alessandro-Salerno/SalernOS-Kernel.svg?style=flat-square
+[forks-url]: https://github.com/Alessandro-Salerno/SalernOS-Kernel/network/members
+[stars-shield]: https://img.shields.io/github/stars/Alessandro-Salerno/SalernOS-Kernel.svg?style=flat-square
+[stars-url]: https://github.com/Alessandro-Salerno/SalernOS-Kernel/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Alessandro-Salerno/SalernOS-Kernel.svg?style=flat-square
+[issues-url]: https://github.com/Alessandro-Salerno/SalernOS-Kernel/issues
+[license-shield]: https://img.shields.io/github/license/Alessandro-Salerno/SalernOS-Kernel.svg?style=flat-square
+[license-url]: https://github.com/Alessandro-Salerno/SalernOS-Kernel/blob/master/LICENSE.txt
+
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
