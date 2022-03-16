@@ -165,6 +165,9 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Try to leave blank lines inside scopes to separate code areas
 * Try to be as precise as possible with padding and spaces. Any request containing `(){` or `a=b` instead of `() {` and `a = b` **WILL BE REJECTED WITHOUT FURTHER INSPECTION**
 
+## Branches
+The `master` branch is used for the current **STABLE** version. A `dev` branch will be created for every Kernel release (`kernel-rome-dev` for example). Smaller changes such as bug fixes may still be pushed to `master`, but all other changes will be commited to the `dev` branch.
+
 ## Contributing
 For your Pull Request to be accepted, it must follow **ALL** the above mentioned conventions and standards.
 You must also describe the changes you made in a simple and organized way, otherwise your request may take longer than usual to process and is more likelly to be rejected.
