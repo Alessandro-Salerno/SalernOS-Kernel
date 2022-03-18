@@ -41,7 +41,7 @@ void kernel_main(boot_t __bootinfo) {
     kernel_kutils_int_setup();
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
-    kprintf("DEBUG: Testing...\n");
+    kloginfo("Testing...");
     void* _test_page = kernel_pgfa_page_new();
 
     kernel_text_reinitialize(
