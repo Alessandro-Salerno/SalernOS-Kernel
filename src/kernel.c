@@ -51,7 +51,7 @@ void kernel_main(boot_t __bootinfo) {
 
     kprintf("Copyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
     kprintf("SalernOS EFI Bootloader %u-%c%u\n", __bootinfo._SEBMajorVersion, _seb_minver_month, _seb_minver_day);
-    kprintf("SalernOS Kernel 0.0.5 (Florence)\n\n");
+    kprintf("SalernOS Kernel DEV (Rome)\n\n");
 
     kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
     kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
