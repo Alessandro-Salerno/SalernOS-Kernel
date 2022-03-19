@@ -35,6 +35,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "GDT/gdt.h"                            /*   Includes the Kernel's definition of the GTD        */
     #include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
+    // Hardware includes
+    #include "Hardware/ACPI/acpi.h"                 /*   Includes the Kernel's RSDP/ACPI Implementation     */
+
     // Syscall includes
     #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
     #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
