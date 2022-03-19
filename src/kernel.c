@@ -73,6 +73,8 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
     kprintf("Test Page Address: %u\n\n",   (uint64_t)(_test_page));
 
+    kprintf("RSDP Address: %u\n\n", (uint64_t)(__bootinfo._RSDP));
+
     kloginfo("Info Test");
     klogerr("Error Test");
     klogwarn("Warning Test");

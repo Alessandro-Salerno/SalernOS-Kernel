@@ -32,6 +32,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         framebuffer_t* _Framebuffer;
         bmpfont_t*     _Font;
         meminfo_t      _Memory;
+        void*          _RSDP;
 
         uint8_t        _SEBMajorVersion;
         uint16_t       _SEBMinorVersion;
