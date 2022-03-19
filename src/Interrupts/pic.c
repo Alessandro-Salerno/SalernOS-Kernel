@@ -30,7 +30,7 @@ void kernel_interrupts_pic_remap() {
 
     kernel_io_out_wait(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
     kernel_io_out_wait(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
-    kernel_io_out_wait(PIC1_DATA, 0x20);\
+    kernel_io_out_wait(PIC1_DATA, 0x20);
     kernel_io_out_wait(PIC2_DATA, 0x28);
     kernel_io_out_wait(PIC1_DATA, 0x04);
     kernel_io_out_wait(PIC2_DATA, 0x02);
