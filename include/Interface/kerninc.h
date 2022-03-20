@@ -35,11 +35,16 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "GDT/gdt.h"                            /*   Includes the Kernel's definition of the GTD        */
     #include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
+    // Hardware includes
+    #include "Hardware/ACPI/acpi.h"                 /*   Includes the Kernel's RSDP/ACPI Implementation     */
+    #include "Hardware/PCI/pci.h"                   /*   Includes the Kernel's PCI Implementation           */
+
     // Syscall includes
     #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
     #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
 
     // Memory includes
+    #include "Memory/Heap/heap.h"                   /*   Includes the Kernel's heap manager                 */
     #include "Memory/pgfalloc.h"                    /*   Includes the Kernel Page Frame Allocator           */
     #include "Memory/paging.h"                      /*   Includes the Kernel Page Table Manager             */
     #include "Memory/mmap.h"                        /*   Includes the Kernel EFI Memory Map Interface       */

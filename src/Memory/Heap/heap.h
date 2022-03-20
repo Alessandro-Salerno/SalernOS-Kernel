@@ -18,32 +18,25 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include <kmem.h>
+#ifndef SALERNOS_CORE_KERNEL_HEAP
+#define SALERNOS_CORE_KERNEL_HEAP
 
-#define KMEMASSERT(__cond) if (!(__cond)) return;
+    #include <kerntypes.h>
 
 
-void kmemset(void* __buff, uint64_t __buffsize, uint8_t __val) {
-    KMEMASSERT(__buffsize >= 16);
+    typedef struct HeapSegmentHeader {
+        size_t                    _Length;
+        struct HeapSegmentHeader* _Next;
+        struct HeapSegmentHeader* _Last;
+        bool_t                    _Free;
+    } heapseghdr_t;
 
-    __uint128_t _128bit_val = __val;
-    for (uint8_t _i = 8; _i < 128; _i += 8)
-        _128bit_val |= (__uint128_t)(__val) << _i;
 
-    for (uint64_t _i = 0; _i < __buffsize; _i += 16)
-        *(__uint128_t*)((uint64_t)(__buff) + _i) = _128bit_val;
+    /****************************************************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ****************************************************************************************************/
+    void            kernel_heap_initialize        (void* __heapbase, size_t __pgcount);
+    void*           kernel_heap_allocate          (size_t __buffsize);
+    void            kernel_heap_free              (void* __buff);
 
-    for (uint64_t _i = __buffsize - (__buffsize % 16); _i < __buffsize; _i++)
-        *(uint8_t*)((uint64_t)(__buff) + _i) = _128bit_val;
-}
-
-bool_t  kmemcmp(void* __buff1, void* __buff2, uint64_t __buffsize) {
-    for (uint64_t _i = 0; _i < __buffsize; _i++) {
-        uint8_t _buff1val = *(uint8_t*)(__buff1 + _i);
-        uint8_t _buff2val = *(uint8_t*)(__buff2 + _i);
-
-        if (_buff1val != _buff2val) return FALSE;
-    }
-
-    return TRUE;
-}
+#endif

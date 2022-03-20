@@ -76,7 +76,6 @@ static void __init__bitmap__() {
     };
 
     pgfInitialized = 2;
-    kernel_pgfa_lock(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
 }
 
 void __free_page__(void* __address) {
@@ -119,13 +118,17 @@ void kernel_pgfa_initialize() {
     pgfInitialized = TRUE;
     __init__bitmap__();
 
+    kernel_pgfa_reserve(0, mFreeSize / 4096 + 1);
+
     for (uint64_t _i = 0; _i < _meminfo._MemoryMapSize / _meminfo._DescriptorSize; _i++) {
         efimemdesc_t* _mem_desc = kernel_mmap_entry_get(_i);
 
-        if (_mem_desc->_Type != USABLE_MEM_TYPE)
-            kernel_pgfa_reserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
+        if (_mem_desc->_Type == USABLE_MEM_TYPE)
+            kernel_pgfa_unreserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 
+    kernel_pgfa_reserve(0, 0x100);
+    kernel_pgfa_lock(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
     pgfInitialized = 3;
 }
 

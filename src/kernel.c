@@ -39,9 +39,12 @@ void kernel_main(boot_t __bootinfo) {
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
     kernel_kutils_int_setup();
+
+    acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
+    
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
-    kprintf("DEBUG: Testing...\n");
+    kloginfo("Testing...");
     void* _test_page = kernel_pgfa_page_new();
 
     kernel_text_reinitialize(
@@ -51,7 +54,7 @@ void kernel_main(boot_t __bootinfo) {
 
     kprintf("Copyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
     kprintf("SalernOS EFI Bootloader %u-%c%u\n", __bootinfo._SEBMajorVersion, _seb_minver_month, _seb_minver_day);
-    kprintf("SalernOS Kernel 0.0.5 (Florence)\n\n");
+    kprintf("SalernOS Kernel DEV (Rome)\n\n");
 
     kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
     kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
@@ -71,11 +74,14 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Free Memory: %u bytes\n",     _free_mem);
     kprintf("Used Memory: %u bytes\n",     _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Test Page Address: %u\n\n",   (uint64_t)(_test_page));
+    kprintf("Test Page Address: %u\n",     (uint64_t)(_test_page));
+    kprintf("Heap Test: %u\n\n",           (size_t)kernel_heap_allocate(0x8000));
 
-    kloginfo("Info Test");
-    klogerr("Error Test");
-    klogwarn("Warning Test");
+    kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo._RSDP));
+    kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));
+
+    kernel_hw_pci_enumerate(_acpi._MCFG);
+
     klogok("Kernel Ready!");
     kprintf("\n\n");
 

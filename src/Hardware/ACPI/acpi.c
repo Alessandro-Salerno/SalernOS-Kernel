@@ -18,32 +18,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
+#include "Hardware/ACPI/acpi.h"
 #include <kmem.h>
 
-#define KMEMASSERT(__cond) if (!(__cond)) return;
 
+void* kernel_hw_acpi_table_find(sdthdr_t* __sdthdr, char* __signature) {
+    uint64_t _nentries = (__sdthdr->_Length - sizeof(sdthdr_t)) / 8;
 
-void kmemset(void* __buff, uint64_t __buffsize, uint8_t __val) {
-    KMEMASSERT(__buffsize >= 16);
-
-    __uint128_t _128bit_val = __val;
-    for (uint8_t _i = 8; _i < 128; _i += 8)
-        _128bit_val |= (__uint128_t)(__val) << _i;
-
-    for (uint64_t _i = 0; _i < __buffsize; _i += 16)
-        *(__uint128_t*)((uint64_t)(__buff) + _i) = _128bit_val;
-
-    for (uint64_t _i = __buffsize - (__buffsize % 16); _i < __buffsize; _i++)
-        *(uint8_t*)((uint64_t)(__buff) + _i) = _128bit_val;
-}
-
-bool_t  kmemcmp(void* __buff1, void* __buff2, uint64_t __buffsize) {
-    for (uint64_t _i = 0; _i < __buffsize; _i++) {
-        uint8_t _buff1val = *(uint8_t*)(__buff1 + _i);
-        uint8_t _buff2val = *(uint8_t*)(__buff2 + _i);
-
-        if (_buff1val != _buff2val) return FALSE;
+    for (uint64_t _i = 0; _i < _nentries; _i++) {
+        sdthdr_t* _sdt =  (sdthdr_t*)(*(uint64_t*)((uint64_t)(__sdthdr) + sizeof(sdthdr_t) + (_i * 8)));
+        if (kmemcmp(_sdt->_Signature, __signature, 4)) return _sdt;
     }
 
-    return TRUE;
+    return NULL;
 }

@@ -65,22 +65,37 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     pgtable_t* _lvl4 = (pgtable_t*)(kernel_pgfa_page_new());
     kmemset(_lvl4, 4096, 0);
 
-    pgtm_t _page_table_manager = (pgtm_t) { 
-        ._PML4Address = _lvl4
-    };
+    pgtm_t _page_table_manager = kernel_paging_initialize(_lvl4);
 
-    kernel_paging_address_mapn(&_page_table_manager, (void*)(0), _mem_size);
-    kernel_paging_address_mapn(&_page_table_manager, (void*)(_fbbase), _fbsize);
+    kernel_paging_address_mapn((void*)(0), _mem_size);
+    kernel_paging_address_mapn((void*)(_fbbase), _fbsize);
 
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     
     kloginfo("Locking Font and Framebuffer Pages...");
     kernel_pgfa_reserve(_fbbase, _fbsize / 4096 + 1);
     kernel_pgfa_reserve(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
+
+    kloginfo("Initializing Heap...");
+    kernel_heap_initialize((void*)(0x100000000000), 0x10);
 }
 
 void kernel_kutils_int_setup() {
     kloginfo("Initializing Interrupts...");
     kernel_idt_initialize();
     kernel_interrupts_pic_remap();
+}
+
+acpiinfo_t kernel_kutils_rsd_setup(boot_t __bootinfo) {
+    kloginfo("Initializing ACPI...");
+
+    sdthdr_t* _xsdt  = (sdthdr_t*)(__bootinfo._RSDP->_XSDTAddress);
+    mcfghdr_t* _mcfg = (mcfghdr_t*)(kernel_hw_acpi_table_find(_xsdt, "MCFG"));
+
+    kernel_panic_assert(kmemcmp(_mcfg->_SDTHeader._Signature, "MCFG", 4), "Invalid MCFG Table");
+
+    return (acpiinfo_t) {
+        ._XSDT = _xsdt,
+        ._MCFG = _mcfg
+    };
 }
