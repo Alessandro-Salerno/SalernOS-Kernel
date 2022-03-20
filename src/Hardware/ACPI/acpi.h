@@ -53,4 +53,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint64_t _Reserved;
     } mcfghdr_t;
 
+
+    /*************************************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    *************************************************************************************/
+    void*           kernel_hw_acpi_table_find     (sdthdr_t* __sdthdr, char* __signature);
+
 #endif
