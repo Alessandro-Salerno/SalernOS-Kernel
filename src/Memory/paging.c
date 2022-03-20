@@ -25,7 +25,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 static pgtm_t tableManager;
-static bool_t pgtmInitialized;
 
 
 static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
@@ -53,7 +52,6 @@ pgtm_t kernel_paging_initialize(pgtable_t* __lvl4) {
         ._PML4Address = __lvl4
     };
 
-    pgtmInitialized = TRUE;
     return tableManager;
 }
 
