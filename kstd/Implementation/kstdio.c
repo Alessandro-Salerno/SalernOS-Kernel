@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "user/Output/Text/textrenderer.h"
-#include "kstdio.h"
+#include <kstdio.h>
 
 
 #include <stdarg.h>
@@ -41,7 +41,7 @@ void kprintf(const char* __fmt, ...) {
                     
                     case 'c'    :   kernel_text_putch((char)(va_arg(_arguments, signed)));            break;
 
-                    case 's'    :   kernel_text_print((char*)(va_arg(_arguments, char*)));         break;
+                    case 's'    :   kernel_text_print((char*)(va_arg(_arguments, char*)));            break;
                 }
                 
                 break;
