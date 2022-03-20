@@ -41,6 +41,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } pcidevhdr_t;
 
 
-    void kernel_hw_pci_enumerate(mcfghdr_t* __mcfgtable);
+    /********************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ********************************************************************/
+    void            kernel_hw_pci_enumerate     (mcfghdr_t* __mcfgtable);
 
 #endif
