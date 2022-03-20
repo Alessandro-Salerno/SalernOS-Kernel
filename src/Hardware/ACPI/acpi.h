@@ -25,7 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
     typedef struct __attribute__((__packed__)) RootSystemDescriptorPointer {
-        uint8_t  _Signature[8];
+        uint8_t _Signature[8];
         uint8_t  _Checksum;
         uint8_t  _OEM[6];
         uint8_t  _Revision;
@@ -41,7 +41,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint32_t _Length;
         uint8_t  _Revision;
         uint8_t  _Checksum;
-        uint8_t  _OEM;
+        uint8_t  _OEM[6];
         uint8_t  _OEMTableID[8];
         uint32_t _OEMRevision;
         uint32_t _Creator;
