@@ -74,7 +74,8 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Free Memory: %u bytes\n",     _free_mem);
     kprintf("Used Memory: %u bytes\n",     _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Test Page Address: %u\n\n",   (uint64_t)(_test_page));
+    kprintf("Test Page Address: %u\n",     (uint64_t)(_test_page));
+    kprintf("Heap Test: %u\n\n",           (size_t)kernel_heap_allocate(0x8000));
 
     kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo._RSDP));
     kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));

@@ -75,6 +75,9 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     kloginfo("Locking Font and Framebuffer Pages...");
     kernel_pgfa_reserve(_fbbase, _fbsize / 4096 + 1);
     kernel_pgfa_reserve(__bootinfo._Font->_Buffer, (__bootinfo._Font->_Header->_CharSize * 256) / 4096);
+
+    kloginfo("Initializing Heap...");
+    kernel_heap_initialize((void*)(0x100000000000), 0x10);
 }
 
 void kernel_kutils_int_setup() {
