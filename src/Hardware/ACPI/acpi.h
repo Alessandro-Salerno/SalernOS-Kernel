@@ -48,10 +48,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint32_t _CreatorRevision;
     } __attribute__((__packed__)) sdthdr_t;
 
-    typedef struct MCFGHeader {
+    typedef struct __attribute__((__packed__)) MCFGHeader {
         sdthdr_t _SDTHeader;
         uint64_t _Reserved;
-    } mcfghdr_t;
+    } __attribute__((__packed__)) mcfghdr_t;
+
+    typedef struct __attribute__((__packed__)) ACPIDeviceConfiguration {
+        uint64_t _BaseAddress;
+        uint16_t _PCISegGroup;
+        uint8_t  _StartBus;
+        uint8_t  _EndBus;
+        uint32_t _Reserved;
+    } __attribute__((__packed__)) acpidevconf_t;
 
 
     /*************************************************************************************
