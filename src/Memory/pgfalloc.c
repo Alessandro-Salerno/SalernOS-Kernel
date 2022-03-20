@@ -127,6 +127,7 @@ void kernel_pgfa_initialize() {
             kernel_pgfa_unreserve(_mem_desc->_PhysicalAddress, _mem_desc->_Pages); 
     }
 
+    kernel_pgfa_reserve(0, 0x100);
     kernel_pgfa_lock(pgBitmap._Buffer, pgBitmap._Size / 4096 + 1);
     pgfInitialized = 3;
 }
