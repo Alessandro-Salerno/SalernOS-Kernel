@@ -23,8 +23,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "kernelpanic.h"
 #include <kmem.h>
 
+#define PGTM_NINIT "Page Table Manager Fault:\nKernel tried to perform operation before initializing."
+
 
 static pgtm_t tableManager;
+static bool_t pgtmInitialized;
 
 
 static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
@@ -52,6 +55,7 @@ pgtm_t kernel_paging_initialize(pgtable_t* __lvl4) {
         ._PML4Address = __lvl4
     };
 
+    pgtmInitialized = TRUE;
     return tableManager;
 }
 
@@ -64,10 +68,12 @@ pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
     };
 }
 
-void kernel_paging_address_map(pgtm_t* __manager, void* __virtaddr, void* __physaddr) {
+void kernel_paging_address_map(void* __virtaddr, void* __physaddr) {
+    kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+
     pgmapidx_t _indexer = kernel_paging_index((uint64_t)(__virtaddr));
     
-    pgtable_t* _page_directory_pointer = __init_page_table__(__manager->_PML4Address, _indexer._PageDirectoryPointerIndex);
+    pgtable_t* _page_directory_pointer = __init_page_table__(tableManager._PML4Address, _indexer._PageDirectoryPointerIndex);
     pgtable_t* _page_directory         = __init_page_table__(_page_directory_pointer, _indexer._PageDirectoryIndex);
     pgtable_t* _page_table             = __init_page_table__(_page_directory, _indexer._PageTableIndex); 
 
@@ -79,7 +85,9 @@ void kernel_paging_address_map(pgtm_t* __manager, void* __virtaddr, void* __phys
     _page_table->_Entries[_indexer._PageIndex] = _entry;
 }
 
-void kernel_paging_address_mapn(pgtm_t* __manager, void* __base, size_t __sz) {
+void kernel_paging_address_mapn(void* __base, size_t __sz) {
+     kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+     
      for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz; _addr += 4096)
-        kernel_paging_address_map(__manager, (void*)(_addr), (void*)(_addr));
+        kernel_paging_address_map((void*)(_addr), (void*)(_addr));
 }

@@ -54,12 +54,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } pgtm_t;
 
 
-    /*****************************************************************************************************
+    /**********************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    *****************************************************************************************************/
+    **********************************************************************************/
     pgtm_t          kernel_paging_initialize      (pgtable_t* __lvl4);
     pgmapidx_t      kernel_paging_index           (uint64_t __virtaddr);
-    void            kernel_paging_address_map     (pgtm_t* __manager, void* __virtaddr, void* __physaddr);
-    void            kernel_paging_address_mapn    (pgtm_t* __manager, void* __base, size_t __sz);
+    void            kernel_paging_address_map     (void* __virtaddr, void* __physaddr);
+    void            kernel_paging_address_mapn    (void* __base, size_t __sz);
 
 #endif

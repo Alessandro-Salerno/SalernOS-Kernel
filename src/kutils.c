@@ -67,8 +67,8 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
 
     pgtm_t _page_table_manager = kernel_paging_initialize(_lvl4);
 
-    kernel_paging_address_mapn(&_page_table_manager, (void*)(0), _mem_size);
-    kernel_paging_address_mapn(&_page_table_manager, (void*)(_fbbase), _fbsize);
+    kernel_paging_address_mapn((void*)(0), _mem_size);
+    kernel_paging_address_mapn((void*)(_fbbase), _fbsize);
 
     asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
     
