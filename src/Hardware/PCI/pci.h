@@ -30,14 +30,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint16_t _Device;
         uint16_t _Command;
         uint16_t _Status;
-        uint8_t _Revision;
-        uint8_t _ProgramInterface;
-        uint8_t _Subclass;
-        uint8_t _Class;
-        uint8_t _CacheLineSize;
-        uint8_t _LatencyTimer;
-        uint8_t _HeaderType;
-        uint8_t _BIST;
+        uint8_t  _Revision;
+        uint8_t  _ProgramInterface;
+        uint8_t  _Subclass;
+        uint8_t  _Class;
+        uint8_t  _CacheLineSize;
+        uint8_t  _LatencyTimer;
+        uint8_t  _HeaderType;
+        uint8_t  _BIST;
     } pcidevhdr_t;
 
 
