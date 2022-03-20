@@ -44,6 +44,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /********************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ********************************************************************/
-    void            kernel_hw_pci_enumerate     (mcfghdr_t* __mcfgtable);
+    void            kernel_hw_pci_enumerate       (mcfghdr_t* __mcfgtable);
 
 #endif
