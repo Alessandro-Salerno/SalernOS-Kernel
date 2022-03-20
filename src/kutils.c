@@ -86,5 +86,10 @@ void kernel_kutils_int_setup() {
 }
 
 void kernel_kutils_rsd_setup(boot_t __bootinfo) {
-    sdthdr_t* _xsdt = (sdthdr_t*)(__bootinfo._RSDP->_XSDTAddress);
+    kloginfo("Initializing ACPI...");
+
+    sdthdr_t* _xsdt  = (sdthdr_t*)(__bootinfo._RSDP->_XSDTAddress);
+    mcfghdr_t* _mcfg = (mcfghdr_t*)(kernel_hw_acpi_table_find(_xsdt, "MCFG"));
+
+    kernel_panic_assert(kmemcmp(_mcfg->_SDTHeader._Signature, "MCFG", 4), "Invalid MCFG Table");
 }
