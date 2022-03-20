@@ -37,6 +37,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
     // Hardware includes
     #include "Hardware/ACPI/acpi.h"                 /*   Includes the Kernel's RSDP/ACPI Implementation     */
+    #include "Hardware/PCI/pci.h"                   /*   Includes the Kernel's PCI Implementation           */
 
     // Syscall includes
     #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */

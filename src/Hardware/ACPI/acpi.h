@@ -61,6 +61,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint32_t _Reserved;
     } __attribute__((__packed__)) acpidevconf_t;
 
+    typedef struct ACPIInfo {
+        sdthdr_t*  _XSDT;
+        mcfghdr_t* _MCFG;
+    } acpiinfo_t;
+
 
     /*************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
