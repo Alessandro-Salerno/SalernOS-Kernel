@@ -20,7 +20,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "Memory/pgfalloc.h"
 #include "Memory/paging.h"
+#include "kernelpanic.h"
 #include <kmem.h>
+
+
+static pgtm_t tableManager;
+static bool_t pgtmInitialized;
 
 
 static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
@@ -42,6 +47,15 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
     return (pgtable_t*)((uint64_t)(_entry._Address) << 12);
 }
 
+
+pgtm_t kernel_paging_initialize(pgtable_t* __lvl4) {
+    tableManager = (pgtm_t) {
+        ._PML4Address = __lvl4
+    };
+
+    pgtmInitialized = TRUE;
+    return tableManager;
+}
 
 pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
     return (pgmapidx_t) {

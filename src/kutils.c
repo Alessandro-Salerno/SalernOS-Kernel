@@ -65,9 +65,7 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     pgtable_t* _lvl4 = (pgtable_t*)(kernel_pgfa_page_new());
     kmemset(_lvl4, 4096, 0);
 
-    pgtm_t _page_table_manager = (pgtm_t) { 
-        ._PML4Address = _lvl4
-    };
+    pgtm_t _page_table_manager = kernel_paging_initialize(_lvl4);
 
     kernel_paging_address_mapn(&_page_table_manager, (void*)(0), _mem_size);
     kernel_paging_address_mapn(&_page_table_manager, (void*)(_fbbase), _fbsize);
