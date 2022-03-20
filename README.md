@@ -166,7 +166,7 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Try to be as precise as possible with padding and spaces. Any request containing `(){` or `a=b` instead of `() {` and `a = b` **WILL BE REJECTED WITHOUT FURTHER INSPECTION**
 
 ## Branches
-The `master` branch is used for the current **STABLE** version. A `dev` branch will be created for every Kernel release (`kernel-rome-dev` for example). Smaller changes such as bug fixes may still be pushed to `master`, but all other changes will be commited to the `dev` branch.
+The `master` branch is used for the current **INDEV** version. A `support` branch will be created for every Kernel release (`kernel-florence-support` for example). 
 
 ## Contributing
 For your Pull Request to be accepted, it must follow **ALL** the above mentioned conventions and standards.
