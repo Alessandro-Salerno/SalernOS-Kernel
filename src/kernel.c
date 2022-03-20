@@ -39,7 +39,9 @@ void kernel_main(boot_t __bootinfo) {
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
     kernel_kutils_int_setup();
-    kernel_kutils_rsd_setup(__bootinfo);
+
+    acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
+    
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kloginfo("Testing...");
@@ -74,13 +76,11 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
     kprintf("Test Page Address: %u\n\n",   (uint64_t)(_test_page));
 
-    sdthdr_t* _xsdt = (sdthdr_t*)(__bootinfo._RSDP->_XSDTAddress);
     kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo._RSDP));
-    kprintf("MCFG Address: %u\n\n", (uint64_t)(kernel_hw_acpi_table_find(_xsdt, "MCFG")));
+    kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));
 
-    kloginfo("Info Test");
-    klogerr("Error Test");
-    klogwarn("Warning Test");
+    kernel_hw_pci_enumerate(_acpi._MCFG);
+
     klogok("Kernel Ready!");
     kprintf("\n\n");
 
