@@ -55,6 +55,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "kutils.h"                             /*   Includes all kernel initialization functions       */
 
     // Kernel Library Includes
+    #include <kmalloc.h>
     #include <kstdio.h>
 
 #endif
