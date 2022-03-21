@@ -47,3 +47,10 @@ bool_t  kmemcmp(void* __buff1, void* __buff2, uint64_t __buffsize) {
 
     return TRUE;
 }
+
+void kmemcpy(void* __from, void* __to, size_t __buffsize) {
+    for (uint64_t _i = 0; _i < __buffsize; _i++) {
+        uint8_t _val = *(uint8_t*)(__from + _i);
+        *(uint8_t*)((uint64_t)(__to) + _i) = _val;
+    }
+}
