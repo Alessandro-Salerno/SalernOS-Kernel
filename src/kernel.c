@@ -45,7 +45,7 @@ void kernel_main(boot_t __bootinfo) {
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kloginfo("Testing...");
-    void* _test_page = kernel_pgfa_page_new();
+    void* _malloc_test = kmalloc(64);
 
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
@@ -63,10 +63,6 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo._Framebuffer->_PixelsPerScanLine, __bootinfo._Framebuffer->_Height);
     kprintf("Framebuffer Base: %u\n",            __bootinfo._Framebuffer->_BaseAddress);
     kprintf("Framebuffer Size: %u bytes\n",      __bootinfo._Framebuffer->_BufferSize);
-    kprintf("Framebuffer BPP: %u bytes\n\n",     __bootinfo._Framebuffer->_BytesPerPixel);
-
-    kprintf("Memory Map Size: %u bytes\n",              __bootinfo._Memory._MemoryMapSize);
-    kprintf("Memory Map Descriptor Size: %u bytes\n\n", __bootinfo._Memory._DescriptorSize);
 
     kernel_pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
     kprintf("System Memory: %u bytes\n",   _mem_size);
@@ -74,10 +70,9 @@ void kernel_main(boot_t __bootinfo) {
     kprintf("Free Memory: %u bytes\n",     _free_mem);
     kprintf("Used Memory: %u bytes\n",     _used_mem);
     kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Test Page Address: %u\n",     (uint64_t)(_test_page));
-    kprintf("Heap Test: %u\n\n",           (size_t)kernel_heap_allocate(0x8000));
+    kprintf("Heap Test: %u\n\n",           (uint64_t)(_malloc_test));
 
-    kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo._RSDP));
+    kprintf("RSDP Address: %u\n",   (uint64_t)(__bootinfo._RSDP));
     kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));
 
     kernel_hw_pci_enumerate(_acpi._MCFG);
