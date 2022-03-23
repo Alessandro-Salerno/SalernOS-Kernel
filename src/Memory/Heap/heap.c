@@ -39,7 +39,6 @@ static void __combine_forward__(heapseghdr_t* __segment) {
         __segment->_Next->_Next->_Last = __segment;
 
     __segment->_Length = __segment->_Length + __segment->_Next->_Length + sizeof(heapseghdr_t);
-
 }
 
 static void __combine_backward__(heapseghdr_t* __segment) {
@@ -48,11 +47,11 @@ static void __combine_backward__(heapseghdr_t* __segment) {
 }
 
 static heapseghdr_t* __split__(heapseghdr_t* __segment, size_t __size) {
-    if (__size < 0x10) return NULL;
+    SOFTASSERT(__size >= 0x10, NULL);
 
     int64_t _split_seg_len = __segment->_Length - __size - sizeof(heapseghdr_t);
 
-    if (_split_seg_len < 0x10) return NULL;
+    SOFTASSERT(_split_seg_len >= 0x10, NULL);
 
     heapseghdr_t* _split_hdr = (heapseghdr_t*)((size_t)(__segment) + __size + sizeof(heapseghdr_t));
     __segment->_Next->_Last  = _split_hdr;

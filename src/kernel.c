@@ -45,7 +45,8 @@ void kernel_main(boot_t __bootinfo) {
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
     kloginfo("Testing...");
-    void* _malloc_test = kmalloc(64);
+    void* _malloc_test  = kmalloc(64);
+    void* _malloc_test2 = kmalloc(64);
 
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
