@@ -24,9 +24,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <kerntypes.h>
 
 
-    /****************************************************************
+    /********************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ****************************************************************/
+    ********************************************************************************/
     uint64_t        kabs                          (int64_t __val);
+    uint64_t        kroundl                       (uint64_t __val, uint64_t __round);
 
 #endif
