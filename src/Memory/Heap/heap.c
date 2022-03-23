@@ -22,6 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Memory/pgfalloc.h"
 #include "Memory/paging.h"
 #include "kernelpanic.h"
+#include <kmath.h>
 
 
 static void* heapBase;
@@ -67,10 +68,7 @@ static heapseghdr_t* __split__(heapseghdr_t* __segment, size_t __size) {
 }
 
 static void __extend__(size_t __size) {
-    if (__size % 4096 > 0) {
-        __size -= __size % 4096;
-        __size += 4096;
-    }
+    __size = kroundl(__size, 4096);
 
     size_t _npages = __size / 4096;
     heapseghdr_t* _new_seg = (heapseghdr_t*)(heapEnd);
@@ -114,10 +112,7 @@ void kernel_heap_initialize(void* __heapbase, size_t __pgcount) {
 void* kernel_heap_allocate(size_t __buffsize) {
     SOFTASSERT(__buffsize != 0, NULL);
     
-    if (__buffsize % 0x10 > 0) {
-        __buffsize -= (__buffsize % 0x10);
-        __buffsize += 0x10;
-    }
+    __buffsize = kroundl(__buffsize, 0x10);
 
     heapseghdr_t* _current_seg = (heapseghdr_t*)(heapBase);
 
