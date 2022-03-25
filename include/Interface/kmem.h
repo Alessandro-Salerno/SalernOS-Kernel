@@ -27,8 +27,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     *************************************************************************************************/
-    void            kmemset                       (void* __buff, uint64_t __buffsize, uint8_t __val);
-    bool_t          kmemcmp                       (void* __buff1, void* __buff2, uint64_t __buffsize);
+    void            kmemset                       (void* __buff, size_t __buffsize, uint8_t __val);
+    bool_t          kmemcmp                       (void* __buff1, void* __buff2, size_t __buffsize);
     void            kmemcpy                       (void* __from, void* __to, size_t __buffsize);
 
 #endif
