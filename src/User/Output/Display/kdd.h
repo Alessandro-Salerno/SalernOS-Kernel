@@ -53,9 +53,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /****************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ****************************************************************************************************/
-    void            kernel_kdd_fbo_bind           (framebuffer_t* __fbo);
+    void            kernel_kdd_fbo_bind           (framebuffer_t __fbo);
     void            kernel_kdd_fbo_clear          (uint32_t __clearcolor);
-    framebuffer_t*  kernel_kdd_fbo_get            ();
+    framebuffer_t   kernel_kdd_fbo_get            ();
     
     uint32_t        kernel_kdd_pxcolor_translate  (uint8_t  __r, uint8_t  __g, uint8_t __b, uint8_t __a);
     uint32_t        kernel_kdd_pxcolor_get        (uint32_t __x, uint32_t __y);

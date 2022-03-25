@@ -39,8 +39,8 @@ static bool  trendrInitialized;
 
 
 static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xoff, uint64_t __yoff) {
-    uint64_t _buff_w = kernel_kdd_fbo_get()->_Width;
-    uint64_t _buff_h = kernel_kdd_fbo_get()->_Height;
+    uint64_t _buff_w = kernel_kdd_fbo_get()._Width;
+    uint64_t _buff_h = kernel_kdd_fbo_get()._Height;
 
     foregroundColor = __color;
     backgroundColor = __backcolor;
@@ -114,7 +114,7 @@ void kernel_text_scroll(uint32_t __lines) {
     SOFTASSERT(__lines < numRows, RETVOID);
     
     for (uint64_t _y = __lines * 16; _y < endPosition.y; _y++) {
-        for (uint64_t _x = startPosition.x; _x < kernel_kdd_fbo_get()->_PixelsPerScanLine; _x++) {
+        for (uint64_t _x = startPosition.x; _x < kernel_kdd_fbo_get()._PixelsPerScanLine; _x++) {
             kernel_kdd_pxcolor_set(
                 _x, _y - __lines * 16,
                 kernel_kdd_pxcolor_get(_x, _y)

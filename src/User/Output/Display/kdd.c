@@ -22,33 +22,33 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "kernelpanic.h"
 
 
-static framebuffer_t* boundFBO;
+static framebuffer_t boundFBO;
 
 
 static uint32_t* __get_pxptr__(uint64_t __x, uint64_t __y) {
-    SOFTASSERT(boundFBO != NULL, NULL);
+    SOFTASSERT(boundFBO._BaseAddress != NULL, NULL);
     
     return (uint32_t*) {
-        (__x * boundFBO->_BytesPerPixel                               ) +
-        (__y * boundFBO->_BytesPerPixel * boundFBO->_PixelsPerScanLine) +
-        boundFBO->_BaseAddress
+        (__x * boundFBO._BytesPerPixel                               ) +
+        (__y * boundFBO._BytesPerPixel * boundFBO._PixelsPerScanLine ) +
+        boundFBO._BaseAddress
     };
 }
 
 
-void kernel_kdd_fbo_bind(framebuffer_t* __fbo) {
+void kernel_kdd_fbo_bind(framebuffer_t __fbo) {
     boundFBO = __fbo;
 }
 
 void kernel_kdd_fbo_clear(uint32_t __clearcolor) {
-    SOFTASSERT(boundFBO != NULL, RETVOID);
+    SOFTASSERT(boundFBO._BaseAddress != NULL, RETVOID);
 
     uint64_t _64bit_color = __clearcolor | ((uint64_t)(__clearcolor) << 32);
-    for (uint64_t _i = 0; _i < boundFBO->_BufferSize; _i += 8)
-        *(uint64_t*)((uint64_t)(boundFBO->_BaseAddress) + _i) = _64bit_color;
+    for (uint64_t _i = 0; _i < boundFBO._BufferSize; _i += 8)
+        *(uint64_t*)((uint64_t)(boundFBO._BaseAddress) + _i) = _64bit_color;
 }
 
-framebuffer_t* kernel_kdd_fbo_get() {
+framebuffer_t kernel_kdd_fbo_get() {
     return boundFBO;
 }
 
