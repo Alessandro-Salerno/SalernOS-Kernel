@@ -24,7 +24,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 void kernel_kutils_kdd_setup(boot_t __bootinfo) {
-    kernel_kdd_fbo_bind(*__bootinfo._Framebuffer);
+    kernel_kdd_fbo_bind(__bootinfo._Framebuffer);
 
     kernel_text_initialize(
         FGCOLOR, BGCOLOR,
@@ -44,8 +44,8 @@ void kernel_kutils_gdt_setup() {
 
 void kernel_kutils_mem_setup(boot_t __bootinfo) {
     uint64_t _mem_size;
-    void*    _fbbase = __bootinfo._Framebuffer->_BaseAddress;
-    size_t   _fbsize = __bootinfo._Framebuffer->_BufferSize + 4096;
+    void*    _fbbase = __bootinfo._Framebuffer._BaseAddress;
+    size_t   _fbsize = __bootinfo._Framebuffer._BufferSize + 4096;
     
     kloginfo("Initializing EFI Memory Map...");
     kernel_mmap_initialize(__bootinfo._Memory);
