@@ -63,7 +63,7 @@ void kernel_main(boot_t __bootinfo) {
 
     kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo._Framebuffer->_PixelsPerScanLine, __bootinfo._Framebuffer->_Height);
     kprintf("Framebuffer Base: %u\n",            __bootinfo._Framebuffer->_BaseAddress);
-    kprintf("Framebuffer Size: %u bytes\n",      __bootinfo._Framebuffer->_BufferSize);
+    kprintf("Framebuffer Size: %u bytes\n\n",    __bootinfo._Framebuffer->_BufferSize);
 
     kernel_pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
     kprintf("System Memory: %u bytes\n",   _mem_size);
