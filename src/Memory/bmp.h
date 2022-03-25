@@ -30,10 +30,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } bmp_t;
 
     
-    /********************************************************************************
+    /******************************************************************************
     RET TYPE        FUNCTION NAME       FUNCTION ARGUMENTS
-    ********************************************************************************/
-    bool_t          kernel_bmp_get      (bmp_t* __bmp, uint64_t __idx);
-    void            kernel_bmp_set      (bmp_t* __bmp, uint64_t __idx, bool_t __val);
+    ******************************************************************************/
+    bool            kernel_bmp_get      (bmp_t* __bmp, uint64_t __idx);
+    void            kernel_bmp_set      (bmp_t* __bmp, uint64_t __idx, bool __val);
 
 #endif

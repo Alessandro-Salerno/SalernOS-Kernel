@@ -27,7 +27,7 @@ void kmemset(void* __buff, size_t __buffsize, uint8_t __val) {
         *(uint8_t*)((uint64_t)(__buff) + _i) = __val;
 }
 
-bool_t  kmemcmp(void* __buff1, void* __buff2, size_t __buffsize) {
+bool  kmemcmp(void* __buff1, void* __buff2, size_t __buffsize) {
     for (uint64_t _i = 0; _i < __buffsize; _i++) {
         uint8_t _buff1val = *(uint8_t*)(__buff1 + _i);
         uint8_t _buff2val = *(uint8_t*)(__buff2 + _i);

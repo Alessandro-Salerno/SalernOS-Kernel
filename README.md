@@ -84,10 +84,10 @@ Sections must be separated by two blank lines and the file must end with an empt
 #include "other.h"
 
 
-static bool_t   aStaticBool;
+static bool     aStaticBool;
 static uint32_t aStaticUint32;
 
-bool_t   aBool;
+bool     aBool;
 uint32_t aUint32;
 
 
@@ -127,7 +127,7 @@ uint32_t kernel_other_implementation() {
     /*************************
            TYPE   NAME
     **************************/
-    extern bool_t anExternBool;
+    extern bool   anExternBool;
 
 
     /*********************************************

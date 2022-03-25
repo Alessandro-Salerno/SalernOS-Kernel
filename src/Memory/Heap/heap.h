@@ -28,7 +28,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         size_t                    _Length;
         struct HeapSegmentHeader* _Next;
         struct HeapSegmentHeader* _Last;
-        bool_t                    _Free;
+        bool                      _Free;
     } heapseghdr_t;
 
 

@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 static uint8_t keyboardScancoide,
                keyboardASCII;
 
-static bool_t  isShiftPressed;
+static bool  isShiftPressed;
 
 
 void kernel_io_keyboard_mods_handle(uint8_t __scancode) {

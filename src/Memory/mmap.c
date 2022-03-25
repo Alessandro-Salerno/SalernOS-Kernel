@@ -37,7 +37,7 @@ static uint64_t mUsableSize;
 
 static memseg_t mLargestSegment;
 
-static bool_t mMapInitialized;
+static bool mMapInitialized;
 
 
 void kernel_mmap_initialize(meminfo_t __meminfo) {

@@ -28,7 +28,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 static idtr_t idtr;
-static bool_t idtInitialized;
+static bool idtInitialized;
 
 
 static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {

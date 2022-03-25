@@ -27,7 +27,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 static pgtm_t tableManager;
-static bool_t pgtmInitialized;
+static bool pgtmInitialized;
 
 
 static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {

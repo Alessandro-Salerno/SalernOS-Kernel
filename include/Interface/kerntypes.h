@@ -30,6 +30,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #define RETVOID
     #define ARGRET(__arg, __val) if (__arg != NULL) *__arg = __val
     
-    typedef uint8_t bool_t;
+    typedef uint8_t bool;
 
 #endif

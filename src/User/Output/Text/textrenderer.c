@@ -35,7 +35,7 @@ static point_t endPosition;
 static point_t lastPosition;
 static point_t curPosition;
 
-static bool_t  trendrInitialized;
+static bool  trendrInitialized;
 
 
 static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xoff, uint64_t __yoff) {
