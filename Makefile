@@ -19,10 +19,10 @@
 OSNAME 	= SalernOS
 MAKEDIR = make
 
-include $(MAKEDIR)/Make.files
-include $(MAKEDIR)/Make.commands
-include $(MAKEDIR)/Make.flags
-include $(MAKEDIR)/Make.data
+include $(MAKEDIR)/files.mk
+include $(MAKEDIR)/commands.mk
+include $(MAKEDIR)/flags.mk
+include $(MAKEDIR)/data.mk
 
 include $(INCDIR)/Makefile
 include $(KSTDDIR)/Makefile
