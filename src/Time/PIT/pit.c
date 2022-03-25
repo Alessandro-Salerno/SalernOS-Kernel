@@ -25,9 +25,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define DIV_MIN 100
 
 
-static double timeSinceBoot;
+static double   uptime;
 static uint16_t divisor;
-static void (*tickHandler)();
+static void     (*tickHandler)();
 
 
 static void __set_divisor__(uint16_t __div) {
@@ -39,12 +39,12 @@ static void __set_divisor__(uint16_t __div) {
 }
 
 double kernel_time_pit_uptime_get() {
-    return timeSinceBoot;
+    return uptime;
 }
 
 void kernel_time_pit_sleep(uint64_t __mills) {
-    double _start = timeSinceBoot;
-    while (timeSinceBoot < _start + __mills * 100)
+    double _start = uptime;
+    while (uptime < _start + __mills * 100)
         asm ("hlt");
 }
 
@@ -61,7 +61,7 @@ void kernel_time_pit_handler_set(void (*__handler)()) {
 }
 
 void kernel_time_pit_tick() {
-    timeSinceBoot += 1 / (double)(kernel_time_pit_frequency_get());
+    uptime += 1 / (double)(kernel_time_pit_frequency_get());
 
     SOFTASSERT(tickHandler != NULL, RETVOID);
     tickHandler();
