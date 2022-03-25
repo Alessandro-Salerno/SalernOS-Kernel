@@ -39,7 +39,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint8_t _CharSize;
     } bmpfonthdr_t;
 
-    typedef struct bmpfont_t {
+    typedef struct BitmapFont {
         bmpfonthdr_t* _Header;
         void*         _Buffer;
     } bmpfont_t;
