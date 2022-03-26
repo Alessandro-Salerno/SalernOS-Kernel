@@ -28,7 +28,7 @@ void kernel_kutils_kdd_setup(boot_t __bootinfo) {
 
     kernel_text_initialize(
         FGCOLOR, BGCOLOR,
-        0, 0, __bootinfo._Font
+        0, 0, *__bootinfo._Font
     );
 }
 

@@ -22,7 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "kernelpanic.h"
 
 
-static bmpfont_t* font;
+static bmpfont_t font;
 
 static uint32_t numColumns;
 static uint32_t numRows;
@@ -65,7 +65,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
 }
 
 static void __drawchar__(char __char) {
-    char* _font_ptr = font->_Buffer + (__char * font->_Header->_CharSize);
+    char* _font_ptr = font._Buffer + (__char * font._Header->_CharSize);
 
     uint64_t _start_x = curPosition.x;
     uint64_t _start_y = curPosition.y;
@@ -180,7 +180,7 @@ void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __pos)
     lastPosition    = curPosition;
 }
 
-void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t* __font) {
+void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font) {
     SOFTASSERT(!trendrInitialized, RETVOID);
 
     __initialize__(__color, __backcolor, __xoff, __yoff);
@@ -194,7 +194,7 @@ void kernel_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_t _
     __initialize__(__color, __backcolor, __xoff, __yoff);
 }
 
-void kernel_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t** __font) {
+void kernel_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t* __font) {
     SOFTASSERT(trendrInitialized, RETVOID);
 
     ARGRET(__color, foregroundColor);
