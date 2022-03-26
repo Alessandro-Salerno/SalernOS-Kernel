@@ -29,13 +29,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
     typedef struct BootInfo {
+        // Standard Information
+        uint64_t      _Reserved;
+
+        // Bootloader Information
+        const char*   _BootloaderName;
+        const char*   _BootlaoderAuthor;
+        const char*   _BootloaderVersion;
+        const char*   _BootloaderCopyright;
+
+        // OS Information
         framebuffer_t _Framebuffer;
         bmpfont_t     _Font;
+        void*         _OSSpecific;
+        void*         _Extensions;
+
+        // Hardware
         meminfo_t     _Memory;
         rsdp_t*       _RSDP;
-
-        uint8_t       _SEBMajorVersion;
-        uint16_t      _SEBMinorVersion;
     } boot_t;
 
     extern uint64_t _KERNEL_START,

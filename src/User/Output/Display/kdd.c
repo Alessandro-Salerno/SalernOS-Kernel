@@ -29,8 +29,8 @@ static uint32_t* __get_pxptr__(uint64_t __x, uint64_t __y) {
     SOFTASSERT(boundFBO._BaseAddress != NULL, NULL);
     
     return (uint32_t*) {
-        (__x * boundFBO._BytesPerPixel                               ) +
-        (__y * boundFBO._BytesPerPixel * boundFBO._PixelsPerScanLine ) +
+        __x * BYTES_PER_PIXEL                   +
+        __y * BYTES_PER_PIXEL * boundFBO._Width +
         boundFBO._BaseAddress
     };
 }

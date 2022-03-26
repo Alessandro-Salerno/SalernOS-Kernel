@@ -23,14 +23,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
     #include <kerntypes.h>
 
+    #define BYTES_PER_PIXEL 4
+
 
     typedef struct Framebuffer {
         void*    _BaseAddress;
         size_t   _BufferSize;
         uint32_t _Width;
         uint32_t _Height;
-        uint32_t _PixelsPerScanLine;
-        uint8_t  _BytesPerPixel;
     } framebuffer_t;
 
     typedef struct BitmapFontHeader {

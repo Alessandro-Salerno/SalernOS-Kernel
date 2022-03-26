@@ -23,9 +23,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 void kernel_main(boot_t* __bootinfo) {
-    uint8_t _seb_minver_day   = __bootinfo->_SEBMinorVersion ^ ((__bootinfo->_SEBMinorVersion >> 8) << 8);
-    uint8_t _seb_minver_month = (__bootinfo->_SEBMinorVersion ^ _seb_minver_day) >> 8;
-
     uint64_t _mem_size,
              _usable_mem,
              _free_mem,
@@ -54,14 +51,14 @@ void kernel_main(boot_t* __bootinfo) {
     );
 
     kprintf("Copyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
-    kprintf("SalernOS EFI Bootloader %u-%c%u\n", __bootinfo->_SEBMajorVersion, _seb_minver_month, _seb_minver_day);
+    kprintf("%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
     kprintf("SalernOS Kernel DEV (Rome)\n\n");
 
     kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
     kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
     kprintf("Kernel Size: %u bytes (%u pages)\n\n", _kernel_size, _kernel_pages);
 
-    kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo->_Framebuffer._PixelsPerScanLine, __bootinfo->_Framebuffer._Height);
+    kprintf("Framebuffer Resolution: %u x %u\n", __bootinfo->_Framebuffer._Width, __bootinfo->_Framebuffer._Height);
     kprintf("Framebuffer Base: %u\n",            __bootinfo->_Framebuffer._BaseAddress);
     kprintf("Framebuffer Size: %u bytes\n\n",    __bootinfo->_Framebuffer._BufferSize);
 
