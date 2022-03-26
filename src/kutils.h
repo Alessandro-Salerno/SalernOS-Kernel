@@ -30,7 +30,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
     typedef struct BootInfo {
         framebuffer_t _Framebuffer;
-        bmpfont_t*    _Font;
+        bmpfont_t     _Font;
         meminfo_t     _Memory;
         rsdp_t*       _RSDP;
 
