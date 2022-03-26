@@ -168,10 +168,5 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 ## Branches
 The `master` branch is used for the current **INDEV** version. A `support` branch will be created for every Kernel release (`kernel-florence-support` for example). 
 
-## Contributing
-For your Pull Request to be accepted, it must follow **ALL** the above mentioned conventions and standards.
-You must also describe the changes you made in a simple and organized way, otherwise your request may take longer than usual to process and is more likelly to be rejected.
-Expect to wait days or weeks for your request to be processed.
-
 ## Roadmap
 You can find the roadmap [here](https://trello.com/b/w0bPHjo6/roadmap)
