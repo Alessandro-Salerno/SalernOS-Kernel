@@ -40,7 +40,7 @@ void kernel_main(boot_t* __bootinfo) {
     kernel_kutils_mem_setup(*__bootinfo);
     kernel_kutils_int_setup();
 
-    acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
+    acpiinfo_t _acpi = kernel_kutils_rsd_setup(*__bootinfo);
     
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 

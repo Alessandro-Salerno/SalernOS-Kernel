@@ -40,8 +40,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } bmpfonthdr_t;
 
     typedef struct BitmapFont {
-        bmpfonthdr_t* _Header;
-        void*         _Buffer;
+        bmpfonthdr_t _Header;
+        void*        _Buffer;
     } bmpfont_t;
 
     typedef struct Point {

@@ -65,7 +65,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
 }
 
 static void __drawchar__(char __char) {
-    char* _font_ptr = font._Buffer + (__char * font._Header->_CharSize);
+    char* _font_ptr = font._Buffer + (__char * font._Header._CharSize);
 
     uint64_t _start_x = curPosition.x;
     uint64_t _start_y = curPosition.y;
