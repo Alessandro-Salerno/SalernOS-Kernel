@@ -23,12 +23,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kmem.h>
 
 
-void kernel_kutils_kdd_setup(boot_t __bootinfo) {
-    kernel_kdd_fbo_bind(__bootinfo._Framebuffer);
+void kernel_kutils_kdd_setup(boot_t* __bootinfo) {
+    kernel_kdd_fbo_bind(__bootinfo->_Framebuffer);
 
     kernel_text_initialize(
         FGCOLOR, BGCOLOR,
-        0, 0, __bootinfo._Font
+        0, 0, __bootinfo->_Font
     );
 }
 
@@ -42,13 +42,13 @@ void kernel_kutils_gdt_setup() {
     kernel_gdt_load(&_gdt_desc);
 }
 
-void kernel_kutils_mem_setup(boot_t __bootinfo) {
+void kernel_kutils_mem_setup(boot_t* __bootinfo) {
     uint64_t _mem_size;
-    void*    _fbbase = __bootinfo._Framebuffer._BaseAddress;
-    size_t   _fbsize = __bootinfo._Framebuffer._BufferSize + 4096;
+    void*    _fbbase = __bootinfo->_Framebuffer._BaseAddress;
+    size_t   _fbsize = __bootinfo->_Framebuffer._BufferSize + 4096;
     
     kloginfo("Initializing EFI Memory Map...");
-    kernel_mmap_initialize(__bootinfo._Memory);
+    kernel_mmap_initialize(__bootinfo->_Memory);
     kernel_mmap_info_get(&_mem_size, NULL, NULL, NULL);
 
     kernel_panic_assert(_mem_size > 64000000, "Insufficient System Memory!");
@@ -74,7 +74,7 @@ void kernel_kutils_mem_setup(boot_t __bootinfo) {
     
     kloginfo("Locking Font and Framebuffer Pages...");
     kernel_pgfa_reserve(_fbbase, _fbsize / 4096 + 1);
-    kernel_pgfa_reserve(__bootinfo._Font._Buffer, (__bootinfo._Font._Header._CharSize * 256) / 4096);
+    kernel_pgfa_reserve(__bootinfo->_Font._Buffer, (__bootinfo->_Font._Header._CharSize * 256) / 4096);
 
     kloginfo("Initializing Heap...");
     kernel_heap_initialize((void*)(0x100000000000), 0x10);
@@ -86,10 +86,10 @@ void kernel_kutils_int_setup() {
     kernel_interrupts_pic_remap();
 }
 
-acpiinfo_t kernel_kutils_rsd_setup(boot_t __bootinfo) {
+acpiinfo_t kernel_kutils_rsd_setup(boot_t* __bootinfo) {
     kloginfo("Initializing ACPI...");
 
-    sdthdr_t* _xsdt  = (sdthdr_t*)(__bootinfo._RSDP->_XSDTAddress);
+    sdthdr_t* _xsdt  = (sdthdr_t*)(__bootinfo->_RSDP->_XSDTAddress);
     mcfghdr_t* _mcfg = (mcfghdr_t*)(kernel_hw_acpi_table_find(_xsdt, "MCFG"));
 
     kernel_panic_assert(kmemcmp(_mcfg->_SDTHeader._Signature, "MCFG", 4), "Invalid MCFG Table");
