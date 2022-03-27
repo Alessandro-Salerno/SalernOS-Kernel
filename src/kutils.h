@@ -22,32 +22,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_CORE_KERNEL_UTILITIES
 
     #include <kerntypes.h>
+    #include <sbs.h>
 
     // Macros and constants
     #define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
     #define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 
-
-    typedef struct BootInfo {
-        // Standard Information
-        uint64_t      _Reserved;
-
-        // Bootloader Information
-        const char*   _BootloaderName;
-        const char*   _BootlaoderAuthor;
-        const char*   _BootloaderVersion;
-        const char*   _BootloaderCopyright;
-
-        // OS Information
-        framebuffer_t _Framebuffer;
-        bmpfont_t     _Font;
-        void*         _OSSpecific;
-        void*         _Extensions;
-
-        // Hardware
-        meminfo_t     _Memory;
-        rsdp_t*       _RSDP;
-    } boot_t;
+    
+    typedef struct SimpleBootInformationTable boot_t;
+    
 
     extern uint64_t _KERNEL_START,
                     _KERNEL_END;

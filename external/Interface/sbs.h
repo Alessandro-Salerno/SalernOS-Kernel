@@ -95,7 +95,7 @@ struct SimpleBootInformationTable {
 
     // Hardware
     struct SimpleBootMemoryInformationTable  _Memory;                   // SBS Memory Inforamtion struct
-    void*                                    _RSDP;                     // Root System Descriptor Pointer
+    struct SimpleBootRootSystemDescriptor*   _RSDP;                     // Root System Descriptor Pointer
 };
 
 #endif
