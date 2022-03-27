@@ -61,4 +61,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <kmalloc.h>
     #include <kstdio.h>
 
+    // Other includes
+    #include <sbs.h>
+
 #endif

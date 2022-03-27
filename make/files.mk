@@ -18,6 +18,7 @@
 
 LDS 	 = kernel.ld
 
+EXTDIR   = external
 INCDIR   = include
 KSTDDIR  = kstd
 KLIBDIR  = klib

@@ -22,28 +22,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_CORE_KERNEL_MMAP
 
     #include <kerntypes.h>
+    #include <sbs.h>
 
     #define USABLE_MEM_TYPE 7
 
-
-    typedef struct EfiMemoryDescriptor {
-        uint32_t _Type;
-        void*    _PhysicalAddress;
-        void*    _VirtualAddress;
-        uint64_t _Pages;
-        uint64_t _Attributes;
-    } efimemdesc_t;
-
-    typedef struct MemoryInfo {
-        void*    _MemoryMap;
-        uint64_t _MemoryMapSize;
-        uint64_t _DescriptorSize;
-    } meminfo_t;
 
     typedef struct MemorySegment {
         void*    _Segment;
         uint64_t _Size;
     } memseg_t;
+
+    typedef struct SimpleBootMemoryInformationTable meminfo_t;
+    typedef struct SimpleBootMemoryDescriptor       efimemdesc_t;
 
 
     /********************************************************************************************************************************

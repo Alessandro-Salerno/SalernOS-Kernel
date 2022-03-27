@@ -22,32 +22,19 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_CORE_KERNEL_DISPLAY_DRIVER
 
     #include <kerntypes.h>
+    #include <sbs.h>
 
     #define BYTES_PER_PIXEL 4
 
-
-    typedef struct Framebuffer {
-        void*    _BaseAddress;
-        size_t   _BufferSize;
-        uint32_t _Width;
-        uint32_t _Height;
-    } framebuffer_t;
-
-    typedef struct BitmapFontHeader {
-        uint8_t _Magic[2];
-        uint8_t _Mode;
-        uint8_t _CharSize;
-    } bmpfonthdr_t;
-
-    typedef struct BitmapFont {
-        bmpfonthdr_t _Header;
-        void*        _Buffer;
-    } bmpfont_t;
 
     typedef struct Point {
         uint32_t x;
         uint32_t y;
     } point_t;
+
+    typedef struct SimpleBootFramebuffer framebuffer_t;
+    typedef struct SimpleBootFontHeader  bmpfonthdr_t;
+    typedef struct SimpleBootFont        bmpfont_t;
 
 
     /****************************************************************************************************

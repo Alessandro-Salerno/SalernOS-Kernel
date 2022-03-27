@@ -16,7 +16,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-CINCLUDE = -I "$(INCDIR)/Interface" -I "$(SRCDIR)" -I "$(KSTDDIR)/Interface" -I "$(KLIBDIR)/Interface"
+CINCLUDE = -I "$(INCDIR)/Interface" -I "$(SRCDIR)" -I "$(KSTDDIR)/Interface" -I "$(KLIBDIR)/Interface" -I "$(EXTDIR)/Interface"
 CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib

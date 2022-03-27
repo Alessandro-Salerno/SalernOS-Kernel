@@ -22,19 +22,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_CORE_KERNEL_HW_ACPI
 
     #include <kerntypes.h>
+    #include <sbs.h>
 
-
-    typedef struct __attribute__((__packed__)) RootSystemDescriptorPointer {
-        uint8_t _Signature[8];
-        uint8_t  _Checksum;
-        uint8_t  _OEM[6];
-        uint8_t  _Revision;
-        uint32_t _RSDTAddress;
-        uint32_t _Length;
-        uint64_t _XSDTAddress;
-        uint8_t  _ExtChecksum;
-        uint8_t  _Reserved[3];
-    } __attribute__((__packed__)) rsdp_t;
 
     typedef struct __attribute__((__packed__)) SystemDescriptorTableHeader {
         uint8_t  _Signature[4];
@@ -65,6 +54,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         sdthdr_t*  _XSDT;
         mcfghdr_t* _MCFG;
     } acpiinfo_t;
+
+    typedef struct SimpleBootRootSystemDescriptor rsdp_t;
 
 
     /*************************************************************************************
