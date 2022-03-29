@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "User/Input/Keyboard/keyboard.h"
 #include "Interrupts/handlers.h"
 #include "Interrupts/pic.h"
+#include "Time/PIT/pit.h"
 #include "kernelpanic.h"
 #include "IO/io.h"
 
@@ -34,4 +35,9 @@ void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
 
     kernel_io_keyboard_mods_handle(_scode);
     kernel_interrupts_pic_master_end();
+}
+
+void kernel_interrupt_handlers_tick(intframe_t* __frame) {
+    kernel_interrupts_pic_master_end();
+    kernel_time_pit_tick();
 }

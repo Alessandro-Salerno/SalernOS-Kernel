@@ -22,6 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Syscall/dispatcher.h"
 #include "Memory/pgfalloc.h"
 #include "Interrupts/idt.h"
+#include "Time/PIT/pit.h"
 #include "kernelpanic.h"
 
 #define IDT_DINIT "Interrupt Descriptor Table Fault:\nKernel tried to reinitialize IDT."
@@ -51,6 +52,7 @@ void kernel_idt_initialize() {
     idtdescent_t* _gpfault_handler = __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);
     idtdescent_t* _kbhit_handler   = __create_entry__(0x21, kernel_interrupt_handlers_kbhit);
     idtdescent_t* _syscall_handler = __create_entry__(0x81, kernel_syscall_dispatch);
+    idtdescent_t* _pit_handler     = __create_entry__(0x2C, kernel_time_pit_tick);
 
     asm ("lidt %0" : : "m" (idtr));
 
