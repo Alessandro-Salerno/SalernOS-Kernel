@@ -166,7 +166,7 @@ void kernel_text_print(char* __str) {
 
     while (*_chr) {
         kernel_text_putch(*_chr);
-        *_chr++;
+        _chr++;
     }
 }
 
