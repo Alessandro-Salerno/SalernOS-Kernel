@@ -34,7 +34,7 @@ static void __set_divisor__(uint16_t __div) {
     if (__div < DIV_MIN) __div = DIV_MIN;
     divisor = __div;
 
-    kernel_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0xff));
+    kernel_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
     kernel_io_out(PIT_PORT, (uint8_t)(divisor & 0xff00) >> 8);
 }
 
@@ -61,7 +61,7 @@ void kernel_time_pit_handler_set(void (*__handler)()) {
 }
 
 void kernel_time_pit_tick() {
-    uptime += 1 / (double)(kernel_time_pit_frequency_get());
+    uptime += 1.0 / (double)(kernel_time_pit_frequency_get());
 
     SOFTASSERT(tickHandler != NULL, RETVOID);
     tickHandler();
