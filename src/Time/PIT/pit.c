@@ -44,7 +44,7 @@ double kernel_time_pit_uptime_get() {
 
 void kernel_time_pit_sleep(uint64_t __mills) {
     double _start = uptime;
-    while (uptime < _start + __mills * 100)
+    while (uptime < _start + (double)(__mills) / 1000)
         asm ("hlt");
 }
 
