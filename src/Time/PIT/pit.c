@@ -25,8 +25,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define DIV_MIN 100
 
 
-static double   uptime  = 0;
-static uint16_t divisor = 63535;
+static volatile double   uptime  = 0;
+static uint16_t          divisor = 63535;
 
 static void (*tickHandler)();
 
@@ -44,17 +44,17 @@ double kernel_time_pit_uptime_get() {
 }
 
 void kernel_time_pit_sleep(uint64_t __mills) {
-    double _start = uptime;
-    while (uptime < _start + (double)(__mills) / 1000)
-        asm ("hlt");
+    const double _START = uptime;
+    while (uptime < _START + (double)(__mills) / 1000)
+        asm volatile ("hlt");
 }
 
 uint64_t kernel_time_pit_frequency_get() {
-    return PIT_BASE_FREQ / divisor;
+    return 65535 / divisor;
 }
 
 void kernel_time_pit_frequency_set(uint64_t __freq) {
-    __set_divisor__(65535 / __freq);
+    __set_divisor__(65535);
 }
 
 void kernel_time_pit_handler_set(void (*__handler)()) {
@@ -62,7 +62,7 @@ void kernel_time_pit_handler_set(void (*__handler)()) {
 }
 
 void kernel_time_pit_tick() {
-    uptime += 1.0 / (double)(kernel_time_pit_frequency_get());
+    uptime += 1.0f / (double)(kernel_time_pit_frequency_get());
 
     SOFTASSERT(tickHandler != NULL, RETVOID);
     tickHandler();

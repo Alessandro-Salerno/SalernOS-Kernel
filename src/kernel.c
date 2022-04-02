@@ -45,7 +45,6 @@ void kernel_main(boot_t* __bootinfo) {
     kloginfo("Testing...");
     void* _malloc_test  = kmalloc(64);
     void* _malloc_test2 = kmalloc(64);
-    // kernel_time_pit_sleep(1000);
 
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
