@@ -38,6 +38,6 @@ void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
 }
 
 void kernel_interrupt_handlers_tick(intframe_t* __frame) {
-    kernel_interrupts_pic_master_end();
     kernel_time_pit_tick();
+    kernel_interrupts_pic_master_end();
 }
