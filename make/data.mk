@@ -22,6 +22,7 @@ KINC   = $(call rwildcard, $(INCDIR), *.c)
 KSTD   = $(call rwildcard, $(KSTDDIR), *.c)
 KLIB   = $(call rwildcard, $(KLIBDIR), *.c)
 SRC    = $(call rwildcard, $(SRCDIR), *.c)
+SRC   += $(call rwildcard, $(SRCDIR), *.cpp)
 ASMSRC = $(call rwildcard, $(SRCDIR), *.asm)
 
 OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/$(KFNAME)/C/%.o, $(SRC))

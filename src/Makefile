@@ -26,6 +26,11 @@ $(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
 	@ mkdir -p $(@D)
 	$(CC) $(CFLAGS) -O3 -c $^ -o $@
 
+$(OBJDIR)/$(KFNAME)/C++/%.o: $(SRCDIR)/%.cpp
+	@ echo !==== COMPILING C++ $^
+	@ mkdir -p $(@D)
+	$(CC) $(CFLAGS) -O3 -c $^ -o $@
+
 $(OBJDIR)/$(KFNAME)/Assembly/%.o: $(SRCDIR)/%.asm
 	@ echo !==== COMPILING ASM $^
 	@ mkdir -p $(@D)
