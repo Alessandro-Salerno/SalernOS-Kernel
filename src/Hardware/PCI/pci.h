@@ -40,6 +40,28 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint8_t  _BIST;
     } pcidevhdr_t;
 
+    typedef struct PCIDeviceHeader0 {
+        pcidevhdr_t _Header;
+        uint32_t    _BAR0;
+        uint32_t    _BAR1;
+        uint32_t    _BAR2;
+        uint32_t    _BAR3;
+        uint32_t    _BAR4;
+        uint32_t    _BAR5;
+        uint32_t    _CardBusCISPointer;
+        uint16_t    _SubsystemVendor;
+        uint16_t    _Subsystem;
+        uint32_t    _ExpansionROMBase;
+        uint8_t     _CapabilitiesPointer;
+        uint8_t     _ReservedZero;
+        uint16_t    _ReservedOne;
+        uint32_t    _ReservedTwo;
+        uint8_t     _InterruptLine;
+        uint8_t     _InterruptPin;
+        uint8_t     _MinimumGrant;
+        uint8_t     _MaximumLatency;
+    } pcidevhdr0_t;
+
 
     /**********************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
