@@ -36,7 +36,7 @@ void kernel_main(boot_t* __bootinfo) {
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
     kernel_kutils_int_setup();
-    // kernel_kutils_time_setup(); BROKEN
+    kernel_kutils_time_setup();
 
     acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
     
