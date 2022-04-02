@@ -24,5 +24,5 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 void kernel_syscall_handlers_printstr(void* __frame) {
     char* _str = __frame;
-    kprintf(_str);
+    kprintf("%s", _str);
 }

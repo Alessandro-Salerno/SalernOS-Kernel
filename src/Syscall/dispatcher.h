@@ -24,10 +24,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <kerntypes.h>
 
 
-    /****************************************************************************
+    /*********************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ****************************************************************************/
-    void            kernel_syscall_invoke         (void* __frame, int __syscall);
-    void            kernel_syscall_dispatch       (void* __frame, int __syscall);
+    *********************************************************************************/
+    void            kernel_syscall_invoke         (void* __frame, uint32_t __syscall);
+    void            kernel_syscall_dispatch       (void* __frame, uint32_t __syscall);
 
 #endif

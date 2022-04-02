@@ -38,6 +38,7 @@ static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
     _handler->_Selector           = 0x08;
 
     kernel_idt_offset_set(_handler, (uint64_t)(__isr));
+    return _handler;
 }
 
 
@@ -47,12 +48,11 @@ void kernel_idt_initialize() {
     idtr._Limit  = 0x1000 - 1;
     idtr._Offset = (uint64_t)(kernel_pgfa_page_new()); 
     
-    idtdescent_t* _pgfault_handler  = __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);
-    idtdescent_t* _dfault_handler   = __create_entry__(0x08, kernel_interrupt_handlers_dfault);
-    idtdescent_t* _gpfault_handler  = __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);
-    idtdescent_t* _kbhit_handler    = __create_entry__(0x21, kernel_interrupt_handlers_kbhit);
-    idtdescent_t* _pit_tick_handler = __create_entry__(0x20, kernel_interrupt_handlers_tick);
-    idtdescent_t* _syscall_handler  = __create_entry__(0x81, kernel_syscall_dispatch);
+    __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);    // Page fault handler
+    __create_entry__(0x08, kernel_interrupt_handlers_dfault);     // Double fault handler
+    __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);    // General protection fault handler
+    __create_entry__(0x20, kernel_interrupt_handlers_tick);       // PIT Tick interrupt handler
+    __create_entry__(0x81, kernel_syscall_dispatch);              // System Call interrupt handler
 
     asm ("lidt %0" : : "m" (idtr));
 

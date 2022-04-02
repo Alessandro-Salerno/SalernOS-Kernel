@@ -42,10 +42,6 @@ void kernel_main(boot_t* __bootinfo) {
     
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
 
-    kloginfo("Testing...");
-    void* _malloc_test  = kmalloc(64);
-    void* _malloc_test2 = kmalloc(64);
-
     kernel_text_reinitialize(
         FGCOLOR, BGCOLOR,
         0, 0
@@ -68,8 +64,7 @@ void kernel_main(boot_t* __bootinfo) {
     kprintf("Usable Memory: %u bytes\n",   _usable_mem);
     kprintf("Free Memory: %u bytes\n",     _free_mem);
     kprintf("Used Memory: %u bytes\n",     _used_mem);
-    kprintf("Reserved Memory: %u bytes\n", _unusable_mem);
-    kprintf("Heap Test: %u\n\n",           (uint64_t)(_malloc_test));
+    kprintf("Reserved Memory: %u bytes\n\n", _unusable_mem);
 
     kprintf("RSDP Address: %u\n",   (uint64_t)(__bootinfo->_RSDP));
     kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));
@@ -81,7 +76,7 @@ void kernel_main(boot_t* __bootinfo) {
 
     // What follows is just debug code
     // This will be removed in a later version
-    uint8_t _kcode, _nkcode, _ascii;
+    uint8_t _kcode = 0, _nkcode = 0, _ascii = 0;
     while (TRUE) {
         kernel_io_keyboard_keys_handle();
         kernel_io_keyboard_keys_get(&_nkcode, &_ascii);

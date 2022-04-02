@@ -24,14 +24,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kstdio.h>
 
 
-static const void (*syscallHandlers[])(void* __frmae) = {
+static void (*syscallHandlers[])(void* __frmae) = {
     kernel_syscall_handlers_printstr
 };
 
 
-void kernel_syscall_dispatch(void* __frame, int __syscall) {
+void kernel_syscall_dispatch(void* __frame, uint32_t __syscall) {
     kernel_panic_assert(
-        __syscall < sizeof(syscallHandlers) / sizeof(syscallHandlers[0]),
+        __syscall < sizeof(syscallHandlers) / sizeof(void (*)(void*)),
         "Syscall invoked with invalid ID!"
     );
 

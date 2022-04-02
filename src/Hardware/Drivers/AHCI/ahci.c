@@ -59,6 +59,10 @@ void kernel_hw_ahci_ports_probe(ahcidevdr_t* __dev) {
     for (uint32_t _i = 0; _i < MAX_PORTS; _i++) {
         if (_ports_impl & (1 << _i)) {
             ahciport_t _ptype = __check_port__(&__dev->_ABAR->_HBAPorts[_i]);
+
+            if (_ptype == SIG_ATA || _ptype == SIG_ATAPI) {
+                // We can do something with this
+            }
         }
     }
 }

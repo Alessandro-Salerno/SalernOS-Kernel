@@ -33,7 +33,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*******************************************************************************************
     RET TYPE        FUNCTION NAME                       FUNCTION ARGUMENTS
     *******************************************************************************************/
-    void            kernel_io_keyboard_mods_handle      (uint8_t __scancode);
+    void            kernel_io_keyboard_mods_handle      ();
     void            kernel_io_keyboard_keys_handle      ();
     void            kernel_io_keyboard_keys_get         (uint8_t* __scancode, uint8_t* __ascii);
 

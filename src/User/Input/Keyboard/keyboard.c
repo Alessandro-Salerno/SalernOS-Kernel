@@ -29,7 +29,7 @@ static uint8_t keyboardScancoide,
 static bool  isShiftPressed;
 
 
-void kernel_io_keyboard_mods_handle(uint8_t __scancode) {
+void kernel_io_keyboard_mods_handle() {
     switch (keyboardScancoide) {
         case KEY_LSHIFT:
         case KEY_RSHIFT:

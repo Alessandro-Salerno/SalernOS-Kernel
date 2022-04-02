@@ -17,7 +17,7 @@
 
 
 CINCLUDE = -I "$(INCDIR)/Interface" -I "$(SRCDIR)" -I "$(KSTDDIR)/Interface" -I "$(KLIBDIR)/Interface" -I "$(EXTDIR)/Interface"
-CFLAGS 	 = -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
+CFLAGS 	 = -Wall -Wextra -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 CPPFLAGS = $(CFLAGS) -fno-exceptions
 ASMFLAGS = 
 LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib

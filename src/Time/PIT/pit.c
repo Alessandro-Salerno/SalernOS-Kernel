@@ -54,7 +54,7 @@ uint64_t kernel_time_pit_frequency_get() {
 }
 
 void kernel_time_pit_frequency_set(uint64_t __freq) {
-    __set_divisor__(65535);
+    __set_divisor__(65535 / __freq);
 }
 
 void kernel_time_pit_handler_set(void (*__handler)()) {

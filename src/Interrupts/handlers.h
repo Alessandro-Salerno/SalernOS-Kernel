@@ -36,7 +36,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     ISR  void            kernel_interrupt_handlers_pgfault      (intframe_t* __frame);
     ISR  void            kernel_interrupt_handlers_dfault       (intframe_t* __frame);
     ISR  void            kernel_interrupt_handlers_gpfault      (intframe_t* __frame);
-    ISR  void            kernel_interrupt_handlers_kbhit        (intframe_t* __frame);
     ISR  void            kernel_interrupt_handlers_tick         (intframe_t* __frame);
 
 #endif
