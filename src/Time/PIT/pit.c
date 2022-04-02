@@ -25,9 +25,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define DIV_MIN 100
 
 
-static double   uptime;
+static double   uptime  = 0;
 static uint16_t divisor = 63535;
-static void     (*tickHandler)();
+
+static void (*tickHandler)();
 
 
 static void __set_divisor__(uint16_t __div) {
@@ -35,7 +36,7 @@ static void __set_divisor__(uint16_t __div) {
     divisor = __div;
 
     kernel_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
-    kernel_io_out(PIT_PORT, (uint8_t)(divisor & 0xff00) >> 8);
+    kernel_io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
 }
 
 double kernel_time_pit_uptime_get() {
