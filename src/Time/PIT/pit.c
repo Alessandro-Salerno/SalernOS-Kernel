@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 static double   uptime;
-static uint16_t divisor;
+static uint16_t divisor = 63535;
 static void     (*tickHandler)();
 
 
@@ -53,7 +53,7 @@ uint64_t kernel_time_pit_frequency_get() {
 }
 
 void kernel_time_pit_frequency_set(uint64_t __freq) {
-    __set_divisor__(PIT_BASE_FREQ / __freq);
+    __set_divisor__(65535 / __freq);
 }
 
 void kernel_time_pit_handler_set(void (*__handler)()) {
