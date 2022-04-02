@@ -39,6 +39,7 @@ static void __combine_forward__(heapseghdr_t* __segment) {
     if (__segment->_Next->_Next != NULL)
         __segment->_Next->_Next->_Last = __segment;
 
+    __segment->_Next   = __segment->_Next->_Next;
     __segment->_Length = __segment->_Length + __segment->_Next->_Length + sizeof(heapseghdr_t);
 }
 
