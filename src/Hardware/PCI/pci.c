@@ -62,7 +62,7 @@ static void __enumerate_function__(uint64_t __devaddr, uint64_t __function) {
                             // Create driver instance
                             ahcidevdr_t* _driver    = kmalloc(sizeof(ahcidevdr_t));
                             _driver->_PCIDeviceBase = _pci_dev;
-                            _driver->_ABAR          = (hbamem_t*)(((pcidevhdr0_t*)(_pci_dev))->_BAR5);
+                            _driver->_ABAR          = (hbamem_t*)((uint64_t)(((pcidevhdr0_t*)(_pci_dev))->_BAR5));
 
                             kernel_paging_address_map(_driver->_ABAR, _driver->_ABAR);
                             kernel_hw_ahci_ports_probe(_driver);
