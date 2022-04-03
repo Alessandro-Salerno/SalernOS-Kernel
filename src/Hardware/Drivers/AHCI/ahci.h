@@ -31,7 +31,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         AHCI_PORT_SEMB,
         AHCI_PORT_PM,
         AHCI_PORT_SATAPI
-    } ahciport_t;
+    } hbaporttype_t;
 
     typedef struct HBAPort {
         uint32_t _CommandListBase;
