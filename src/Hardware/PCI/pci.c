@@ -48,8 +48,6 @@ static void __enumerate_function__(uint64_t __devaddr, uint64_t __function) {
     SOFTASSERT(_pci_dev->_Device, RETVOID);
     SOFTASSERT(_pci_dev->_Device != 0xffff, RETVOID);
 
-    kprintf("Device ID: %u\tVendor ID: %u\n", _pci_dev->_Device, _pci_dev->_Vendor);
-
     // Check device class
     switch (_pci_dev->_Class) {
         case MASS_STORAGE_CONTROLLER: {

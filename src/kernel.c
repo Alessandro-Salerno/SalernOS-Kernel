@@ -67,9 +67,7 @@ void kernel_main(boot_t* __bootinfo) {
     kprintf("Reserved Memory: %u bytes\n\n", _unusable_mem);
 
     kprintf("RSDP Address: %u\n",   (uint64_t)(__bootinfo->_RSDP));
-    kprintf("MCFG Address: %u\n\n", (uint64_t)(_acpi._MCFG));
-
-    kernel_hw_pci_enumerate(_acpi._MCFG);
+    kprintf("MCFG Address: %u\n", (uint64_t)(_acpi._MCFG));
 
     klogok("Kernel Ready!");
     kprintf("\n\n");

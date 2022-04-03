@@ -94,6 +94,9 @@ acpiinfo_t kernel_kutils_rsd_setup(boot_t* __bootinfo) {
 
     kernel_panic_assert(kmemcmp(_mcfg->_SDTHeader._Signature, "MCFG", 4), "Invalid MCFG Table");
 
+    kloginfo("Initializing PCI...");
+    kernel_hw_pci_enumerate(_mcfg);
+
     return (acpiinfo_t) {
         ._XSDT = _xsdt,
         ._MCFG = _mcfg
