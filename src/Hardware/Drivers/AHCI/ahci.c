@@ -78,14 +78,14 @@ static void __configure_port__(ahciport_t* __port) {
     void* _new_base = kernel_pgfa_page_new();
     __port->_HBAPort->_CommandListBase      = (uint32_t)(uint64_t)(_new_base);
     __port->_HBAPort->_CommandListBaseUpper = (uint32_t)((uint64_t)(_new_base) >> 32);
-    kmemset(__port->_HBAPort->_CommandListBase, 1024, 0);
+    kmemset(_new_base, 1024, 0);
 
     void* _fis_base = kernel_pgfa_page_new();
     __port->_HBAPort->_FisBaseAddress      = (uint32_t)(uint64_t)(_fis_base);
     __port->_HBAPort->_FisBaseAddressUpper = (uint32_t)((uint64_t)(_fis_base) >> 32);
-    kmemset(__port->_HBAPort->_FisBaseAddress, 256, 0);
+    kmemset(_fis_base, 256, 0);
 
-    hbacmdhdr_t* _cmdhdr = (hbacmdhdr_t*)(*(uint64_t*)(&__port->_HBAPort->_CommandListBase));
+    hbacmdhdr_t* _cmdhdr = (hbacmdhdr_t*)(_new_base);
 
     for (uint32_t _i = 0; _i < MAX_CMDHDR; _i++) {
         _cmdhdr[_i]._PRDTLength = 8;
