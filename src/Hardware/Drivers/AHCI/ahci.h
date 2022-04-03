@@ -40,7 +40,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint32_t _FisBaseAddressUpper;
         uint32_t _InterruptStatus;
         uint32_t _InterruptEnable;
-        uint32_t _CommandStatu;
+        uint32_t _CommandStatus;
         uint32_t _ReservedZero;
         uint32_t _TaskFileData;
         uint32_t _Signature;
@@ -74,9 +74,19 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         hbaport_t _HBAPorts[1];
     } hbamem_t;
 
+    typedef struct AHCIPort {
+        hbaport_t*    _HBAPort;
+        hbaporttype_t _HBAPortType;
+        uint8_t*      _DMABuffer;
+        uint8_t       _PortNum;
+    } ahciport_t;
+
     typedef struct AHCIDeviceDriver {
         pcidevhdr_t* _PCIDeviceBase;
         hbamem_t*    _ABAR;
+
+        ahciport_t   _Ports[32];
+        uint8_t      _NPorts;
     } ahcidevdr_t;
 
 
