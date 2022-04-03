@@ -74,6 +74,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         hbaport_t _HBAPorts[1];
     } hbamem_t;
 
+    typedef struct HBACommandHeader {
+        uint8_t _CommandFISLength : 5;
+        uint8_t _ATAPI            : 1;
+        uint8_t _Write            : 1;
+        uint8_t _Prefetchable     : 1;
+        uint8_t _Reset            : 1;
+        uint8_t _BIST             : 1;
+        uint8_t _CleanBusy        : 1;
+        uint8_t _ReservedZero     : 1;
+        uint8_t _PortMultiplier   : 4;
+
+        uint16_t _PRDTLength;
+        uint32_t _PRDBCount;
+        uint32_t _CommandTableBaseAddress;
+        uint32_t _CommandTableBaseAddressUpper;
+        uint32_t _ReservedOne[4];
+    } hbacmdhdr_t;
+
     typedef struct AHCIPort {
         hbaport_t*    _HBAPort;
         hbaporttype_t _HBAPortType;
