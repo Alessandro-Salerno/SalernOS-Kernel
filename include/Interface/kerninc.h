@@ -36,6 +36,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
     // Hardware includes
+    #include "Hardware/Drivers/AHCI/ahci.h"         /*   Includes the Kernel's AHCI driver                  */
     #include "Hardware/ACPI/acpi.h"                 /*   Includes the Kernel's RSDP/ACPI Implementation     */
     #include "Hardware/PCI/pci.h"                   /*   Includes the Kernel's PCI Implementation           */
 
