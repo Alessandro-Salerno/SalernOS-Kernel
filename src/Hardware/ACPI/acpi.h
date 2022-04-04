@@ -25,7 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <sbs.h>
 
 
-    typedef struct __attribute__((__packed__)) SystemDescriptorTableHeader {
+    typedef struct __attribute__((packed)) SystemDescriptorTableHeader {
         uint8_t  _Signature[4];
         uint32_t _Length;
         uint8_t  _Revision;
@@ -35,20 +35,20 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint32_t _OEMRevision;
         uint32_t _Creator;
         uint32_t _CreatorRevision;
-    } __attribute__((__packed__)) sdthdr_t;
+    } sdthdr_t;
 
-    typedef struct __attribute__((__packed__)) MCFGHeader {
+    typedef struct __attribute__((packed)) MCFGHeader {
         sdthdr_t _SDTHeader;
         uint64_t _Reserved;
-    } __attribute__((__packed__)) mcfghdr_t;
+    } mcfghdr_t;
 
-    typedef struct __attribute__((__packed__)) ACPIDeviceConfiguration {
+    typedef struct __attribute__((packed)) ACPIDeviceConfiguration {
         uint64_t _BaseAddress;
         uint16_t _PCISegGroup;
         uint8_t  _StartBus;
         uint8_t  _EndBus;
         uint32_t _Reserved;
-    } __attribute__((__packed__)) acpidevconf_t;
+    } acpidevconf_t;
 
     typedef struct ACPIInfo {
         sdthdr_t*  _XSDT;

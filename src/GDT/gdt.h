@@ -24,21 +24,21 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <kerntypes.h>
 
 
-    typedef struct GDTDescriptor {
+    typedef struct __attribute__((packed)) GDTDescriptor {
         uint16_t _Size;
         uint64_t _Offset;
-    } __attribute__((__packed__)) gdtdesc_t;
+    } gdtdesc_t;
 
-    typedef struct GDTEntry {
+    typedef struct __attribute__((packed)) GDTEntry {
         uint16_t _LimitZero;
         uint16_t _BaseZero;
         uint8_t  _BaseOne;
         uint8_t  _AccessByte;
         uint8_t  _LimitOne_Flags;
         uint8_t  _BaseTwo;
-    } __attribute__((__packed__)) gdtent_t;
+    } gdtent_t;
 
-    typedef struct __attribute__((__aligned__(0x1000)))  GlobalDescriptorTable {
+    typedef struct __attribute__((aligned(0x1000))) GlobalDescriptorTable {
         gdtent_t _Null;
         gdtent_t _KernelCodeSegment;
         gdtent_t _KernelDataSegment;
@@ -49,7 +49,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         gdtent_t _OVMFCodeSegment;
         gdtent_t _TSSLowSegment;
         gdtent_t _TSSHighSegment;
-    } __attribute__((__aligned__(0x1000))) gdt_t;
+    } gdt_t;
 
 
     /********************

@@ -38,7 +38,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint64_t _Address     : 40;
     } pgdirent_t;
 
-    typedef struct __attribute__((__aligned__(0x1000))) PageTable {
+    typedef struct __attribute__((aligned(0x1000))) PageTable {
         pgdirent_t _Entries[512];
     } pgtable_t;
 

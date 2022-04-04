@@ -28,7 +28,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #define IDT_TA_TRAP_GATE      0b10001111
 
 
-    typedef struct __attribute__((__packed__)) IDTDescriptorEntry {
+    typedef struct __attribute__((packed)) IDTDescriptorEntry {
         uint16_t _OffsetZero;
         uint16_t _Selector;
         uint8_t  _InterruptStackTableOffset;
@@ -36,12 +36,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint16_t _OffsetOne;
         uint32_t _OffsetTwo;
         uint32_t _Ignore;
-    } __attribute__((__packed__)) idtdescent_t;
+    } idtdescent_t;
 
-    typedef struct __attribute__((__packed__)) InterruptDescriptorTableRegister {
+    typedef struct __attribute__((packed)) InterruptDescriptorTableRegister {
         uint16_t _Limit;
         uint64_t _Offset;
-    } __attribute__((__packed__)) idtr_t;
+    } idtr_t;
 
     /**************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
