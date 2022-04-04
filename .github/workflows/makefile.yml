@@ -15,10 +15,10 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Install dependencies
-      run: sudo apt install -y nasm; sudo apt install -y binutils-x86-64-linux-gnu; sudo apt install -y build-essential; sudo apt install -y gcc-x86-64-linux-gnu
-      
+      run: sh ./.github/workflows/configure.sh
+    
     - name: Setup directory
       run: make setup
-  
-    - name: Build
+
+    - name: Build for x86-64
       run: make
