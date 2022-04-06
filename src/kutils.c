@@ -70,8 +70,8 @@ void kernel_kutils_mem_setup(boot_t* __bootinfo) {
     kernel_paging_address_mapn((void*)(0), _mem_size);
     kernel_paging_address_mapn((void*)(_fbbase), _fbsize);
 
-    asm ("mov %0, %%cr3" : : "r" (_lvl4)); 
-    
+    kernel_paging_laod(_lvl4);
+
     kloginfo("Locking Font and Framebuffer Pages...");
     kernel_pgfa_reserve(_fbbase, _fbsize / 4096 + 1);
     kernel_pgfa_reserve(__bootinfo->_Font._Buffer, (__bootinfo->_Font._Header._CharSize * 256) / 4096);
