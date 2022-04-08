@@ -40,7 +40,7 @@ void kernel_interrupts_pic_remap() {
     kernel_io_out(PIC1_DATA, _pic1);
     kernel_io_out(PIC2_DATA, _pic2);
 
-    kernel_io_out(PIC1_DATA, 0b11111110);
+    kernel_io_out(PIC1_DATA, 0b11111100);
     kernel_io_out(PIC2_DATA, 0b11111111);
     asm volatile ("sti");
 }
