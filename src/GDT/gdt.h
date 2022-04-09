@@ -29,7 +29,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint64_t _Offset;
     } gdtdesc_t;
 
-    typedef struct TaskStateSegment {
+    typedef struct __attribute__((packed)) TaskStateSegment {
         uint32_t _ReservedZero;
         uint64_t _RSP0;
         uint64_t _RSP1;
