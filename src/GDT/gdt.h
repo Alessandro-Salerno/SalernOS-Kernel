@@ -61,8 +61,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         gdtent_t _KernelCodeSegment;
         gdtent_t _KernelDataSegment;
         gdtent_t _UserNull;
-        gdtent_t _UserCodeSegment;
         gdtent_t _UserDataSegment;
+        gdtent_t _UserCodeSegment;
         gdtent_t _OVMFDataSegment;
         gdtent_t _OVMFCodeSegment;
         gdtent_t _TSSLowSegment;
