@@ -41,6 +41,7 @@ static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
         _entry._Address   = (uint64_t)(_pgtable) >> 12;
         _entry._Present   = TRUE;
         _entry._ReadWrite = TRUE;
+        _entry._UserSuper = TRUE;
 
         __dir->_Entries[__idx] = _entry;
         return _pgtable;

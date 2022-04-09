@@ -25,17 +25,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
     typedef struct PageDirectoryEntry {
-        bool   _Present       : 1;
-        bool   _ReadWrite     : 1;
-        bool   _UserSuper     : 1;
-        bool   _WriteThrough  : 1;
-        bool   _CacheDisabled : 1;
-        bool   _Accessed      : 1;
-        bool   _IgnoreZero    : 1;
-        bool   _LargerPages   : 1;
-        bool   _IgnoreOne     : 1;
-        uint8_t  _Available   : 3;
-        uint64_t _Address     : 40;
+        bool     _Present       : 1;
+        bool     _ReadWrite     : 1;
+        bool     _UserSuper     : 1;
+        bool     _WriteThrough  : 1;
+        bool     _CacheDisabled : 1;
+        bool     _Accessed      : 1;
+        bool     _IgnoreZero    : 1;
+        bool     _LargerPages   : 1;
+        bool     _IgnoreOne     : 1;
+        uint8_t  _Available     : 3;
+        uint64_t _Address       : 40;
     } pgdirent_t;
 
     typedef struct __attribute__((aligned(0x1000))) PageTable {
