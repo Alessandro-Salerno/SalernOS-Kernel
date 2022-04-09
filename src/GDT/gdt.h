@@ -29,6 +29,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint64_t _Offset;
     } gdtdesc_t;
 
+    typedef struct TaskStateSegment {
+        uint32_t _ReservedZero;
+        uint64_t _RSP0;
+        uint64_t _RSP1;
+        uint64_t _RSP2;
+        uint64_t _ReservedOne;
+        uint64_t _IST1;
+        uint64_t _IST2;
+        uint64_t _IST3;
+        uint64_t _IST4;
+        uint64_t _IST5;
+        uint64_t _IST6;
+        uint64_t _IST7;
+        uint64_t _ReservedTwo;
+        uint16_t _ReservedThree;
+        uint16_t _IOPBOffset;
+    } tss_t;
+
     typedef struct __attribute__((packed)) GDTEntry {
         uint16_t _LimitZero;
         uint16_t _BaseZero;
