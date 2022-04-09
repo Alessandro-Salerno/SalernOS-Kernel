@@ -38,6 +38,16 @@ void kernel_kutils_gdt_setup() {
         ._Offset = (uint64_t)(&gdt)
     };
 
+    kloginfo("Initializing TSS...");
+    kmemset(&tss, sizeof(tss_t), 0);
+    uint64_t _tss_base = (uint64_t)(&tss);
+    gdt._TSSLowSegment._BaseZero   = _tss_base & 0xffff;
+    gdt._TSSLowSegment._BaseOne    = (_tss_base >> 16) & 0xff;
+    gdt._TSSLowSegment._BaseTwo    = (_tss_base >> 24) & 0xff;
+    gdt._TSSLowSegment._LimitZero  = sizeof(tss_t);
+    gdt._TSSHighSegment._LimitZero = (_tss_base >> 32) & 0xffff;
+    gdt._TSSHighSegment._BaseZero  = (_tss_base >> 48) & 0xffff;
+
     kloginfo("Initializing GDT...");
     kernel_gdt_load(&_gdt_desc);
 }

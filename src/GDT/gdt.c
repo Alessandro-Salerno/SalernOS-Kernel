@@ -21,6 +21,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "GDT/gdt.h"
 
 
+tss_t tss;
+
 __attribute__((aligned(0x1000)))
 gdt_t gdt = {
     { 0, 0, 0, 0x00, 0x00, 0 }, // Null Segment

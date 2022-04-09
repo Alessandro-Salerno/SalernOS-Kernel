@@ -28,4 +28,5 @@ kernel_syscall_enable:
     wrmsr
     ret
 
+
 GLOBAL kernel_syscall_enable

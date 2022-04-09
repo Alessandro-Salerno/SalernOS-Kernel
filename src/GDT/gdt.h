@@ -52,7 +52,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint16_t _BaseZero;
         uint8_t  _BaseOne;
         uint8_t  _AccessByte;
-        uint8_t  _LimitOne_Flags;
+        uint8_t  _LimitOneFlags;
         uint8_t  _BaseTwo;
     } gdtent_t;
 
@@ -74,6 +74,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
      *      TYPE    NAME
     ********************/
     extern  gdt_t   gdt;
+    extern  tss_t   tss;
 
 
     /*****************************************************************************
