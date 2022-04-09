@@ -35,6 +35,7 @@ void kernel_main(boot_t* __bootinfo) {
     kernel_kutils_kdd_setup(__bootinfo);
     kernel_kutils_gdt_setup();
     kernel_kutils_mem_setup(__bootinfo);
+    kernel_syscall_enable();
     kernel_kutils_int_setup();
     kernel_kutils_time_setup();
 

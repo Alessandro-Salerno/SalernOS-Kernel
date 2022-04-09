@@ -43,6 +43,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     // Syscall includes
     #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
     #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
+    #include "Syscall/sce.h"
 
     // Memory includes
     #include "Memory/Heap/heap.h"                   /*   Includes the Kernel's heap manager                 */
