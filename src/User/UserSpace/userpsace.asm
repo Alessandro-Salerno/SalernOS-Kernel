@@ -18,10 +18,18 @@
 
 [bits 64]
 kernel_userspace_enter:
-    mov     rcx,    rdi
-    mov     rsp,    rsi
-    mov     r11,    0x0202
-    sysretq
+    mov     ax,     0x20
+    mov     ds,     ax
+    mov     es,     ax
+    mov     fs,     ax
+    mov     gs,     ax
+    mov     ss,     ax
+
+    pop     rsi
+    mov     rax,    0x28
+    push    rax
+    push    rdi
+    retfq
 
 kernel_userspace_exit:
     ret
