@@ -19,5 +19,6 @@
 [bits 64]
 kernel_syscall_invoke:
     int     0x81
+    ret
 
 GLOBAL kernel_syscall_invoke
