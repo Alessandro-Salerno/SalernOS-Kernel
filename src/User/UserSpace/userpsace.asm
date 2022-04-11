@@ -25,8 +25,9 @@ kernel_userspace_enter:
     mov     gs,     ax
     mov     ss,     ax
 
-    pop     rsi
+    pop     rcx
     mov     rax,    0x28
+    mov     rsp,    rsi
     push    rax
     push    rdi
     retfq
