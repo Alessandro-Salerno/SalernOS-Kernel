@@ -20,14 +20,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerninc.h>
 #include <kdebug.h>
-#include "User/UserSpace/userspace.h"
-
-
-uint64_t user_stack[1024];
-void user_main() {
-    kernel_syscall_invoke("HELLO FROM SYSCALL", SYSCALL_PRINT_STR);
-    while (TRUE);
-}
 
 
 void kernel_main(boot_t* __bootinfo) {
@@ -80,8 +72,6 @@ void kernel_main(boot_t* __bootinfo) {
 
     klogok("Kernel Ready!");
     kprintf("\n\n");
-
-    kernel_userspace_enter(user_main, &user_stack[500]);
 
     // What follows is just debug code
     // This will be removed in a later version
