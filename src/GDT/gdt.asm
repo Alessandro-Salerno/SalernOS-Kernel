@@ -19,7 +19,7 @@
 [bits 64]
 kernel_gdt_load:
     lgdt    [rdi]
-    mov     ax,     0x40
+    mov     ax,     0x30
     ltr     ax
     mov     ax,     0x10
     mov     ds,     ax
