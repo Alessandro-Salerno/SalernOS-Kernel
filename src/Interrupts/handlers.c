@@ -26,9 +26,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "IO/io.h"
 
 
-void kernel_interrupt_handlers_pgfault(intframe_t* __frame)     { kernel_panic_throw("Page Fault Detected!");               }
-void kernel_interrupt_handlers_dfault(intframe_t* __frame)      { kernel_panic_throw("Double Fault Detected!");             }
-void kernel_interrupt_handlers_gpfault(intframe_t* __frame)     { kernel_panic_throw("General Protection Fault Detected!"); }
+void kernel_interrupt_handlers_pgfault(intframe_t* __frame)     { kernel_panic_throw("Page Fault Detected!", __frame);               }
+void kernel_interrupt_handlers_dfault(intframe_t* __frame)      { kernel_panic_throw("Double Fault Detected!", __frame);             }
+void kernel_interrupt_handlers_gpfault(intframe_t* __frame)     { kernel_panic_throw("General Protection Fault Detected!", __frame); }
 
 void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
     kernel_io_keyboard_mods_handle();

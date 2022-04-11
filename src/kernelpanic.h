@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_PANIC
 #define SALERNOS_CORE_KERNEL_PANIC
 
+    #include "Interrupts/handlers.h"
     #include <kerntypes.h>
 
     #define SOFTASSERT(__cond, __ret) if (!(__cond)) return __ret;
@@ -33,10 +34,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } panicinfo_t;
 
 
-    /*******************************************************************************
+    /***************************************************************************************
     RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
-    *******************************************************************************/
-    void            kernel_panic_throw      (const char* __message);
+    ***************************************************************************************/
+    void            kernel_panic_throw      (const char* __message, intframe_t* __regstate);
     void            kernel_panic_assert     (uint8_t __cond, const char* __message);
 
 #endif
