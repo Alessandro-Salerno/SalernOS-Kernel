@@ -21,9 +21,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_SYCALL_SCE
 #define SALERNOS_CORE_KERNEL_SYCALL_SCE
 
-    /****************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ****************************************************************/
-    void            kernel_syscall_enable         ();
+    /***********************************************************************
+            RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ***********************************************************************/
+    extern  void            kernel_syscall_enable         ();
 
 #endif
