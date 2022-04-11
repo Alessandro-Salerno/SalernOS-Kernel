@@ -26,8 +26,30 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #define ISR __attribute__((interrupt))
 
 
-    struct InterruptFrame;
-    typedef struct InterruptFrame intframe_t;
+    typedef struct __attribute__((packed)) InterruptFrame {
+        uint64_t _R15;
+        uint64_t _R14;
+        uint64_t _R13;
+        uint64_t _R12;
+        uint64_t _R11;
+        uint64_t _R10;
+        uint64_t _R9;
+        uint64_t _R8;
+        uint64_t _RBP;
+        uint64_t _RDI;
+        uint64_t _RSI;
+        uint64_t _RDX;
+        uint64_t _RCX;
+        uint64_t _RBX;
+        uint64_t _RAX;
+        uint64_t _ReservedZero;
+        uint64_t _ResrvedOne;
+        uint64_t _RIP;
+        uint64_t _CS;
+        uint64_t _RFlags;
+        uint64_t _RSP;
+        uint64_t _SS;
+    } intframe_t;
 
 
     /*********************************************************************************
