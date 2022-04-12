@@ -17,6 +17,9 @@
 
 
 [bits 64]
+
+
+global kernel_syscall_enable
 kernel_syscall_enable:
     mov     rcx,    0xc0000080
     rdmsr
@@ -27,6 +30,3 @@ kernel_syscall_enable:
     mov     edx,    0x00180008
     wrmsr
     ret
-
-
-GLOBAL kernel_syscall_enable

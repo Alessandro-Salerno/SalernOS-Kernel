@@ -17,21 +17,16 @@
 
 
 [bits 64]
+
+
+global kernel_userspace_enter
 kernel_userspace_enter:
-    mov     ax,     0x20
-    mov     ds,     ax
-    mov     es,     ax
-    mov     fs,     ax
-    mov     gs,     ax
-    mov     ss,     ax
-
-    pop     rcx
-    mov     rax,    0x28
+    mov     rcx,    rdi
     mov     rsp,    rsi
-    push    rax
-    push    rdi
-    retfq
+    mov     r11,    0x202
+    o64 sysret
 
+global kernel_userspace_exit
 kernel_userspace_exit:
     mov     ax,     0x10
     mov     ds,     ax
@@ -45,7 +40,3 @@ kernel_userspace_exit:
     push    rax
     push    rdi
     retfq
-
-
-GLOBAL kernel_userspace_enter
-GLOBAL kernel_userspace_exit
