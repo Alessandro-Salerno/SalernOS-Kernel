@@ -39,11 +39,11 @@ void kernel_panic_throw(const char* __message, intframe_t* __regstate) {
         kprintf("R15: %u\nR14: %u\n",   __regstate->_R15, __regstate->_R14);
         kprintf("R13: %u\nR12: %u\n",   __regstate->_R13, __regstate->_R12);
         kprintf("R11: %u\nR10: %u\n",   __regstate->_R11, __regstate->_R10);
-        kprintf("R09: %u\nR08: %u\n\n", __regstate->_R9, __regstate->_R8);
+        kprintf("R09: %u\nR08: %u\n\n", __regstate->_R9,  __regstate->_R8);
 
         kprintf("[Special Registers]:\n");
         kprintf("RIP: %u\nRSP: %u\n", __regstate->_RIP, __regstate->_RSP);
-        kprintf("CS: %u\nSS: %u\n",   __regstate->_CS, __regstate->_SS);
+        kprintf("CS: %u\nSS: %u\n",   __regstate->_CS,  __regstate->_SS);
         kprintf("RFlags: %u\n",       __regstate->_RFlags);
     }
 
