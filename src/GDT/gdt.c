@@ -29,8 +29,8 @@ gdt_t gdt = {
     { 0, 0, 0, 0x9A, 0xA0, 0 }, // Kernel Code Segment
     { 0, 0, 0, 0x92, 0xA0, 0 }, // Kernel Data Segment
     { 0, 0, 0, 0x00, 0x00, 0 }, // User Null Segment
-    { 0, 0, 0, 0x92, 0xA0, 0 }, // User Data Segment
-    { 0, 0, 0, 0x9A, 0xA0, 0 }, // User Code Segment
+    { 0, 0, 0, 0xF2, 0xA0, 0 }, // User Data Segment
+    { 0, 0, 0, 0xFA, 0xA0, 0 }, // User Code Segment
     { 0, 0, 0, 0x89, 0xA0, 0 }, // TSS Low Segment
     { 0, 0, 0, 0x00, 0x00, 0 }, // TSS High Segment
 };
