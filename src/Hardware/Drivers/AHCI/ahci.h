@@ -34,10 +34,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } hbaporttype_t;
 
     typedef struct HBAPort {
-        uint32_t _CommandListBase;
-        uint32_t _CommandListBaseUpper;
-        uint32_t _FisBaseAddress;
-        uint32_t _FisBaseAddressUpper;
+        uint64_t _CommandListBase;
+        uint64_t _FisBaseAddress;
         uint32_t _InterruptStatus;
         uint32_t _InterruptEnable;
         uint32_t _CommandStatus;
@@ -87,8 +85,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
         uint16_t _PRDTLength;
         uint32_t _PRDBCount;
-        uint32_t _CommandTableBaseAddress;
-        uint32_t _CommandTableBaseAddressUpper;
+        uint64_t _CommandTableBaseAddress;
         uint32_t _ReservedOne[4];
     } hbacmdhdr_t;
 
@@ -107,10 +104,48 @@ with this program; if not, write to the Free Software Foundation, Inc.,
         uint8_t      _NPorts;
     } ahcidevdr_t;
 
+    typedef struct AHCIFISRegisterHardwareToDevice {
+        uint8_t _FISType;
+        uint8_t _PortMultiplier : 4;
+        uint8_t _ReservedZero : 3;
+        bool    _CommandControl : 1;
+        uint8_t _Command;
+        uint8_t _FeatureLow;
+        uint8_t _LBA0;
+        uint8_t _LBA1;
+        uint8_t _LBA2;
+        uint8_t _DeviceRegister;
+        uint8_t _LBA3;
+        uint8_t _LBA4;
+        uint8_t _LBA5;
+        uint8_t _FeatureLine;
+        uint8_t _CountLow;
+        uint8_t _CountHigh;
+        uint8_t _ISOCommandCompletion;
+        uint8_t _Control;
+        uint32_t _ReservedOne;
+    } ahcifish2d_t;
 
-    /*****************************************************************
+    typedef struct HBAPRDTEntry {
+        uint64_t _DataBaseAddress;
+        uint32_t _ReservedZero;
+        uint32_t _ByteCount             : 22;
+        uint32_t _ReservedOne           : 9;
+        bool     _InterruptOnCompletion : 1;
+    } hbaprdtent_t;
+
+    typedef struct HBACommandTable {
+        uint8_t      _CommandFIS[64];
+        uint8_t      _ATAPICommand[16];
+        uint8_t      _Reserved[48];
+        hbaprdtent_t _Entries[];
+    } hbacmdtb_t;
+
+
+    /***********************************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ******************************************************************/
+    ***********************************************************************************************************************/
     void            kernel_hw_ahci_ports_probe    (ahcidevdr_t* __dev);
+    bool            kernel_hw_ahci_read           (ahciport_t* __port, uint64_t __sector, uint16_t __sectors, void* __buff);
 
 #endif

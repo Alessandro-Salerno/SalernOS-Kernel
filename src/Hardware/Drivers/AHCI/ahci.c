@@ -39,6 +39,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define HBA_PXCMD_FRE 0x0010
 #define HBA_PXCMD_ST  0x0001
 #define HBA_PXCMD_FR  0x4000
+#define HBA_PXIS_TFES (1 << 30)
+
+#define FIS_TYPE_REG_H2D   0x27
+#define FIS_TYPE_REG_D2D   0x34
+#define FIS_TYPE_DMA_ACT   0x39
+#define FIS_TYPE_DMA_SETUP 0x41
+#define FIS_TYPE_DATA      0x46
+#define FIS_TYPE_BIST      0x58
+#define FIS_TYPE_PIO_SETUP 0x5F
+#define FIS_TYPE_DEV_BITS  0xA1
+
+#define FIS_MODE_LBA 1 << 6
+
+#define ATA_CMD_READ_DMA_EX 0x25
+
+#define ATA_DEV_BUSY 0x80
+#define ATA_DEV_DRQ  0x08
 
 
 static hbaporttype_t __check_port__(hbaport_t* __port) {
@@ -72,17 +89,21 @@ static void __start_port__(ahciport_t* __port) {
     __port->_HBAPort->_CommandStatus |= HBA_PXCMD_FRE | HBA_PXCMD_ST;
 }
 
+static bool __wait__(ahciport_t* __port) {
+    uint64_t _spin = 0;
+    while ((__port->_HBAPort->_TaskFileData & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && _spin++ < 1000000);
+    return _spin < 1000000;
+}
+
 static void __configure_port__(ahciport_t* __port) {
     __stop_port__(__port);
 
-    void* _new_base = kernel_pgfa_page_new();
-    __port->_HBAPort->_CommandListBase      = (uint32_t)(uint64_t)(_new_base);
-    __port->_HBAPort->_CommandListBaseUpper = (uint32_t)((uint64_t)(_new_base) >> 32);
+    void* _new_base                    = kernel_pgfa_page_new();
+    __port->_HBAPort->_CommandListBase = (uint64_t)(_new_base);
     kmemset(_new_base, 1024, 0);
 
-    void* _fis_base = kernel_pgfa_page_new();
-    __port->_HBAPort->_FisBaseAddress      = (uint32_t)(uint64_t)(_fis_base);
-    __port->_HBAPort->_FisBaseAddressUpper = (uint32_t)((uint64_t)(_fis_base) >> 32);
+    void* _fis_base                   = kernel_pgfa_page_new();
+    __port->_HBAPort->_FisBaseAddress = (uint64_t)(_fis_base);
     kmemset(_fis_base, 256, 0);
 
     hbacmdhdr_t* _cmdhdr = (hbacmdhdr_t*)(_new_base);
@@ -93,8 +114,7 @@ static void __configure_port__(ahciport_t* __port) {
         void*    _cmdtb = kernel_pgfa_page_new();
         uint64_t _addr  = (uint64_t)(_cmdtb) + (_i << 8);
 
-        _cmdhdr[_i]._CommandTableBaseAddress      = (uint32_t)(_addr);
-        _cmdhdr[_i]._CommandTableBaseAddressUpper = (uint32_t)(_addr >> 32);
+        _cmdhdr[_i]._CommandTableBaseAddress = (uint64_t)(_addr);
 
         kmemset((void*)(_addr), 256, 0);
     }
@@ -117,9 +137,62 @@ void kernel_hw_ahci_ports_probe(ahcidevdr_t* __dev) {
                     ._PortNum     = __dev->_NPorts
                 };
 
-                __configure_port__(&__dev->_Ports[__dev->_NPorts]);
                 __dev->_NPorts++;
             }
         }
     }
+    
+    for (uint32_t _i = 0; _i < __dev->_NPorts; _i++) {
+        ahciport_t _port = __dev->_Ports[_i];
+        __configure_port__(&_port);
+
+        _port._DMABuffer = (uint8_t*)(kernel_pgfa_page_new());
+        kmemset(_port._DMABuffer, 4096, 0); 
+    }
+}
+
+bool kernel_hw_ahci_read(ahciport_t* __port, uint64_t __sector, uint16_t __sectors, void* __buff) {
+    uint32_t _sec_low  = (uint32_t)(__sector),
+             _sec_high = (uint32_t)(__sector >> 32);
+
+    // Clear interrupt status
+    __port->_HBAPort->_InterruptStatus = (uint32_t)(-1);
+    
+    hbacmdhdr_t* _cmdhdr = (hbacmdhdr_t*)(__port->_HBAPort->_CommandListBase);
+
+    _cmdhdr->_CommandFISLength = sizeof(ahcifish2d_t) / sizeof(uint32_t);
+    _cmdhdr->_Write            = FALSE;
+    _cmdhdr->_PRDTLength       = 1;
+
+    hbacmdtb_t* _cmdtb = (hbacmdtb_t*)(_cmdhdr->_CommandTableBaseAddress);
+    kmemset(_cmdtb, sizeof(hbacmdtb_t) + _cmdhdr->_PRDTLength * sizeof(hbaprdtent_t), 0);
+
+    _cmdtb->_Entries[0]._DataBaseAddress       = (uint64_t)(__buff);
+    _cmdtb->_Entries[0]._ByteCount             = __sectors * 512 - 1;
+    _cmdtb->_Entries[0]._InterruptOnCompletion = TRUE;
+
+    ahcifish2d_t* _fis    = (ahcifish2d_t*)(&_cmdtb->_CommandFIS);
+    _fis->_FISType        = FIS_TYPE_REG_D2D;
+    _fis->_CommandControl = TRUE;
+    _fis->_Command        = ATA_CMD_READ_DMA_EX;
+    _fis->_LBA0           = (uint8_t)(_sec_low);
+    _fis->_LBA1           = (uint8_t)(_sec_low >> 8);
+    _fis->_LBA2           = (uint8_t)(_sec_low >> 16);
+    _fis->_LBA3           = (uint8_t)(_sec_high);
+    _fis->_LBA4           = (uint8_t)(_sec_high >> 8);
+    _fis->_LBA5           = (uint8_t)(_sec_high >> 16);
+    _fis->_DeviceRegister = FIS_MODE_LBA;
+    _fis->_CountLow       = __sectors & 0xff;
+    _fis->_CountHigh      = (__sectors << 8) & 0xff;
+
+    RETIFN(__wait__(__port));
+    __port->_HBAPort->_CommandIssue = TRUE;
+
+    // Temporary code
+    while (TRUE) {
+        if (__port->_HBAPort->_CommandIssue == 0) break;
+        if (__port->_HBAPort->_InterruptStatus & HBA_PXIS_TFES) return FALSE;
+    }
+
+    return TRUE;
 }

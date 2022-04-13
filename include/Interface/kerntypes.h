@@ -30,6 +30,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #define RETVOID
     #define ARGRET(__arg, __val) if (__arg != NULL) *__arg = __val
     
+    #define RETIFN(__cond) if (!(__cond)) return __cond;
+    #define RETIF(__cond) if (__cond) return __cond;
+
     typedef uint8_t bool;
 
 #endif
