@@ -23,8 +23,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kstdio.h>
 #include "kdebug.h"
 
-#define INFO_FGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
-#define INFO_BGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
+#define INFO_FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
+#define INFO_BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 #define INFO_TEXT    "[  DEBUG  ]"
 
 #define ERR_FGCOLOR  kernel_kdd_pxcolor_translate(255, 255, 255, 255)
