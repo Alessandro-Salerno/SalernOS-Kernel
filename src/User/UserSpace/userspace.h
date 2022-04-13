@@ -25,6 +25,5 @@ with this program; if not, write to the Free Software Foundation, Inc.,
             RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ******************************************************************************************/
     extern  void            kernel_userspace_enter        (void* __usrentry, void* __usrstack);
-    extern  void            kernel_userspace_exit         ();
 
 #endif

@@ -25,18 +25,3 @@ kernel_userspace_enter:
     mov     rsp,    rsi
     mov     r11,    0x202
     o64 sysret
-
-global kernel_userspace_exit
-kernel_userspace_exit:
-    mov     ax,     0x10
-    mov     ds,     ax
-    mov     es,     ax
-    mov     fs,     ax
-    mov     gs,     ax
-    mov     ss,     ax
-
-    pop     rdi
-    mov     rax,    0x08
-    push    rax
-    push    rdi
-    retfq
