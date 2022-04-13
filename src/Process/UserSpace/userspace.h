@@ -18,12 +18,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_USER_USERSPACE
-#define SALERNOS_CORE_KERNEL_USER_USERSPACE
+#ifndef SALERNOS_CORE_KERNEL_PROC_USERSPACE
+#define SALERNOS_CORE_KERNEL_PROC_USERSPACE
 
     /******************************************************************************************
             RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ******************************************************************************************/
-    extern  void            kernel_userspace_enter        (void* __usrentry, void* __usrstack);
+    extern  void            kernel_proc_userspace_enter   (void* __usrentry, void* __usrstack);
 
 #endif
