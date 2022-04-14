@@ -42,13 +42,7 @@ void kernel_main(boot_t* __bootinfo) {
     acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
     
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
-
-    kernel_text_reinitialize(
-        FGCOLOR, BGCOLOR,
-        0, 0
-    );
-
-    kprintf("Copyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
+    kprintf("\n\nCopyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
     kprintf("%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
     kprintf("SalernOS Kernel DEV (Rome)\n\n");
 
