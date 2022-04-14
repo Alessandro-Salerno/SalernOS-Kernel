@@ -147,7 +147,7 @@ void kernel_hw_ahci_ports_probe(ahcidevdr_t* __dev) {
         __configure_port__(&_port);
 
         _port._DMABuffer = (uint8_t*)(kernel_pgfa_page_new());
-        kmemset(_port._DMABuffer, 4096, 0); 
+        kmemset(_port._DMABuffer, 4096, 0);
     }
 }
 
@@ -185,7 +185,9 @@ bool kernel_hw_ahci_read(ahciport_t* __port, uint64_t __sector, uint16_t __secto
     _fis->_CountLow       = __sectors        & 0xff;
     _fis->_CountHigh      = (__sectors << 8) & 0xff;
 
-    RETIFN(__wait__(__port));
+    if (!__wait__(__port))
+        return FALSE;
+    
     __port->_HBAPort->_CommandIssue = TRUE;
 
     // Temporary code
