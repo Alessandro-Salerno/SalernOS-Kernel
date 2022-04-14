@@ -182,7 +182,7 @@ bool kernel_hw_ahci_read(ahciport_t* __port, uint64_t __sector, uint16_t __secto
     _fis->_LBA4           = (uint8_t)(_sec_high >> 8);
     _fis->_LBA5           = (uint8_t)(_sec_high >> 16);
     _fis->_DeviceRegister = FIS_MODE_LBA;
-    _fis->_CountLow       = __sectors & 0xff;
+    _fis->_CountLow       = __sectors        & 0xff;
     _fis->_CountHigh      = (__sectors << 8) & 0xff;
 
     RETIFN(__wait__(__port));
