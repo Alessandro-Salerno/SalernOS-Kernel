@@ -24,7 +24,6 @@ include $(MAKEDIR)/commands.mk
 include $(MAKEDIR)/flags.mk
 include $(MAKEDIR)/data.mk
 
-include $(INCDIR)/Makefile
 include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile

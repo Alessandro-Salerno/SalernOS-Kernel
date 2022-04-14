@@ -18,8 +18,7 @@
 
 LDS 	 = arch/x86-64/Boot/SimpleBoot/link.ld
 
-EXTDIR   = external
-INCDIR   = include
+INCDIR   = intf
 KSTDDIR  = kstd
 KLIBDIR  = klib
 SRCDIR 	 = src
