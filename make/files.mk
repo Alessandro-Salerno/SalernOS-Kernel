@@ -16,7 +16,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-LDS 	 = kernel.ld
+LDS 	 = arch/x86-64/Boot/SimpleBoot/link.ld
 
 EXTDIR   = external
 INCDIR   = include
