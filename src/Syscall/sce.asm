@@ -18,15 +18,31 @@
 
 [bits 64]
 
+extern kernel_syscall_dispatch
+
 
 global kernel_syscall_enable
 kernel_syscall_enable:
-    mov     rcx,    0xc0000080
-    rdmsr
-    or      eax,    1
-    wrmsr
-    mov     rcx,    0xc0000081
-    rdmsr
-    mov     edx,    0x00180008
-    wrmsr
+    ; Enables SCE
+    mov     rcx,    0xc0000080                  ; Use EFER MSR
+    rdmsr                                       ; Read from EFER
+    or      eax,    1                           ; Enable bit 0
+    wrmsr                                       ; Write back
+
+    ; Sets segments for user and kernel space
+    mov     rcx,    0xc0000081                  ; Use STAR MSR
+    rdmsr                                       ; Read from STAR
+    mov     edx,    0x00180008                  ; Write segment offsets in STAR-Upper
+    wrmsr                                       ; Write back
+
+    ; Sets Syscall handler function
+    push    rdx                                 ; Save RDX Register
+    push    rax                                 ; Save RAX Register
+    mov     rdx,    kernel_syscall_dispatch     ; Move handler address into RDX
+    mov     rax,    rdx                         ; Copy RDX to RAX
+    shr     rdx,    32                          ; Shift RDX by 32 bits to get the upper part of the address in EDX
+    mov     rcx,    0xc0000082                  ; Use LSTAR MSR
+    wrmsr                                       ; Write back
+    pop     rax                                 ; Restore RAX
+    pop     rdx                                 ; Restore RDX
     ret
