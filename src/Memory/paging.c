@@ -82,6 +82,7 @@ void kernel_paging_address_map(void* __virtaddr, void* __physaddr) {
     _entry._Address   = (uint64_t)(__physaddr) >> 12;
     _entry._Present   = TRUE;
     _entry._ReadWrite = TRUE;
+    _entry._UserSuper = TRUE;
     
     _page_table->_Entries[_indexer._PageIndex] = _entry;
 }

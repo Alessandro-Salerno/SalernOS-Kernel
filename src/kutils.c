@@ -34,7 +34,7 @@ void kernel_kutils_kdd_setup(boot_t* __bootinfo) {
 
 void kernel_kutils_gdt_setup() {
     gdtdesc_t _gdt_desc = (gdtdesc_t) {
-        ._Size   = sizeof(gdt_t) - 1,
+        ._Size   = sizeof(gdt) - 1,
         ._Offset = (uint64_t)(&gdt)
     };
 
