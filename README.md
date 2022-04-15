@@ -29,14 +29,13 @@
 ## Source Tree Strucutre
 The source tree is structured as follows:
 * `src` Contains all the source code for the core parts of the kernel
-* `include` Contains "libraries" ahd headers that are mostly independent from other kernel components (`kerninc.h` is an exception)
+* `intf` Contains headers for kernel libraries
+* `arch` Contains architecture-specific code (Not yet) and BootStandard-specific code, like the linker script used to link the kernel
 * `kstd` Contains a pseudo C Standard Library for the kernel
 * `klib` Contains code that is dependent on other parts of the kernel (Such as `kstd`, `include` and `src`), but are not important enough to keep inside the core source
 * `make` Contains files included by the main `Makefile`
 * `obj` Is created by the `Makefile` and contains the object files (`.o`) derived from the compilation of the kernel
 * `bin` Is created by the `Makefile` and contains the final kernel ELF64 binary
-
-Finally, `kernel.ld` is the Linker Script for the kernel.
 
 ## Setup
 To set the environment up, just type `make setup` and hit enter.
