@@ -91,6 +91,11 @@ void kernel_kutils_mem_setup(boot_t* __bootinfo) {
     kernel_heap_initialize((void*)(0x100000000000), 0x10);
 }
 
+void kernel_kutils_sc_setup() {
+    kloginfo("Enabling SCE...");
+    kernel_syscall_enable();
+}
+
 void kernel_kutils_int_setup() {
     kloginfo("Initializing Interrupts...");
     kernel_idt_initialize();

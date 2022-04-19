@@ -42,6 +42,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     void            kernel_kutils_kdd_setup       (boot_t* __bootinfo);
     void            kernel_kutils_gdt_setup       ();
     void            kernel_kutils_mem_setup       (boot_t* __bootinfo);
+    void            kernel_kutils_sc_setup        ();
     void            kernel_kutils_int_setup       ();
     void            kernel_kutils_time_setup      ();
     acpiinfo_t      kernel_kutils_rsd_setup       (boot_t* __bootinfo);
