@@ -105,24 +105,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     } ahcidevdr_t;
 
     typedef struct AHCIFISRegisterHardwareToDevice {
-        uint8_t _FISType;
-        uint8_t _PortMultiplier : 4;
-        uint8_t _ReservedZero : 3;
-        bool    _CommandControl : 1;
-        uint8_t _Command;
-        uint8_t _FeatureLow;
-        uint8_t _LBA0;
-        uint8_t _LBA1;
-        uint8_t _LBA2;
-        uint8_t _DeviceRegister;
-        uint8_t _LBA3;
-        uint8_t _LBA4;
-        uint8_t _LBA5;
-        uint8_t _FeatureLine;
-        uint8_t _CountLow;
-        uint8_t _CountHigh;
-        uint8_t _ISOCommandCompletion;
-        uint8_t _Control;
+        uint8_t  _FISType;
+        uint8_t  _PortMultiplier : 4;
+        uint8_t  _ReservedZero   : 3;
+        bool     _CommandControl : 1;
+        uint8_t  _Command;
+        uint8_t  _FeatureLow;
+        uint8_t  _LBA0;
+        uint8_t  _LBA1;
+        uint8_t  _LBA2;
+        uint8_t  _DeviceRegister;
+        uint8_t  _LBA3;
+        uint8_t  _LBA4;
+        uint8_t  _LBA5;
+        uint8_t  _FeatureHigh;
+        uint8_t  _CountLow;
+        uint8_t  _CountHigh;
+        uint8_t  _ISOCommandCompletion;
+        uint8_t  _Control;
         uint32_t _ReservedOne;
     } ahcifish2d_t;
 
