@@ -44,7 +44,7 @@ void kernel_main(boot_t* __bootinfo) {
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
     kprintf("\n\nCopyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");
     kprintf("%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
-    kprintf("SalernOS Kernel DEV (Rome)\n\n");
+    kprintf("SalernOS Kernel 0.0.6 (Rome)\n\n");
 
     kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
     kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
