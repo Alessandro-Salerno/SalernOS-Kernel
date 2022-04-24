@@ -146,6 +146,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ***********************************************************************************************************************/
     void            kernel_hw_ahci_ports_probe    (ahcidevdr_t* __dev);
-    bool            kernel_hw_ahci_read           (ahciport_t* __port, uint64_t __sector, uint16_t __sectors, void* __buff);
+    bool            kernel_hw_ahci_read           (ahciport_t* __port, uint64_t __sector, uint64_t __sectors, void* __buff);
 
 #endif

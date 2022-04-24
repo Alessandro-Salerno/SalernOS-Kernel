@@ -151,7 +151,7 @@ void kernel_hw_ahci_ports_probe(ahcidevdr_t* __dev) {
     }
 }
 
-bool kernel_hw_ahci_read(ahciport_t* __port, uint64_t __sector, uint16_t __sectors, void* __buff) {
+bool kernel_hw_ahci_read(ahciport_t* __port, uint64_t __sector, uint64_t __sectors, void* __buff) {
     uint32_t _sec_low  = (uint32_t)(__sector),
              _sec_high = (uint32_t)(__sector >> 32);
 
