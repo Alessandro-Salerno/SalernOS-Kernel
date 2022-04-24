@@ -55,10 +55,10 @@ void kernel_main(boot_t* __bootinfo) {
     kprintf("Framebuffer Size: %u bytes\n\n",    __bootinfo->_Framebuffer._BufferSize);
 
     kernel_pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
-    kprintf("System Memory: %u bytes\n",   _mem_size);
-    kprintf("Usable Memory: %u bytes\n",   _usable_mem);
-    kprintf("Free Memory: %u bytes\n",     _free_mem);
-    kprintf("Used Memory: %u bytes\n",     _used_mem);
+    kprintf("System Memory: %u bytes\n",     _mem_size);
+    kprintf("Usable Memory: %u bytes\n",     _usable_mem);
+    kprintf("Free Memory: %u bytes\n",       _free_mem);
+    kprintf("Used Memory: %u bytes\n",       _used_mem);
     kprintf("Reserved Memory: %u bytes\n\n", _unusable_mem);
 
     kprintf("RSDP Address: %u\n",   (uint64_t)(__bootinfo->_RSDP));
