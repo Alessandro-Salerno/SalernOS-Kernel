@@ -14,7 +14,7 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
-![shield](https://img.shields.io/static/v1?label=version&message=0.0.6&color=blue) 
+![shield](https://img.shields.io/static/v1?label=version&message=DEV&color=blue) 
 
 
 <p align="center">
