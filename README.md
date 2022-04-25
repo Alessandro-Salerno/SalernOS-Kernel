@@ -14,6 +14,7 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
+![](https://tokei.rs/b1/github/Alessandro-Salerno/SalernOS-Kernel)
 ![shield](https://img.shields.io/static/v1?label=version&message=DEV&color=blue) 
 
 
