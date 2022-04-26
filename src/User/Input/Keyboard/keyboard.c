@@ -89,7 +89,7 @@ void kernel_io_keyboard_keys_handle() {
         keyboardScancoide != KEY_RSHIFT           &&
         keyboardScancoide != KEY_ENTER,
 
-        RETVOID 
+        RETVOID
     );
 
     keyboardASCII = (isShiftPressed) ? _shift_ascii_table   [keyboardScancoide] : 
@@ -97,6 +97,6 @@ void kernel_io_keyboard_keys_handle() {
 }
 
 void kernel_io_keyboard_keys_get(uint8_t* __scancode, uint8_t* __ascii) {
-    ARGRET(__scancode, keyboardScancoide);
+    ARGRET(__scancode,- keyboardScancoide);
     ARGRET(__ascii, keyboardASCII);
 }
