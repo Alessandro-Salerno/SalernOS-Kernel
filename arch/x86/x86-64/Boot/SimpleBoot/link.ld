@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 OUTPUT_FORMAT(elf64-x86-64)
-ENTRY(kernel_main)
+ENTRY(kernel_entry)
 
 
 SECTIONS {
