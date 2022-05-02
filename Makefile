@@ -30,8 +30,8 @@ include $(SRCDIR)/Makefile
 
 
 setup:
-	@mkdir $(BUILDDIR)
-	@mkdir $(OBJDIR)
+	@ mkdir $(BUILDDIR)
+	@ mkdir $(OBJDIR)
 
 kernel: $(OBJS) link
 

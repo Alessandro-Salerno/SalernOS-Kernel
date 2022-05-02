@@ -30,8 +30,3 @@ OBJS  += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/$(KFNAME)/Assembly/%.o, $(ASMSRC)
 OBJS  += $(patsubst $(KSTDDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KSTD))
 OBJS  += $(patsubst $(KLIBDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KLIB))
 OBJS  += $(patsubst $(INCDIR)/%.c, $(OBJDIR)/$(LFNAME)/%.o, $(KINC))
-
-DIRS   = $(wildcard $(SRCDIR)/*)
-DIRS  += $(wildcard $(KSTDDIR)/*)
-DIRS  += $(wildcard $(KLIBDIR)/*)
-DIRS  += $(wildcard $(INCDIR)/*)
