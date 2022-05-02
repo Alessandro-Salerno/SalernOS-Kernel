@@ -19,6 +19,10 @@
 OSNAME 	= SalernOS
 MAKEDIR = make
 
+FAMILY ?= x86
+ARCH   ?= x86-64
+BOOT   ?= SimpleBoot
+
 include $(MAKEDIR)/files.mk
 include $(MAKEDIR)/commands.mk
 include $(MAKEDIR)/flags.mk
