@@ -22,6 +22,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kdebug.h>
 
 
+extern void kernel_main();
+
 void kernel_entry(boot_t* __bootinfo) {
     uint64_t _mem_size,
              _usable_mem,
@@ -67,7 +69,5 @@ void kernel_entry(boot_t* __bootinfo) {
     klogok("Kernel Ready!");
     kprintf("\n\n");
 
-    while (TRUE) {
-        asm volatile ("hlt");
-    }
+    kernel_main();
 }
