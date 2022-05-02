@@ -16,8 +16,6 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-LDS 	 = arch/x86/x86-64/Boot/SimpleBoot/link.ld
-
 INCDIR   = intf
 KSTDDIR  = kstd
 KLIBDIR  = klib

@@ -28,6 +28,8 @@ include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
 
+include arch/Makefile
+
 
 setup:
 	@ mkdir $(BUILDDIR)
