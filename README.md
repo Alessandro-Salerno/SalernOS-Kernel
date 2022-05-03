@@ -18,7 +18,7 @@
 ![shield](https://img.shields.io/static/v1?label=version&message=DEV&color=blue) 
 
 [![Stargazers repo roster for @Alessandro-Salerno/SalernOS-Kernel](https://reporoster.com/stars/Alessandro-Salerno/SalernOS-Kernel)](https://github.com/Alessandro-Salerno/SalernOS-Kernel/stargazers)
-[![Forkers repo roster for @Alessandro-Salerno/SalernOS-Kernel](https://reporoster.com/forks/Alessandro-Salerno/SalernOS-Kernel)](https://github.com/Alessandro-Salerno/SalernOS-Kernel/network/members)
+
 
 <p align="center">
     <h1 align="center">SalernOS Kernel</h1>
