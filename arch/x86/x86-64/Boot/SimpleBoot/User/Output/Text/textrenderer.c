@@ -24,18 +24,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 static bmpfont_t font;
 
-static uint32_t numColumns;
-static uint32_t numRows;
+static uint32_t  numColumns;
+static uint32_t  numRows;
 
-static uint32_t foregroundColor;
-static uint32_t backgroundColor;
+static uint32_t  foregroundColor;
+static uint32_t  backgroundColor;
 
-static point_t startPosition;
-static point_t endPosition;
-static point_t lastPosition;
-static point_t curPosition;
+static point_t   startPosition;
+static point_t   endPosition;
+static point_t   lastPosition;
+static point_t   curPosition;
 
-static bool  trendrInitialized;
+static bool      trendrInitialized;
 
 
 static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xoff, uint64_t __yoff) {
