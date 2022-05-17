@@ -22,7 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_INC_KERNEL_INCLUDES
 
     // User Output includes
-    #include "User/Output/Text/textrenderer.h"      /*   Includes the basic Kernel Text Renderer            */
+    #include <User/Output/Text/textrenderer.h>      /*   Includes the basic Kernel Text Renderer            */
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
 
     // User Input includes
