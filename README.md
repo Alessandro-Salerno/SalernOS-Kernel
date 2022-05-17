@@ -17,6 +17,8 @@
 ![](https://tokei.rs/b1/github/Alessandro-Salerno/SalernOS-Kernel)
 ![shield](https://img.shields.io/static/v1?label=version&message=DEV&color=blue) 
 
+[![Stargazers repo roster for @Alessandro-Salerno/SalernOS-Kernel](https://reporoster.com/stars/Alessandro-Salerno/SalernOS-Kernel)](https://github.com/Alessandro-Salerno/SalernOS-Kernel/stargazers)
+
 
 <p align="center">
     <h1 align="center">SalernOS Kernel</h1>
@@ -149,7 +151,7 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 * Type names must follow the POSIX Standard type notation (`name_t`) and should be as short as possible
 * Function names must follow the scheme `kernel_category_target_action`, such as `kernel_kdd_pxcolor_set` and `kernel_kdd_pxcolor_get`. If the category is the target, such as `kernel_mmap_initialize`, the `target` section can be dropped
 * Static function names must follow the scheme `__action_target__`, such as `__get_pxptr__`
-* Static global variables and global variables must usa `pascalCase` notation
+* Static global variables and global variables must use `pascalCase` notation
 * Static local variables and local variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`
 * Function arguments must be comprised of lowercase characters and must start with `__` as in `__function_argument`
 * Struct fields must use `CamelCase` notation and must start with `_`
