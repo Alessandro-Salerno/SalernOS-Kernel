@@ -92,23 +92,23 @@ static void __newline__() {
 
     SOFTASSERT(!(curPosition.y < endPosition.y), RETVOID);
 
-    kernel_text_scroll(1);
+    arch_boot_text_scroll(1);
 }
 
 static void __putch__(char __char) {
     lastPosition = curPosition;
 
     switch (__char) {
-        case '\n': kernel_text_blitch(' ');   __newline__();    return;
-        case '\t': kernel_text_print("    ");                   return;
+        case '\n': arch_boot_text_blitch(' ');   __newline__();    return;
+        case '\t': arch_boot_text_print("    ");                   return;
     }
 
-    kernel_text_blitch(__char);
+    arch_boot_text_blitch(__char);
     curPosition.x += 8;
 }
 
 
-void kernel_text_scroll(uint32_t __lines) {
+void arch_boot_text_scroll(uint32_t __lines) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__lines != 0, RETVOID);
     SOFTASSERT(__lines < numRows, RETVOID);
@@ -123,12 +123,12 @@ void kernel_text_scroll(uint32_t __lines) {
     }
 
     for (uint64_t _l = 0; _l < __lines; _l++)
-        kernel_text_line_clear(curPosition.y / 16 - _l);
+        arch_boot_text_line_clear(curPosition.y / 16 - _l);
 
     curPosition.y -= 16 * __lines;
 }
 
-void kernel_text_line_clear(uint32_t __line) {
+void arch_boot_text_line_clear(uint32_t __line) {
     SOFTASSERT(trendrInitialized, RETVOID);
 
     for (uint64_t _y = __line * 16 - 16; _y < __line * 16; _y++) {
@@ -141,7 +141,7 @@ void kernel_text_line_clear(uint32_t __line) {
     }
 }
 
-void kernel_text_blitch(char __char) {
+void arch_boot_text_blitch(char __char) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__char != 0, RETVOID);
     
@@ -151,26 +151,26 @@ void kernel_text_blitch(char __char) {
     __drawchar__(__char);
 }
 
-void kernel_text_putch(char __char) {
+void arch_boot_text_putch(char __char) {
     SOFTASSERT(trendrInitialized, RETVOID);
     SOFTASSERT(__char != 0, RETVOID);
 
     __putch__(__char);
-    kernel_text_blitch(CURSOR_CHARACTER);
+    arch_boot_text_blitch(CURSOR_CHARACTER);
 }
 
-void kernel_text_print(char* __str) {
+void arch_boot_text_print(char* __str) {
     SOFTASSERT(trendrInitialized, RETVOID);
 
     char* _chr = __str;
 
     while (*_chr) {
-        kernel_text_putch(*_chr);
+        arch_boot_text_putch(*_chr);
         _chr++;
     }
 }
 
-void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __pos) {
+void arch_boot_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __pos) {
     SOFTASSERT(trendrInitialized, RETVOID);
     
     foregroundColor = __color;
@@ -180,7 +180,7 @@ void kernel_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __pos)
     lastPosition    = curPosition;
 }
 
-void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font) {
+void arch_boot_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font) {
     SOFTASSERT(!trendrInitialized, RETVOID);
 
     __initialize__(__color, __backcolor, __xoff, __yoff);
@@ -189,12 +189,12 @@ void kernel_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __x
     trendrInitialized = TRUE;
 }
 
-void kernel_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff) {
+void arch_boot_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff) {
     SOFTASSERT(trendrInitialized, RETVOID);
     __initialize__(__color, __backcolor, __xoff, __yoff);
 }
 
-void kernel_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t* __font) {
+void arch_boot_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t* __font) {
     SOFTASSERT(trendrInitialized, RETVOID);
 
     ARGRET(__color, foregroundColor);

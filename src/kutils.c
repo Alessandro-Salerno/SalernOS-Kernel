@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 void kernel_kutils_kdd_setup(boot_t* __bootinfo) {
     kernel_kdd_fbo_bind(__bootinfo->_Framebuffer);
 
-    kernel_text_initialize(
+    arch_boot_text_initialize(
         FGCOLOR, BGCOLOR,
         0, 0, __bootinfo->_Font
     );

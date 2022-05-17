@@ -46,13 +46,13 @@ static void __putmsg__(uint32_t __color, uint32_t __backcolor, const char* __typ
 
     point_t _pos;
 
-    kernel_text_info_get(&_color, &_backcolor, &_pos, NULL, NULL);
-    kernel_text_info_set(__color, __backcolor, _pos);
+    arch_boot_text_info_get(&_color, &_backcolor, &_pos, NULL, NULL);
+    arch_boot_text_info_set(__color, __backcolor, _pos);
 
     kprintf("%s\t%s", __type, __msg);
 
-    kernel_text_info_get(NULL, NULL, &_pos, NULL, NULL);
-    kernel_text_info_set(_color, _backcolor, _pos);
+    arch_boot_text_info_get(NULL, NULL, &_pos, NULL, NULL);
+    arch_boot_text_info_set(_color, _backcolor, _pos);
     kprintf("\n");
 }
 
