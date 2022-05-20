@@ -16,7 +16,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-CINCLUDE = -I "$(INCDIR)" -I "$(INCDIR)/Libraries/External" -I "$(INCDIR)/Libraries/Kernel" -I "$(SRCDIR)" 
+CINCLUDE = -I "$(INCDIR)" -I "$(INCDIR)/Libraries/External" -I "$(INCDIR)/Libraries/Kernel" -I "$(INCDIR)/Kernel" -I "$(SRCDIR)" 
 CFLAGS 	 = -Wall -Wextra -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE) 
 CPPFLAGS = $(CFLAGS) -fno-exceptions
 ASMFLAGS = 
