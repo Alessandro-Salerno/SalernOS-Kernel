@@ -36,14 +36,15 @@ include arch/Makefile
 
 
 setup:
-	mkdir $(BUILDDIR)
-	mkdir $(OBJDIR)
+	@ mkdir $(BUILDDIR)
+	@ mkdir $(OBJDIR)
 
 kernel: $(OBJS) link
 
 link:
-	echo !==== LINKING
-	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
+	@ echo !==== LINKING
+	@ $(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
 
 clean:
-	rm $(OBJS)
+	@ echo !==== REMOVING ALL OBJECT FILES
+	@ rm $(OBJS)
