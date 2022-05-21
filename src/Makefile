@@ -17,21 +17,21 @@
 
 
 $(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
-	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
+	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
-	@ echo !==== COMPILING $^
+	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(CC) $(CFLAGS) -O3 -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/C++/%.o: $(SRCDIR)/%.cpp
-	@ echo !==== COMPILING C++ $^
+	@ echo $(shell tput setaf 3) [C++] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(CC) $(CPPFLAGS) -O3 -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/Assembly/%.o: $(SRCDIR)/%.asm
-	@ echo !==== COMPILING ASM $^
+	@ echo $(shell tput setaf 3) [ASM] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@

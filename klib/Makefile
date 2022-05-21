@@ -17,6 +17,6 @@
 
 
 $(OBJDIR)/$(LFNAME)/%.o: $(KLIBDIR)/%.c
-	@ echo !==== COMPILING KERNEL LIBRARY  $^
+	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [KLIB] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(CC) $(CFLAGS) -O3 -c $^ -o $@

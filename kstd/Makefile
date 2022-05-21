@@ -17,6 +17,6 @@
 
 
 $(OBJDIR)/$(LFNAME)/%.o: $(KSTDDIR)/%.c
-	@ echo !==== COMPILING STD  $^
+	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [KSTD] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)
 	@ $(CC) $(CFLAGS) -O3 -c $^ -o $@
