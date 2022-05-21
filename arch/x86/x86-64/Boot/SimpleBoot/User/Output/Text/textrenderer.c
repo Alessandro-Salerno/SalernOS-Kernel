@@ -45,7 +45,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
 
     foregroundColor = __color;
     backgroundColor = __backcolor;
-    
+
     startPosition = (point_t) {
         .x = __xoff,
         .y = __yoff
@@ -77,7 +77,7 @@ static void __drawchar__(char __char) {
     for (uint64_t _y = _start_y; _y < _end_y; _y++) {
         for (uint64_t _x = _start_x; _x < _end_x; _x++) {
             kernel_kdd_pxcolor_set(
-                _x, _y, 
+                _x, _y,
                 ((*_font_ptr & ((1 << 7) >> (_x - _start_x))))
                     ? foregroundColor : backgroundColor
             );
