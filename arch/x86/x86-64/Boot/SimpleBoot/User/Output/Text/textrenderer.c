@@ -131,6 +131,7 @@ void arch_boot_text_scroll(uint32_t __lines) {
 
 void arch_boot_text_line_clear(uint32_t __line) {
     SOFTASSERT(trendrInitialized, RETVOID);
+0
 
     for (uint64_t _y = __line * 16 - 16; _y < __line * 16; _y++) {
         for (uint64_t _x = startPosition.x; _x < endPosition.x; _x++) {
