@@ -8,6 +8,6 @@ OBJS     += $(patsubst $(BOOTDIR)/%.c, $(OBJDIR)/$(KFNAME)/C/%.o, $(BOOTSRC))
 
 
 $(OBJDIR)/$(KFNAME)/C/%.o: $(BOOTDIR)/%.c
-	@ echo !==== COMPILING BOOT-SPECIFIC $^
-	@ mkdir -p $(@D)
+	echo !==== COMPILING BOOT-SPECIFIC $^
+	mkdir -p $(@D)
 	$(CC) $(CFLAGS) -O3 -c $^ -o $@
