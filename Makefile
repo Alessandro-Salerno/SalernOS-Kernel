@@ -47,4 +47,4 @@ link:
 
 clean:
 	@ echo !==== REMOVING ALL OBJECT FILES
-	@ rm $(OBJS)
+	@ rm $(shell find obj -name *.o)
