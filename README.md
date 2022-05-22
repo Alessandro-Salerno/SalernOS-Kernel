@@ -44,7 +44,7 @@ The source tree is structured as follows:
 To set the environment up, just type `make setup` and hit enter.
 
 ## Building the Kernel
-To compile the entire kernel, just type `make` and hit enter.
+To compile the entire kernel, just type `make kernel` and hit enter.
 
 ### Requirements
 * A C Compiler (GCC) for x86_64
