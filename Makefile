@@ -35,16 +35,12 @@ include $(SRCDIR)/Makefile
 include arch/Makefile
 
 
-setup:
-	@ mkdir $(BUILDDIR)
-	@ mkdir $(OBJDIR)
-
 kernel: $(OBJS) link
 
 link:
 	@ echo !==== LINKING
+	@ mkdir -p $(BUILDDIR)
 	@ $(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
 
 clean:
-	@ echo !==== REMOVING ALL OBJECT FILES
-	@ rm $(shell find obj -name *.o)
+	@ rm -rf $(OBJDIR) $(BUILDDIR)
