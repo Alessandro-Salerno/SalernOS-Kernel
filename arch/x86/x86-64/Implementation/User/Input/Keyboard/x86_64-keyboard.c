@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "User/Input/Keyboard/keyboard.h"
+#include <User/Input/Keyboard/keyboard.h>
 #include "kernelpanic.h"
 #include "IO/io.h"
 
@@ -26,10 +26,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 static uint8_t keyboardScancoide,
                keyboardASCII;
 
-static bool  isShiftPressed;
+static bool    isShiftPressed;
 
 
-void kernel_io_keyboard_mods_handle() {
+void arch_io_keyboard_mods_handle() {
     switch (keyboardScancoide) {
         case KEY_LSHIFT:
         case KEY_RSHIFT:
@@ -43,7 +43,7 @@ void kernel_io_keyboard_mods_handle() {
     }
 }
 
-void kernel_io_keyboard_keys_handle() {
+void arch_io_keyboard_keys_handle() {
     const char _ascii_table[] = {
          0 ,  0 , '1', '2',
         '3', '4', '5', '6',
@@ -96,7 +96,7 @@ void kernel_io_keyboard_keys_handle() {
                                        _ascii_table         [keyboardScancoide] ;
 }
 
-void kernel_io_keyboard_keys_get(uint8_t* __scancode, uint8_t* __ascii) {
+void arch_io_keyboard_keys_get(uint8_t* __scancode, uint8_t* __ascii) {
     ARGRET(__scancode,- keyboardScancoide);
     ARGRET(__ascii, keyboardASCII);
 }

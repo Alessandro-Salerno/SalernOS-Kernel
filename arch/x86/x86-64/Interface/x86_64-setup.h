@@ -35,9 +35,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*****************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     *****************************************************************/
-    void            x8664_setup_gdt_setup       ();
-    void            x8664_setup_sc_setup        ();
-    void            x8664_setup_int_setup       ();
-    void            x8664_setup_time_setup      ();
+    void            x8664_setup_gdt_setup         ();
+    void            x8664_setup_sc_setup          ();
+    void            x8664_setup_int_setup         ();
+    void            x8664_setup_time_setup        ();
 
 #endif

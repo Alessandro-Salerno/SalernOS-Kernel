@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "User/Input/Keyboard/keyboard.h"
+#include <User/Input/Keyboard/keyboard.h>
 #include "Interrupts/handlers.h"
 #include "Interrupts/pic.h"
 #include "Time/PIT/pit.h"
@@ -31,7 +31,7 @@ void kernel_interrupt_handlers_dfault(intframe_t* __frame)      { kernel_panic_t
 void kernel_interrupt_handlers_gpfault(intframe_t* __frame)     { kernel_panic_throw("General Protection Fault Detected!", __frame); }
 
 void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
-    kernel_io_keyboard_mods_handle();
+    arch_io_keyboard_mods_handle();
      kernel_interrupts_pic_master_end();
 }
 

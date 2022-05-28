@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_USER_INPUT_KEYBOARD
-#define SALERNOS_CORE_KERNEL_USER_INPUT_KEYBOARD
+#ifndef SALERNOS_COMMON_USER_INPUT_KEYBOARD
+#define SALERNOS_COMMON_USER_INPUT_KEYBOARD
 
     #include <kerntypes.h>
 
@@ -33,8 +33,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*******************************************************************************************
     RET TYPE        FUNCTION NAME                       FUNCTION ARGUMENTS
     *******************************************************************************************/
-    void            kernel_io_keyboard_mods_handle      ();
-    void            kernel_io_keyboard_keys_handle      ();
-    void            kernel_io_keyboard_keys_get         (uint8_t* __scancode, uint8_t* __ascii);
+    void            arch_io_keyboard_mods_handle        ();
+    void            arch_io_keyboard_keys_handle        ();
+    void            arch_io_keyboard_keys_get           (uint8_t* __scancode, uint8_t* __ascii);
 
 #endif

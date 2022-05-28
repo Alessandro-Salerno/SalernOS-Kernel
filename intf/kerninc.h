@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "User/Output/Display/kdd.h"            /*   Includes the basic Kernel Display Driver           */
 
     // User Input includes
-    #include "User/Input/Keyboard/keyboard.h"       /*   Includes the basic Kernel Keyboard Driver          */
+    #include <User/Input/Keyboard/keyboard.h>       /*   Includes the basic Kernel Keyboard Driver          */
 
     // System includes
     #include "Interrupts/handlers.h"                /*   Includes the Kernel's Interrupt Service Routines   */
