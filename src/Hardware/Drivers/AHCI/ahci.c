@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "Hardware/Drivers/AHCI/ahci.h"
 #include "Memory/pgfalloc.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
 #include <kstdio.h>
 #include <kmem.h>
 

@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_IDT
-#define SALERNOS_CORE_KERNEL_IDT
+#ifndef SALERNOS_X8664_IDT
+#define SALERNOS_X8664_IDT
 
     #include <kerntypes.h>
 
@@ -46,8 +46,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /**************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     **************************************************************************************/
-    void            kernel_idt_initialize         ();
-    void            kernel_idt_offset_set         (idtdescent_t* __ent, uint64_t __offset);
-    uint64_t        kernel_idt_offset_get         (idtdescent_t* __ent);
+    void            x8664_idt_initialize         ();
+    void            x8664_idt_offset_set         (idtdescent_t* __ent, uint64_t __offset);
+    uint64_t        x8664_idt_offset_get         (idtdescent_t* __ent);
 
 #endif

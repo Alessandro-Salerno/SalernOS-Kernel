@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "User/Output/Display/x86_64-sbs-kdd.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
 
 
 static framebuffer_t boundFBO;

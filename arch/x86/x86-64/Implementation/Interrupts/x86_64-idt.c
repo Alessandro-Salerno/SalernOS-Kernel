@@ -18,10 +18,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "Interrupts/handlers.h"
+#include "Interrupts/x86_64-handlers.h"
+#include "Interrupts/x86_64-idt.h"
 #include "Memory/pgfalloc.h"
-#include "Interrupts/idt.h"
-#include "kernelpanic.h"
+#include "panicassert.h"
 
 #define IDT_DINIT "Interrupt Descriptor Table Fault:\nKernel tried to reinitialize IDT."
 
@@ -35,35 +35,35 @@ static idtdescent_t* __create_entry__(uint16_t __offset, void* __isr) {
     _handler->_TypesAndAttributes = IDT_TA_INTERRUPT_GATE;
     _handler->_Selector           = 0x08;
 
-    kernel_idt_offset_set(_handler, (uint64_t)(__isr));
+    x8664_idt_offset_set(_handler, (uint64_t)(__isr));
     return _handler;
 }
 
 
-void kernel_idt_initialize() {
+void x8664_idt_initialize() {
     kernel_panic_assert(!idtInitialized, IDT_DINIT);
 
     idtr._Limit  = 0x1000 - 1;
     idtr._Offset = (uint64_t)(kernel_pgfa_page_new()); 
     
-    __create_entry__(0x0E, kernel_interrupt_handlers_pgfault);    // Page fault handler
-    __create_entry__(0x08, kernel_interrupt_handlers_dfault);     // Double fault handler
-    __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);    // General protection fault handler
-    __create_entry__(0x21, kernel_interrupt_handlers_kbhit);      // Keyboard Interrupt hanlder
-    __create_entry__(0x20, kernel_interrupt_handlers_tick);       // PIT Tick interrupt handler
+    __create_entry__(0x0E, x8664_interrupt_handlers_pgfault);    // Page fault handler
+    __create_entry__(0x08, x8664_interrupt_handlers_dfault);     // Double fault handler
+    __create_entry__(0x0D, x8664_interrupt_handlers_gpfault);    // General protection fault handler
+    __create_entry__(0x21, x8664_interrupt_handlers_kbhit);      // Keyboard Interrupt hanlder
+    __create_entry__(0x20, x8664_interrupt_handlers_tick);       // PIT Tick interrupt handler
 
     asm ("lidt %0" : : "m" (idtr));
 
     idtInitialized = TRUE;
 }
 
-void kernel_idt_offset_set(idtdescent_t* __ent, uint64_t __offset) {
+void x8664_idt_offset_set(idtdescent_t* __ent, uint64_t __offset) {
     __ent->_OffsetZero = (uint16_t)(__offset  & 0x000000000000ffff);
     __ent->_OffsetOne  = (uint16_t)((__offset & 0x00000000ffff0000) >> 16);
     __ent->_OffsetTwo  = (uint32_t)((__offset & 0xffffffff00000000) >> 32);
 }
 
-uint64_t kernel_idt_offset_get(idtdescent_t* __ent) {
+uint64_t x8664_idt_offset_get(idtdescent_t* __ent) {
     return (uint64_t) {
         (uint64_t)(__ent->_OffsetZero)      |
         (uint64_t)(__ent->_OffsetOne) << 16 |

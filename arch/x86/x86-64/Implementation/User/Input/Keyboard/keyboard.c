@@ -19,7 +19,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include <User/Input/Keyboard/keyboard.h>
-#include "kernelpanic.h"
+#include <kernelpanic.h>
+#include "panicassert.h"
 #include "IO/io.h"
 
 

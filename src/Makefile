@@ -16,11 +16,6 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-$(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
-	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
-	@ mkdir -p $(@D)
-	@ $(CC) $(CINCLUDE) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
-
 $(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
 	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [COMMON SOURCE] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)

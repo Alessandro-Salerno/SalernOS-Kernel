@@ -56,6 +56,11 @@ $(OBJDIR)/$(KFNAME)/Assembly/%.o: $(BOOTDIR)/%.asm
 	@ mkdir -p $(@D)
 	@ $(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@
 
+$(OBJDIR)/$(KFNAME)/C/Interrupts/x86_64-handlers.o: $(ARCHIMPLDIR)/Interrupts/x86_64-handlers.c
+	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [ARCH] $(shell tput setaf 7) $^
+	@ mkdir -p $(@D)
+	@ $(CC) $(CINCLUDE) $(ARCHCINC) -mno-red-zone -mgeneral-regs-only -ffreestanding -c $^ -o $@
+
 $(OBJDIR)/$(KFNAME)/C/%.o: $(ARCHIMPLDIR)/%.c
 	@ echo $(shell tput setaf 3) [C] $(shell tput setaf 5) [ARCH] $(shell tput setaf 7) $^
 	@ mkdir -p $(@D)

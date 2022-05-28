@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_PIC
-#define SALERNOS_CORE_KERNEL_PIC
+#ifndef SALERNOS_X8664_PIC
+#define SALERNOS_X8664_PIC
 
     #include <kerntypes.h>
 
@@ -37,8 +37,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /**********************************************************************
     RET TYPE        FUNCTION NAME                       FUNCTION ARGUMENTS
     **********************************************************************/
-    void            kernel_interrupts_pic_remap         ();
-    void            kernel_interrupts_pic_master_end    ();
-    void            kernel_interrupts_pic_slave_end     ();
+    void            x8664_interrupts_pic_remap         ();
+    void            x8664_interrupts_pic_master_end    ();
+    void            x8664_interrupts_pic_slave_end     ();
 
 #endif

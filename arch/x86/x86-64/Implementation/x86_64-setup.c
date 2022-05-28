@@ -18,6 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
+#include "Interrupts/x86_64-idt.h"
+#include "Interrupts/x86_64-pic.h"
 #include "Time/PIT/x86_64-pit.h"
 #include "Syscall/x86_64-sce.h"
 #include "GDT/x86_64-gdt.h"
@@ -56,8 +58,8 @@ void x8664_setup_sc_setup() {
 
 void x8664_setup_int_setup() {
     kloginfo("Initializing Interrupts...");
-    kernel_idt_initialize();
-    kernel_interrupts_pic_remap();
+    x8664_idt_initialize();
+    x8664_interrupts_pic_remap();
 }
 
 void x8664_setup_time_setup() {

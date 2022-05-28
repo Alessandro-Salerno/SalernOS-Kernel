@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "Memory/mmap.h"
-#include "kernelpanic.h"
+#include "panicassert.h"
 
 #define MMAP_DINIT   "EFI Memory Map Fault:\nKernel tried to reinitialize Memory Map."
 #define MMAP_NINIT   "EFI Memory Map Fault:\nKernel tried to fetch information before initializing."

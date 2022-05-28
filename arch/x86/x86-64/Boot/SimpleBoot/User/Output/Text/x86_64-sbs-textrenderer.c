@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "User/Output/Text/x86_64-sbs-textrenderer.h"
 #include "User/Output/Display/x86_64-sbs-kdd.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
 
 
 static bmpfont_t font;

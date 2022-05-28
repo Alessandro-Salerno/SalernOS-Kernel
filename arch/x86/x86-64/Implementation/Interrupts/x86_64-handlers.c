@@ -18,26 +18,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_PANIC
-#define SALERNOS_CORE_KERNEL_PANIC
-
-    #include "Interrupts/handlers.h"
-    #include <kerntypes.h>
-
-    #define SOFTASSERT(__cond, __ret) if (!(__cond)) return __ret;
+#include <User/Input/Keyboard/keyboard.h>
+#include "Interrupts/x86_64-handlers.h"
+#include "Interrupts/x86_64-pic.h"
+#include <kernelpanic.h>
+#include "IO/io.h"
 
 
-    typedef struct KernelPanicInfo {
-        const char* _Type;
-        const char* _Fault;
-        const char* _Message;
-    } panicinfo_t;
+void x8664_interrupt_handlers_pgfault(intframe_t* __frame)     { arch_panic_throw("Page Fault Detected!", __frame);               }
+void x8664_interrupt_handlers_dfault(intframe_t* __frame)      { arch_panic_throw("Double Fault Detected!", __frame);             }
+void x8664_interrupt_handlers_gpfault(intframe_t* __frame)     { arch_panic_throw("General Protection Fault Detected!", __frame); }
 
+void x8664_interrupt_handlers_kbhit(intframe_t* __frame) {
+    arch_io_keyboard_mods_handle();
+     x8664_interrupts_pic_master_end();
+}
 
-    /***************************************************************************************
-    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
-    ***************************************************************************************/
-    void            kernel_panic_throw      (const char* __message, intframe_t* __regstate);
-    void            kernel_panic_assert     (bool __cond, const char* __message);
-
-#endif
+void x8664_interrupt_handlers_tick(intframe_t* __frame) {
+    // x8664_time_pit_tick(); temporary
+    x8664_interrupts_pic_master_end();
+}

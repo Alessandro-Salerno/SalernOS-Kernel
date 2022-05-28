@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "Memory/pgfalloc.h"
 #include "Memory/paging.h"
-#include "kernelpanic.h"
+#include "panicassert.h"
 #include <kmem.h>
 
 #define PGTM_NINIT "Page Table Manager Fault:\nKernel tried to perform operation before initializing."

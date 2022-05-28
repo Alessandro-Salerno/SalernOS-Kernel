@@ -19,7 +19,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "Time/PIT/x86_64-pit.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
+#include "panicassert.h"
 #include "IO/io.h"
 
 #define DIV_MIN 100

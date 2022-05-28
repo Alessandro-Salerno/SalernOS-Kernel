@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_INTERRUPT_HANDLERS
-#define SALERNOS_CORE_KERNEL_INTERRUPT_HANDLERS
+#ifndef SALERNOS_CORE_X8664_INTERRUPT_HANDLERS
+#define SALERNOS_CORE_X8664_INTERRUPT_HANDLERS
 
     #include <kerntypes.h>
 
@@ -55,10 +55,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*********************************************************************************
          RET TYPE        FUNCTION NAME                          FUNCTION ARGUMENTS
     *********************************************************************************/
-    ISR  void            kernel_interrupt_handlers_pgfault      (intframe_t* __frame);
-    ISR  void            kernel_interrupt_handlers_dfault       (intframe_t* __frame);
-    ISR  void            kernel_interrupt_handlers_gpfault      (intframe_t* __frame);
-    ISR  void            kernel_interrupt_handlers_kbhit        (intframe_t* __frame);
-    ISR  void            kernel_interrupt_handlers_tick         (intframe_t* __frame);
+    ISR  void            x8664_interrupt_handlers_pgfault      (intframe_t* __frame);
+    ISR  void            x8664_interrupt_handlers_dfault       (intframe_t* __frame);
+    ISR  void            x8664_interrupt_handlers_gpfault      (intframe_t* __frame);
+    ISR  void            x8664_interrupt_handlers_kbhit        (intframe_t* __frame);
+    ISR  void            x8664_interrupt_handlers_tick         (intframe_t* __frame);
 
 #endif

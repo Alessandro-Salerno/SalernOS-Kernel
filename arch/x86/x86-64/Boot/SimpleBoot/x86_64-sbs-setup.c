@@ -20,6 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "User/Output/Text/x86_64-sbs-textrenderer.h"
 #include "x86_64-sbs-setup.h"
+#include "panicassert.h"
 #include <kerninc.h>
 #include <kdebug.h>
 #include <kmem.h>

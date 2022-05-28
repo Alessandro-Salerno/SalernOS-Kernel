@@ -21,7 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Memory/Heap/heap.h"
 #include "Memory/pgfalloc.h"
 #include "Memory/paging.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
 #include <kmath.h>
 
 

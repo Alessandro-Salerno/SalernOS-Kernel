@@ -28,9 +28,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <User/Input/Keyboard/keyboard.h>       /*   Includes the basic Kernel Keyboard Driver          */
 
     // System includes
-    #include "Interrupts/handlers.h"                /*   Includes the Kernel's Interrupt Service Routines   */
-    #include "Interrupts/idt.h"                     /*   Includes the Kernel's definition of the IDT        */
-    #include "Interrupts/pic.h"                     /*   Includes the basic Kernel PIC Driver               */
     #include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
     // Hardware includes
@@ -47,9 +44,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "Memory/paging.h"                      /*   Includes the Kernel Page Table Manager             */
     #include "Memory/mmap.h"                        /*   Includes the Kernel EFI Memory Map Interface       */
     #include "Memory/bmp.h"                         /*   Includes the Kernel's definition of a Bitmap       */
-
-    // Utils includes
-    #include "kernelpanic.h"                        /*   Includes the Kernel panic handler                  */
 
     // Kernel Library Includes
     #include <kmalloc.h>

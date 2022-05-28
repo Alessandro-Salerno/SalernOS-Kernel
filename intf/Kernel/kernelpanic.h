@@ -18,23 +18,20 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include <User/Input/Keyboard/keyboard.h>
-#include "Interrupts/handlers.h"
-#include "Interrupts/pic.h"
-#include "kernelpanic.h"
-#include "IO/io.h"
+#ifndef SALERNOS_COMMON_PANIC
+#define SALERNOS_COMMON_PANIC
+
+    #include <kerntypes.h>
+
+    #define SOFTASSERT(__cond, __ret) if (!(__cond)) return __ret;
 
 
-void kernel_interrupt_handlers_pgfault(intframe_t* __frame)     { kernel_panic_throw("Page Fault Detected!", __frame);               }
-void kernel_interrupt_handlers_dfault(intframe_t* __frame)      { kernel_panic_throw("Double Fault Detected!", __frame);             }
-void kernel_interrupt_handlers_gpfault(intframe_t* __frame)     { kernel_panic_throw("General Protection Fault Detected!", __frame); }
+    typedef struct InterruptFrame intframe_t; // ; temporary
 
-void kernel_interrupt_handlers_kbhit(intframe_t* __frame) {
-    arch_io_keyboard_mods_handle();
-     kernel_interrupts_pic_master_end();
-}
 
-void kernel_interrupt_handlers_tick(intframe_t* __frame) {
-    // x8664_time_pit_tick(); temporary
-    kernel_interrupts_pic_master_end();
-}
+    /***************************************************************************************
+    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
+    ***************************************************************************************/
+    void            arch_panic_throw        (const char* __message, intframe_t* __regstate);
+
+#endif

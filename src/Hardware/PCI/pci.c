@@ -21,7 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Hardware/Drivers/AHCI/ahci.h"
 #include "Hardware/PCI/pci.h"
 #include "Memory/paging.h"
-#include "kernelpanic.h"
+#include <kernelpanic.h>
 #include <kmalloc.h>
 #include <kstdio.h>
 
