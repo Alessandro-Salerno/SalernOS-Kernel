@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "GDT/gdt.h"
+#include "GDT/x86_64-gdt.h"
 
 
 tss_t tss;

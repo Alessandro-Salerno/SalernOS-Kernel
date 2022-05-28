@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "Syscall/x86_64-sce.h"
+#include "GDT/x86_64-gdt.h"
 #include "x86_64-setup.h"
 #include <kerninc.h>
 #include <kdebug.h>
@@ -43,7 +44,7 @@ void x8664_setup_gdt_setup() {
     gdt._TSSHighSegment._BaseZero  = (_tss_base >> 48) & 0xffff;
 
     kloginfo("Initializing GDT...");
-    kernel_gdt_load(&_gdt_desc);
+    x8664_gdt_load(&_gdt_desc);
 }
 
 

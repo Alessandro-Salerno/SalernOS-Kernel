@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_GDT
-#define SALERNOS_CORE_KERNEL_GDT
+#ifndef SALERNOS_X8664_GDT
+#define SALERNOS_X8664_GDT
 
     #include <kerntypes.h>
 
@@ -78,6 +78,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*****************************************************************************
             RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     *****************************************************************************/
-    extern  void            kernel_gdt_load               (gdtdesc_t* __gdtdesck);
+    extern  void            x8664_gdt_load               (gdtdesc_t* __gdtdesck);
 
 #endif

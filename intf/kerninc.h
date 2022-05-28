@@ -31,7 +31,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "Interrupts/handlers.h"                /*   Includes the Kernel's Interrupt Service Routines   */
     #include "Interrupts/idt.h"                     /*   Includes the Kernel's definition of the IDT        */
     #include "Interrupts/pic.h"                     /*   Includes the basic Kernel PIC Driver               */
-    #include "GDT/gdt.h"                            /*   Includes the Kernel's definition of the GTD        */
     #include "IO/io.h"                              /*   Includes the basic Kernel I/O functions            */
 
     // Hardware includes

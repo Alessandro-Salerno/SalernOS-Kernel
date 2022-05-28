@@ -19,8 +19,8 @@
 [bits 64]
 
 
-global kernel_gdt_load
-kernel_gdt_load:
+global x8664_gdt_load
+x8664_gdt_load:
     lgdt    [rdi]
     mov     ax,     0x30
     ltr     ax
