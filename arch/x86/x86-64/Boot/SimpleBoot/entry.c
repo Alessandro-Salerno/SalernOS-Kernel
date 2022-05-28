@@ -62,7 +62,7 @@ void kernel_entry(boot_t* __bootinfo) {
     kprintf("Used Memory: %u bytes\n",       _used_mem);
     kprintf("Reserved Memory: %u bytes\n\n", _unusable_mem);
 
-    kprintf("RSDP Address: %u\n",   (uint64_t)(__bootinfo->_RSDP));
+    kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo->_RSDP));
     kprintf("MCFG Address: %u\n", (uint64_t)(_acpi._MCFG));
 
     klogok("Kernel Ready!");
