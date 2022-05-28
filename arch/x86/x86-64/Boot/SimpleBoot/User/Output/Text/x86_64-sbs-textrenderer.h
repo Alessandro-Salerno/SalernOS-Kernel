@@ -18,34 +18,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_COMMON_TEXT
-#define SALERNOS_COMMON_TEXT
+#ifndef SALERNOS_X8664_SBS_TEXT
+#define SALERNOS_X8664_SBS_TEXT
 
-    #include "User/Output/Display/kdd.h"
-    #include <kerntypes.h>
-
-    #define CURSOR_CHARACTER '_'
-
-
-    typedef struct Point {
-        uint32_t x;
-        uint32_t y;
-    } point_t;
+    #include <User/Output/Text/textrenderer.h>
 
 
     /***********************************************************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ***********************************************************************************************************************************************/
-    void            arch_boot_text_blitch         (char __char);
-    void            arch_boot_text_putch          (char __char);
-    void            arch_boot_text_print          (char* __str);
-
-    void            arch_boot_text_reinitialize   (uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff);
-
-    void            arch_boot_text_scroll         (uint32_t __lines);
-    void            arch_boot_text_line_clear     (uint32_t __line);
-    
-    void            arch_boot_text_info_set       (uint32_t __color, uint32_t __backcolor, point_t __pos);
-    void            arch_boot_text_info_get       (uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos);
+    void            x8664_sbs_text_initialize     (uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font); 
 
 #endif

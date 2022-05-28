@@ -182,7 +182,7 @@ void arch_boot_text_info_set(uint32_t __color, uint32_t __backcolor, point_t __p
     lastPosition    = curPosition;
 }
 
-void arch_boot_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font) {
+void x8664_sbs_text_initialize(uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font) {
     SOFTASSERT(!trendrInitialized, RETVOID);
 
     __initialize__(__color, __backcolor, __xoff, __yoff);
@@ -196,7 +196,7 @@ void arch_boot_text_reinitialize(uint32_t __color, uint32_t __backcolor, uint32_
     __initialize__(__color, __backcolor, __xoff, __yoff);
 }
 
-void arch_boot_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos, bmpfont_t* __font) {
+void arch_boot_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* __curpos, point_t* __lpos) {
     SOFTASSERT(trendrInitialized, RETVOID);
 
     ARGRET(__color, foregroundColor);
@@ -204,5 +204,4 @@ void arch_boot_text_info_get(uint32_t* __color, uint32_t* __backcolor, point_t* 
 
     ARGRET(__curpos, curPosition);
     ARGRET(__lpos, lastPosition);
-    ARGRET(__font, font);
 }
