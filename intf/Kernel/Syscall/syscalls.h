@@ -18,12 +18,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_SYCALL_SCE
-#define SALERNOS_CORE_KERNEL_SYCALL_SCE
+#ifndef SALERNOS_COMMON_SYSCALLS
+#define SALERNOS_COMMON_SYSCALLS
+
+    #include <kerntypes.h>
+
+    #define SYSCALL_PRINT_STR 0
+
 
     /***********************************************************************
-            RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    RET TYPE        FUNCTION NAME                        FUNCTION ARGUMENTS
     ***********************************************************************/
-    extern  void            kernel_syscall_enable         ();
+    void            arch_syscall_handlers_printstr       (void* __frame);
 
 #endif

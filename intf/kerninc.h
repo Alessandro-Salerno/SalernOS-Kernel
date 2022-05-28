@@ -41,9 +41,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "Hardware/PCI/pci.h"                   /*   Includes the Kernel's PCI Implementation           */
 
     // Syscall includes
-    #include "Syscall/dispatcher.h"                 /*   Includes the Kernel Syscall Dispatcher functions   */
-    #include "Syscall/syscalls.h"                   /*   Includes all kernel Syscall declarations           */
-    #include "Syscall/sce.h"
+    #include <Syscall/syscalls.h>                   /*   Includes all kernel Syscall declarations           */
 
     // Memory includes
     #include "Memory/Heap/heap.h"                   /*   Includes the Kernel's heap manager                 */
@@ -57,7 +55,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
     // Utils includes
     #include "kernelpanic.h"                        /*   Includes the Kernel panic handler                  */
-    #include "kutils.h"                             /*   Includes all kernel initialization functions       */
 
     // Kernel Library Includes
     #include <kmalloc.h>

@@ -18,17 +18,26 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_SYSCALLS
-#define SALERNOS_CORE_KERNEL_SYSCALLS
+#ifndef SALERNOS_X8664_SETUP
+#define SALERNOS_X8664_SETUP
 
     #include <kerntypes.h>
 
-    #define SYSCALL_PRINT_STR 0
+    // Macros and constants
+    #define FGCOLOR 0xffffffff
+    #define BGCOLOR 0
 
 
-    /***********************************************************************
-    RET TYPE        FUNCTION NAME                        FUNCTION ARGUMENTS
-    ***********************************************************************/
-    void            kernel_syscall_handlers_printstr    (void* __frame);
+    extern uint64_t _KERNEL_START,
+                    _KERNEL_END;
+
+
+    /*****************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    *****************************************************************/
+    void            x8664_setup_gdt_setup       ();
+    void            x8664_setup_sc_setup        ();
+    void            x8664_setup_int_setup       ();
+    void            x8664_setup_time_setup      ();
 
 #endif

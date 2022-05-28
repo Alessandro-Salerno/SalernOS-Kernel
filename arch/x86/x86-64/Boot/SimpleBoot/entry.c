@@ -22,6 +22,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kdebug.h>
 #include <kernel.h>
 
+#include "x86_64-sbs-setup.h"
+
 
 void kernel_entry(boot_t* __bootinfo) {
     uint64_t _mem_size,
@@ -33,14 +35,14 @@ void kernel_entry(boot_t* __bootinfo) {
     uint64_t _kernel_size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
     uint64_t _kernel_pages = (uint64_t)(_kernel_size) / 4096 + 1;
 
-    kernel_kutils_kdd_setup(__bootinfo);
-    kernel_kutils_gdt_setup();
-    kernel_kutils_mem_setup(__bootinfo);
-    kernel_kutils_sc_setup();
-    kernel_kutils_int_setup();
-    kernel_kutils_time_setup();
+    x8664_sbs_setup_kdd_setup(__bootinfo);
+    x8664_setup_gdt_setup();
+    x8664_sbs_setup_mem_setup(__bootinfo);
+    x8664_setup_sc_setup();
+    x8664_setup_int_setup();
+    x8664_setup_time_setup();
 
-    acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
+    acpiinfo_t _acpi = x8664_sbs_setup_rsd_setup(__bootinfo);
 
     kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
     kprintf("\n\nCopyright 2021 - 2022 Alessandro Salerno. All rights reserved.\n");

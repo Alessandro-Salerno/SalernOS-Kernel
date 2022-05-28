@@ -19,7 +19,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "Interrupts/handlers.h"
-#include "Syscall/dispatcher.h"
 #include "Memory/pgfalloc.h"
 #include "Interrupts/idt.h"
 #include "Time/PIT/pit.h"
@@ -53,7 +52,6 @@ void kernel_idt_initialize() {
     __create_entry__(0x0D, kernel_interrupt_handlers_gpfault);    // General protection fault handler
     __create_entry__(0x21, kernel_interrupt_handlers_kbhit);      // Keyboard Interrupt hanlder
     __create_entry__(0x20, kernel_interrupt_handlers_tick);       // PIT Tick interrupt handler
-    __create_entry__(0x81, kernel_syscall_dispatch);              // System Call interrupt handler
 
     asm ("lidt %0" : : "m" (idtr));
 

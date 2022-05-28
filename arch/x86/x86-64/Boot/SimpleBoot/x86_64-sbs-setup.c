@@ -18,12 +18,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
+#include "x86_64-sbs-setup.h"
 #include <kerninc.h>
 #include <kdebug.h>
 #include <kmem.h>
 
 
-void kernel_kutils_kdd_setup(boot_t* __bootinfo) {
+void x8664_sbs_setup_kdd_setup(boot_t* __bootinfo) {
     kernel_kdd_fbo_bind(__bootinfo->_Framebuffer);
 
     arch_boot_text_initialize(
@@ -32,28 +33,7 @@ void kernel_kutils_kdd_setup(boot_t* __bootinfo) {
     );
 }
 
-void kernel_kutils_gdt_setup() {
-    gdtdesc_t _gdt_desc = (gdtdesc_t) {
-        ._Size   = sizeof(gdt) - 1,
-        ._Offset = (uint64_t)(&gdt)
-    };
-
-    kloginfo("Initializing TSS...");
-    kmemset(&tss, sizeof(tss_t), 0);
-    uint64_t _tss_base = (uint64_t)(&tss);
-    
-    gdt._TSSLowSegment._LimitZero  = sizeof(tss_t);
-    gdt._TSSLowSegment._BaseZero   = _tss_base         & 0xffff;
-    gdt._TSSLowSegment._BaseOne    = (_tss_base >> 16) & 0x00ff;
-    gdt._TSSLowSegment._BaseTwo    = (_tss_base >> 24) & 0x00ff;
-    gdt._TSSHighSegment._LimitZero = (_tss_base >> 32) & 0xffff;
-    gdt._TSSHighSegment._BaseZero  = (_tss_base >> 48) & 0xffff;
-
-    kloginfo("Initializing GDT...");
-    kernel_gdt_load(&_gdt_desc);
-}
-
-void kernel_kutils_mem_setup(boot_t* __bootinfo) {
+void x8664_sbs_setup_mem_setup(boot_t* __bootinfo) {
     uint64_t _mem_size;
     void*    _fbbase = __bootinfo->_Framebuffer._BaseAddress;
     size_t   _fbsize = __bootinfo->_Framebuffer._BufferSize + 4096;
@@ -91,18 +71,7 @@ void kernel_kutils_mem_setup(boot_t* __bootinfo) {
     kernel_heap_initialize((void*)(0x100000000000), 0x10);
 }
 
-void kernel_kutils_sc_setup() {
-    kloginfo("Enabling SCE...");
-    kernel_syscall_enable();
-}
-
-void kernel_kutils_int_setup() {
-    kloginfo("Initializing Interrupts...");
-    kernel_idt_initialize();
-    kernel_interrupts_pic_remap();
-}
-
-acpiinfo_t kernel_kutils_rsd_setup(boot_t* __bootinfo) {
+acpiinfo_t x8664_sbs_setup_rsd_setup(boot_t* __bootinfo) {
     kloginfo("Initializing ACPI...");
 
     sdthdr_t*  _xsdt = (sdthdr_t*)(__bootinfo->_RSDP->_XSDTAddress);
@@ -117,9 +86,4 @@ acpiinfo_t kernel_kutils_rsd_setup(boot_t* __bootinfo) {
         ._XSDT = _xsdt,
         ._MCFG = _mcfg
     };
-}
-
-void kernel_kutils_time_setup() {
-    kloginfo("Initializing PIT...");
-    kernel_time_pit_frequency_set(1);
 }

@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_PROC_USERSPACE
-#define SALERNOS_CORE_KERNEL_PROC_USERSPACE
+#ifndef SALERNOS_X8664_PROC_USERSPACE
+#define SALERNOS_X8664_PROC_USERSPACE
 
     /******************************************************************************************
             RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS

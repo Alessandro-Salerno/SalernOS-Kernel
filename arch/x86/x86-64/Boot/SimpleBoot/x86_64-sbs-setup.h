@@ -18,26 +18,22 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "Syscall/dispatcher.h"
-#include "Syscall/syscalls.h"
-#include "kernelpanic.h"
-#include <kstdio.h>
+#ifndef SALERNOS_X8664_SBS_SETUP
+#define SALERNOS_X8664_SBS_SETUP
 
+    #include "x86_64-setup.h"
+    #include <kerninc.h>
+    #include <sbs.h>
 
-static void (*syscallHandlers[])(void* __frmae) = {
-    kernel_syscall_handlers_printstr
-};
-
-
-void kernel_syscall_dispatch(void* __frame, uint32_t __syscall) {
-    kernel_panic_assert(
-        __syscall < sizeof(syscallHandlers) / sizeof(void (*)(void*)),
-        "Syscall invoked with invalid ID!"
-    );
-
-    #ifdef DEBUG
-        kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
-    #endif
     
-    syscallHandlers[__syscall](__frame);
-}
+    typedef struct SimpleBootInformationTable boot_t;
+
+
+    /********************************************************************
+    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ********************************************************************/
+    void            x8664_sbs_setup_kdd_setup       (boot_t* __bootinfo);
+    void            x8664_sbs_setup_mem_setup       (boot_t* __bootinfo);
+    acpiinfo_t      x8664_sbs_setup_rsd_setup       (boot_t* __bootinfo);
+
+#endif

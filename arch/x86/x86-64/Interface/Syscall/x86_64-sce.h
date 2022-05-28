@@ -18,16 +18,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
-#define SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
+#ifndef SALERNOS_X8664_SYCALL_SCE
+#define SALERNOS_X8664_SYCALL_SCE
 
-    #include <kerntypes.h>
-
-
-    /*********************************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    *********************************************************************************/
-    void            kernel_syscall_invoke         (void* __frame, uint32_t __syscall);
-    void            kernel_syscall_dispatch       (void* __frame, uint32_t __syscall);
+    /***********************************************************************
+            RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
+    ***********************************************************************/
+    extern  void            x8664_syscall_enable          ();
 
 #endif

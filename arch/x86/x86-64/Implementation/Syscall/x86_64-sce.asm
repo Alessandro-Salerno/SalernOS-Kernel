@@ -18,11 +18,12 @@
 
 [bits 64]
 
-extern kernel_syscall_dispatch
+kernel_syscall_dispatch:
+    ret ; Temporary
 
 
-global kernel_syscall_enable
-kernel_syscall_enable:
+global x8664_syscall_enable
+x8664_syscall_enable:
     ; Enables SCE
     mov     rcx,    0xc0000080                  ; Use EFER MSR
     rdmsr                                       ; Read from EFER
