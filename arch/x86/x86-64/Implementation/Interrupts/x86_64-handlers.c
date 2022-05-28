@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <User/Input/Keyboard/keyboard.h>
 #include "Interrupts/x86_64-handlers.h"
 #include "Interrupts/x86_64-pic.h"
+#include "Time/PIT/x86_64-pit.h"
 #include <kernelpanic.h>
 #include "IO/io.h"
 
@@ -35,6 +36,6 @@ void x8664_interrupt_handlers_kbhit(intframe_t* __frame) {
 }
 
 void x8664_interrupt_handlers_tick(intframe_t* __frame) {
-    // x8664_time_pit_tick(); temporary
+    x8664_time_pit_tick();
     x8664_interrupts_pic_master_end();
 }
