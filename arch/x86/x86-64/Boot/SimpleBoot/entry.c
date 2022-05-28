@@ -18,11 +18,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
+#include "x86_64-sbs-setup.h"
 #include <kerninc.h>
 #include <kdebug.h>
 #include <kernel.h>
-
-#include "x86_64-sbs-setup.h"
 
 
 void kernel_entry(boot_t* __bootinfo) {
