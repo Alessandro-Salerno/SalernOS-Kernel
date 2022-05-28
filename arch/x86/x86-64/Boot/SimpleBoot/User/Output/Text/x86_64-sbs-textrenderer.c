@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "User/Output/Text/x86_64-sbs-textrenderer.h"
-#include "User/Output/Display/kdd.h"
+#include "User/Output/Display/x86_64-sbs-kdd.h"
 #include "kernelpanic.h"
 
 
@@ -40,8 +40,8 @@ static bool      trendrInitialized;
 
 
 static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xoff, uint64_t __yoff) {
-    uint64_t _buff_w = kernel_kdd_fbo_get()._Width;
-    uint64_t _buff_h = kernel_kdd_fbo_get()._Height;
+    uint64_t _buff_w = x8664_sbs_kdd_fbo_get()._Width;
+    uint64_t _buff_h = x8664_sbs_kdd_fbo_get()._Height;
 
     foregroundColor = __color;
     backgroundColor = __backcolor;
@@ -62,7 +62,7 @@ static void __initialize__(uint32_t __color, uint32_t __backcolor, uint64_t __xo
     numColumns = endPosition.x / 8;
     numRows    = endPosition.y / 16;
 
-    kernel_kdd_fbo_clear(backgroundColor);
+    x8664_sbs_kdd_fbo_clear(backgroundColor);
 }
 
 static void __drawchar__(char __char) {
@@ -76,7 +76,7 @@ static void __drawchar__(char __char) {
 
     for (uint64_t _y = _start_y; _y < _end_y; _y++) {
         for (uint64_t _x = _start_x; _x < _end_x; _x++) {
-            kernel_kdd_pxcolor_set(
+            x8664_sbs_kdd_pxcolor_set(
                 _x, _y,
                 ((*_font_ptr & ((1 << 7) >> (_x - _start_x))))
                     ? foregroundColor : backgroundColor
@@ -115,10 +115,10 @@ void arch_boot_text_scroll(uint32_t __lines) {
     SOFTASSERT(__lines < numRows, RETVOID);
     
     for (uint64_t _y = __lines * 16; _y < endPosition.y; _y++) {
-        for (uint64_t _x = startPosition.x; _x < kernel_kdd_fbo_get()._Width; _x++) {
-            kernel_kdd_pxcolor_set(
+        for (uint64_t _x = startPosition.x; _x < x8664_sbs_kdd_fbo_get()._Width; _x++) {
+            x8664_sbs_kdd_pxcolor_set(
                 _x, _y - __lines * 16,
-                kernel_kdd_pxcolor_get(_x, _y)
+                x8664_sbs_kdd_pxcolor_get(_x, _y)
             );
         }
     }
@@ -135,7 +135,7 @@ void arch_boot_text_line_clear(uint32_t __line) {
 
     for (uint64_t _y = __line * 16 - 16; _y < __line * 16; _y++) {
         for (uint64_t _x = startPosition.x; _x < endPosition.x; _x++) {
-            kernel_kdd_pxcolor_set(
+            x8664_sbs_kdd_pxcolor_set(
                 _x, _y,
                 backgroundColor
             );

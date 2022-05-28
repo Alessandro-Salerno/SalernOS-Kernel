@@ -21,7 +21,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_COMMON_TEXT
 #define SALERNOS_COMMON_TEXT
 
-    #include "User/Output/Display/kdd.h"
     #include <kerntypes.h>
 
     #define CURSOR_CHARACTER '_'

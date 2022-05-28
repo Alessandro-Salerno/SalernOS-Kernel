@@ -149,7 +149,7 @@ A structure for `.asm` files will soon be defined. In the meanwhile, try to matc
 
 ## Naming Conventions (For `src/`)
 * Type names must follow the POSIX Standard type notation (`name_t`) and should be as short as possible
-* Function names must follow the scheme `kernel_category_target_action`, such as `kernel_kdd_pxcolor_set` and `kernel_kdd_pxcolor_get`. If the category is the target, such as `kernel_mmap_initialize`, the `target` section can be dropped
+* Function names must follow the scheme `kernel_category_target_action`, such as `x8664_sbs_kdd_pxcolor_set` and `x8664_sbs_kdd_pxcolor_get`. If the category is the target, such as `kernel_mmap_initialize`, the `target` section can be dropped
 * Static function names must follow the scheme `__action_target__`, such as `__get_pxptr__`
 * Static global variables and global variables must use `pascalCase` notation
 * Static local variables and local variables must be comprised of lowecase characters and must start with a `_` as in `_local_variable`

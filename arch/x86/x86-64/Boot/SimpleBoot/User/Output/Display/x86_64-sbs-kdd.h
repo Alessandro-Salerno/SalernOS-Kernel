@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_DISPLAY_DRIVER
-#define SALERNOS_CORE_KERNEL_DISPLAY_DRIVER
+#ifndef SALERNOS_X8664_SBS_DISPLAY_DRIVER
+#define SALERNOS_X8664_SBS_DISPLAY_DRIVER
 
     #include <kerntypes.h>
     #include <sbs.h>
@@ -32,15 +32,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     typedef struct SimpleBootFont        bmpfont_t;
 
 
-    /****************************************************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ****************************************************************************************************/
-    void            kernel_kdd_fbo_bind           (framebuffer_t __fbo);
-    void            kernel_kdd_fbo_clear          (uint32_t __clearcolor);
-    framebuffer_t   kernel_kdd_fbo_get            ();
+    /*******************************************************************************************************
+    RET TYPE        FUNCTION NAME                    FUNCTION ARGUMENTS
+    *******************************************************************************************************/
+    void            x8664_sbs_kdd_fbo_bind           (framebuffer_t __fbo);
+    void            x8664_sbs_kdd_fbo_clear          (uint32_t __clearcolor);
+    framebuffer_t   x8664_sbs_kdd_fbo_get            ();
     
-    uint32_t        kernel_kdd_pxcolor_translate  (uint8_t  __r, uint8_t  __g, uint8_t __b, uint8_t __a);
-    uint32_t        kernel_kdd_pxcolor_get        (uint32_t __x, uint32_t __y);
-    void            kernel_kdd_pxcolor_set        (uint32_t __x, uint32_t __y, uint32_t __color);
+    uint32_t        x8664_sbs_kdd_pxcolor_translate  (uint8_t  __r, uint8_t  __g, uint8_t __b, uint8_t __a);
+    uint32_t        x8664_sbs_kdd_pxcolor_get        (uint32_t __x, uint32_t __y);
+    void            x8664_sbs_kdd_pxcolor_set        (uint32_t __x, uint32_t __y, uint32_t __color);
 
 #endif

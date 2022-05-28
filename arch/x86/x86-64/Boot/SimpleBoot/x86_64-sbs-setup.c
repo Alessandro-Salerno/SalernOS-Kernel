@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 void x8664_sbs_setup_kdd_setup(boot_t* __bootinfo) {
-    kernel_kdd_fbo_bind(__bootinfo->_Framebuffer);
+    x8664_sbs_kdd_fbo_bind(__bootinfo->_Framebuffer);
 
     x8664_sbs_text_initialize(
         FGCOLOR, BGCOLOR,

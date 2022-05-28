@@ -22,11 +22,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_X8664_SBS_TEXT
 
     #include <User/Output/Text/textrenderer.h>
+    #include "User/Output/Display/x86_64-sbs-kdd.h"
 
 
-    /***********************************************************************************************************************************************
+    /******************************************************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ***********************************************************************************************************************************************/
-    void            x8664_sbs_text_initialize     (uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font); 
+    ******************************************************************************************************************************************/
+    void            x8664_sbs_text_initialize     (uint32_t __color, uint32_t __backcolor, uint32_t __xoff, uint32_t __yoff, bmpfont_t __font);
 
 #endif
