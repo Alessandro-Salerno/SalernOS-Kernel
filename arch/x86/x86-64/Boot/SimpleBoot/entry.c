@@ -20,9 +20,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerninc.h>
 #include <kdebug.h>
+#include <kernel.h>
 
-
-extern void kernel_main();
 
 void kernel_entry(boot_t* __bootinfo) {
     uint64_t _mem_size,
