@@ -25,12 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include <sbs.h>
 
     #define BYTES_PER_PIXEL 4
-
-
-    typedef struct Point {
-        uint32_t x;
-        uint32_t y;
-    } point_t;
+    
 
     typedef struct SimpleBootFramebuffer framebuffer_t;
     typedef struct SimpleBootFontHeader  bmpfonthdr_t;

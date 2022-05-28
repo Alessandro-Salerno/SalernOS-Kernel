@@ -25,7 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
     // Macros and constants
     #define FGCOLOR 0xffffffff
-    #define BGCOLOR 0
+    #define BGCOLOR 0xff000000
 
 
     extern uint64_t _KERNEL_START,

@@ -27,6 +27,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #define CURSOR_CHARACTER '_'
 
 
+    typedef struct Point {
+        uint32_t x;
+        uint32_t y;
+    } point_t;
+    
+
     /***********************************************************************************************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     ***********************************************************************************************************************************************/

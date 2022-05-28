@@ -19,24 +19,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include <User/Output/Text/textrenderer.h>
-#include "User/Output/Display/kdd.h"
 #include <kstdio.h>
 #include "kdebug.h"
 
-#define INFO_FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-#define INFO_BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
+#define INFO_FGCOLOR 0xffffffff
+#define INFO_BGCOLOR 0xff000000
 #define INFO_TEXT    "[  DEBUG  ]"
 
-#define ERR_FGCOLOR  kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-#define ERR_BGCOLOR  kernel_kdd_pxcolor_translate(255, 0, 0, 255)
+#define ERR_FGCOLOR  0xffffffff
+#define ERR_BGCOLOR  0xffff0000
 #define ERR_TEXT     "[  ERROR  ]"
 
-#define WARN_FGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
-#define WARN_BGCOLOR kernel_kdd_pxcolor_translate(255, 255, 0, 255)
+#define WARN_FGCOLOR 0xff000000
+#define WARN_BGCOLOR 0xffffff00
 #define WARN_TEXT    "[ WARNING ]"
 
-#define OK_FGCOLOR   kernel_kdd_pxcolor_translate(0, 0, 0, 255)
-#define OK_BGCOLOR   kernel_kdd_pxcolor_translate(0, 255, 0, 255)
+#define OK_FGCOLOR   0xff000000
+#define OK_BGCOLOR   0xff00ff00
 #define OK_TEXT      "[ SUCCESS ]"
 
 
