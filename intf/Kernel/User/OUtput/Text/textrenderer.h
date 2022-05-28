@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_arch_boot_text
-#define SALERNOS_CORE_arch_boot_text
+#ifndef SALERNOS_COMMON_TEXT
+#define SALERNOS_COMMON_TEXT
 
     #include "User/Output/Display/kdd.h"
     #include <kerntypes.h>
