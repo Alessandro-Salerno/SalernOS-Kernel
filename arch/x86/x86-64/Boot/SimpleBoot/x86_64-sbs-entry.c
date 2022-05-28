@@ -24,7 +24,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kernel.h>
 
 
-void kernel_entry(boot_t* __bootinfo) {
+void x8664_sbs_entry(boot_t* __bootinfo) {
     uint64_t _mem_size,
              _usable_mem,
              _free_mem,
