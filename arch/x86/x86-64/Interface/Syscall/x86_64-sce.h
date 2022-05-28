@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_X8664_SYCALL_SCE
-#define SALERNOS_X8664_SYCALL_SCE
+#ifndef SALERNOS_X8664_SYSCALL_SCE
+#define SALERNOS_X8664_SYSCALL_SCE
 
     /***********************************************************************
             RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
