@@ -50,7 +50,7 @@ void kernel_panic_throw(const char* __message, intframe_t* __regstate) {
     while (TRUE);
 }
 
-void kernel_panic_assert(uint8_t __cond, const char* __message) {
+void kernel_panic_assert(bool __cond, const char* __message) {
     SOFTASSERT(!(__cond), RETVOID);
     kernel_panic_throw(__message, NULL);
 }

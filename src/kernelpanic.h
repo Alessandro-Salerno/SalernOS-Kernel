@@ -38,6 +38,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
     ***************************************************************************************/
     void            kernel_panic_throw      (const char* __message, intframe_t* __regstate);
-    void            kernel_panic_assert     (uint8_t __cond, const char* __message);
+    void            kernel_panic_assert     (bool __cond, const char* __message);
 
 #endif
