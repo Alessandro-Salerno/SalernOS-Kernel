@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <User/Output/Text/textrenderer.h>
 #include <kstdio.h>
-#include "kdebug.h"
+#include <kdebug.h>
 
 #define INFO_FGCOLOR 0xffffffff
 #define INFO_BGCOLOR 0xff000000
