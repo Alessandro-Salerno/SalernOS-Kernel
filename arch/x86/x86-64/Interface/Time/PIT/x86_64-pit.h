@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_TIME_PIT
-#define SALERNOS_CORE_KERNEL_TIME_PIT
+#ifndef SALERNOS_X8664_TIME_PIT
+#define SALERNOS_X8664_TIME_PIT
 
     #include <kerntypes.h>
 
@@ -30,11 +30,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /*******************************************************************
     RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
     *******************************************************************/
-    double          kernel_time_pit_uptime_get    ();
-    void            kernel_time_pit_sleep         (uint64_t __mills);
-    uint64_t        kernel_time_pit_frequency_get ();
-    void            kernel_time_pit_frequency_set (uint64_t __freq);
-    void            kernel_time_pit_handler_set   (void (*__handler)());
-    void            kernel_time_pit_tick          ();
+    double          x8664_time_pit_uptime_get    ();
+    void            x8664_time_pit_sleep         (uint64_t __mills);
+    uint64_t        x8664_time_pit_frequency_get ();
+    void            x8664_time_pit_frequency_set (uint64_t __freq);
+    void            x8664_time_pit_handler_set   (void (*__handler)());
+    void            x8664_time_pit_tick          ();
 
 #endif

@@ -21,7 +21,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Interrupts/handlers.h"
 #include "Memory/pgfalloc.h"
 #include "Interrupts/idt.h"
-#include "Time/PIT/pit.h"
 #include "kernelpanic.h"
 
 #define IDT_DINIT "Interrupt Descriptor Table Fault:\nKernel tried to reinitialize IDT."

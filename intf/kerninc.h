@@ -48,9 +48,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     #include "Memory/mmap.h"                        /*   Includes the Kernel EFI Memory Map Interface       */
     #include "Memory/bmp.h"                         /*   Includes the Kernel's definition of a Bitmap       */
 
-    // Time includes
-    #include "Time/PIT/pit.h"                       /*   Includes the Kernel's PIT driver                   */
-
     // Utils includes
     #include "kernelpanic.h"                        /*   Includes the Kernel panic handler                  */
 

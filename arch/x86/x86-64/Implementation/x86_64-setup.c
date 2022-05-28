@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
+#include "Time/PIT/x86_64-pit.h"
 #include "Syscall/x86_64-sce.h"
 #include "GDT/x86_64-gdt.h"
 #include "x86_64-setup.h"
@@ -61,5 +62,5 @@ void x8664_setup_int_setup() {
 
 void x8664_setup_time_setup() {
     kloginfo("Initializing PIT...");
-    kernel_time_pit_frequency_set(1);
+    x8664_time_pit_frequency_set(1);
 }

@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#include "Time/PIT/pit.h"
+#include "Time/PIT/x86_64-pit.h"
 #include "kernelpanic.h"
 #include "IO/io.h"
 
@@ -39,30 +39,30 @@ static void __set_divisor__(uint16_t __div) {
     kernel_io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
 }
 
-double kernel_time_pit_uptime_get() {
+double x8664_time_pit_uptime_get() {
     return uptime;
 }
 
-void kernel_time_pit_sleep(uint64_t __mills) {
+void x8664_time_pit_sleep(uint64_t __mills) {
     const double _START = uptime;
     while (uptime < _START + (double)(__mills) / 1000)
         asm volatile ("hlt");
 }
 
-uint64_t kernel_time_pit_frequency_get() {
+uint64_t x8664_time_pit_frequency_get() {
     return 65535 / divisor;
 }
 
-void kernel_time_pit_frequency_set(uint64_t __freq) {
+void x8664_time_pit_frequency_set(uint64_t __freq) {
     __set_divisor__(65535 / __freq);
 }
 
-void kernel_time_pit_handler_set(void (*__handler)()) {
+void x8664_time_pit_handler_set(void (*__handler)()) {
     tickHandler = __handler;
 }
 
-void kernel_time_pit_tick() {
-    uptime += 1.0f / (double)(kernel_time_pit_frequency_get());
+void x8664_time_pit_tick() {
+    uptime += 1.0f / (double)(x8664_time_pit_frequency_get());
 
     SOFTASSERT(tickHandler != NULL, RETVOID);
     tickHandler();
