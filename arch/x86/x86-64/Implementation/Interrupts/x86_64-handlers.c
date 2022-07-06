@@ -22,8 +22,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Interrupts/x86_64-handlers.h"
 #include "Interrupts/x86_64-pic.h"
 #include "Time/PIT/x86_64-pit.h"
+#include "IO/x86_64-io.h"
 #include <kernelpanic.h>
-#include "IO/io.h"
 
 
 void x8664_interrupt_handlers_pgfault(intframe_t* __frame)     { arch_panic_throw("Page Fault Detected!", __frame);               }

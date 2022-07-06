@@ -21,7 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <User/Input/Keyboard/keyboard.h>
 #include <kernelpanic.h>
 #include "panicassert.h"
-#include "IO/io.h"
+#include "IO/x86_64-io.h"
 
 
 static uint8_t keyboardScancoide,
@@ -81,7 +81,7 @@ void arch_io_keyboard_keys_handle() {
          0 , ' '
     };
     
-    keyboardScancoide = kernel_io_in(0x60);
+    keyboardScancoide = x8664_io_in(0x60);
     keyboardASCII     = 0;
     
     SOFTASSERT(

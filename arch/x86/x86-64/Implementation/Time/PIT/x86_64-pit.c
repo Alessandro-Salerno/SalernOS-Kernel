@@ -19,9 +19,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 
 #include "Time/PIT/x86_64-pit.h"
+#include "IO/x86_64-io.h"
 #include <kernelpanic.h>
 #include "panicassert.h"
-#include "IO/io.h"
 
 #define DIV_MIN 100
 
@@ -36,8 +36,8 @@ static void __set_divisor__(uint16_t __div) {
     if (__div < DIV_MIN) __div = DIV_MIN;
     divisor = __div;
 
-    kernel_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
-    kernel_io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
+    x8664_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
+    x8664_io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
 }
 
 double x8664_time_pit_uptime_get() {

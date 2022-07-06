@@ -18,8 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 
-#ifndef SALERNOS_CORE_KERNEL_IO
-#define SALERNOS_CORE_KERNEL_IO
+#ifndef SALERNOS_CORE_x8664_io
+#define SALERNOS_CORE_x8664_io
 
     #include <kerntypes.h>
 
@@ -27,10 +27,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
     /********************************************************************
     RET TYPE        FUNCTION NAME       FUNCTION ARGUMENTS
     ********************************************************************/
-    void            kernel_io_out       (uint16_t __port, uint8_t __val);
-    void            kernel_io_out_wait  (uint16_t __port, uint8_t __val);
-    uint8_t         kernel_io_in        (uint16_t __port);
-    uint8_t         kernel_io_in_wait   (int16_t __port);
-    void            kernel_io_wait      ();
+    void            x8664_io_out        (uint16_t __port, uint8_t __val);
+    void            x8664_io_out_wait   (uint16_t __port, uint8_t __val);
+    uint8_t         x8664_io_in         (uint16_t __port);
+    uint8_t         x8664_io_in_wait    (int16_t __port);
+    void            x8664_io_wait       ();
 
 #endif
