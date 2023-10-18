@@ -17,23 +17,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_CORE_KERNEL_BMP
 #define SALERNOS_CORE_KERNEL_BMP
 
-    #include <kerntypes.h>
+#include <kerntypes.h>
 
+typedef struct Bitmap {
+  size_t   _Size;
+  uint8_t *_Buffer;
+} bmp_t;
 
-    typedef struct Bitmap {
-        size_t   _Size;
-        uint8_t* _Buffer;
-    } bmp_t;
-
-    
-    /******************************************************************************
-    RET TYPE        FUNCTION NAME       FUNCTION ARGUMENTS
-    ******************************************************************************/
-    bool            kernel_bmp_get      (bmp_t* __bmp, uint64_t __idx);
-    void            kernel_bmp_set      (bmp_t* __bmp, uint64_t __idx, bool __val);
+bool kernel_bmp_get(bmp_t *__bmp, uint64_t __idx);
+void kernel_bmp_set(bmp_t *__bmp, uint64_t __idx, bool __val);
 
 #endif

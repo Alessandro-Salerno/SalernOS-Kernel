@@ -17,12 +17,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #include "Syscall/syscalls.h"
 #include <kstdio.h>
 
-
-void kernel_syscall_handlers_printstr(void* __frame) {
-    char* _str = __frame;
-    kprintf("%s", _str);
+void kernel_syscall_handlers_printstr(void *__frame) {
+  char *_str = __frame;
+  kprintf("%s", _str);
 }

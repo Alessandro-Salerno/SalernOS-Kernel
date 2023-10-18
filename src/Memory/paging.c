@@ -17,79 +17,77 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
-#include "Memory/pgfalloc.h"
 #include "Memory/paging.h"
+#include "Memory/pgfalloc.h"
 #include "kernelpanic.h"
 #include <kmem.h>
 
-#define PGTM_NINIT "Page Table Manager Fault:\nKernel tried to perform operation before initializing."
-
+#define PGTM_NINIT                                                       \
+  "Page Table Manager Fault:\nKernel tried to perform operation before " \
+  "initializing."
 
 static pgtm_t tableManager;
-static bool pgtmInitialized;
+static bool   pgtmInitialized;
 
+static pgtable_t *__init_page_table__(pgtable_t *__dir, uint64_t __idx) {
+  pgdirent_t _entry = __dir->_Entries[__idx];
+  pgtable_t *_pgtable;
 
-static pgtable_t* __init_page_table__(pgtable_t* __dir, uint64_t __idx) {
-    pgdirent_t _entry = __dir->_Entries[__idx];
-    pgtable_t* _pgtable;
-    
-    if (!_entry._Present) {
-        _pgtable = (pgtable_t*)(kernel_pgfa_page_new());
-        kmemset((void*)(_pgtable), 4096, 0);
-        
-        _entry._Address   = (uint64_t)(_pgtable) >> 12;
-        _entry._Present   = TRUE;
-        _entry._ReadWrite = TRUE;
-        _entry._UserSuper = TRUE;
+  if (!_entry._Present) {
+    _pgtable = (pgtable_t *)(kernel_pgfa_page_new());
+    kmemset((void *)(_pgtable), 4096, 0);
 
-        __dir->_Entries[__idx] = _entry;
-        return _pgtable;
-    }
-
-    return (pgtable_t*)((uint64_t)(_entry._Address) << 12);
-}
-
-
-pgtm_t kernel_paging_initialize(pgtable_t* __lvl4) {
-    tableManager = (pgtm_t) {
-        ._PML4Address = __lvl4
-    };
-
-    pgtmInitialized = TRUE;
-    return tableManager;
-}
-
-pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
-    return (pgmapidx_t) {
-        ._PageDirectoryPointerIndex = (__virtaddr >> 39) & 0x1ff,
-        ._PageDirectoryIndex        = (__virtaddr >> 30) & 0x1ff,
-        ._PageTableIndex            = (__virtaddr >> 21) & 0x1ff,
-        ._PageIndex                 = (__virtaddr >> 12) & 0x1ff
-    };
-}
-
-void kernel_paging_address_map(void* __virtaddr, void* __physaddr) {
-    kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
-
-    pgmapidx_t _indexer = kernel_paging_index((uint64_t)(__virtaddr));
-    
-    pgtable_t* _page_directory_pointer = __init_page_table__(tableManager._PML4Address, _indexer._PageDirectoryPointerIndex);
-    pgtable_t* _page_directory         = __init_page_table__(_page_directory_pointer, _indexer._PageDirectoryIndex);
-    pgtable_t* _page_table             = __init_page_table__(_page_directory, _indexer._PageTableIndex); 
-
-    pgdirent_t _entry = _page_table->_Entries[_indexer._PageIndex];
-    _entry._Address   = (uint64_t)(__physaddr) >> 12;
+    _entry._Address   = (uint64_t)(_pgtable) >> 12;
     _entry._Present   = TRUE;
     _entry._ReadWrite = TRUE;
     _entry._UserSuper = TRUE;
-    
-    _page_table->_Entries[_indexer._PageIndex] = _entry;
+
+    __dir->_Entries[__idx] = _entry;
+    return _pgtable;
+  }
+
+  return (pgtable_t *)((uint64_t)(_entry._Address) << 12);
 }
 
-void kernel_paging_address_mapn(void* __base, size_t __sz) {
-     kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
-     
-     for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz; _addr += 4096)
-        kernel_paging_address_map((void*)(_addr), (void*)(_addr));
+pgtm_t kernel_paging_initialize(pgtable_t *__lvl4) {
+  tableManager = (pgtm_t){._PML4Address = __lvl4};
+
+  pgtmInitialized = TRUE;
+  return tableManager;
+}
+
+pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
+  return (pgmapidx_t){._PageDirectoryPointerIndex = (__virtaddr >> 39) & 0x1ff,
+                      ._PageDirectoryIndex        = (__virtaddr >> 30) & 0x1ff,
+                      ._PageTableIndex            = (__virtaddr >> 21) & 0x1ff,
+                      ._PageIndex                 = (__virtaddr >> 12) & 0x1ff};
+}
+
+void kernel_paging_address_map(void *__virtaddr, void *__physaddr) {
+  kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+
+  pgmapidx_t _indexer = kernel_paging_index((uint64_t)(__virtaddr));
+
+  pgtable_t *_page_directory_pointer = __init_page_table__(
+      tableManager._PML4Address, _indexer._PageDirectoryPointerIndex);
+  pgtable_t *_page_directory = __init_page_table__(
+      _page_directory_pointer, _indexer._PageDirectoryIndex);
+  pgtable_t *_page_table =
+      __init_page_table__(_page_directory, _indexer._PageTableIndex);
+
+  pgdirent_t _entry = _page_table->_Entries[_indexer._PageIndex];
+  _entry._Address   = (uint64_t)(__physaddr) >> 12;
+  _entry._Present   = TRUE;
+  _entry._ReadWrite = TRUE;
+  _entry._UserSuper = TRUE;
+
+  _page_table->_Entries[_indexer._PageIndex] = _entry;
+}
+
+void kernel_paging_address_mapn(void *__base, size_t __sz) {
+  kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+
+  for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz;
+       _addr += 4096)
+    kernel_paging_address_map((void *)(_addr), (void *)(_addr));
 }

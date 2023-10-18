@@ -17,13 +17,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_CORE_KERNEL_PROC_USERSPACE
 #define SALERNOS_CORE_KERNEL_PROC_USERSPACE
 
-    /******************************************************************************************
-            RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ******************************************************************************************/
-    extern  void            kernel_proc_userspace_enter   (void* __usrentry, void* __usrstack);
+extern void kernel_proc_userspace_enter(void *__usrentry, void *__usrstack);
 
 #endif

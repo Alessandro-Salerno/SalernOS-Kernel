@@ -17,34 +17,26 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_CORE_KERNEL_UTILITIES
 #define SALERNOS_CORE_KERNEL_UTILITIES
 
-    #include <kerntypes.h>
-    #include <sbs.h>
+#include <kerntypes.h>
+#include <sbs.h>
 
-    // Macros and constants
-    #define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-    #define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
+// Macros and constants
+#define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
+#define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
 
-    
-    typedef struct SimpleBootInformationTable boot_t;
-    
+typedef struct SimpleBootInformationTable boot_t;
 
-    extern uint64_t _KERNEL_START,
-                    _KERNEL_END;
+extern uint64_t _KERNEL_START, _KERNEL_END;
 
-
-    /*****************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    *****************************************************************/
-    void            kernel_kutils_kdd_setup       (boot_t* __bootinfo);
-    void            kernel_kutils_gdt_setup       ();
-    void            kernel_kutils_mem_setup       (boot_t* __bootinfo);
-    void            kernel_kutils_sc_setup        ();
-    void            kernel_kutils_int_setup       ();
-    void            kernel_kutils_time_setup      ();
-    acpiinfo_t      kernel_kutils_rsd_setup       (boot_t* __bootinfo);
+void       kernel_kutils_kdd_setup(boot_t *__bootinfo);
+void       kernel_kutils_gdt_setup();
+void       kernel_kutils_mem_setup(boot_t *__bootinfo);
+void       kernel_kutils_sc_setup();
+void       kernel_kutils_int_setup();
+void       kernel_kutils_time_setup();
+acpiinfo_t kernel_kutils_rsd_setup(boot_t *__bootinfo);
 
 #endif

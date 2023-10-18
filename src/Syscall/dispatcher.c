@@ -17,27 +17,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #include "Syscall/dispatcher.h"
 #include "Syscall/syscalls.h"
 #include "kernelpanic.h"
 #include <kstdio.h>
 
+static void (*syscallHandlers[])(void *__frmae) = {
+    kernel_syscall_handlers_printstr};
 
-static void (*syscallHandlers[])(void* __frmae) = {
-    kernel_syscall_handlers_printstr
-};
+void kernel_syscall_dispatch(void *__frame, uint32_t __syscall) {
+  kernel_panic_assert(__syscall <
+                          sizeof(syscallHandlers) / sizeof(void (*)(void *)),
+                      "Syscall invoked with invalid ID!");
 
+#ifdef DEBUG
+  kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n",
+          (uint64_t)(__frame),
+          __syscall);
+#endif
 
-void kernel_syscall_dispatch(void* __frame, uint32_t __syscall) {
-    kernel_panic_assert(
-        __syscall < sizeof(syscallHandlers) / sizeof(void (*)(void*)),
-        "Syscall invoked with invalid ID!"
-    );
-
-    #ifdef DEBUG
-        kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n", (uint64_t)(__frame), __syscall);
-    #endif
-    
-    syscallHandlers[__syscall](__frame);
+  syscallHandlers[__syscall](__frame);
 }

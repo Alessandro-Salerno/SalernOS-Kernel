@@ -17,18 +17,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_STD_KERNEL_MALLOC
 #define SALERNOS_STD_KERNEL_MALLOC
 
-    #include <kerntypes.h>
+#include <kerntypes.h>
 
-
-    /******************************************************************************************
-    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
-    ******************************************************************************************/
-    void*           kmalloc                 (size_t __buffsize);
-    void*           krealloc                (void* __buff, size_t __oldsize, size_t __newsize);
-    void            kfree                   (void* __buff);
+void *kmalloc(size_t __buffsize);
+void *krealloc(void *__buff, size_t __oldsize, size_t __newsize);
+void  kfree(void *__buff);
 
 #endif

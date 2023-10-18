@@ -17,19 +17,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_LIB_KERNEL_DEBUG
 #define SALERNOS_LIB_KERNEL_DEBUG
 
-    #include <kerntypes.h>
+#include <kerntypes.h>
 
-
-    /***********************************************************
-    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
-    ***********************************************************/
-    void            kloginfo                (const char* __msg);
-    void            klogerr                 (const char* __msg);
-    void            klogwarn                (const char* __msg);
-    void            klogok                  (const char* __msg);
+void kloginfo(const char *__msg);
+void klogerr(const char *__msg);
+void klogwarn(const char *__msg);
+void klogok(const char *__msg);
 
 #endif

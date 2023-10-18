@@ -17,18 +17,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_INC_KERNEL_MEMORY
 #define SALERNOS_INC_KERNEL_MEMORY
 
-    #include <kerntypes.h>
+#include <kerntypes.h>
 
-
-    /***********************************************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    ***********************************************************************************************/
-    void            kmemset                       (void* __buff, size_t __buffsize, uint8_t __val);
-    bool            kmemcmp                       (void* __buff1, void* __buff2, size_t __buffsize);
-    void            kmemcpy                       (void* __from, void* __to, size_t __buffsize);
+void kmemset(void *__buff, size_t __buffsize, uint8_t __val);
+bool kmemcmp(void *__buff1, void *__buff2, size_t __buffsize);
+void kmemcpy(void *__from, void *__to, size_t __buffsize);
 
 #endif

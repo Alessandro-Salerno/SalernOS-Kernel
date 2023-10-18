@@ -17,13 +17,22 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_INC_KERNEL_STR
-#define SALERNOS_INC_KERNEL_STR
 
-#include <kerntypes.h>
-#include <kmath.h>
+OUTPUT_FORMAT(elf64-x86-64)
+ENTRY(kernel_main)
 
-const char *uitoa(uint64_t __val);
-const char *itoa(int64_t __val);
 
-#endif
+SECTIONS {
+	_KERNEL_START = .;
+
+	.text   : ALIGN(0x1000)   {  *(.text)   }
+	.data   : ALIGN(0x1000)   {  *(.data)   }
+	.rodata : ALIGN(0x1000)   {  *(.rodata) }
+
+	.bss : ALIGN(0x1000) {
+		*(COMMON)
+		*(.bss)
+	}
+
+	_KERNEL_END = .;
+}

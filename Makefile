@@ -33,6 +33,9 @@ setup:
 	@mkdir $(BUILDDIR)
 	@mkdir $(OBJDIR)
 
+format:
+	clang-format $(FORMAT) -i
+
 kernel: $(OBJS) link
 
 link:

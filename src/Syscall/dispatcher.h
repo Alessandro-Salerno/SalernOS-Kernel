@@ -17,17 +17,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
 #define SALERNOS_CORE_KERNEL_SYSCALL_DISPATCHER
 
-    #include <kerntypes.h>
+#include <kerntypes.h>
 
-
-    /*********************************************************************************
-    RET TYPE        FUNCTION NAME                 FUNCTION ARGUMENTS
-    *********************************************************************************/
-    void            kernel_syscall_invoke         (void* __frame, uint32_t __syscall);
-    void            kernel_syscall_dispatch       (void* __frame, uint32_t __syscall);
+void kernel_syscall_invoke(void *__frame, uint32_t __syscall);
+void kernel_syscall_dispatch(void *__frame, uint32_t __syscall);
 
 #endif

@@ -17,19 +17,20 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_INC_KERNEL_TYPES
 #define SALERNOS_INC_KERNEL_TYPES
 
-    #include <stddef.h>
-    #include <stdint.h>
+#include <stddef.h>
+#include <stdint.h>
 
-    #define TRUE 1
-    #define FALSE 0
+#define TRUE  1
+#define FALSE 0
 
-    #define RETVOID
-    #define ARGRET(__arg, __val) if (__arg != NULL) *__arg = __val
-    
-    typedef uint8_t bool;
+#define RETVOID
+#define ARGRET(__arg, __val) \
+  if (__arg != NULL)         \
+  *__arg = __val
+
+typedef uint8_t bool;
 
 #endif

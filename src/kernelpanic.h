@@ -17,27 +17,26 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #ifndef SALERNOS_CORE_KERNEL_PANIC
 #define SALERNOS_CORE_KERNEL_PANIC
 
-    #include "Interrupts/handlers.h"
-    #include <kerntypes.h>
+#include "Interrupts/handlers.h"
+#include <kerntypes.h>
 
-    #define SOFTASSERT(__cond, __ret) if (!(__cond)) return __ret;
+#define SOFTASSERT(__cond, __ret) \
+  if (!(__cond))                  \
+    return __ret;
 
+typedef struct KernelPanicInfo {
+  const char *_Type;
+  const char *_Fault;
+  const char *_Message;
+} panicinfo_t;
 
-    typedef struct KernelPanicInfo {
-        const char* _Type;
-        const char* _Fault;
-        const char* _Message;
-    } panicinfo_t;
-
-
-    /***************************************************************************************
-    RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
-    ***************************************************************************************/
-    void            kernel_panic_throw      (const char* __message, intframe_t* __regstate);
-    void            kernel_panic_assert     (uint8_t __cond, const char* __message);
+/***************************************************************************************
+RET TYPE        FUNCTION NAME           FUNCTION ARGUMENTS
+***************************************************************************************/
+void kernel_panic_throw(const char *__message, intframe_t *__regstate);
+void kernel_panic_assert(uint8_t __cond, const char *__message);
 
 #endif

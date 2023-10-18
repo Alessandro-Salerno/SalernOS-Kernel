@@ -24,6 +24,7 @@ KLIB   = $(call rwildcard, $(KLIBDIR), *.c)
 SRC    = $(call rwildcard, $(SRCDIR), *.c)
 SRC   += $(call rwildcard, $(SRCDIR), *.cpp)
 ASMSRC = $(call rwildcard, $(SRCDIR), *.asm)
+FORMAT = $(SRC) $(call rwildcard, ./, *.h)
 
 OBJS   = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/$(KFNAME)/C/%.o, $(SRC))
 OBJS  += $(patsubst $(SRCDIR)/%.asm, $(OBJDIR)/$(KFNAME)/Assembly/%.o, $(ASMSRC)) 

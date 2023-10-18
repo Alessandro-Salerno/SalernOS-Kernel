@@ -17,18 +17,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #include "Hardware/ACPI/acpi.h"
 #include <kmem.h>
 
+void *kernel_hw_acpi_table_find(sdthdr_t *__sdthdr, char *__signature) {
+  uint64_t _nentries = (__sdthdr->_Length - sizeof(sdthdr_t)) / 8;
 
-void* kernel_hw_acpi_table_find(sdthdr_t* __sdthdr, char* __signature) {
-    uint64_t _nentries = (__sdthdr->_Length - sizeof(sdthdr_t)) / 8;
+  for (uint64_t _i = 0; _i < _nentries; _i++) {
+    sdthdr_t *_sdt = (sdthdr_t *)(*(uint64_t *)((uint64_t)(__sdthdr) +
+                                                sizeof(sdthdr_t) + (_i * 8)));
+    if (kmemcmp(_sdt->_Signature, __signature, 4))
+      return _sdt;
+  }
 
-    for (uint64_t _i = 0; _i < _nentries; _i++) {
-        sdthdr_t* _sdt =  (sdthdr_t*)(*(uint64_t*)((uint64_t)(__sdthdr) + sizeof(sdthdr_t) + (_i * 8)));
-        if (kmemcmp(_sdt->_Signature, __signature, 4)) return _sdt;
-    }
-
-    return NULL;
+  return NULL;
 }
