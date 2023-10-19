@@ -28,8 +28,7 @@ include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
 
-
-setup:
+setup: limine
 	@mkdir -p $(BUILDDIR)
 	@mkdir -p $(OBJDIR)
 	@curl -Lo intf/Libraries/External/limine.h https://github.com/limine-bootloader/limine/raw/trunk/limine.h
@@ -41,7 +40,7 @@ kernel: $(OBJS) link
 
 link:
 	@ echo !==== LINKING
-	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kernel.elf $(OBJS)
+	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kern $(OBJS)
 
 clean:
 	rm $(OBJS)
