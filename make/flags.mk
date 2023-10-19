@@ -17,7 +17,7 @@
 
 
 CINCLUDE = -I "$(INCDIR)" -I "$(INCDIR)/Libraries/External" -I "$(INCDIR)/Libraries/Kernel" -I "$(SRCDIR)" 
-CFLAGS 	 = -Wall -Wextra -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE) 
+CFLAGS 	 = -Wall -Wextra -O2 -ffreestanding -fshort-wchar -mno-red-zone $(CINCLUDE)
 CPPFLAGS = $(CFLAGS) -fno-exceptions
 ASMFLAGS = 
-LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib 
+LDFLAGS  = -T $(LDS) -static -Bsymbolic -nostdlib -z max-page-size=0x1000 --no-dynamic-linker 

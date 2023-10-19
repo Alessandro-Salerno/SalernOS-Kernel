@@ -30,8 +30,9 @@ include $(SRCDIR)/Makefile
 
 
 setup:
-	@mkdir $(BUILDDIR)
-	@mkdir $(OBJDIR)
+	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(OBJDIR)
+	@curl -Lo intf/Libraries/External/limine.h https://github.com/limine-bootloader/limine/raw/trunk/limine.h
 
 format:
 	clang-format $(FORMAT) -i
