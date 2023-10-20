@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kdebug.h>
 #include <kerninc.h>
 
-void kernel_main(boot_t *__bootinfo) {
+void kernel_main() {
   uint64_t _mem_size, _usable_mem, _free_mem, _used_mem, _unusable_mem;
 
   uint64_t _kernel_size = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
