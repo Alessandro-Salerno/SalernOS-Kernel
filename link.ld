@@ -1,6 +1,6 @@
 /**********************************************************************
 SalernOS Kernel
-Copyright (C) 2021 - 2022 Alessandro Salerno
+Copyright (C) 2021 - 2023 Alessandro Salerno
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,7 +42,8 @@ SECTIONS {
         *(.text .text.*)
     } :text
 
-    /* Move to the next memory page for .rodata */
+    /* Move to the next memory page for .rodata */
+
     . += CONSTANT(MAXPAGESIZE);
 
     .rodata : {
@@ -53,7 +54,8 @@ SECTIONS {
     . += CONSTANT(MAXPAGESIZE);
 
     .data : {
-        *(.data .data.*)
+        *(.data .data.*)
+
     } :data
 
     /* Dynamic section for relocations, both in its own PHDR and inside data PHDR */

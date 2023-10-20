@@ -1,0 +1,14 @@
+*.c text
+*.asm text
+*.cpp text
+*.mk text
+Makefile text
+.clang-format text
+*.md text
+*.obj binary
+kern binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+
+text eol=lf
