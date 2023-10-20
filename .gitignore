@@ -2,3 +2,4 @@ obj/
 .vscode/
 bin/
 .DS_Store
+intf/Libraries/External/
