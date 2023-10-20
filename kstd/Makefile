@@ -17,6 +17,6 @@
 
 
 $(OBJDIR)/$(LFNAME)/%.o: $(KSTDDIR)/%.c
-	@ echo !==== COMPILING STD  $^
+	@ echo [C]  $^
 	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -O3 -c $^ -o $@
+	@$(CC) $(CFLAGS) -c $^ -o $@

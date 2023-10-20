@@ -19,19 +19,19 @@
 $(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
 	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
 	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -mgeneral-regs-only -c $^ -o $@
+	@$(CC) $(CFLAGS) -mgeneral-regs-only -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/C/%.o: $(SRCDIR)/%.c
-	@ echo !==== COMPILING $^
+	@ echo [C] $^
 	@ mkdir -p $(@D)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	@$(CC) $(CFLAGS) -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/C++/%.o: $(SRCDIR)/%.cpp
-	@ echo !==== COMPILING C++ $^
+	@ echo [C++] $^
 	@ mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) -c $^ -o $@
+	@$(CC) $(CPPFLAGS) -c $^ -o $@
 
 $(OBJDIR)/$(KFNAME)/Assembly/%.o: $(SRCDIR)/%.asm
-	@ echo !==== COMPILING ASM $^
+	@ echo [ASM] $^
 	@ mkdir -p $(@D)
-	$(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@
+	@$(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@

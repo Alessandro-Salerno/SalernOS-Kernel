@@ -28,19 +28,39 @@ include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
 
-setup: limine
+bin:
 	@mkdir -p $(BUILDDIR)
+obj:
 	@mkdir -p $(OBJDIR)
+
+intf/Libraries/External/limine.h:
 	@curl -Lo intf/Libraries/External/limine.h https://github.com/limine-bootloader/limine/raw/trunk/limine.h
+src/External:
+	@mkdir -p src/External
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/term.h
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/tterm.h
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/gterm.h
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/term.c
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/tterm.c
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/gterm.c
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/image.h
+	@curl -Lo src/External/term.h https://github.com/Alessandro-Salerno/limine-terminal-port/raw/trunk/source/image.c
 
 format:
 	clang-format $(FORMAT) -i
 
-kernel: $(OBJS) link
+kernel: bin obj intf/Libraries/External/limine.h src/External $(OBJS) link
+	@echo Done!
 
 link:
-	@ echo !==== LINKING
-	$(LD) $(LDFLAGS) -o $(BUILDDIR)/kern $(OBJS)
+	@echo Linking...
+	@$(LD) $(LDFLAGS) -o $(BUILDDIR)/kern $(OBJS)
 
 clean:
-	rm $(OBJS)
+	rm -rf obj/
+	rm -rf bin/
+
+distclean: clean
+	rm -rf src/External
+	rm intf/Libraries/External/limine.h
+
