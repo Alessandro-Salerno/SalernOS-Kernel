@@ -17,7 +17,7 @@
 
 
 $(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
-	@ echo !==== COMPILING INTERRUPTS UNOPTIMIZED $^
+	@ echo [C] $^
 	@ mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -mgeneral-regs-only -c $^ -o $@
 
