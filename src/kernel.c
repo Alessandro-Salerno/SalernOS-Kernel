@@ -19,9 +19,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kdebug.h>
 #include <kerninc.h>
+#include <limine.h>
+
+#include "Hardware/KernelDrivers/Display/vbe.h"
+
+static volatile struct limine_framebuffer_request framebufferRequest = {
+    .id       = LIMINE_FRAMEBUFFER_REQUEST,
+    .revision = 0};
 
 void kernel_main() {
   boot_t *__bootinfo = NULL;
+  kernel_hw_kdrivers_vbe_initialize(framebufferRequest.response);
+
   while (true)
     asm("hlt");
   uint64_t _mem_size, _usable_mem, _free_mem, _used_mem, _unusable_mem;

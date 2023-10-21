@@ -26,12 +26,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "External/image.h"
 #include "External/term.h"
 #include "External/unifont.h"
+#include "Hardware/KernelDrivers/Display/vbe.h"
 
 static struct term_t terminal;
-
-static volatile struct limine_framebuffer_request tmpFramebufferRequest = {
-    .id       = LIMINE_FRAMEBUFFER_REQUEST,
-    .revision = 0};
 
 static void __termbind_callback__(struct term_t *__term,
                                   uint64_t       __unused0,
@@ -69,6 +66,8 @@ void *memset(void *__dest, int __ch, size_t __n) {
 }
 
 void kernel_terminal_initialize() {
+  struct limine_framebuffer *_fb;
+  kernel_hw_kdrivers_vbe_get(&_fb);
   term_init(&terminal, __termbind_callback__, false, 4);
 
   struct background_t _background = {NULL, STRETCHED, DEFAULT_BACKGROUND};
@@ -83,10 +82,7 @@ void kernel_terminal_initialize() {
   };
 
   struct framebuffer_t _framebuffer = {
-      (uintptr_t)tmpFramebufferRequest.response->framebuffers[0]->address,
-      tmpFramebufferRequest.response->framebuffers[0]->width,
-      tmpFramebufferRequest.response->framebuffers[0]->height,
-      tmpFramebufferRequest.response->framebuffers[0]->pitch};
+      (uintptr_t)_fb, _fb->width, _fb->height, _fb->pitch};
 
   struct style_t _style = {
       DEFAULT_ANSI_COLOURS,        // Default terminal palette
