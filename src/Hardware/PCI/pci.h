@@ -20,8 +20,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_HW_PCI
 #define SALERNOS_CORE_KERNEL_HW_PCI
 
-#include "Hardware/ACPI/acpi.h"
 #include <kerntypes.h>
+
+#include "Hardware/ACPI/acpi.h"
 
 typedef struct PCIDeviceHeader {
   uint16_t _Vendor;

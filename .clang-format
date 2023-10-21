@@ -1,0 +1,36 @@
+BasedOnStyle: LLVM
+UseTab: Never
+AccessModifierOffset: '0'
+AlignConsecutiveMacros: 'true'
+AlignEscapedNewlines: Left
+AlignOperands: 'true'
+AlignTrailingComments: 'true'
+AlignAfterOpenBracket: 'true'
+AlignConsecutiveAssignments: 'Consecutive'
+AlignConsecutiveBitFields: 'AcrossEmptyLines'
+AlignConsecutiveDeclarations: 'Consecutive'
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: false
+AllowShortFunctionsOnASingleLine: 'false'
+IndentCaseLabels: 'false'
+IndentWidth: '2'
+SpaceBeforeParens: ControlStatements
+SpacesInCStyleCastParentheses: 'false'
+SpacesInSquareBrackets: 'false'
+TabWidth: '2'
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '<[[:alnum:].\/-]+>'
+    Priority:        0
+    SortPriority:    0
+  - Regex:           '"[[:alnum:].\/-]+"'
+    Priority:        10
+    SortPriority:    10
+BinPackArguments: false
+BinPackParameters: false
+ExperimentalAutoDetectBinPacking: false
+AllowAllParametersOfDeclarationOnNextLine: false
+...

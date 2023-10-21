@@ -18,9 +18,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Memory/paging.h"
+#include <kmem.h>
+
 #include "Memory/pgfalloc.h"
 #include "kernelpanic.h"
-#include <kmem.h>
 
 #define PGTM_NINIT                                                       \
   "Page Table Manager Fault:\nKernel tried to perform operation before " \

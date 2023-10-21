@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "User/Output/Display/kdd.h"
+
 #include "kernelpanic.h"
 
 static framebuffer_t boundFBO;

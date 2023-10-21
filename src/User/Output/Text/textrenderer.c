@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "User/Output/Text/textrenderer.h"
+
 #include "kernelpanic.h"
 
 static bmpfont_t font;
@@ -93,13 +94,13 @@ static void __putch__(char __char) {
   lastPosition = curPosition;
 
   switch (__char) {
-    case '\n':
-      kernel_text_blitch(' ');
-      __newline__();
-      return;
-    case '\t':
-      kernel_text_print("    ");
-      return;
+  case '\n':
+    kernel_text_blitch(' ');
+    __newline__();
+    return;
+  case '\t':
+    kernel_text_print("    ");
+    return;
   }
 
   kernel_text_blitch(__char);

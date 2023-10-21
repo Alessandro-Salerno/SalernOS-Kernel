@@ -20,8 +20,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_PANIC
 #define SALERNOS_CORE_KERNEL_PANIC
 
-#include "Interrupts/handlers.h"
 #include <kerntypes.h>
+
+#include "Interrupts/handlers.h"
 
 #define SOFTASSERT(__cond, __ret) \
   if (!(__cond))                  \

@@ -18,9 +18,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Syscall/dispatcher.h"
+#include <kstdio.h>
+
 #include "Syscall/syscalls.h"
 #include "kernelpanic.h"
-#include <kstdio.h>
 
 static void (*syscallHandlers[])(void *__frmae) = {
     kernel_syscall_handlers_printstr};

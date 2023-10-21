@@ -20,9 +20,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_PAGE_FRAME_ALLOCATOR
 #define SALERNOS_CORE_KERNEL_PAGE_FRAME_ALLOCATOR
 
+#include <kerntypes.h>
+
 #include "Memory/bmp.h"
 #include "Memory/mmap.h"
-#include <kerntypes.h>
 
 void kernel_pgfa_initialize();
 void kernel_pgfa_free(void *__address, uint64_t __pagecount);

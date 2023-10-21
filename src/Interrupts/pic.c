@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Interrupts/pic.h"
+
 #include "IO/io.h"
 
 void kernel_interrupts_pic_remap() {

@@ -20,6 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_INC_KERNEL_TYPES
 #define SALERNOS_INC_KERNEL_TYPES
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -30,7 +31,5 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define ARGRET(__arg, __val) \
   if (__arg != NULL)         \
   *__arg = __val
-
-typedef uint8_t bool;
 
 #endif

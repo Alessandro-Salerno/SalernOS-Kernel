@@ -18,10 +18,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Hardware/Drivers/AHCI/ahci.h"
-#include "Memory/pgfalloc.h"
-#include "kernelpanic.h"
 #include <kmem.h>
 #include <kstdio.h>
+
+#include "Memory/pgfalloc.h"
+#include "kernelpanic.h"
 
 #define MAX_PORTS  32
 #define MAX_CMDHDR 32
@@ -66,14 +67,14 @@ static hbaporttype_t __check_port__(hbaport_t *__port) {
   SOFTASSERT(_intf_power_management == PORT_ACTIVE, AHCI_PORT_NONE);
 
   switch (__port->_Signature) {
-    case SIG_ATAPI:
-      return AHCI_PORT_SATAPI;
-    case SIG_ATA:
-      return AHCI_PORT_SATA;
-    case SIG_PM:
-      return AHCI_PORT_PM;
-    case SIG_SEMB:
-      return AHCI_PORT_SEMB;
+  case SIG_ATAPI:
+    return AHCI_PORT_SATAPI;
+  case SIG_ATA:
+    return AHCI_PORT_SATA;
+  case SIG_PM:
+    return AHCI_PORT_PM;
+  case SIG_SEMB:
+    return AHCI_PORT_SEMB;
   }
 
   return AHCI_PORT_NONE;

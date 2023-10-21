@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Memory/mmap.h"
+
 #include "kernelpanic.h"
 
 #define MMAP_DINIT \

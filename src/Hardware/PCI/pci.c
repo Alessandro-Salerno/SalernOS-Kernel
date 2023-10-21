@@ -18,11 +18,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Hardware/PCI/pci.h"
+#include <kmalloc.h>
+#include <kstdio.h>
+
 #include "Hardware/Drivers/AHCI/ahci.h"
 #include "Memory/paging.h"
 #include "kernelpanic.h"
-#include <kmalloc.h>
-#include <kstdio.h>
 
 #define DEV_PER_BUS 32
 #define FN_PER_DEV  8
@@ -48,26 +49,26 @@ static void __enumerate_function__(uint64_t __devaddr, uint64_t __function) {
 
   // Check device class
   switch (_pci_dev->_Class) {
-    case MASS_STORAGE_CONTROLLER: {
-      // Check device Subclass
-      switch (_pci_dev->_Subclass) {
-        case SERIAL_ATA: {
-          // Check device program interface
-          switch (_pci_dev->_ProgramInterface) {
-            case AHCI_1_0: {
-              // Create driver instance
-              ahcidevdr_t *_driver    = kmalloc(sizeof(ahcidevdr_t));
-              _driver->_PCIDeviceBase = _pci_dev;
-              _driver->_ABAR =
-                  (hbamem_t *)((uint64_t)(((pcidevhdr0_t *)(_pci_dev))->_BAR5));
+  case MASS_STORAGE_CONTROLLER: {
+    // Check device Subclass
+    switch (_pci_dev->_Subclass) {
+    case SERIAL_ATA: {
+      // Check device program interface
+      switch (_pci_dev->_ProgramInterface) {
+      case AHCI_1_0: {
+        // Create driver instance
+        ahcidevdr_t *_driver    = kmalloc(sizeof(ahcidevdr_t));
+        _driver->_PCIDeviceBase = _pci_dev;
+        _driver->_ABAR =
+            (hbamem_t *)((uint64_t)(((pcidevhdr0_t *)(_pci_dev))->_BAR5));
 
-              kernel_paging_address_map(_driver->_ABAR, _driver->_ABAR);
-              kernel_hw_ahci_ports_probe(_driver);
-            }
-          }
-        }
+        kernel_paging_address_map(_driver->_ABAR, _driver->_ABAR);
+        kernel_hw_ahci_ports_probe(_driver);
+      }
       }
     }
+    }
+  }
   }
 }
 

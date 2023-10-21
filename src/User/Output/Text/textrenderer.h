@@ -20,8 +20,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef SALERNOS_CORE_KERNEL_TEXT
 #define SALERNOS_CORE_KERNEL_TEXT
 
-#include "User/Output/Display/kdd.h"
 #include <kerntypes.h>
+
+#include "User/Output/Display/kdd.h"
 
 #define CURSOR_CHARACTER '_'
 

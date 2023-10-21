@@ -18,8 +18,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "Memory/pgfalloc.h"
-#include "kernelpanic.h"
 #include <kmem.h>
+
+#include "kernelpanic.h"
 
 #define PGFALLOC_FAULT                                             \
   "Page Frame Allocator Fault:\nAllocator Function called before " \

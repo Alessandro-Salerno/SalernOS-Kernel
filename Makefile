@@ -45,6 +45,7 @@ src/External:
 	@curl -Lo src/External/gterm.c https://alessandro-salerno.github.io/limine-terminal-port/source/gterm.c
 	@curl -Lo src/External/image.h https://alessandro-salerno.github.io/limine-terminal-port/source/image.h
 	@curl -Lo src/External/image.c https://alessandro-salerno.github.io/limine-terminal-port/source/image.c
+	@curl -Lo src/External/unifont.h https://alessandro-salerno.github.io/limine-terminal-port/fonts/unifont.h
 
 format:
 	clang-format $(FORMAT) -i

@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include "User/Input/Keyboard/keyboard.h"
+
 #include "IO/io.h"
 #include "kernelpanic.h"
 
@@ -27,15 +28,15 @@ static bool isShiftPressed;
 
 void kernel_io_keyboard_mods_handle() {
   switch (keyboardScancoide) {
-    case KEY_LSHIFT:
-    case KEY_RSHIFT:
-      isShiftPressed = TRUE;
-      break;
+  case KEY_LSHIFT:
+  case KEY_RSHIFT:
+    isShiftPressed = TRUE;
+    break;
 
-    case KEY_LSHIFT + 0x80:
-    case KEY_RSHIFT + 0x80:
-      isShiftPressed = 0;
-      break;
+  case KEY_LSHIFT + 0x80:
+  case KEY_RSHIFT + 0x80:
+    isShiftPressed = 0;
+    break;
   }
 }
 
