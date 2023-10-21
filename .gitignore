@@ -3,3 +3,4 @@ obj/
 bin/
 .DS_Store
 intf/Libraries/External/
+src/External/
