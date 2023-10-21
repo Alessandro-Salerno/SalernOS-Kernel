@@ -16,9 +16,6 @@ jobs:
 
     - name: Install dependencies
       run: sh ./.github/workflows/configure.sh
-    
-    - name: Setup directory
-      run: make setup
 
     - name: Build for x86-64
-      run: make
+      run: make all
