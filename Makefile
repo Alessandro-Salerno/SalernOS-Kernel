@@ -51,12 +51,14 @@ format:
 
 setup: bin obj intf/Libraries/External/limine.h src/External
 
-kernel: setup $(OBJS) link
+compile: setup $(OBJS)
+kernel: compile link
 	@echo Done!
 
 .PHONY: all
 all: setup
-	@make -j10 kernel
+	@make -j10 compile
+	@make kernel 
 
 link:
 	@echo Linking...
