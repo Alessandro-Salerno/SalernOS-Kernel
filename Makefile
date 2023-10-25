@@ -28,6 +28,11 @@ include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
 
+.PHONY: all
+all: setup
+	@make -j10 compile
+	@make kernel 
+
 bin:
 	@mkdir -p $(BUILDDIR)
 obj:
@@ -55,11 +60,6 @@ setup: bin obj intf/Libraries/External/limine.h src/External
 compile: setup $(OBJS)
 kernel: compile link
 	@echo Done!
-
-.PHONY: all
-all: setup
-	@make -j10 compile
-	@make kernel 
 
 link:
 	@echo Linking...
