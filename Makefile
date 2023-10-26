@@ -19,6 +19,11 @@
 OSNAME 	= SalernOS
 MAKEDIR = make
 
+.PHONY: all
+all: setup
+	@make -j10 compile
+	@make kernel
+
 include $(MAKEDIR)/files.mk
 include $(MAKEDIR)/commands.mk
 include $(MAKEDIR)/flags.mk
@@ -27,11 +32,6 @@ include $(MAKEDIR)/data.mk
 include $(KSTDDIR)/Makefile
 include $(KLIBDIR)/Makefile
 include $(SRCDIR)/Makefile
-
-.PHONY: all
-all: setup
-	@make -j10 compile
-	@make kernel 
 
 bin:
 	@mkdir -p $(BUILDDIR)
