@@ -26,6 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "External/flanterm/backends/fb.h"
 #include "External/flanterm/flanterm.h"
 #include "Hardware/KernelDrivers/Display/vbe.h"
+#include "termbind.h"
 
 static struct flanterm_context *terminal;
 
@@ -45,11 +46,30 @@ void *memset(void *__dest, int __ch, size_t __n) {
   return __dest;
 }
 
+void kernel_terminal_putchar(char __ch) {
+  terminal->raw_putchar(terminal, __ch);
+}
+
+void kernel_terminal_flush() {
+  terminal->double_buffer_flush(terminal);
+}
+
+void kernel_terminal_write(const char *__str) {
+  kernel_terminal_fastwrite(__str);
+  kernel_terminal_flush();
+}
+
+void kernel_terminal_fastwrite(const char *__str) {
+  for (; *__str; __str++) {
+    kernel_terminal_putchar(*__str);
+  }
+}
+
 void kernel_terminal_initialize() {
   struct limine_framebuffer *_fb;
   kernel_hw_kdrivers_vbe_get(&_fb);
   terminal = flanterm_fb_simple_init(
       _fb->address, _fb->width, _fb->height, _fb->pitch);
   // Temporary test
-  flanterm_write(terminal, "Hello, world", 12);
+  terminal->autoflush = false;
 }

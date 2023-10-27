@@ -17,41 +17,49 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
-#include "user/Output/Text/textrenderer.h"
 #include <kstdio.h>
-
-
-#include <stdarg.h>
 #include <kstr.h>
+#include <stdarg.h>
 
+#include "termbind.h"
 
-void kprintf(const char* __fmt, ...) {
-    va_list _arguments;
-    va_start(_arguments, __fmt);
+void kprintf(const char *__fmt, ...) {
+  va_list _arguments;
+  va_start(_arguments, __fmt);
 
-    for (char* _ptr = (char*)(__fmt); *_ptr; _ptr++) {
-        switch (*_ptr) {
-            case '%': {
-                switch (*(++_ptr)) {
-                    case 'u'    :   kernel_text_print((char*)(uitoa(va_arg(_arguments, uint64_t))));  break;
-                    
-                    case 'd'    :
-                    case 'i'    :   kernel_text_print((char*)(itoa(va_arg(_arguments, int64_t))));    break;
-                    
-                    case 'c'    :   kernel_text_putch((char)(va_arg(_arguments, signed)));            break;
+  for (char *_ptr = (char *)(__fmt); *_ptr; _ptr++) {
+    switch (*_ptr) {
+    case '%': {
+      switch (*(++_ptr)) {
+      case 'u':
+        kernel_terminal_fastwrite(
+            (const char *)(uitoa(va_arg(_arguments, uint64_t))));
+        break;
 
-                    case 's'    :   kernel_text_print((char*)(va_arg(_arguments, char*)));            break;
-                }
-                
-                break;
-            }
+      case 'd':
+      case 'i':
+        kernel_terminal_fastwrite(
+            (const char *)(itoa(va_arg(_arguments, int64_t))));
+        break;
 
-            default:
-                kernel_text_putch(*_ptr);
-                break;
-        }
+      case 'c':
+        kernel_terminal_putchar((char)(va_arg(_arguments, signed)));
+        break;
+
+      case 's':
+        kernel_terminal_fastwrite((const char *)(va_arg(_arguments, char *)));
+        break;
+      }
+
+      break;
     }
 
-    va_end(_arguments);
+    default:
+      kernel_terminal_putchar(*_ptr);
+      break;
+    }
+  }
+
+  va_end(_arguments);
+  kernel_terminal_flush();
 }

@@ -23,8 +23,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "Hardware/KernelDrivers/Display/vbe.h"
 #include "Memory/pmm.h"
-
-extern void kernel_terminal_initialize();
+#include "kstdio.h"
+#include "termbind.h"
 
 static volatile struct limine_framebuffer_request framebufferRequest = {
     .id       = LIMINE_FRAMEBUFFER_REQUEST,
@@ -34,6 +34,7 @@ void kernel_main() {
   boot_t *__bootinfo = NULL;
   kernel_hw_kdrivers_vbe_initialize(framebufferRequest.response);
   kernel_terminal_initialize();
+  kprintf("Hello, world %i", 123);
 
   kernel_pmm_initialize();
 
