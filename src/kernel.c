@@ -24,6 +24,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "Hardware/KernelDrivers/Display/vbe.h"
 #include "Memory/pmm.h"
 
+extern void kernel_terminal_initialize();
+
 static volatile struct limine_framebuffer_request framebufferRequest = {
     .id       = LIMINE_FRAMEBUFFER_REQUEST,
     .revision = 0};
@@ -31,20 +33,13 @@ static volatile struct limine_framebuffer_request framebufferRequest = {
 void kernel_main() {
   boot_t *__bootinfo = NULL;
   kernel_hw_kdrivers_vbe_initialize(framebufferRequest.response);
+  kernel_terminal_initialize();
+
   kernel_pmm_initialize();
 
   struct limine_framebuffer *fb;
   kernel_hw_kdrivers_vbe_get(&fb);
   struct limine_framebuffer *framebuffer = fb;
-
-  // Note: we assume the framebuffer model is RGB with 32-bit pixels.
-
-  for (size_t i = 0; i < 100; i++) {
-
-    volatile uint32_t *fb_ptr = framebuffer->address;
-
-    fb_ptr[i * (framebuffer->pitch / 4) + i] = 0xffffff;
-  }
 
   while (true)
     asm("hlt");

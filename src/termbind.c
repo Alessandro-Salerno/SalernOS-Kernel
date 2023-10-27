@@ -23,31 +23,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "External/image.h"
-#include "External/term.h"
-#include "External/unifont.h"
+#include "External/flanterm/backends/fb.h"
+#include "External/flanterm/flanterm.h"
 #include "Hardware/KernelDrivers/Display/vbe.h"
 
-static struct term_t terminal;
-
-static void __termbind_callback__(struct term_t *__term,
-                                  uint64_t       __unused0,
-                                  uint64_t       __unused1,
-                                  uint64_t       __unused2,
-                                  uint64_t       __unused3) {
-  // Handle callback
-}
-
-// Implementations for functions used by the terminal
-void *alloc_mem(size_t __size) {
-  void *_buf = kmalloc(__size);
-  kmemset(_buf, __size, 0);
-  return _buf;
-}
-
-void free_mem(void *__buf, size_t __unused) {
-  kfree(__buf);
-}
+static struct flanterm_context *terminal;
 
 void *memcpy(void *__dest, const void *__src, size_t __len) {
   kmemcpy(__src, __dest, __len);
@@ -68,31 +48,8 @@ void *memset(void *__dest, int __ch, size_t __n) {
 void kernel_terminal_initialize() {
   struct limine_framebuffer *_fb;
   kernel_hw_kdrivers_vbe_get(&_fb);
-  term_init(&terminal, __termbind_callback__, false, 4);
-
-  struct background_t _background = {NULL, STRETCHED, DEFAULT_BACKGROUND};
-
-  struct font_t _font = {
-      (uintptr_t)unifont,
-      8,
-      16,
-      1,
-      1,
-      1,
-  };
-
-  struct framebuffer_t _framebuffer = {
-      (uintptr_t)_fb, _fb->width, _fb->height, _fb->pitch};
-
-  struct style_t _style = {
-      DEFAULT_ANSI_COLOURS,        // Default terminal palette
-      DEFAULT_ANSI_BRIGHT_COLOURS, // Default terminal bright palette
-      DEFAULT_BACKGROUND,          // Background colour
-      DEFAULT_FOREGROUND,          // Foreground colour
-      DEFAULT_MARGIN,              // Terminal margin
-      DEFAULT_MARGIN_GRADIENT      // Terminal margin gradient
-  };
-
-  term_vbe(&terminal, _framebuffer, _font, _style, _background);
-  term_write(&terminal, "Setup", 5);
+  terminal = flanterm_fb_simple_init(
+      _fb->address, _fb->width, _fb->height, _fb->pitch);
+  // Temporary test
+  flanterm_write(terminal, "Hello, world", 12);
 }
