@@ -43,15 +43,6 @@ intf/Libraries/External/limine.h:
 src/External:
 	@mkdir -p src/External
 	@git clone https://github.com/mintsuki/flanterm src/External/flanterm
-	# @curl -Lo src/External/term.h https://alessandro-salerno.github.io/limine-terminal-port/source/term.h
-	# @curl -Lo src/External/tterm.h https://alessandro-salerno.github.io/limine-terminal-port/source/tterm.h
-	# @curl -Lo src/External/gterm.h https://alessandro-salerno.github.io/limine-terminal-port/source/gterm.h
-	# @curl -Lo src/External/term.c https://alessandro-salerno.github.io/limine-terminal-port/source/term.c
-	# @curl -Lo src/External/tterm.c https://alessandro-salerno.github.io/limine-terminal-port/source/tterm.c
-	# @curl -Lo src/External/gterm.c https://alessandro-salerno.github.io/limine-terminal-port/source/gterm.c
-	# @curl -Lo src/External/image.h https://alessandro-salerno.github.io/limine-terminal-port/source/image.h
-	# @curl -Lo src/External/image.c https://alessandro-salerno.github.io/limine-terminal-port/source/image.c
-	# @curl -Lo src/External/unifont.h https://alessandro-salerno.github.io/limine-terminal-port/fonts/unifont.h
 
 format:
 	clang-format $(FORMAT) -i
