@@ -21,7 +21,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define SALERNOS_STD_KERNEL_STDIO
 
 #include <kerntypes.h>
+#include <stdarg.h>
 
+void kvprintf(const char *__fmt, va_list __args);
 void kprintf(const char *__fmt, ...);
 
 #endif

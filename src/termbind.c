@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kmalloc.h>
 #include <kmem.h>
+#include <kstr.h>
 #include <limine.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -26,6 +27,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "External/flanterm/backends/fb.h"
 #include "External/flanterm/flanterm.h"
 #include "Hardware/KernelDrivers/Display/vbe.h"
+#include "kerntypes.h"
 #include "termbind.h"
 
 static struct flanterm_context *terminal;
@@ -55,14 +57,23 @@ void kernel_terminal_flush() {
 }
 
 void kernel_terminal_write(const char *__str) {
-  kernel_terminal_fastwrite(__str);
-  kernel_terminal_flush();
+  flanterm_write(terminal, __str, kstrlen(__str));
 }
 
 void kernel_terminal_fastwrite(const char *__str) {
   for (; *__str; __str++) {
     kernel_terminal_putchar(*__str);
   }
+}
+
+void kernel_terminal_info_get(uint32_t *__bg, uint32_t *__fg) {
+  ARGRET(__bg, terminal->current_bg);
+  ARGRET(__bg, terminal->current_primary);
+}
+
+void kernel_terminal_info_set(uint32_t __bg, uint32_t __fg) {
+  terminal->set_text_bg_rgb(terminal, __bg);
+  terminal->set_text_fg_rgb(terminal, __fg);
 }
 
 void kernel_terminal_initialize() {

@@ -22,9 +22,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerntypes.h>
 
-void kloginfo(const char *__msg);
-void klogerr(const char *__msg);
-void klogwarn(const char *__msg);
-void klogok(const char *__msg);
+void kloginfo(const char *__fmt, ...);
+void klogerr(const char *__fmt, ...);
+void klogwarn(const char *__fmt, ...);
+void klogok(const char *__fmt, ...);
 
 #endif

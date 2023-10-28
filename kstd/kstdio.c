@@ -23,36 +23,41 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "termbind.h"
 
-void kprintf(const char *__fmt, ...) {
-  va_list _arguments;
-  va_start(_arguments, __fmt);
-
+void kvprintf(const char *__fmt, va_list __args) {
   for (char *_ptr = (char *)(__fmt); *_ptr; _ptr++) {
     switch (*_ptr) {
     case '%': {
       switch (*(++_ptr)) {
       case 'u':
         kernel_terminal_fastwrite(
-            (const char *)(uitoa(va_arg(_arguments, uint64_t))));
+            (const char *)(uitoa(va_arg(__args, uint64_t))));
         break;
 
       case 'd':
       case 'i':
         kernel_terminal_fastwrite(
-            (const char *)(itoa(va_arg(_arguments, int64_t))));
+            (const char *)(itoa(va_arg(__args, int64_t))));
         break;
 
       case 'c':
-        kernel_terminal_putchar((char)(va_arg(_arguments, signed)));
+        kernel_terminal_putchar((char)(va_arg(__args, signed)));
         break;
 
       case 's':
-        kernel_terminal_fastwrite((const char *)(va_arg(_arguments, char *)));
+        kernel_terminal_fastwrite((const char *)(va_arg(__args, char *)));
         break;
       }
 
       break;
     }
+
+    case '\n':
+      kernel_terminal_write("\n");
+      break;
+
+    case '\t':
+      kernel_terminal_write("\t");
+      break;
 
     default:
       kernel_terminal_putchar(*_ptr);
@@ -60,6 +65,12 @@ void kprintf(const char *__fmt, ...) {
     }
   }
 
-  va_end(_arguments);
   kernel_terminal_flush();
+}
+
+void kprintf(const char *__fmt, ...) {
+  va_list _arguments;
+  va_start(_arguments, __fmt);
+  kvprintf(__fmt, _arguments);
+  va_end(_arguments);
 }

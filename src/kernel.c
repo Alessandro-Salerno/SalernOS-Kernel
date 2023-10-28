@@ -30,17 +30,19 @@ static volatile struct limine_framebuffer_request framebufferRequest = {
     .id       = LIMINE_FRAMEBUFFER_REQUEST,
     .revision = 0};
 
+static volatile struct limine_hhdm_request hhdmRequest = {
+    .id       = LIMINE_HHDM_REQUEST,
+    .revision = 0};
+
 void kernel_main() {
   boot_t *__bootinfo = NULL;
   kernel_hw_kdrivers_vbe_initialize(framebufferRequest.response);
   kernel_terminal_initialize();
-  kprintf("Hello, world %i", 123);
+  kernel_pmm_initialize(hhdmRequest.response);
 
-  kernel_pmm_initialize();
-
-  struct limine_framebuffer *fb;
-  kernel_hw_kdrivers_vbe_get(&fb);
-  struct limine_framebuffer *framebuffer = fb;
+  kprintf(
+      "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
+  kprintf("SalernOS Kernel 0.0.7\n");
 
   while (true)
     asm("hlt");
@@ -60,10 +62,7 @@ void kernel_main() {
 
   kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
   kprintf(
-      "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
-  kprintf(
       "%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
-  kprintf("SalernOS Kernel 0.0.6 (Rome)\n\n");
 
   kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
   kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));

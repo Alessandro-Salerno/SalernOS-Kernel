@@ -19,10 +19,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#include <limine.h>
 #include <stdint.h>
 
 void kernel_pmm_free(void *__address, uint64_t __pagecount);
 void kernel_pmm_lock(void *__address, uint64_t __pagecount);
 void kernel_pmm_unreserve(void *__address, uint64_t __pagecount);
 void kernel_pmm_reserve(void *__address, uint64_t __agecount);
-void kernel_pmm_initialize();
+void kernel_pmm_initialize(struct limine_hhdm_response *__hhdm);

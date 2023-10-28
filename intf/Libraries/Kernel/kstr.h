@@ -25,5 +25,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 const char *uitoa(uint64_t __val);
 const char *itoa(int64_t __val);
+uint64_t    kstrlen(const char *__str);
 
 #endif
