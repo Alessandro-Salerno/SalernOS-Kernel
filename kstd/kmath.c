@@ -17,15 +17,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-
 #include <kmath.h>
 
-
 uint64_t kabs(int64_t __val) {
-    return (__val < 0) ? __val * -1 : __val;
+  return (__val < 0) ? __val * -1 : __val;
 }
 
 uint64_t kroundl(uint64_t __val, uint64_t __round) {
-    uint64_t _rem = __val % __round;
-    return (_rem > 0) ? __val - _rem + __round : __val;
+  uint64_t _rem = __val % __round;
+  return (_rem > 0) ? __val - _rem + __round : __val;
 }
