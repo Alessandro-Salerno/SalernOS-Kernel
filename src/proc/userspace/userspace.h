@@ -19,4 +19,4 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
-extern void kernel_proc_userspace_enter(void *__usrentry, void *__usrstack);
+extern void proc_userspace_enter(void *__usrentry, void *__usrstack);

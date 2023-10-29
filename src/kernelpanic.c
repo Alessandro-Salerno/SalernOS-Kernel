@@ -21,7 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kdebug.h>
 #include <kstdio.h>
 
-void kernel_panic_throw(const char *__message, intframe_t *__regstate) {
+void panic_throw(const char *__message, intframe_t *__regstate) {
   klogerr("Kernel panic: execution of the kernel has been halted due to a "
           "critical system fault.");
   kprintf("%s\n\n", __message);
@@ -49,7 +49,7 @@ void kernel_panic_throw(const char *__message, intframe_t *__regstate) {
     ;
 }
 
-void kernel_panic_assert(uint8_t __cond, const char *__message) {
+void panic_assert(uint8_t __cond, const char *__message) {
   SOFTASSERT(!(__cond), RETVOID);
-  kernel_panic_throw(__message, NULL);
+  panic_throw(__message, NULL);
 }

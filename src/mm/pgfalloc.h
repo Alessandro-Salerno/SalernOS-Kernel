@@ -24,13 +24,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mm/bmp.h"
 #include "mm/mmap.h"
 
-void kernel_pgfa_initialize();
-void kernel_pgfa_free(void *__address, uint64_t __pagecount);
-void kernel_pgfa_lock(void *__address, uint64_t __pagecount);
-void kernel_pgfa_unreserve(void *__address, uint64_t __pagecount);
-void kernel_pgfa_reserve(void *__address, uint64_t __pagecount);
+void pgfa_initialize();
+void pgfa_free(void *__address, uint64_t __pagecount);
+void pgfa_lock(void *__address, uint64_t __pagecount);
+void pgfa_unreserve(void *__address, uint64_t __pagecount);
+void pgfa_reserve(void *__address, uint64_t __pagecount);
 
-void  kernel_pgfa_info_get(uint64_t *__freemem,
-                           uint64_t *__usedmem,
-                           uint64_t *__reservedmem);
-void *kernel_pgfa_page_new();
+void  pgfa_info_get(uint64_t *__freemem,
+                    uint64_t *__usedmem,
+                    uint64_t *__reservedmem);
+void *pgfa_page_new();

@@ -28,6 +28,6 @@ typedef struct HeapSegmentHeader {
   bool                      _Free;
 } heapseghdr_t;
 
-void  kernel_heap_initialize(void *__heapbase, size_t __pgcount);
-void *kernel_heap_allocate(size_t __buffsize);
-void  kernel_heap_free(void *__buff);
+void  heap_initialize(void *__heapbase, size_t __pgcount);
+void *heap_allocate(size_t __buffsize);
+void  heap_free(void *__buff);

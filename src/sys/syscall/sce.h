@@ -19,4 +19,4 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
-extern void kernel_syscall_enable();
+extern void syscall_enable();

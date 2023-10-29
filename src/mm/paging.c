@@ -35,7 +35,7 @@ static pgtable_t *__init_page_table__(pgtable_t *__dir, uint64_t __idx) {
   pgtable_t *_pgtable;
 
   if (!_entry._Present) {
-    _pgtable = (pgtable_t *)(kernel_pgfa_page_new());
+    _pgtable = (pgtable_t *)(pgfa_page_new());
     kmemset((void *)(_pgtable), 4096, 0);
 
     _entry._Address   = (uint64_t)(_pgtable) >> 12;
@@ -50,24 +50,24 @@ static pgtable_t *__init_page_table__(pgtable_t *__dir, uint64_t __idx) {
   return (pgtable_t *)((uint64_t)(_entry._Address) << 12);
 }
 
-pgtm_t kernel_paging_initialize(pgtable_t *__lvl4) {
+pgtm_t paging_initialize(pgtable_t *__lvl4) {
   tableManager = (pgtm_t){._PML4Address = __lvl4};
 
   pgtmInitialized = TRUE;
   return tableManager;
 }
 
-pgmapidx_t kernel_paging_index(uint64_t __virtaddr) {
+pgmapidx_t paging_index(uint64_t __virtaddr) {
   return (pgmapidx_t){._PageDirectoryPointerIndex = (__virtaddr >> 39) & 0x1ff,
                       ._PageDirectoryIndex        = (__virtaddr >> 30) & 0x1ff,
                       ._PageTableIndex            = (__virtaddr >> 21) & 0x1ff,
                       ._PageIndex                 = (__virtaddr >> 12) & 0x1ff};
 }
 
-void kernel_paging_address_map(void *__virtaddr, void *__physaddr) {
-  kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+void paging_address_map(void *__virtaddr, void *__physaddr) {
+  panic_assert(pgtmInitialized, PGTM_NINIT);
 
-  pgmapidx_t _indexer = kernel_paging_index((uint64_t)(__virtaddr));
+  pgmapidx_t _indexer = paging_index((uint64_t)(__virtaddr));
 
   pgtable_t *_page_directory_pointer = __init_page_table__(
       tableManager._PML4Address, _indexer._PageDirectoryPointerIndex);
@@ -85,10 +85,10 @@ void kernel_paging_address_map(void *__virtaddr, void *__physaddr) {
   _page_table->_Entries[_indexer._PageIndex] = _entry;
 }
 
-void kernel_paging_address_mapn(void *__base, size_t __sz) {
-  kernel_panic_assert(pgtmInitialized, PGTM_NINIT);
+void paging_address_mapn(void *__base, size_t __sz) {
+  panic_assert(pgtmInitialized, PGTM_NINIT);
 
   for (uint64_t _addr = (uint64_t)(__base); _addr < (uint64_t)(__base) + __sz;
        _addr += 4096)
-    kernel_paging_address_map((void *)(_addr), (void *)(_addr));
+    paging_address_map((void *)(_addr), (void *)(_addr));
 }

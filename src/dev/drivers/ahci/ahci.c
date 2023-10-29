@@ -106,11 +106,11 @@ static bool __wait__(ahciport_t *__port) {
 static void __configure_port__(ahciport_t *__port) {
   __stop_port__(__port);
 
-  void *_new_base                    = kernel_pgfa_page_new();
+  void *_new_base                    = pgfa_page_new();
   __port->_HBAPort->_CommandListBase = (uint64_t)(_new_base);
   kmemset(_new_base, 1024, 0);
 
-  void *_fis_base                   = kernel_pgfa_page_new();
+  void *_fis_base                   = pgfa_page_new();
   __port->_HBAPort->_FisBaseAddress = (uint64_t)(_fis_base);
   kmemset(_fis_base, 256, 0);
 
@@ -119,7 +119,7 @@ static void __configure_port__(ahciport_t *__port) {
   for (uint32_t _i = 0; _i < MAX_CMDHDR; _i++) {
     _cmdhdr[_i]._PRDTLength = 8;
 
-    void    *_cmdtb = kernel_pgfa_page_new();
+    void    *_cmdtb = pgfa_page_new();
     uint64_t _addr  = (uint64_t)(_cmdtb) + (_i << 8);
 
     _cmdhdr[_i]._CommandTableBaseAddress = (uint64_t)(_addr);
@@ -130,7 +130,7 @@ static void __configure_port__(ahciport_t *__port) {
   __start_port__(__port);
 }
 
-void kernel_hw_ahci_ports_probe(ahcidevdr_t *__dev) {
+void hw_ahci_ports_probe(ahcidevdr_t *__dev) {
   uint32_t _ports_impl = __dev->_ABAR->_PortsImpplemented;
 
   for (uint32_t _i = 0; _i < MAX_PORTS; _i++) {
@@ -152,15 +152,15 @@ void kernel_hw_ahci_ports_probe(ahcidevdr_t *__dev) {
     ahciport_t _port = __dev->_Ports[_i];
     __configure_port__(&_port);
 
-    _port._DMABuffer = (uint8_t *)(kernel_pgfa_page_new());
+    _port._DMABuffer = (uint8_t *)(pgfa_page_new());
     kmemset(_port._DMABuffer, 4096, 0);
   }
 }
 
-bool kernel_hw_ahci_read(ahciport_t *__port,
-                         uint64_t    __sector,
-                         uint64_t    __sectors,
-                         void       *__buff) {
+bool hw_ahci_read(ahciport_t *__port,
+                  uint64_t    __sector,
+                  uint64_t    __sectors,
+                  void       *__buff) {
   uint32_t _sec_low  = (uint32_t)(__sector),
            _sec_high = (uint32_t)(__sector >> 32);
 

@@ -60,4 +60,4 @@ typedef struct PCIDeviceHeader0 {
   uint8_t     _MaximumLatency;
 } pcidevhdr0_t;
 
-void kernel_hw_pci_enumerate(mcfghdr_t *__mcfgtable);
+void hw_pci_enumerate(mcfghdr_t *__mcfgtable);

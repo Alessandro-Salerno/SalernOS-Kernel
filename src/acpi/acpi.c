@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "acpi/acpi.h"
 #include <kmem.h>
 
-void *kernel_hw_acpi_table_find(sdthdr_t *__sdthdr, char *__signature) {
+void *hw_acpi_table_find(sdthdr_t *__sdthdr, char *__signature) {
   uint64_t _nentries = (__sdthdr->_Length - sizeof(sdthdr_t)) / 8;
 
   for (uint64_t _i = 0; _i < _nentries; _i++) {

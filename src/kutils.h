@@ -23,17 +23,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <sbs.h>
 
 // Macros and constants
-#define FGCOLOR kernel_kdd_pxcolor_translate(255, 255, 255, 255)
-#define BGCOLOR kernel_kdd_pxcolor_translate(0, 0, 0, 255)
+#define FGCOLOR kdd_pxcolor_translate(255, 255, 255, 255)
+#define BGCOLOR kdd_pxcolor_translate(0, 0, 0, 255)
 
 typedef struct SimpleBootInformationTable boot_t;
 
 extern uint64_t _KERNEL_START, _KERNEL_END;
 
-void       kernel_kutils_kdd_setup(boot_t *__bootinfo);
-void       kernel_kutils_gdt_setup();
-void       kernel_kutils_mem_setup(boot_t *__bootinfo);
-void       kernel_kutils_sc_setup();
-void       kernel_kutils_int_setup();
-void       kernel_kutils_time_setup();
-acpiinfo_t kernel_kutils_rsd_setup(boot_t *__bootinfo);
+void       kutils_kdd_setup(boot_t *__bootinfo);
+void       kutils_gdt_setup();
+void       kutils_mem_setup(boot_t *__bootinfo);
+void       kutils_sc_setup();
+void       kutils_int_setup();
+void       kutils_time_setup();
+acpiinfo_t kutils_rsd_setup(boot_t *__bootinfo);

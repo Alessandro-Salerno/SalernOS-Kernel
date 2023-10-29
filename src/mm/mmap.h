@@ -32,9 +32,9 @@ typedef struct MemorySegment {
 typedef struct SimpleBootMemoryInformationTable meminfo_t;
 typedef struct SimpleBootMemoryDescriptor       efimemdesc_t;
 
-void          kernel_mmap_initialize(meminfo_t __meminfo);
-void          kernel_mmap_info_get(uint64_t  *__memsz,
-                                   uint64_t  *__usablemem,
-                                   memseg_t  *__lseg,
-                                   meminfo_t *__meminfo);
-efimemdesc_t *kernel_mmap_entry_get(uint64_t __idx);
+void          mmap_initialize(meminfo_t __meminfo);
+void          mmap_info_get(uint64_t  *__memsz,
+                            uint64_t  *__usablemem,
+                            memseg_t  *__lseg,
+                            meminfo_t *__meminfo);
+efimemdesc_t *mmap_entry_get(uint64_t __idx);

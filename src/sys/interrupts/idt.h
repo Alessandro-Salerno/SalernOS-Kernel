@@ -40,6 +40,6 @@ typedef struct __attribute__((packed)) InterruptDescriptorTableRegister {
   uint64_t _Offset;
 } idtr_t;
 
-void     kernel_idt_initialize();
-void     kernel_idt_offset_set(idtdescent_t *__ent, uint64_t __offset);
-uint64_t kernel_idt_offset_get(idtdescent_t *__ent);
+void     idt_initialize();
+void     idt_offset_set(idtdescent_t *__ent, uint64_t __offset);
+uint64_t idt_offset_get(idtdescent_t *__ent);

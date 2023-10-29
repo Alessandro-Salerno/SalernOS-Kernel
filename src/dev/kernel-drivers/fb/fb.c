@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 static volatile struct limine_framebuffer_response *framebufferResponse;
 static struct limine_framebuffer                   *framebuffer;
 
-void kernel_hw_kdrivers_fb_initialize(
+void hw_kdrivers_fb_initialize(
     struct limine_framebuffer_response *__fbresponse) {
   SOFTASSERT(__fbresponse != NULL, RETVOID);
   SOFTASSERT(__fbresponse->framebuffer_count > 0, RETVOID);
@@ -35,6 +35,6 @@ void kernel_hw_kdrivers_fb_initialize(
   framebuffer         = __fbresponse->framebuffers[0];
 }
 
-void kernel_hw_kdrivers_fb_get(struct limine_framebuffer **__fb) {
+void hw_kdrivers_fb_get(struct limine_framebuffer **__fb) {
   ARGRET(__fb, framebuffer);
 }

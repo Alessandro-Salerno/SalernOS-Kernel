@@ -31,6 +31,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define ICW1_ICW4 0x01
 #define ICW4_8086 0x01
 
-void kernel_interrupts_pic_remap();
-void kernel_interrupts_pic_master_end();
-void kernel_interrupts_pic_slave_end();
+void interrupts_pic_remap();
+void interrupts_pic_master_end();
+void interrupts_pic_slave_end();

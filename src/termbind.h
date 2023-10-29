@@ -21,10 +21,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <stdint.h>
 
-void kernel_terminal_putchar(char __ch);
-void kernel_terminal_flush();
-void kernel_terminal_write(const char *__str);
-void kernel_terminal_fastwrite(const char *__str);
-void kernel_terminal_info_get(uint32_t *__bg, uint32_t *__fg);
-void kernel_terminal_info_set(uint32_t __bg, uint32_t __fg);
-void kernel_terminal_initialize();
+void terminal_putchar(char __ch);
+void terminal_flush();
+void terminal_write(const char *__str);
+void terminal_fastwrite(const char *__str);
+void terminal_info_get(uint32_t *__bg, uint32_t *__fg);
+void terminal_info_set(uint32_t __bg, uint32_t __fg);
+void terminal_initialize();

@@ -34,34 +34,34 @@ static void __set_divisor__(uint16_t __div) {
     __div = DIV_MIN;
   divisor = __div;
 
-  kernel_io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
-  kernel_io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
+  io_out_wait(PIT_PORT, (uint8_t)(divisor & 0x00ff));
+  io_out(PIT_PORT, (uint8_t)((divisor & 0xff00) >> 8));
 }
 
-double kernel_time_pit_uptime_get() {
+double time_pit_uptime_get() {
   return uptime;
 }
 
-void kernel_time_pit_sleep(uint64_t __mills) {
+void time_pit_sleep(uint64_t __mills) {
   const double _START = uptime;
   while (uptime < _START + (double)(__mills) / 1000)
     asm volatile("hlt");
 }
 
-uint64_t kernel_time_pit_frequency_get() {
+uint64_t time_pit_frequency_get() {
   return 65535 / divisor;
 }
 
-void kernel_time_pit_frequency_set(uint64_t __freq) {
+void time_pit_frequency_set(uint64_t __freq) {
   __set_divisor__(65535 / __freq);
 }
 
-void kernel_time_pit_handler_set(void (*__handler)()) {
+void time_pit_handler_set(void (*__handler)()) {
   tickHandler = __handler;
 }
 
-void kernel_time_pit_tick() {
-  uptime += 1.0f / (double)(kernel_time_pit_frequency_get());
+void time_pit_tick() {
+  uptime += 1.0f / (double)(time_pit_frequency_get());
 
   SOFTASSERT(tickHandler != NULL, RETVOID);
   tickHandler();

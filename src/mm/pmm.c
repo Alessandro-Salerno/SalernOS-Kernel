@@ -44,9 +44,9 @@ static uint64_t usedMem;
 static void __reserve_page__(void *__address, uint64_t *__rsvmemcount) {
   uint64_t _idx = (uint64_t)(__address) / 4096;
 
-  SOFTASSERT(!(kernel_bmp_get(&pageBitmap, _idx)), RETVOID)
+  SOFTASSERT(!(bmp_get(&pageBitmap, _idx)), RETVOID)
 
-  kernel_bmp_set(&pageBitmap, _idx, 1);
+  bmp_set(&pageBitmap, _idx, 1);
   freeMem -= 4096;
   *__rsvmemcount += 4096;
 }
@@ -54,42 +54,42 @@ static void __reserve_page__(void *__address, uint64_t *__rsvmemcount) {
 static void __unreserve_page__(void *__address, uint64_t *__rsvmemcount) {
   uint64_t _idx = (uint64_t)(__address) / 4096;
 
-  SOFTASSERT(kernel_bmp_get(&pageBitmap, _idx), RETVOID)
+  SOFTASSERT(bmp_get(&pageBitmap, _idx), RETVOID)
 
-  kernel_bmp_set(&pageBitmap, _idx, 0);
+  bmp_set(&pageBitmap, _idx, 0);
   freeMem += 4096;
   *__rsvmemcount -= 4096;
 
   bitmapIndex = (bitmapIndex > _idx) ? _idx : bitmapIndex;
 }
 
-void kernel_pmm_free(void *__address, uint64_t __pagecount) {
+void pmm_free(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __unreserve_page__((void *)((uint64_t)(__address) + (_i * 4096)), &usedMem);
 }
 
-void kernel_pmm_lock(void *__address, uint64_t __pagecount) {
+void pmm_lock(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __reserve_page__((void *)((uint64_t)(__address) + (_i * 4096)), &usedMem);
 }
 
-void kernel_pmm_unreserve(void *__address, uint64_t __pagecount) {
+void pmm_unreserve(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __unreserve_page__((void *)((uint64_t)(__address) + (_i * 4096)),
                        &reservedMem);
 }
 
-void kernel_pmm_reserve(void *__address, uint64_t __pagecount) {
+void pmm_reserve(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __reserve_page__((void *)((uint64_t)(__address) + (_i * 4096)),
                      &reservedMem);
 }
 
-void *kernel_pmm_alloc() {
+void *pmm_alloc() {
   for (; bitmapIndex < pageBitmap._Size * 8; bitmapIndex++) {
-    if (kernel_bmp_get(&pageBitmap, bitmapIndex) == 0) {
+    if (bmp_get(&pageBitmap, bitmapIndex) == 0) {
       void *_page = (void *)(bitmapIndex * 4096);
-      kernel_pmm_lock(_page, 1);
+      pmm_lock(_page, 1);
       return _page;
     }
   }
@@ -97,7 +97,7 @@ void *kernel_pmm_alloc() {
   return NULL; // Swap file not implemented yet
 }
 
-void kernel_pmm_initialize(struct limine_hhdm_response *__hhdm) {
+void pmm_initialize(struct limine_hhdm_response *__hhdm) {
   memoryMapResponse      = memoryMapRequest.response;
   uint64_t _highest_addr = 0;
 
@@ -159,7 +159,7 @@ void kernel_pmm_initialize(struct limine_hhdm_response *__hhdm) {
       struct limine_memmap_entry *_entry = memoryMapResponse->entries[_i];
 
       if (_entry->type == LIMINE_MEMMAP_USABLE)
-        kernel_pmm_unreserve((void *)_entry->base, _entry->length / 4096);
+        pmm_unreserve((void *)_entry->base, _entry->length / 4096);
     }
 
     klogok("PMM: Done");

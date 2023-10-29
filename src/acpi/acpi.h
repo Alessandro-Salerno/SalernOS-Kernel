@@ -54,4 +54,4 @@ typedef struct ACPIInfo {
 
 typedef struct SimpleBootRootSystemDescriptor rsdp_t;
 
-void *kernel_hw_acpi_table_find(sdthdr_t *__sdthdr, char *__signature);
+void *hw_acpi_table_find(sdthdr_t *__sdthdr, char *__signature);

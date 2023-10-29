@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "sys/syscall/syscalls.h"
 #include <kstdio.h>
 
-void kernel_syscall_handlers_printstr(void *__frame) {
+void syscall_handlers_printstr(void *__frame) {
   char *_str = __frame;
   kprintf("%s", _str);
 }

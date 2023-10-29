@@ -139,8 +139,8 @@ typedef struct HBACommandTable {
   hbaprdtent_t _Entries[];
 } hbacmdtb_t;
 
-void kernel_hw_ahci_ports_probe(ahcidevdr_t *__dev);
-bool kernel_hw_ahci_read(ahciport_t *__port,
-                         uint64_t    __sector,
-                         uint64_t    __sectors,
-                         void       *__buff);
+void hw_ahci_ports_probe(ahcidevdr_t *__dev);
+bool hw_ahci_read(ahciport_t *__port,
+                  uint64_t    __sector,
+                  uint64_t    __sectors,
+                  void       *__buff);

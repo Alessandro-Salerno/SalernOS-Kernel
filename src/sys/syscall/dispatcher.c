@@ -23,13 +23,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "kernelpanic.h"
 #include "sys/syscall/syscalls.h"
 
-static void (*syscallHandlers[])(void *__frmae) = {
-    kernel_syscall_handlers_printstr};
+static void (*syscallHandlers[])(void *__frmae) = {syscall_handlers_printstr};
 
-void kernel_syscall_dispatch(void *__frame, uint32_t __syscall) {
-  kernel_panic_assert(__syscall <
-                          sizeof(syscallHandlers) / sizeof(void (*)(void *)),
-                      "Syscall invoked with invalid ID!");
+void syscall_dispatch(void *__frame, uint32_t __syscall) {
+  panic_assert(__syscall < sizeof(syscallHandlers) / sizeof(void (*)(void *)),
+               "Syscall invoked with invalid ID!");
 
 #ifdef DEBUG
   kprintf("\n\nSYSTEM CALL INFORMATION:\nFrame Poiinter: %u\nSyscall ID: %d\n",

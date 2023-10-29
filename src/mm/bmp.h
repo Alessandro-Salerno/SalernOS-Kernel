@@ -26,5 +26,5 @@ typedef struct Bitmap {
   uint8_t *_Buffer;
 } bmp_t;
 
-bool kernel_bmp_get(bmp_t *__bmp, uint64_t __idx);
-void kernel_bmp_set(bmp_t *__bmp, uint64_t __idx, bool __val);
+bool bmp_get(bmp_t *__bmp, uint64_t __idx);
+void bmp_set(bmp_t *__bmp, uint64_t __idx, bool __val);

@@ -50,8 +50,8 @@ typedef struct PageTableManagerData {
   pgtable_t *_PML4Address;
 } pgtm_t;
 
-pgtm_t      kernel_paging_initialize(pgtable_t *__lvl4);
-pgmapidx_t  kernel_paging_index(uint64_t __virtaddr);
-void        kernel_paging_address_map(void *__virtaddr, void *__physaddr);
-void        kernel_paging_address_mapn(void *__base, size_t __sz);
-extern void kernel_paging_laod(pgtable_t *__lvl4);
+pgtm_t      paging_initialize(pgtable_t *__lvl4);
+pgmapidx_t  paging_index(uint64_t __virtaddr);
+void        paging_address_map(void *__virtaddr, void *__physaddr);
+void        paging_address_mapn(void *__base, size_t __sz);
+extern void paging_laod(pgtable_t *__lvl4);

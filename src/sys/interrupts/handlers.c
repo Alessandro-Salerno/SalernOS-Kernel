@@ -24,22 +24,22 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "sys/legacy-io/io.h"
 #include "time/pit/pit.h"
 
-void kernel_interrupt_handlers_pgfault(intframe_t *__frame) {
-  kernel_panic_throw("Page Fault Detected!", __frame);
+void interrupt_handlers_pgfault(intframe_t *__frame) {
+  panic_throw("Page Fault Detected!", __frame);
 }
-void kernel_interrupt_handlers_dfault(intframe_t *__frame) {
-  kernel_panic_throw("Double Fault Detected!", __frame);
+void interrupt_handlers_dfault(intframe_t *__frame) {
+  panic_throw("Double Fault Detected!", __frame);
 }
-void kernel_interrupt_handlers_gpfault(intframe_t *__frame) {
-  kernel_panic_throw("General Protection Fault Detected!", __frame);
-}
-
-void kernel_interrupt_handlers_kbhit(intframe_t *__frame) {
-  // kernel_io_keyboard_mods_handle();
-  // kernel_interrupts_pic_master_end();
+void interrupt_handlers_gpfault(intframe_t *__frame) {
+  panic_throw("General Protection Fault Detected!", __frame);
 }
 
-void kernel_interrupt_handlers_tick(intframe_t *__frame) {
-  kernel_time_pit_tick();
-  kernel_interrupts_pic_master_end();
+void interrupt_handlers_kbhit(intframe_t *__frame) {
+  // io_keyboard_mods_handle();
+  // interrupts_pic_master_end();
+}
+
+void interrupt_handlers_tick(intframe_t *__frame) {
+  time_pit_tick();
+  interrupts_pic_master_end();
 }

@@ -77,7 +77,7 @@ static void __extend__(size_t __size) {
   heapseghdr_t *_new_seg = (heapseghdr_t *)(heapEnd);
 
   for (size_t _i = 0; _i < _npages; _i++) {
-    kernel_paging_address_map(heapEnd, kernel_pgfa_page_new());
+    paging_address_map(heapEnd, pgfa_page_new());
     heapEnd = (void *)((size_t)(heapEnd) + 4096);
   }
 
@@ -90,11 +90,11 @@ static void __extend__(size_t __size) {
   __combine_backward__(_new_seg);
 }
 
-void kernel_heap_initialize(void *__heapbase, size_t __pgcount) {
+void heap_initialize(void *__heapbase, size_t __pgcount) {
   void *_pos = __heapbase;
 
   for (size_t _i = 0; _i < __pgcount; _i++) {
-    kernel_paging_address_map(_pos, kernel_pgfa_page_new());
+    paging_address_map(_pos, pgfa_page_new());
     _pos = (void *)((size_t)(_pos) + 4096);
   }
 
@@ -111,7 +111,7 @@ void kernel_heap_initialize(void *__heapbase, size_t __pgcount) {
   lastHeader               = _start_seg;
 }
 
-void *kernel_heap_allocate(size_t __buffsize) {
+void *heap_allocate(size_t __buffsize) {
   SOFTASSERT(__buffsize != 0, NULL);
 
   __buffsize = kroundl(__buffsize, 0x10);
@@ -139,10 +139,10 @@ void *kernel_heap_allocate(size_t __buffsize) {
   }
 
   __extend__(__buffsize);
-  return kernel_heap_allocate(__buffsize);
+  return heap_allocate(__buffsize);
 }
 
-void kernel_heap_free(void *__buff) {
+void heap_free(void *__buff) {
   heapseghdr_t *_segment = (heapseghdr_t *)(__buff)-1;
   _segment->_Free        = TRUE;
 

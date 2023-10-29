@@ -23,4 +23,4 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define SYSCALL_PRINT_STR 0
 
-void kernel_syscall_handlers_printstr(void *__frame);
+void syscall_handlers_printstr(void *__frame);

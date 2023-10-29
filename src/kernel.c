@@ -34,11 +34,11 @@ static volatile struct limine_hhdm_request hhdmRequest = {
     .id       = LIMINE_HHDM_REQUEST,
     .revision = 0};
 
-void kernel_main() {
+void main() {
   boot_t *__bootinfo = NULL;
-  kernel_hw_kdrivers_fb_initialize(framebufferRequest.response);
-  kernel_terminal_initialize();
-  kernel_pmm_initialize(hhdmRequest.response);
+  hw_kdrivers_fb_initialize(framebufferRequest.response);
+  terminal_initialize();
+  pmm_initialize(hhdmRequest.response);
 
   kprintf(
       "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
@@ -48,25 +48,25 @@ void kernel_main() {
     asm("hlt");
   uint64_t _mem_size, _usable_mem, _free_mem, _used_mem, _unusable_mem;
 
-  uint64_t _kernel_size = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
-  uint64_t _kernel_pages = (uint64_t)(_kernel_size) / 4096 + 1;
+  uint64_t _size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
+  uint64_t _pages = (uint64_t)(_size) / 4096 + 1;
 
-  kernel_kutils_kdd_setup(__bootinfo);
-  kernel_kutils_gdt_setup();
-  kernel_kutils_mem_setup(__bootinfo);
-  kernel_kutils_sc_setup();
-  kernel_kutils_int_setup();
-  kernel_kutils_time_setup();
+  kutils_kdd_setup(__bootinfo);
+  kutils_gdt_setup();
+  kutils_mem_setup(__bootinfo);
+  kutils_sc_setup();
+  kutils_int_setup();
+  kutils_time_setup();
 
-  acpiinfo_t _acpi = kernel_kutils_rsd_setup(__bootinfo);
+  acpiinfo_t _acpi = kutils_rsd_setup(__bootinfo);
 
-  kernel_mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
+  mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
   kprintf(
       "%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
 
   kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
   kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
-  kprintf("Kernel Size: %u bytes (%u pages)\n\n", _kernel_size, _kernel_pages);
+  kprintf("Kernel Size: %u bytes (%u pages)\n\n", _size, _pages);
 
   kprintf("Framebuffer Resolution: %u x %u\n",
           __bootinfo->_Framebuffer._Width,
@@ -75,7 +75,7 @@ void kernel_main() {
   kprintf("Framebuffer Size: %u bytes\n\n",
           __bootinfo->_Framebuffer._BufferSize);
 
-  kernel_pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
+  pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
   kprintf("System Memory: %u bytes\n", _mem_size);
   kprintf("Usable Memory: %u bytes\n", _usable_mem);
   kprintf("Free Memory: %u bytes\n", _free_mem);

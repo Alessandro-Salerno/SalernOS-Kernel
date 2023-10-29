@@ -67,4 +67,4 @@ typedef struct __attribute__((aligned(0x1000))) GlobalDescriptorTable {
 extern gdt_t gdt;
 extern tss_t tss;
 
-extern void kernel_gdt_load(gdtdesc_t *__gdtdesck);
+extern void gdt_load(gdtdesc_t *__gdtdesck);

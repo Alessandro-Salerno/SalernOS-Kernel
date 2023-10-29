@@ -19,8 +19,8 @@
 [bits 64]
 
 
-global kernel_proc_userspace_enter
-kernel_proc_userspace_enter:
+global proc_userspace_enter
+proc_userspace_enter:
     mov     rcx,    rdi
     mov     rsp,    rsi
     mov     r11,    0x202

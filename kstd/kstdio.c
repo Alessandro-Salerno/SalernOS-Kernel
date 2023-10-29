@@ -29,22 +29,20 @@ void kvprintf(const char *__fmt, va_list __args) {
     case '%': {
       switch (*(++_ptr)) {
       case 'u':
-        kernel_terminal_fastwrite(
-            (const char *)(uitoa(va_arg(__args, uint64_t))));
+        terminal_fastwrite((const char *)(uitoa(va_arg(__args, uint64_t))));
         break;
 
       case 'd':
       case 'i':
-        kernel_terminal_fastwrite(
-            (const char *)(itoa(va_arg(__args, int64_t))));
+        terminal_fastwrite((const char *)(itoa(va_arg(__args, int64_t))));
         break;
 
       case 'c':
-        kernel_terminal_putchar((char)(va_arg(__args, signed)));
+        terminal_putchar((char)(va_arg(__args, signed)));
         break;
 
       case 's':
-        kernel_terminal_fastwrite((const char *)(va_arg(__args, char *)));
+        terminal_fastwrite((const char *)(va_arg(__args, char *)));
         break;
       }
 
@@ -52,20 +50,20 @@ void kvprintf(const char *__fmt, va_list __args) {
     }
 
     case '\n':
-      kernel_terminal_write("\n");
+      terminal_write("\n");
       break;
 
     case '\t':
-      kernel_terminal_write("\t");
+      terminal_write("\t");
       break;
 
     default:
-      kernel_terminal_putchar(*_ptr);
+      terminal_putchar(*_ptr);
       break;
     }
   }
 
-  kernel_terminal_flush();
+  terminal_flush();
 }
 
 void kprintf(const char *__fmt, ...) {

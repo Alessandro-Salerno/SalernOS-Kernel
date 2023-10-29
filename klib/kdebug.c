@@ -41,13 +41,13 @@ static void __putmsg__(uint32_t    __color,
                        va_list     __args) {
   uint32_t _color, _backcolor;
 
-  kernel_terminal_info_get(&_backcolor, &_color);
-  kernel_terminal_info_set(_backcolor, __color);
+  terminal_info_get(&_backcolor, &_color);
+  terminal_info_set(_backcolor, __color);
 
   kprintf("%s\t", __type);
   kvprintf(__fmt, __args);
 
-  kernel_terminal_info_set(_backcolor, _color);
+  terminal_info_set(_backcolor, _color);
 
   kprintf("\n");
 }

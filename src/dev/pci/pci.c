@@ -41,7 +41,7 @@ static void __enumerate_function__(uint64_t __devaddr, uint64_t __function) {
   int64_t  _fn_offset = __function << 12;
   uint64_t _fn_addr   = __devaddr + _fn_offset;
 
-  kernel_paging_address_map((void *)(_fn_addr), (void *)(_fn_addr));
+  paging_address_map((void *)(_fn_addr), (void *)(_fn_addr));
 
   pcidevhdr_t *_pci_dev = (pcidevhdr_t *)(_fn_addr);
   SOFTASSERT(_pci_dev->_Device, RETVOID);
@@ -62,8 +62,8 @@ static void __enumerate_function__(uint64_t __devaddr, uint64_t __function) {
         _driver->_ABAR =
             (hbamem_t *)((uint64_t)(((pcidevhdr0_t *)(_pci_dev))->_BAR5));
 
-        kernel_paging_address_map(_driver->_ABAR, _driver->_ABAR);
-        kernel_hw_ahci_ports_probe(_driver);
+        paging_address_map(_driver->_ABAR, _driver->_ABAR);
+        hw_ahci_ports_probe(_driver);
       }
       }
     }
@@ -76,7 +76,7 @@ static void __enumerate_dev__(uint64_t __busaddr, uint64_t __dev) {
   int64_t  _dev_offset = __dev << 15;
   uint64_t _dev_addr   = __busaddr + _dev_offset;
 
-  kernel_paging_address_map((void *)(_dev_addr), (void *)(_dev_addr));
+  paging_address_map((void *)(_dev_addr), (void *)(_dev_addr));
 
   pcidevhdr_t *_pci_dev = (pcidevhdr_t *)(_dev_addr);
   SOFTASSERT(_pci_dev->_Device, RETVOID);
@@ -91,7 +91,7 @@ static void __enumerate_bus__(uint64_t __baseaddr, uint64_t __bus) {
   uint64_t _bus_offset = __bus << 20;
   uint64_t _bus_addr   = __baseaddr + _bus_offset;
 
-  kernel_paging_address_map((void *)(_bus_addr), (void *)(_bus_addr));
+  paging_address_map((void *)(_bus_addr), (void *)(_bus_addr));
 
   pcidevhdr_t *_pci_dev = (pcidevhdr_t *)(_bus_addr);
   SOFTASSERT(_pci_dev->_Device, RETVOID);
@@ -102,7 +102,7 @@ static void __enumerate_bus__(uint64_t __baseaddr, uint64_t __bus) {
   }
 }
 
-void kernel_hw_pci_enumerate(mcfghdr_t *__mcfgtable) {
+void hw_pci_enumerate(mcfghdr_t *__mcfgtable) {
   uint64_t _nentries = (__mcfgtable->_SDTHeader._Length - sizeof(mcfghdr_t)) /
                        sizeof(acpidevconf_t);
 

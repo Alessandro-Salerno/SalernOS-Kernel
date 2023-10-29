@@ -48,8 +48,8 @@ typedef struct __attribute__((packed)) InterruptFrame {
   uint64_t _SS;
 } intframe_t;
 
-ISR void kernel_interrupt_handlers_pgfault(intframe_t *__frame);
-ISR void kernel_interrupt_handlers_dfault(intframe_t *__frame);
-ISR void kernel_interrupt_handlers_gpfault(intframe_t *__frame);
-ISR void kernel_interrupt_handlers_kbhit(intframe_t *__frame);
-ISR void kernel_interrupt_handlers_tick(intframe_t *__frame);
+ISR void interrupt_handlers_pgfault(intframe_t *__frame);
+ISR void interrupt_handlers_dfault(intframe_t *__frame);
+ISR void interrupt_handlers_gpfault(intframe_t *__frame);
+ISR void interrupt_handlers_kbhit(intframe_t *__frame);
+ISR void interrupt_handlers_tick(intframe_t *__frame);

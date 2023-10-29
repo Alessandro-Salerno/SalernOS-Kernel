@@ -21,6 +21,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <limine.h>
 
-void kernel_hw_kdrivers_fb_initialize(
+void hw_kdrivers_fb_initialize(
     struct limine_framebuffer_response *__fbresponse);
-void kernel_hw_kdrivers_fb_get(struct limine_framebuffer **__fb);
+void hw_kdrivers_fb_get(struct limine_framebuffer **__fb);
