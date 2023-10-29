@@ -17,10 +17,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include "Time/PIT/pit.h"
+#include "time/pit/pit.h"
 
-#include "IO/io.h"
 #include "kernelpanic.h"
+#include "sys/legacy-io/io.h"
 
 #define DIV_MIN 100
 

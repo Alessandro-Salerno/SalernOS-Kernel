@@ -16,14 +16,14 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-LDS 	   = link.ld
+LDS=link.ld
 
-INCDIR   = intf
-KSTDDIR  = kstd
-KLIBDIR  = klib
-SRCDIR 	 = src
-OBJDIR 	 = obj
-BUILDDIR = bin
+INCDIR=intf
+KSTDDIR=kstd
+KLIBDIR=klib
+SRCDIR=src
+OBJDIR=obj
+BUILDDIR=bin
 
-KFNAME   = kern
-LFNAME   = Libraries
+KFNAME=kern
+LFNAME=libraries

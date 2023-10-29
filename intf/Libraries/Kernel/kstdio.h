@@ -17,13 +17,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_STD_KERNEL_STDIO
-#define SALERNOS_STD_KERNEL_STDIO
+#pragma once
 
 #include <kerntypes.h>
 #include <stdarg.h>
 
 void kvprintf(const char *__fmt, va_list __args);
 void kprintf(const char *__fmt, ...);
-
-#endif

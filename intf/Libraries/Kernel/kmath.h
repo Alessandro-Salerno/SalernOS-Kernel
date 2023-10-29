@@ -17,12 +17,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_INC_KERNEL_MATH
-#define SALERNOS_INC_KERNEL_MATH
+#pragma once
 
 #include <kerntypes.h>
 
 uint64_t kabs(int64_t __val);
 uint64_t kroundl(uint64_t __val, uint64_t __round);
-
-#endif

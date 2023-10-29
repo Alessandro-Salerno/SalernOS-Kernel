@@ -17,8 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_INC_KERNEL_TYPES
-#define SALERNOS_INC_KERNEL_TYPES
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,5 +30,3 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define ARGRET(__arg, __val) \
   if (__arg != NULL)         \
   *__arg = __val
-
-#endif

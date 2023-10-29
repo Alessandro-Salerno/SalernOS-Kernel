@@ -16,7 +16,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-$(OBJDIR)/$(KFNAME)/C/Interrupts/handlers.o: $(SRCDIR)/Interrupts/handlers.c
+$(OBJDIR)/$(KFNAME)/C/sys/interrupts/handlers.o: $(SRCDIR)/sys/interrupts/handlers.c
 	@ echo [C] $^
 	@ mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -mgeneral-regs-only -c $^ -o $@

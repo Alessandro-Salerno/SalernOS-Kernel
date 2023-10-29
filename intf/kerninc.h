@@ -17,42 +17,34 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_INC_KERNEL_INCLUDES
-#define SALERNOS_INC_KERNEL_INCLUDES
-
-// User Output includes
-#include "User/Output/Display/kdd.h" /*   Includes the basic Kernel Display Driver           */
-#include "User/Output/Text/textrenderer.h" /*   Includes the basic Kernel Text Renderer            */
-
-// User Input includes
-#include "User/Input/Keyboard/keyboard.h" /*   Includes the basic Kernel Keyboard Driver          */
+#pragma once
 
 // System includes
-#include "GDT/gdt.h" /*   Includes the Kernel's definition of the GTD        */
-#include "IO/io.h"   /*   Includes the basic Kernel I/O functions            */
-#include "Interrupts/handlers.h" /*   Includes the Kernel's Interrupt Service Routines   */
-#include "Interrupts/idt.h" /*   Includes the Kernel's definition of the IDT        */
-#include "Interrupts/pic.h" /*   Includes the basic Kernel PIC Driver               */
+#include "sys/gdt/gdt.h" /*   Includes the Kernel's definition of the GTD        */
+#include "sys/interrupts/handlers.h" /*   Includes the Kernel's Interrupt Service Routines   */
+#include "sys/interrupts/idt.h" /*   Includes the Kernel's definition of the IDT        */
+#include "sys/interrupts/pic.h" /*   Includes the basic Kernel PIC Driver               */
+#include "sys/legacy-io/io.h" /*   Includes the basic Kernel I/O functions            */
 
 // Hardware includes
-#include "Hardware/ACPI/acpi.h" /*   Includes the Kernel's RSDP/ACPI Implementation     */
-#include "Hardware/Drivers/AHCI/ahci.h" /*   Includes the Kernel's AHCI driver                  */
-#include "Hardware/PCI/pci.h" /*   Includes the Kernel's PCI Implementation           */
+#include "acpi/acpi.h" /*   Includes the Kernel's RSDP/ACPI Implementation     */
+#include "dev/drivers/ahci/ahci.h" /*   Includes the Kernel's AHCI driver                  */
+#include "dev/pci/pci.h" /*   Includes the Kernel's PCI Implementation           */
 
 // Syscall includes
-#include "Syscall/dispatcher.h" /*   Includes the Kernel Syscall Dispatcher functions   */
-#include "Syscall/sce.h"
-#include "Syscall/syscalls.h" /*   Includes all kernel Syscall declarations           */
+#include "sys/syscall/dispatcher.h" /*   Includes the Kernel Syscall Dispatcher functions   */
+#include "sys/syscall/sce.h"
+#include "sys/syscall/syscalls.h" /*   Includes all kernel Syscall declarations           */
 
 // Memory includes
-#include "Memory/Heap/heap.h" /*   Includes the Kernel's heap manager                 */
-#include "Memory/bmp.h" /*   Includes the Kernel's definition of a Bitmap       */
-#include "Memory/mmap.h" /*   Includes the Kernel EFI Memory Map Interface       */
-#include "Memory/paging.h" /*   Includes the Kernel Page Table Manager             */
-#include "Memory/pgfalloc.h" /*   Includes the Kernel Page Frame Allocator           */
+#include "mm/Heap/heap.h" /*   Includes the Kernel's heap manager                 */
+#include "mm/bmp.h"  /*   Includes the Kernel's definition of a Bitmap       */
+#include "mm/mmap.h" /*   Includes the Kernel EFI Memory Map Interface       */
+#include "mm/paging.h" /*   Includes the Kernel Page Table Manager             */
+#include "mm/pgfalloc.h" /*   Includes the Kernel Page Frame Allocator           */
 
 // Time includes
-#include "Time/PIT/pit.h" /*   Includes the Kernel's PIT driver                   */
+#include "time/pit/pit.h" /*   Includes the Kernel's PIT driver                   */
 
 // Utils includes
 #include "kernelpanic.h" /*   Includes the Kernel panic handler                  */
@@ -65,5 +57,3 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 // Other includes
 #include <limine.h>
 #include <sbs.h>
-
-#endif

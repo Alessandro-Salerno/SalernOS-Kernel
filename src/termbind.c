@@ -24,9 +24,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "External/flanterm/backends/fb.h"
-#include "External/flanterm/flanterm.h"
-#include "Hardware/KernelDrivers/Display/vbe.h"
+#include "dev/kernel-drivers/fb/fb.h"
+#include "extern/flanterm/backends/fb.h"
+#include "extern/flanterm/flanterm.h"
 #include "kerntypes.h"
 #include "termbind.h"
 
@@ -78,7 +78,7 @@ void kernel_terminal_info_set(uint32_t __bg, uint32_t __fg) {
 
 void kernel_terminal_initialize() {
   struct limine_framebuffer *_fb;
-  kernel_hw_kdrivers_vbe_get(&_fb);
+  kernel_hw_kdrivers_fb_get(&_fb);
   terminal = flanterm_fb_simple_init(
       _fb->address, _fb->width, _fb->height, _fb->pitch);
   // Temporary test

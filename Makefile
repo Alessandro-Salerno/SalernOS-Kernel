@@ -16,8 +16,8 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-OSNAME 	= SalernOS
-MAKEDIR = make
+OSNAME=SalernOS
+MAKEDIR=make
 
 .PHONY: all
 all: setup
@@ -38,16 +38,16 @@ bin:
 obj:
 	@mkdir -p $(OBJDIR)
 
-intf/Libraries/External/limine.h:
-	@curl -Lo intf/Libraries/External/limine.h https://github.com/limine-bootloader/limine/raw/trunk/limine.h
-src/External:
-	@mkdir -p src/External
-	@git clone https://github.com/mintsuki/flanterm src/External/flanterm
+intf/libraries/extern/limine.h:
+	@curl -Lo intf/libraries/extern/limine.h https://github.com/limine-bootloader/limine/raw/trunk/limine.h
+src/extern:
+	@mkdir -p src/extern
+	@git clone https://github.com/mintsuki/flanterm src/extern/flanterm
 
 format:
 	clang-format $(FORMAT) -i
 
-setup: bin obj intf/Libraries/External/limine.h src/External
+setup: bin obj intf/libraries/extern/limine.h src/extern
 
 compile: setup $(OBJS)
 kernel: compile link
@@ -62,6 +62,5 @@ clean:
 	rm -rf bin/
 
 distclean: clean
-	rm -rf src/External
-	rm intf/Libraries/External/limine.h
-
+	rm -rf src/extern
+	rm intf/libraries/extern/limine.h

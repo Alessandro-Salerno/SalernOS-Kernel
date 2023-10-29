@@ -17,8 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_CORE_KERNEL_TIME_PIT
-#define SALERNOS_CORE_KERNEL_TIME_PIT
+#pragma once
 
 #include <kerntypes.h>
 
@@ -31,5 +30,3 @@ uint64_t kernel_time_pit_frequency_get();
 void     kernel_time_pit_frequency_set(uint64_t __freq);
 void     kernel_time_pit_handler_set(void (*__handler)());
 void     kernel_time_pit_tick();
-
-#endif

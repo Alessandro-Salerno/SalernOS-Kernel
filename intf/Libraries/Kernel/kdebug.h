@@ -17,8 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_LIB_KERNEL_DEBUG
-#define SALERNOS_LIB_KERNEL_DEBUG
+#pragma once
 
 #include <kerntypes.h>
 
@@ -26,5 +25,3 @@ void kloginfo(const char *__fmt, ...);
 void klogerr(const char *__fmt, ...);
 void klogwarn(const char *__fmt, ...);
 void klogok(const char *__fmt, ...);
-
-#endif

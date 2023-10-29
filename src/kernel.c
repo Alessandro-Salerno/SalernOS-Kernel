@@ -21,9 +21,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kerninc.h>
 #include <limine.h>
 
-#include "Hardware/KernelDrivers/Display/vbe.h"
-#include "Memory/pmm.h"
+#include "dev/kernel-drivers/fb/fb.h"
 #include "kstdio.h"
+#include "mm/pmm.h"
 #include "termbind.h"
 
 static volatile struct limine_framebuffer_request framebufferRequest = {
@@ -36,7 +36,7 @@ static volatile struct limine_hhdm_request hhdmRequest = {
 
 void kernel_main() {
   boot_t *__bootinfo = NULL;
-  kernel_hw_kdrivers_vbe_initialize(framebufferRequest.response);
+  kernel_hw_kdrivers_fb_initialize(framebufferRequest.response);
   kernel_terminal_initialize();
   kernel_pmm_initialize(hhdmRequest.response);
 

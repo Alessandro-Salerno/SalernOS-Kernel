@@ -20,8 +20,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kstdio.h>
 #include <stdarg.h>
 
-#include "User/Output/Display/kdd.h"
-#include "User/Output/Text/textrenderer.h"
 #include "kdebug.h"
 #include "termbind.h"
 
@@ -42,8 +40,6 @@ static void __putmsg__(uint32_t    __color,
                        const char *__fmt,
                        va_list     __args) {
   uint32_t _color, _backcolor;
-
-  // point_t _pos;
 
   kernel_terminal_info_get(&_backcolor, &_color);
   kernel_terminal_info_set(_backcolor, __color);

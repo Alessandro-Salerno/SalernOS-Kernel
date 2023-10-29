@@ -17,8 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_INC_KERNEL_STR
-#define SALERNOS_INC_KERNEL_STR
+#pragma once
 
 #include <kerntypes.h>
 #include <kmath.h>
@@ -26,5 +25,3 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 const char *uitoa(uint64_t __val);
 const char *itoa(int64_t __val);
 uint64_t    kstrlen(const char *__str);
-
-#endif

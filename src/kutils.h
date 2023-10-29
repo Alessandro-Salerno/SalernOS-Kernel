@@ -17,8 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#ifndef SALERNOS_CORE_KERNEL_UTILITIES
-#define SALERNOS_CORE_KERNEL_UTILITIES
+#pragma once
 
 #include <kerntypes.h>
 #include <sbs.h>
@@ -38,5 +37,3 @@ void       kernel_kutils_sc_setup();
 void       kernel_kutils_int_setup();
 void       kernel_kutils_time_setup();
 acpiinfo_t kernel_kutils_rsd_setup(boot_t *__bootinfo);
-
-#endif
