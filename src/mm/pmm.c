@@ -109,8 +109,8 @@ void pmm_initialize(struct limine_hhdm_response *__hhdm) {
 
     kloginfo("PMM: Segment:\tBse=%u Length=%u Top=%u",
              _entry->base,
-             _seg_top,
-             _entry->length);
+             _entry->length,
+             _seg_top);
 
     if (_entry->type != LIMINE_MEMMAP_USABLE) {
       reservedMem += _entry->length;
