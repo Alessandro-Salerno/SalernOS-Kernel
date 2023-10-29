@@ -45,7 +45,7 @@ src/extern:
 	@git clone https://github.com/mintsuki/flanterm src/extern/flanterm
 
 format:
-	clang-format $(FORMAT) -i
+	find ./ -iname *.h -o -iname *.c | xargs clang-format -i
 
 setup: bin obj intf/libraries/extern/limine.h src/extern
 
