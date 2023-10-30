@@ -17,10 +17,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include "dev/drivers/ahci/ahci.h"
 #include <kmem.h>
 #include <kstdio.h>
 
+#include "dev/drivers/ahci/ahci.h"
 #include "kernelpanic.h"
 #include "mm/pgfalloc.h"
 

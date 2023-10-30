@@ -19,11 +19,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kdebug.h>
 #include <kerninc.h>
+#include <kstdio.h>
 #include <limine.h>
 
 #include "dev/kernel-drivers/fb/fb.h"
-#include "kstdio.h"
 #include "mm/pmm.h"
+#include "sched/lock.h"
 #include "termbind.h"
 
 static volatile struct limine_framebuffer_request framebufferRequest = {
@@ -34,10 +35,19 @@ static volatile struct limine_hhdm_request hhdmRequest = {
     .id       = LIMINE_HHDM_REQUEST,
     .revision = 0};
 
-void main() {
+void kernel_main() {
   boot_t *__bootinfo = NULL;
   hw_kdrivers_fb_initialize(framebufferRequest.response);
   terminal_initialize();
+
+  kloginfo("Testing lock acquire...");
+  lock_t _test_lock = SCHED_LOCK_NEW();
+  sched_lock_acquire(&_test_lock);
+  klogok("Lock acquired");
+  kloginfo("Testing lock release...");
+  sched_lock_release(&_test_lock);
+  klogok("Lock released");
+
   pmm_initialize(hhdmRequest.response);
 
   kprintf(
