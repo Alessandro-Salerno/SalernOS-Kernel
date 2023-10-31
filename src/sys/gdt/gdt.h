@@ -21,8 +21,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerntypes.h>
 
-void sys_gdt_init();
 void sys_gdt_reload();
+void sys_gdt_initialize();
 
 // deprecated
 __attribute__((deprecated)) extern void gdt_load(void *__ignored);

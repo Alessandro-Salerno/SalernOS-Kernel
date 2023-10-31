@@ -49,7 +49,7 @@ void kernel_main() {
   sched_lock_release(&_test_lock);
   klogok("Lock released");
 
-  sys_gdt_init();
+  sys_gdt_initialize();
   pmm_initialize(hhdmRequest.response);
 
   kprintf(

@@ -70,7 +70,27 @@ static inline void __new_segment__(uint64_t __offset,
   gdt._Descriptors[__offset]._BaseHigh    = __basehigh;
 }
 
-void sys_gdt_init() {
+void sys_gdt_reload() {
+  // NOTE: Temporary code
+  // Borrowed from Lyre Kernel
+  asm volatile("lgdt %0\n\t"
+               "push $0x28\n\t"
+               "lea 1f(%%rip), %%rax\n\t"
+               "push %%rax\n\t"
+               "lretq\n\t"
+               "1:\n\t"
+               "mov $0x30, %%ax\n\t"
+               "mov %%ax, %%ds\n\t"
+               "mov %%ax, %%es\n\t"
+               "mov %%ax, %%fs\n\t"
+               "mov %%ax, %%gs\n\t"
+               "mov %%ax, %%ss\n\t"
+               :
+               : "m"(gdtr)
+               : "rax", "memory");
+}
+
+void sys_gdt_initialize() {
   // Null segment
   kloginfo("GDT: Loading null segment");
   __new_segment__(0, 0, 0, 0, 0, 0, 0);
@@ -131,24 +151,4 @@ void sys_gdt_init() {
   kloginfo("GDT: Applying changes...");
   sys_gdt_reload();
   klogok("GDT: Done");
-}
-
-void sys_gdt_reload() {
-  // NOTE: Temporary code
-  // Borrowed from Lyre Kernel
-  asm volatile("lgdt %0\n\t"
-               "push $0x28\n\t"
-               "lea 1f(%%rip), %%rax\n\t"
-               "push %%rax\n\t"
-               "lretq\n\t"
-               "1:\n\t"
-               "mov $0x30, %%ax\n\t"
-               "mov %%ax, %%ds\n\t"
-               "mov %%ax, %%es\n\t"
-               "mov %%ax, %%fs\n\t"
-               "mov %%ax, %%gs\n\t"
-               "mov %%ax, %%ss\n\t"
-               :
-               : "m"(gdtr)
-               : "rax", "memory");
 }
