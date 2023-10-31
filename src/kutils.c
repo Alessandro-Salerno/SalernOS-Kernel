@@ -28,22 +28,22 @@ void kutils_kdd_setup(boot_t *__bootinfo) {
 }
 
 void kutils_gdt_setup() {
-  gdtdesc_t _gdt_desc =
-      (gdtdesc_t){._Size = sizeof(gdt) - 1, ._Offset = (uint64_t)(&gdt)};
-
-  kloginfo("Initializing TSS...");
-  kmemset(&tss, sizeof(tss_t), 0);
-  uint64_t _tss_base = (uint64_t)(&tss);
-
-  gdt._TSSLowSegment._LimitZero  = sizeof(tss_t);
-  gdt._TSSLowSegment._BaseZero   = _tss_base & 0xffff;
-  gdt._TSSLowSegment._BaseOne    = (_tss_base >> 16) & 0x00ff;
-  gdt._TSSLowSegment._BaseTwo    = (_tss_base >> 24) & 0x00ff;
-  gdt._TSSHighSegment._LimitZero = (_tss_base >> 32) & 0xffff;
-  gdt._TSSHighSegment._BaseZero  = (_tss_base >> 48) & 0xffff;
-
-  kloginfo("Initializing GDT...");
-  gdt_load(&_gdt_desc);
+  // gdtdesc_t _gdt_desc =
+  //     (gdtdesc_t){._Size = sizeof(gdt) - 1, ._Offset = (uint64_t)(&gdt)};
+  //
+  // kloginfo("Initializing TSS...");
+  // kmemset(&tss, sizeof(tss_t), 0);
+  // uint64_t _tss_base = (uint64_t)(&tss);
+  //
+  // gdt._TSSLowSegment._LimitZero  = sizeof(tss_t);
+  // gdt._TSSLowSegment._BaseZero   = _tss_base & 0xffff;
+  // gdt._TSSLowSegment._BaseOne    = (_tss_base >> 16) & 0x00ff;
+  // gdt._TSSLowSegment._BaseTwo    = (_tss_base >> 24) & 0x00ff;
+  // gdt._TSSHighSegment._LimitZero = (_tss_base >> 32) & 0xffff;
+  // gdt._TSSHighSegment._BaseZero  = (_tss_base >> 48) & 0xffff;
+  //
+  // kloginfo("Initializing GDT...");
+  // gdt_load(&_gdt_desc);
 }
 
 void kutils_mem_setup(boot_t *__bootinfo) {

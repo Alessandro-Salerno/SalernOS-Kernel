@@ -25,6 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "dev/kernel-drivers/fb/fb.h"
 #include "mm/pmm.h"
 #include "sched/lock.h"
+#include "sys/gdt/gdt.h"
 #include "termbind.h"
 
 static volatile struct limine_framebuffer_request framebufferRequest = {
@@ -48,6 +49,7 @@ void kernel_main() {
   sched_lock_release(&_test_lock);
   klogok("Lock released");
 
+  sys_gdt_init();
   pmm_initialize(hhdmRequest.response);
 
   kprintf(

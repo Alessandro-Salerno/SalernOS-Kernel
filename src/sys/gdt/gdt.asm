@@ -22,9 +22,9 @@
 global gdt_load
 gdt_load:
     lgdt    [rdi]
+    ; mov     ax,     0x30
+    ; ltr     ax
     mov     ax,     0x30
-    ltr     ax
-    mov     ax,     0x10
     mov     ds,     ax
     mov     es,     ax
     mov     fs,     ax
@@ -32,7 +32,7 @@ gdt_load:
     mov     ss,     ax
 
     pop     rdi
-    mov     rax,    0x08
+    mov     rax,    0x28
     push    rax
     push    rdi
     retfq
