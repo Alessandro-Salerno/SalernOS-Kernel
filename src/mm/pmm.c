@@ -17,14 +17,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
+#include <kdebug.h>
 #include <kmem.h>
 #include <kstdio.h>
 #include <limine.h>
 
-#include "kdebug.h"
 #include "kernelpanic.h"
 #include "mm/bmp.h"
 #include "mm/pmm.h"
+#include "sched/lock.h"
 
 static volatile struct limine_memmap_request memoryMapRequest = {
     .id       = LIMINE_MEMMAP_REQUEST,
@@ -40,6 +41,8 @@ static uint64_t usablemem;
 static uint64_t freeMem;
 static uint64_t reservedMem;
 static uint64_t usedMem;
+
+static lock_t pmmLock = SCHED_LOCK_NEW();
 
 static void __reserve_page__(void *__address, uint64_t *__rsvmemcount) {
   uint64_t _idx = (uint64_t)(__address) / 4096;
@@ -63,41 +66,45 @@ static void __unreserve_page__(void *__address, uint64_t *__rsvmemcount) {
   bitmapIndex = (bitmapIndex > _idx) ? _idx : bitmapIndex;
 }
 
-void pmm_free(void *__address, uint64_t __pagecount) {
+void mm_pmm_free(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __unreserve_page__((void *)((uint64_t)(__address) + (_i * 4096)), &usedMem);
 }
 
-void pmm_lock(void *__address, uint64_t __pagecount) {
+void mm_pmm_lock(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __reserve_page__((void *)((uint64_t)(__address) + (_i * 4096)), &usedMem);
 }
 
-void pmm_unreserve(void *__address, uint64_t __pagecount) {
+void mm_pmm_unreserve(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __unreserve_page__((void *)((uint64_t)(__address) + (_i * 4096)),
                        &reservedMem);
 }
 
-void pmm_reserve(void *__address, uint64_t __pagecount) {
+void mm_pmm_reserve(void *__address, uint64_t __pagecount) {
   for (uint64_t _i = 0; _i < __pagecount; _i++)
     __reserve_page__((void *)((uint64_t)(__address) + (_i * 4096)),
                      &reservedMem);
 }
 
-void *pmm_alloc() {
+void *mm_pmm_alloc() {
+  sched_lock_acquire(&pmmLock);
+  void *_ret = NULL;
+
   for (; bitmapIndex < pageBitmap._Size * 8; bitmapIndex++) {
     if (bmp_get(&pageBitmap, bitmapIndex) == 0) {
-      void *_page = (void *)(bitmapIndex * 4096);
-      pmm_lock(_page, 1);
-      return _page;
+      _ret = (void *)(bitmapIndex * 4096);
+      mm_pmm_lock(_ret, 1);
+      break;
     }
   }
 
-  return NULL; // Swap file not implemented yet
+  sched_lock_release(&pmmLock);
+  return _ret;
 }
 
-void pmm_initialize(struct limine_hhdm_response *__hhdm) {
+void mm_pmm_initialize(struct limine_hhdm_response *__hhdm) {
   memoryMapResponse      = memoryMapRequest.response;
   uint64_t _highest_addr = 0;
 
@@ -159,7 +166,7 @@ void pmm_initialize(struct limine_hhdm_response *__hhdm) {
       struct limine_memmap_entry *_entry = memoryMapResponse->entries[_i];
 
       if (_entry->type == LIMINE_MEMMAP_USABLE)
-        pmm_unreserve((void *)_entry->base, _entry->length / 4096);
+        mm_pmm_unreserve((void *)_entry->base, _entry->length / 4096);
     }
 
     klogok("PMM: Done");

@@ -50,57 +50,26 @@ void kernel_main() {
   klogok("Lock released");
 
   sys_gdt_initialize();
-  pmm_initialize(hhdmRequest.response);
+  mm_pmm_initialize(hhdmRequest.response);
+
+  kloginfo("Testing page allocation...");
+  void *_test_page = mm_pmm_alloc();
+  mm_pmm_free(_test_page, 1);
+  void *_test_page2 = mm_pmm_alloc();
+  mm_pmm_free(_test_page2, 1);
+
+  if (_test_page != _test_page2) {
+    klogwarn("Memory leak detected! First page at %u, second at %u",
+             (uint64_t)_test_page,
+             (uint64_t)_test_page2);
+  } else {
+    klogok("Page allocation and deallocation test passed!");
+  }
 
   kprintf(
       "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
   kprintf("SalernOS Kernel 0.0.7\n");
 
   while (true)
-    asm("hlt");
-  uint64_t _mem_size, _usable_mem, _free_mem, _used_mem, _unusable_mem;
-
-  uint64_t _size  = (uint64_t)(&_KERNEL_END) - (uint64_t)(&_KERNEL_START);
-  uint64_t _pages = (uint64_t)(_size) / 4096 + 1;
-
-  kutils_kdd_setup(__bootinfo);
-  kutils_gdt_setup();
-  kutils_mem_setup(__bootinfo);
-  kutils_sc_setup();
-  kutils_int_setup();
-  kutils_time_setup();
-
-  acpiinfo_t _acpi = kutils_rsd_setup(__bootinfo);
-
-  mmap_info_get(&_mem_size, &_usable_mem, NULL, NULL);
-  kprintf(
-      "%s %s\n", __bootinfo->_BootloaderName, __bootinfo->_BootloaderVersion);
-
-  kprintf("Kernel Base: %u\n", (uint64_t)(&_KERNEL_START));
-  kprintf("Kernel End: %u\n", (uint64_t)(&_KERNEL_END));
-  kprintf("Kernel Size: %u bytes (%u pages)\n\n", _size, _pages);
-
-  kprintf("Framebuffer Resolution: %u x %u\n",
-          __bootinfo->_Framebuffer._Width,
-          __bootinfo->_Framebuffer._Height);
-  kprintf("Framebuffer Base: %u\n", __bootinfo->_Framebuffer._BaseAddress);
-  kprintf("Framebuffer Size: %u bytes\n\n",
-          __bootinfo->_Framebuffer._BufferSize);
-
-  pgfa_info_get(&_free_mem, &_used_mem, &_unusable_mem);
-  kprintf("System Memory: %u bytes\n", _mem_size);
-  kprintf("Usable Memory: %u bytes\n", _usable_mem);
-  kprintf("Free Memory: %u bytes\n", _free_mem);
-  kprintf("Used Memory: %u bytes\n", _used_mem);
-  kprintf("Reserved Memory: %u bytes\n\n", _unusable_mem);
-
-  kprintf("RSDP Address: %u\n", (uint64_t)(__bootinfo->_RSDP));
-  kprintf("MCFG Address: %u\n", (uint64_t)(_acpi._MCFG));
-
-  klogok("Kernel Ready!");
-  kprintf("\n\n");
-
-  while (TRUE) {
     asm volatile("hlt");
-  }
 }

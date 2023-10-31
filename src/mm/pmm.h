@@ -22,8 +22,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <limine.h>
 #include <stdint.h>
 
-void pmm_free(void *__address, uint64_t __pagecount);
-void pmm_lock(void *__address, uint64_t __pagecount);
-void pmm_unreserve(void *__address, uint64_t __pagecount);
-void pmm_reserve(void *__address, uint64_t __agecount);
-void pmm_initialize(struct limine_hhdm_response *__hhdm);
+void  mm_pmm_free(void *__address, uint64_t __pagecount);
+void  mm_pmm_lock(void *__address, uint64_t __pagecount);
+void  mm_pmm_unreserve(void *__address, uint64_t __pagecount);
+void  mm_pmm_reserve(void *__address, uint64_t __agecount);
+void *mm_pmm_alloc();
+void  mm_pmm_initialize(struct limine_hhdm_response *__hhdm);
