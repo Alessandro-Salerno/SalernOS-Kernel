@@ -17,35 +17,38 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include "kernelpanic.h"
 #include <kdebug.h>
 #include <kstdio.h>
+#include <stdbool.h>
 
-void panic_throw(const char *__message, intframe_t *__regstate) {
+#include "kernelpanic.h"
+#include "sys/cpu/ctx.h"
+
+void panic_throw(const char *__message, cpuctx_t *__cpuctx) {
   klogerr("Kernel panic: execution of the kernel has been halted due to a "
           "critical system fault.");
   kprintf("%s\n\n", __message);
 
-  if (__regstate != NULL) {
+  if (__cpuctx != NULL) {
     kprintf("[Registers]:\n");
-    kprintf("RBP: %u\nRDI: %u\n", __regstate->_RBP, __regstate->_RDI);
-    kprintf("RSI: %u\nRDX: %u\n", __regstate->_RSI, __regstate->_RDX);
-    kprintf("RCX: %u\nRBX: %u\n", __regstate->_RCX, __regstate->_RBX);
-    kprintf("RAX: %u\n\n", __regstate->_RAX);
+    kprintf("RBP:\t%u\nRDI:\t%u\n", __cpuctx->_RBP, __cpuctx->_RDI);
+    kprintf("RSI:\t%u\nRDX:\t%u\n", __cpuctx->_RSI, __cpuctx->_RDX);
+    kprintf("RCX:\t%u\nRBX:\t%u\n", __cpuctx->_RCX, __cpuctx->_RBX);
+    kprintf("RAX:\t%u\n\n", __cpuctx->_RAX);
 
     kprintf("[Numbered Registers]:\n");
-    kprintf("R15: %u\nR14: %u\n", __regstate->_R15, __regstate->_R14);
-    kprintf("R13: %u\nR12: %u\n", __regstate->_R13, __regstate->_R12);
-    kprintf("R11: %u\nR10: %u\n", __regstate->_R11, __regstate->_R10);
-    kprintf("R09: %u\nR08: %u\n\n", __regstate->_R9, __regstate->_R8);
+    kprintf("R15:\t%u\nR14:\t%u\n", __cpuctx->_R15, __cpuctx->_R14);
+    kprintf("R13:\t%u\nR12:\t%u\n", __cpuctx->_R13, __cpuctx->_R12);
+    kprintf("R11:\t%u\nR10:\t%u\n", __cpuctx->_R11, __cpuctx->_R10);
+    kprintf("R09:\t%u\nR08:\t%u\n\n", __cpuctx->_R9, __cpuctx->_R8);
 
     kprintf("[Special Registers]:\n");
-    kprintf("RIP: %u\nRSP: %u\n", __regstate->_RIP, __regstate->_RSP);
-    kprintf("CS: %u\nSS: %u\n", __regstate->_CS, __regstate->_SS);
-    kprintf("RFlags: %u\n", __regstate->_RFlags);
+    kprintf("RIP:\t%u\nRSP:\t%u\n", __cpuctx->_RIP, __cpuctx->_RSP);
+    kprintf("CS:\t%u\nSS:\t%u\n", __cpuctx->_CS, __cpuctx->_SS);
+    kprintf("RFlags:\t%u\n", __cpuctx->_RFlags);
   }
 
-  while (TRUE)
+  while (true)
     ;
 }
 

@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerntypes.h>
 
+#include "sys/cpu/ctx.h"
 #include "sys/interrupts/handlers.h"
 
 #define SOFTASSERT(__cond, __ret) \
@@ -33,5 +34,5 @@ typedef struct KernelPanicInfo {
   const char *_Message;
 } panicinfo_t;
 
-void panic_throw(const char *__message, intframe_t *__regstate);
+void panic_throw(const char *__message, cpuctx_t *__cpuctx);
 void panic_assert(uint8_t __cond, const char *__message);
