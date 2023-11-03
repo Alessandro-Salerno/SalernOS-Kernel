@@ -21,9 +21,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 // System includes
 #include "sys/gdt/gdt.h" /*   Includes the Kernel's definition of the GTD        */
-#include "sys/interrupts/handlers.h" /*   Includes the Kernel's Interrupt Service Routines   */
-#include "sys/interrupts/idt.h" /*   Includes the Kernel's definition of the IDT        */
-#include "sys/interrupts/pic.h" /*   Includes the basic Kernel PIC Driver               */
 #include "sys/legacy-io/io.h" /*   Includes the basic Kernel I/O functions            */
 
 // Hardware includes
@@ -48,7 +45,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 // Utils includes
 #include "kernelpanic.h" /*   Includes the Kernel panic handler                  */
-#include "kutils.h" /*   Includes all kernel initialization functions       */
 
 // Kernel Library Includes
 #include <kmalloc.h>

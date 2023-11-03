@@ -17,37 +17,16 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include "sys/interrupts/pic.h"
+#include <stddef.h>
 
-#include "sys/legacy-io/io.h"
+#include "sys/idt/idt.h"
+#include "sys/idt/ipi.h"
 
-void interrupts_pic_remap() {
-  asm volatile("cli");
+uint8_t sys_idt_ipi_vecPanic;
 
-  uint8_t _pic1 = io_in_wait(PIC1_DATA), _pic2 = io_in_wait(PIC2_DATA);
-
-  io_out_wait(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
-  io_out_wait(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
-  io_out_wait(PIC1_DATA, 0x20);
-  io_out_wait(PIC2_DATA, 0x28);
-  io_out_wait(PIC1_DATA, 0x04);
-  io_out_wait(PIC2_DATA, 0x02);
-  io_out_wait(PIC1_DATA, ICW4_8086);
-  io_out_wait(PIC2_DATA, ICW4_8086);
-
-  io_out(PIC1_DATA, _pic1);
-  io_out(PIC2_DATA, _pic2);
-
-  io_out(PIC1_DATA, 0b11111100);
-  io_out(PIC2_DATA, 0b11111111);
-  asm volatile("sti");
-}
-
-void interrupts_pic_master_end() {
-  io_out(PIC1_COMMAND, PIC_EOI);
-}
-
-void interrupts_pic_slave_end() {
-  io_out(PIC2_COMMAND, PIC_EOI);
-  io_out(PIC1_COMMAND, PIC_EOI);
+void sys_idt_ipi_initialize() {
+  // Temporary code
+  sys_idt_ipi_vecPanic = sys_idt_vector_allocate();
+  sys_idt_isr_register(sys_idt_ipi_vecPanic, sys_idt_ipi_entry_panic, 0x8e);
+  sys_idt_isr_set(sys_idt_ipi_vecPanic, sys_idt_ipi_entry_panic);
 }

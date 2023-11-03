@@ -23,9 +23,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <limine.h>
 
 #include "dev/kernel-drivers/fb/fb.h"
+#include "kernelpanic.h"
 #include "mm/pmm.h"
 #include "sched/lock.h"
+#include "sys/cpu/ctx.h"
 #include "sys/gdt/gdt.h"
+#include "sys/idt/idt.h"
 #include "termbind.h"
 
 static volatile struct limine_framebuffer_request framebufferRequest = {
@@ -37,7 +40,6 @@ static volatile struct limine_hhdm_request hhdmRequest = {
     .revision = 0};
 
 void kernel_main() {
-  boot_t *__bootinfo = NULL;
   hw_kdrivers_fb_initialize(framebufferRequest.response);
   terminal_initialize();
 
@@ -66,9 +68,14 @@ void kernel_main() {
     klogok("Page allocation and deallocation test passed!");
   }
 
+  sys_idt_initialize();
+
   kprintf(
       "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
   kprintf("SalernOS Kernel 0.0.7\n");
+
+  // cpuctx_t ctx = {0};
+  // panic_throw("Test panic", &ctx);
 
   while (true)
     asm volatile("hlt");

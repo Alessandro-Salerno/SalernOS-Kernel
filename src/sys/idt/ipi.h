@@ -17,29 +17,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include "sys/interrupts/handlers.h"
+#pragma once
 
-#include "kernelpanic.h"
-#include "sys/interrupts/pic.h"
-#include "sys/legacy-io/io.h"
-#include "time/pit/pit.h"
+#include <stdint.h>
 
-void interrupt_handlers_pgfault(intframe_t *__frame) {
-  panic_throw("Page Fault Detected!", __frame);
-}
-void interrupt_handlers_dfault(intframe_t *__frame) {
-  panic_throw("Double Fault Detected!", __frame);
-}
-void interrupt_handlers_gpfault(intframe_t *__frame) {
-  panic_throw("General Protection Fault Detected!", __frame);
-}
+extern uint8_t sys_idt_ipi_vecPanic;
 
-void interrupt_handlers_kbhit(intframe_t *__frame) {
-  // io_keyboard_mods_handle();
-  // interrupts_pic_master_end();
-}
+void sys_idt_ipi_initialize();
 
-void interrupt_handlers_tick(intframe_t *__frame) {
-  time_pit_tick();
-  interrupts_pic_master_end();
-}
+extern void sys_idt_ipi_entry_panic();

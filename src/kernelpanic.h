@@ -22,7 +22,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kerntypes.h>
 
 #include "sys/cpu/ctx.h"
-#include "sys/interrupts/handlers.h"
 
 #define SOFTASSERT(__cond, __ret) \
   if (!(__cond))                  \
