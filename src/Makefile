@@ -31,7 +31,12 @@ $(OBJDIR)/$(KFNAME)/C++/%.o: $(SRCDIR)/%.cpp
 	@ mkdir -p $(@D)
 	@$(CC) $(CPPFLAGS) -c $^ -o $@
 
-$(OBJDIR)/$(KFNAME)/Assembly/%.o: $(SRCDIR)/%.asm
-	@ echo [ASM] $^
+$(OBJDIR)/$(KFNAME)/NASM/%.o: $(SRCDIR)/%.asm
+	@ echo [NASM] $^
 	@ mkdir -p $(@D)
-	@$(ASMC) $(ASMFLAGS) $^ -f elf64 -o $@
+	@$(NASM) $(NASMFLAGS) $^ -f elf64 -o $@
+
+$(OBJDIR)/$(KFNAME)/AS/%.o: $(SRCDIR)/%.S
+	@ echo [AS] $^
+	@ mkdir -p $(@D)
+	@$(AS) $(ASFLAGS) $^ -o $@

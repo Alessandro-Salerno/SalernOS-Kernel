@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <kmalloc.h>
 #include <kmem.h>
 
-#include "mm/Heap/heap.h"
+#include "mm/heap/heap.h"
 
 void *kmalloc(size_t __buffsize) {
   return heap_allocate(__buffsize);

@@ -18,5 +18,6 @@
 
 CXX=$(CROSS_COMPILE)g++
 CC=$(CROSS_COMPILE)gcc
-ASMC=nasm
+NASM=nasm
+AS=as
 LD=$(CROSS_COMPILE)ld

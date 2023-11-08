@@ -34,8 +34,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "sys/syscall/syscalls.h" /*   Includes all kernel Syscall declarations           */
 
 // Memory includes
-#include "mm/Heap/heap.h" /*   Includes the Kernel's heap manager                 */
-#include "mm/bmp.h"  /*   Includes the Kernel's definition of a Bitmap       */
+#include "mm/bmp.h" /*   Includes the Kernel's definition of a Bitmap       */
+#include "mm/heap/heap.h" /*   Includes the Kernel's heap manager                 */
 #include "mm/mmap.h" /*   Includes the Kernel EFI Memory Map Interface       */
 #include "mm/paging.h" /*   Includes the Kernel Page Table Manager             */
 #include "mm/pgfalloc.h" /*   Includes the Kernel Page Frame Allocator           */
