@@ -25,6 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "sys/cpu/ctx.h"
 
 void panic_throw(const char *__message, cpuctx_t *__cpuctx) {
+  asm volatile("sti");
   klogerr("Kernel panic: execution of the kernel has been halted due to a "
           "critical system fault.");
   kprintf("%s\n\n", __message);

@@ -18,16 +18,19 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include <kstr.h>
+#include <stdint.h>
+
+#include "kdebug.h"
 
 static char kstrOutput[24];
 
 const char *uitoa(uint64_t __val) {
-  uint64_t _size_test = 10;
+  uint64_t _size_test = __val;
   uint8_t  _size      = 0;
   uint8_t  _idx       = 0;
 
-  while (__val / _size_test > 0) {
-    _size_test *= 10;
+  while (_size_test >= 10) {
+    _size_test /= 10;
     _size++;
   }
 

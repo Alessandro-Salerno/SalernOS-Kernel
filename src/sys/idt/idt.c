@@ -22,6 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <stdint.h>
 
 #include "kernelpanic.h"
+#include "kstdio.h"
 #include "sched/lock.h"
 #include "sys/cpu/ctx.h"
 #include "sys/idt/idt.h"
@@ -111,7 +112,8 @@ void sys_idt_initialize() {
   kloginfo("IDT: Loading generic ISRs...");
 
   for (uint64_t _i = 0; _i < 256; _i++) {
-    continue;
+    sys_idt_isr_register(_i, isrThunkLookup[_i], 0x8e);
+    sys_idt_isr_set(_i, __generic_isr__);
   }
 
   kloginfo("IDT: Loading IPI entries...");

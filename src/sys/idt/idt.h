@@ -21,6 +21,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <stdint.h>
 
+extern void *isrThunkLookup[];
+
 void    sys_idt_isr_register(uint8_t __vec, void *__isr, uint8_t __flags);
 uint8_t sys_idt_vector_allocate();
 void    sys_idt_isr_set(uint8_t __vec, void *__isr);
