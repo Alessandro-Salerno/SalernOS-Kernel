@@ -33,5 +33,5 @@ typedef struct KernelPanicInfo {
   const char *_Message;
 } panicinfo_t;
 
-void panic_throw(const char *__message, cpuctx_t *__cpuctx);
+void panic_throw(const char *__message, cpuctx_t *__cpuctx, ...);
 void panic_assert(uint8_t __cond, const char *__message);

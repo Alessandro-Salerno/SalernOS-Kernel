@@ -19,16 +19,21 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kdebug.h>
 #include <kstdio.h>
+#include <stdarg.h>
 #include <stdbool.h>
 
 #include "kernelpanic.h"
 #include "sys/cpu/ctx.h"
 
-void panic_throw(const char *__message, cpuctx_t *__cpuctx) {
+void panic_throw(const char *__fmt, cpuctx_t *__cpuctx, ...) {
   asm volatile("sti");
   klogerr("Kernel panic: execution of the kernel has been halted due to a "
           "critical system fault.");
-  kprintf("%s\n\n", __message);
+  va_list _arguments;
+  va_start(_arguments, __cpuctx);
+
+  kvprintf(__fmt, _arguments);
+  kprintf("\n\n");
 
   if (__cpuctx != NULL) {
     kprintf("[Registers]:\n");
@@ -50,7 +55,7 @@ void panic_throw(const char *__message, cpuctx_t *__cpuctx) {
   }
 
   while (true)
-    ;
+    asm volatile("hlt");
 }
 
 void panic_assert(uint8_t __cond, const char *__message) {

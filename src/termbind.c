@@ -31,6 +31,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "termbind.h"
 
 static struct flanterm_context *terminal;
+static uint32_t                 backgroundRGB;
+static uint32_t                 foregroundRGB;
 
 void *memcpy(void *__dest, const void *__src, size_t __len) {
   kmemcpy(__src, __dest, __len);
@@ -67,8 +69,8 @@ void terminal_fastwrite(const char *__str) {
 }
 
 void terminal_info_get(uint32_t *__bg, uint32_t *__fg) {
-  ARGRET(__bg, terminal->current_bg);
-  ARGRET(__bg, terminal->current_primary);
+  ARGRET(__bg, backgroundRGB);
+  ARGRET(__fg, foregroundRGB);
 }
 
 void terminal_info_set(uint32_t __bg, uint32_t __fg) {
@@ -81,6 +83,10 @@ void terminal_initialize() {
   hw_kdrivers_fb_get(&_fb);
   terminal = flanterm_fb_simple_init(
       _fb->address, _fb->width, _fb->height, _fb->pitch);
-  // Temporary test
   terminal->autoflush = false;
+
+  backgroundRGB = 0x00000000;
+  foregroundRGB = 0x00aaaaaa;
+
+  terminal_info_set(backgroundRGB, foregroundRGB);
 }

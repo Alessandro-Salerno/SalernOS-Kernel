@@ -27,6 +27,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mm/pmm.h"
 #include "sched/lock.h"
 #include "sys/cpu/ctx.h"
+#include "sys/except/except.h"
 #include "sys/gdt/gdt.h"
 #include "sys/idt/idt.h"
 #include "termbind.h"
@@ -69,6 +70,7 @@ void kernel_main() {
   }
 
   sys_idt_initialize();
+  sys_except_initialize();
 
   kprintf(
       "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
