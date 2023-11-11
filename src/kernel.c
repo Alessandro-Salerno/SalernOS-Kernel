@@ -72,9 +72,8 @@ void kernel_main() {
   sys_idt_initialize();
   sys_except_initialize();
 
-  kprintf(
-      "\n\nCopyright 2021 - 2023 Alessandro Salerno. All rights reserved.\n");
-  kprintf("SalernOS Kernel 0.0.7\n");
+  kprintf("Copyright (C) 2021 - 2023 Alessandro Salerno.\n"
+          "SalernOS Kernel 0.0.7\n\n");
 
   // cpuctx_t ctx = {0};
   // panic_throw("Test panic", &ctx);
