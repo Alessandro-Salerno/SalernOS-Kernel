@@ -17,24 +17,12 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include <kerntypes.h>
+#pragma once
+
 #include <limine.h>
 #include <stdint.h>
 
-#include "kernelpanic.h"
-#include "liminebind.h"
-
-static volatile struct limine_framebuffer_response *framebufferResponse;
-static struct limine_framebuffer                   *framebuffer;
-
-void hw_kdrivers_fb_initialize() {
-  SOFTASSERT(liminebind_fb_get() != NULL, RETVOID);
-  SOFTASSERT(liminebind_fb_get()->framebuffer_count > 0, RETVOID);
-
-  framebufferResponse = liminebind_fb_get();
-  framebuffer         = liminebind_fb_get()->framebuffers[0];
-}
-
-void hw_kdrivers_fb_get(struct limine_framebuffer **__fb) {
-  ARGRET(__fb, framebuffer);
-}
+void                               *liminebind_transptr(void *__addr);
+uint64_t                            liminebind_transint(uint64_t __addr);
+struct limine_framebuffer_response *liminebind_fb_get();
+struct limine_memmap_response      *liminebind_mmap_get();

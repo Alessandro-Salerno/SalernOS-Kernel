@@ -1,0 +1,14 @@
+SYNTAX: 
+something ->(requires) something else ->(rept) ...
+
+SYNTAX EXAMPLE:
+interrupt events -> lapic -> pit
+
+
+TODO:
+
+interrupt events -> lapic
+interrupt events -> event
+lapic -> pit
+event -> thread
+

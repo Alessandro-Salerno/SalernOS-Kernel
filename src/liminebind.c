@@ -17,24 +17,32 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 **********************************************************************/
 
-#include <kerntypes.h>
 #include <limine.h>
-#include <stdint.h>
 
-#include "kernelpanic.h"
-#include "liminebind.h"
+static volatile struct limine_hhdm_request hhdmRequest = {
+    .id       = LIMINE_HHDM_REQUEST,
+    .revision = 0};
 
-static volatile struct limine_framebuffer_response *framebufferResponse;
-static struct limine_framebuffer                   *framebuffer;
+static volatile struct limine_framebuffer_request framebufferRequest = {
+    .id       = LIMINE_FRAMEBUFFER_REQUEST,
+    .revision = 0};
 
-void hw_kdrivers_fb_initialize() {
-  SOFTASSERT(liminebind_fb_get() != NULL, RETVOID);
-  SOFTASSERT(liminebind_fb_get()->framebuffer_count > 0, RETVOID);
+static volatile struct limine_memmap_request memoryMapRequest = {
+    .id       = LIMINE_MEMMAP_REQUEST,
+    .revision = 0};
 
-  framebufferResponse = liminebind_fb_get();
-  framebuffer         = liminebind_fb_get()->framebuffers[0];
+void *liminebind_transptr(void *__addr) {
+  return __addr + hhdmRequest.response->offset;
 }
 
-void hw_kdrivers_fb_get(struct limine_framebuffer **__fb) {
-  ARGRET(__fb, framebuffer);
+uint64_t liminebind_transint(uint64_t __addr) {
+  return __addr + (uint64_t)hhdmRequest.response->offset;
+}
+
+struct limine_framebuffer_response *liminebind_fb_get() {
+  return framebufferRequest.response;
+}
+
+struct limine_memmap_response *liminebind_mmap_get() {
+  return memoryMapRequest.response;
 }

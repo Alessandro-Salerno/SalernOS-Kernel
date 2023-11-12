@@ -27,4 +27,4 @@ void  mm_pmm_lock(void *__address, uint64_t __pagecount);
 void  mm_pmm_unreserve(void *__address, uint64_t __pagecount);
 void  mm_pmm_reserve(void *__address, uint64_t __agecount);
 void *mm_pmm_alloc();
-void  mm_pmm_initialize(struct limine_hhdm_response *__hhdm);
+void  mm_pmm_initialize();

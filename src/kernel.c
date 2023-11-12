@@ -32,16 +32,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "sys/idt/idt.h"
 #include "termbind.h"
 
-static volatile struct limine_framebuffer_request framebufferRequest = {
-    .id       = LIMINE_FRAMEBUFFER_REQUEST,
-    .revision = 0};
-
-static volatile struct limine_hhdm_request hhdmRequest = {
-    .id       = LIMINE_HHDM_REQUEST,
-    .revision = 0};
-
 void kernel_main() {
-  hw_kdrivers_fb_initialize(framebufferRequest.response);
+  hw_kdrivers_fb_initialize();
   terminal_initialize();
 
   kloginfo("Testing lock acquire...");
@@ -53,7 +45,7 @@ void kernel_main() {
   klogok("Lock released");
 
   sys_gdt_initialize();
-  mm_pmm_initialize(hhdmRequest.response);
+  mm_pmm_initialize();
 
   kloginfo("Testing page allocation...");
   void *_test_page = mm_pmm_alloc();

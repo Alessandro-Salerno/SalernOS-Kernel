@@ -23,13 +23,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <limine.h>
 
 #include "kernelpanic.h"
+#include "liminebind.h"
 #include "mm/bmp.h"
 #include "mm/pmm.h"
 #include "sched/lock.h"
-
-static volatile struct limine_memmap_request memoryMapRequest = {
-    .id       = LIMINE_MEMMAP_REQUEST,
-    .revision = 0};
 
 static volatile struct limine_memmap_response *memoryMapResponse;
 
@@ -104,8 +101,8 @@ void *mm_pmm_alloc() {
   return _ret;
 }
 
-void mm_pmm_initialize(struct limine_hhdm_response *__hhdm) {
-  memoryMapResponse      = memoryMapRequest.response;
+void mm_pmm_initialize() {
+  memoryMapResponse      = liminebind_mmap_get();
   uint64_t _highest_addr = 0;
 
   // Calculate memory map & bitmap size
@@ -140,7 +137,7 @@ void mm_pmm_initialize(struct limine_hhdm_response *__hhdm) {
     if (_entry->type == LIMINE_MEMMAP_USABLE && _entry->length >= _bmp_sz) {
       kloginfo(
           "PMM: Bitmap:\tIndex=%u Base=%u Size=%u", _i, _entry->base, _bmp_sz);
-      pageBitmap._Buffer = (uint8_t *)(_entry->base + __hhdm->offset);
+      pageBitmap._Buffer = (uint8_t *)liminebind_transint(_entry->base);
       pageBitmap._Size   = _bmp_sz;
 
       // Reserve the entire memory space
