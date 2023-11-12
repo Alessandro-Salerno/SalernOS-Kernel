@@ -54,7 +54,7 @@ static void __handle_exception__(uint8_t __vec, cpuctx_t *__cpuctx) {
 void sys_except_initialize() {
   kloginfo("Except: Initializing exceptions");
 
-  for (int _i = 0; _i < sizeof(exceptions) / sizeof(char *); _i++) {
+  for (uint64_t _i = 0; _i < sizeof(exceptions) / sizeof(char *); _i++) {
     sys_idt_isr_set(_i, __handle_exception__);
   }
 

@@ -19,13 +19,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kmem.h>
 
-void kmemset(void *__buff, size_t __buffsize, uint8_t __val) {
+void kmemset(const void *__buff, size_t __buffsize, uint8_t __val) {
   // Use compiler optiimzations for better performance
   for (uint64_t _i = 0; _i < __buffsize; _i++)
     *(uint8_t *)((uint64_t)(__buff) + _i) = __val;
 }
 
-bool kmemcmp(void *__buff1, void *__buff2, size_t __buffsize) {
+bool kmemcmp(const void *__buff1, const void *__buff2, size_t __buffsize) {
   for (uint64_t _i = 0; _i < __buffsize; _i++) {
     uint8_t _buff1val = *(uint8_t *)(__buff1 + _i);
     uint8_t _buff2val = *(uint8_t *)(__buff2 + _i);
@@ -37,7 +37,7 @@ bool kmemcmp(void *__buff1, void *__buff2, size_t __buffsize) {
   return TRUE;
 }
 
-void kmemcpy(void *__from, void *__to, size_t __buffsize) {
+void kmemcpy(const void *__from, const void *__to, size_t __buffsize) {
   for (uint64_t _i = 0; _i < __buffsize; _i++) {
     uint8_t _val                        = *(uint8_t *)(__from + _i);
     *(uint8_t *)((uint64_t)(__to) + _i) = _val;

@@ -48,7 +48,8 @@ static idtentry_t idt[256];
 void *isrLookup[256];
 
 static void __generic_isr__(uint8_t __vec, cpuctx_t *__cputctx) {
-  panic_throw("Unassigned interrupt vector invoked", __cputctx);
+  panic_throw(
+      "Unassigned interrupt vector invoke %u", __cputctx, (uint64_t)__vec);
 }
 
 void sys_idt_isr_register(uint8_t __vec, void *__isr, uint8_t __flags) {

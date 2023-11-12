@@ -21,6 +21,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <kerntypes.h>
 
-void kmemset(void *__buff, size_t __buffsize, uint8_t __val);
-bool kmemcmp(void *__buff1, void *__buff2, size_t __buffsize);
-void kmemcpy(void *__from, void *__to, size_t __buffsize);
+void kmemset(const void *__buff, size_t __buffsize, uint8_t __val);
+bool kmemcmp(const void *__buff1, const void *__buff2, size_t __buffsize);
+void kmemcpy(const void *__from, const void *__to, size_t __buffsize);
