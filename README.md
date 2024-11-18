@@ -1,6 +1,5 @@
-# IMPORTANT
-If you're intrested in the development of the SalernOS Kernel, check out the [hellow](https://github.com/Alessandro-Salerno/SalernOS-Kernel/tree/hellow) branch. The `hellow` branch focusses on getting a "Hello world" program to run in userspace. It also aims to speed up Kernel development by including third-party modules (like [Limine](https://github.com/limine-bootloader/limine) and [limine-terminal-port](https://github.com/V01D-NULL/limine-terminal-port)) and enhance the developer experience with linting, multithreaded Makefiles, and more.
-
+> [!WARNING]
+> This branch is for historical purposes only. It is used as a monument to the year 2022, and may be used as a "nostalgia kit" to build older SalernOS versions from that year.
 
 <br>
 <br>
