@@ -1,5 +1,5 @@
 > [!WARNING]
-> This branch is for historical purposes only. It is used as a monument to the year 2022, and may be used as a "nostalgia kit" to build older SalernOS versions from that year.
+> This branch is for historical purposes only. It is used as a monument to the year 2022, and may be used as a "nostalgia kit" to build older SalernOS versions from that year. A fourth, and hopefully decent, rewrite will soon commence.
 
 <br>
 <br>
