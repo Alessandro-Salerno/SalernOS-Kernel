@@ -1,4 +1,0 @@
--Iintf/
--Isrc/
--Iintf/libraries/kernel/
--Iintf/libraries/extern/

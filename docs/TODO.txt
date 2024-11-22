@@ -1,0 +1,161 @@
+DESIGN TEMPLATE FOR SALERNOS KERNEL 0.2.X (2024-25 REWRITE)
+THIS DOCUMENT HAS NOT BEEN FINALIZED YET!
+
+
+Top level source tree structure:
+    SalernOS-Kernel/
+        .git/
+        .github/
+        config/
+        docs/
+        include/
+        src/
+        .gitignore
+        .gitattributes
+        .clang-format
+        kerntool
+        GNUmakefile
+        AUTHORS
+        README.md
+        CODE_OF_CONDUCT.md
+        SECURITY.md
+
+
+Structure of include/ directory:
+    include/
+        lib/
+        vendor/
+        kernel/
+            platform/
+                template/
+                    arch/
+                amd64/
+                    arch/
+                ...
+            com/
+
+    The lib/ directory contains headers for "support libraries" that are an integral
+    part of the kernel and are developed alongisde it (e.g., kprintf).
+    The vendor/ directory contains headers from foreign source trees (e.g., limine.h).
+    The kernel/ directory holds headers that directly belong to the kernel. It is
+    subdivided into platform/ and com/.
+    The kernel/platform/ directory is itself divided into one subdirectory per architecture
+    (e.g., amd64, aarch64). The directory kernel/platform/template/ is used as a template
+    for new platform ports. Directories under kernel/platform/ may be initially generated
+    using kerntool. Each directory under kernel/platform/ MUST contain an arch/ subdirectory,
+    this is used for generic arch headers.
+    The kernel/com/ directory holds common headers for the kernel.
+    Include paths shall be set so that:
+        - Files under include/lib/ may be included using #include <lib/foo.h>
+        - Files under include/vendor/ may be included using #include <vendor/foo.h>
+            with the necessary exceptions
+        - Files under include/kernel/platform/<platform>/arch/ may be included
+            using #include <arch/foo.h>
+        - Files under include/kernel/platform/<platform>/ may be included using
+            #include <kernel/platform/<platform>/foo.h>
+        - Files under include/kernel/com/ may be included using #include <com/foo.h>
+    In other words, the include paths should **probably** be:
+        - include/
+        - include/kernel
+        - include/kernel/platform/<platform>
+
+
+Structure of src/ directory:
+    src/
+        com/
+        platform/
+            amd64/
+                linker.ld
+            ...
+
+    The src/com/ directory shall hold source files for common code.
+    The src/platform/<platform>/ directory shall hold source files for
+    platform-specific code.
+
+
+Naming conventions for declarations in HEADERS (must also be followed by impl ofc):
+    - com_* common symbol (across all architectures) [e.g., com_sched_init()]
+    - arch_* generic interface to be implemented by arch-specific code [e.g., arch_]
+    - <arch>_* arch-specific funciton [e.g., amd64_apic_init()]
+    - *_t type [e.g., amd64_cpu_t]
+    - *_intf_*_t funciton pointer type alias [e.g., com_intf_syscall_t]
+
+
+The creation of generic interfaces with _intf_ and arch should always be preferred to other solutions.
+In the case of functions whose code may be frequently invoked, however, the definition may be included
+in a header file so to allow for compile-time inlining and reduce overhead in "hot" areas.
+
+Functions DEFINED inside header files must:
+    - Be `static inline`
+    - Prefix `hdr_` to their name [e.g., hdr_arch_get_cur_cpu()]
+
+
+Uppercase versins of the above are used for macros [e.g., COM_MUTEX_INIT(m)].
+Symbols declared inside source files taht have no exposure to outside units shall be named
+without any prefix (e.g., gdtr_t instead of amd64_gdtr_t).
+
+
+General naming conventions:
+    - Types, symbols, local variables, arguments, and struct fields shall make of of snake
+        notation (e.g., this_is_snake)
+    - Global variables shall use PascalCase. Note: avoid having fully uppercase names for
+        global variables since this is reserved for macros (e.g, Gdtr, not GDTR)
+
+
+Type policy:
+    Avoid the use of generic integer types and prefer those from stdint.h.
+    Generic integer types may be used where their size is of no importance
+    (e.g., a for loop with a known ceiling inside the range).
+
+
+Code style policy:
+    Code style should follow the guidfelines outoutlined by the .clang-format file
+    and should be handled by clang format directly.
+
+
+Foreign code policy:
+    "Foreign code" refers to source code/headers that are not exclusive to
+    the SalernOS Kernel (e.g., flanterm, uacpi). These sources should be easily
+    identifiable and placed under some kind of vendor/ directory.
+    The use of git module links is not allowed. Code should always be part of the
+    source tree, even when part ofa submodule.
+
+
+kerntool (Planned for the future):
+    kerntool is a utility shell script used to automate kernel development
+    tasks. In kernel versions 0.2.x, it supports:
+
+    Creating new platform header directory from template:
+        ./kerntool mkarch <arch>
+
+    Switching compile_flags.txt based on the architecture:
+        ./kerntool switch <arch>
+
+
+Roadmap for version 0.2.0 (in order):
+    - Basic x86-64 CPU features
+    - Basic E9 logging
+    - x86-64 GDT
+    - x86-64 IDT
+    - Basic DPC
+    - Basic PMM
+    - Basic MMU setup
+    - Basic VMM
+    - Basic memory allocator
+    - Limine command-line parser
+    - Basic ACPI support
+    - x86-64 APIC Part 1
+    - Timekeeper Part 1
+    - CPU Initialization
+    - x86-64 APIC Part 2
+    - Basic scheduler
+    - Timekeeper Part 2
+    - Basic x86-64 SMP
+    - Timekeeper Part 3
+    - + Other things that may be required by one
+        or more of the above (eg., proc)
+
+    These goals are taken from the Astral Kernel at Astral/kernel-src/arch/x86-64/main.c.
+    The practical goal of version 0.2.0 is to get syncronized parallel output from two
+    threads using the scheduler. Ideally, the output would come from a system call, but this
+    is not strictly required to meet the 0.2.0 criteria.
