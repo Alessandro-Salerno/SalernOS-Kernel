@@ -2,5 +2,8 @@ obj/
 .vscode/
 bin/
 .DS_Store
-intf/Libraries/External/
-src/External/
+limine
+*.dat
+iso_root/
+*.iso
+
