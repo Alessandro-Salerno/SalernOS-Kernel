@@ -2,9 +2,12 @@
 MAKEFLAGS += -rR
 .SUFFIXES:
 
+PLATFORM ?= x86-64
+rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard ,$d, $2) $(filter $(subst *, %, $2),$d))
+
 # This is the name that our final executable will have.
 # Change as needed.
-override OUTPUT := myos
+override OUTPUT := vmsalernos
 
 # User controllable C compiler command.
 CC := cc
@@ -26,6 +29,9 @@ LDFLAGS :=
 
 # Internal C flags that should not be changed by the user.
 override CFLAGS += \
+		-I include/ \
+		-I include/kernel/ \
+		-I include/kernel/platform/$(PLATFORM) \
     -Wall \
     -Wextra \
     -std=gnu11 \
@@ -45,7 +51,6 @@ override CFLAGS += \
 
 # Internal C preprocessor flags that should not be changed by the user.
 override CPPFLAGS := \
-    -I src \
     $(CPPFLAGS) \
     -MMD \
     -MP
@@ -61,22 +66,23 @@ override LDFLAGS += \
     -nostdlib \
     -static \
     -z max-page-size=0x1000 \
-    -T linker.ld
+    -T src/platform/$(PLATFORM)/linker.ld
 
 # Use "find" to glob all *.c, *.S, and *.asm files in the tree and obtain the
 # object and header dependency file names.
-override CFILES := $(shell cd src && find -L * -type f -name '*.c' | LC_ALL=C sort)
-override ASFILES := $(shell cd src && find -L * -type f -name '*.S' | LC_ALL=C sort)
-override NASMFILES := $(shell cd src && find -L * -type f -name '*.asm' | LC_ALL=C sort)
-override OBJ := $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
-override HEADER_DEPS := $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
+
+override CFILES = $(call rwildcard, src/com, *c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
+override ASFILES = $(call rwildcard, src/platform/$(PLATFORM), *.S)
+override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
+override OBJ = $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
+override HEADER_DEPS = $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target.
 .PHONY: all
 all: bin/$(OUTPUT)
 
 # Link rules for the final executable.
-bin/$(OUTPUT): GNUmakefile linker.ld $(OBJ)
+bin/$(OUTPUT): GNUmakefile src/platform/$(PLATFORM)/linker.ld $(OBJ)
 	mkdir -p "$$(dirname $@)"
 	$(LD) $(OBJ) $(LDFLAGS) -o $@
 
@@ -84,17 +90,17 @@ bin/$(OUTPUT): GNUmakefile linker.ld $(OBJ)
 -include $(HEADER_DEPS)
 
 # Compilation rules for *.c files.
-obj/%.c.o: src/%.c GNUmakefile
+obj/src/%.c.o: src/%.c GNUmakefile
 	mkdir -p "$$(dirname $@)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # Compilation rules for *.S files.
-obj/%.S.o: src/%.S GNUmakefile
+obj/src/%.S.o: src/%.S GNUmakefile
 	mkdir -p "$$(dirname $@)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # Compilation rules for *.asm (nasm) files.
-obj/%.asm.o: src/%.asm GNUmakefile
+obj/src/%.asm.o: src/%.asm GNUmakefile
 	mkdir -p "$$(dirname $@)"
 	nasm $(NASMFLAGS) $< -o $@
 
