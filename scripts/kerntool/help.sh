@@ -1,4 +1,3 @@
-#!/bin/sh
 # SalernOS kernel / kerntool
 # Copyright (C) 2021 - 2024 Alessandro Salerno
 #
@@ -15,17 +14,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>. 
 
-error() {
-  echo "kerntool error: $1, see ./kerntool help"
-  exit -1
+info() {
+  echo "this command gives you information on how to use kerntool"
 }
 
-if [ $# -eq 0 ]; then
-  error "must specify a command to run"
+if [ "$1" == "?" ]; then
+  info
+  exit 0
 fi
 
-if [ ! -f "./scripts/kerntool/$1.sh" ]; then
-  error "unknown command '$1'"
-fi
+echo "kerntool commands:"
 
-sh ./scripts/kerntool/$1.sh ${@:2}
+for filename in ./scripts/kerntool/*; do
+  IFS='/'
+  read -ra pathsep <<< "${filename}"
+  short_name=${pathsep[-1]}
+  IFS='.'
+  read -ra dotsep <<< "${short_name}"
+  command=${dotsep[0]}
+  echo "        ${command}"
+done
+
+echo
+echo "commands can be invoked as follows: ./kerntool <command> [<arguments>]"
+echo "additional information on each commaand can be found using the '?' argument"
+echo "example: ./kerntool mkiso ?"

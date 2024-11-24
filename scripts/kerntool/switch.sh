@@ -1,4 +1,3 @@
-#!/bin/sh
 # SalernOS kernel / kerntool
 # Copyright (C) 2021 - 2024 Alessandro Salerno
 #
@@ -16,16 +15,23 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>. 
 
 error() {
-  echo "kerntool error: $1, see ./kerntool help"
+  echo "kerntool error: $1, see ./kerntool switch ?"
   exit -1
 }
 
-if [ $# -eq 0 ]; then
-  error "must specify a command to run"
+info() {
+  echo "this command updates the 'compile_flags.txt' file using the correct one for the given platform"
+  echo "example: ./kerntool switch x86-64"
+}
+
+if [ "$1" == "?" ]; then
+  info
+  exit 0
 fi
 
-if [ ! -f "./scripts/kerntool/$1.sh" ]; then
-  error "unknown command '$1'"
+if [ ! -f "./config/compile-flags/$1.txt" ]; then
+  error "unknown platform '$1'"
 fi
 
-sh ./scripts/kerntool/$1.sh ${@:2}
+ln -s "./config/compile-flags/$1.txt" "compile_flags.txt"
+echo "compile_flags.txt linked to config/compile-flags/$1.txt"
