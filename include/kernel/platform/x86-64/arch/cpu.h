@@ -16,13 +16,15 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <vendor/limine.h>
+#pragma once
 
-arch_cpu_t BaseCpu;
+#include <kernel/platform/x86-64/msr.h>
 
-void kmain(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  while (1)
-    ;
+typedef struct arch_cpu {
+  struct arch_cpu *self;
+} arch_cpu_t;
+
+static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
+  cpu->self = cpu;
+  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
 }

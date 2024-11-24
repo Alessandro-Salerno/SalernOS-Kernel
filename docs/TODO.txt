@@ -9,6 +9,7 @@ Top level source tree structure:
         config/
         docs/
         include/
+        scripts/
         src/
         .gitignore
         .gitattributes

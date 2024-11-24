@@ -16,13 +16,27 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <vendor/limine.h>
+#pragma once
 
-arch_cpu_t BaseCpu;
+#include <stdint.h>
 
-void kmain(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  while (1)
-    ;
+#define X86_64_MSR_EFER         0xC0000080
+#define X86_64_MSR_STAR         0xC0000081
+#define X86_64_MSR_LSTAR        0xC0000082
+#define X86_64_MSR_CSTAR        0xC0000083
+#define X86_64_MSR_FMASK        0xC0000084
+#define X86_64_MSR_FSBASE       0xC0000100
+#define X86_64_MSR_GSBASE       0xC0000101
+#define X86_64_MSR_KERNELGSBASE 0xC0000102
+
+static inline uint32_t hdr_x86_64_msr_read(uint32_t reg) {
+  uint64_t low, high;
+  asm volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(reg));
+  return (high << 32) | low;
+}
+
+static inline void hdr_x86_64_msr_write(uint32_t reg, uint64_t val) {
+  uint32_t low  = val & 0xFFFFFFFF;
+  uint32_t high = (val >> 32) & 0xFFFFFFFF;
+  asm volatile("wrmsr" : : "a"(low), "d"(high), "c"(reg));
 }

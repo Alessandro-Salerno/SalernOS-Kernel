@@ -14,14 +14,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>. 
 
-error() {
-  echo "kerntool error: $1, see ./kerntool switch ?"
-  exit -1
-}
-
 info() {
-  echo "this command updates the 'compile_flags.txt' file using the correct one for the given platform"
-  echo "example: ./kerntool switch x86-64"
+  echo "this command is used to build and run the kernel"
+  echo "example: ./kerntool run"
 }
 
 if [ "$1" == "?" ]; then
@@ -29,10 +24,7 @@ if [ "$1" == "?" ]; then
   exit 0
 fi
 
-if [ ! -f "./config/compile-flags/$1.txt" ]; then
-  error "unknown platform '$1'"
-fi
+make
+./kerntool mkiso
 
-rm compile_flags.txt
-ln -s "./config/compile-flags/$1.txt" "compile_flags.txt"
-echo "compile_flags.txt linked to config/compile-flags/$1.txt"
+qemu-system-x86_64 -M q35 -m 4g -smp cpus=1 -no-shutdown -no-reboot -monitor stdio -debugcon file:/dev/stdout -serial file:/dev/stdout -netdev user,id=net0 -device virtio-net,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=netdump.dat -cdrom image.iso
