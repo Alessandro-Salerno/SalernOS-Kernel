@@ -18,19 +18,35 @@
 
 #pragma once
 
-#include <kernel/platform/x86-64/msr.h>
+#include <stdint.h>
 
-typedef struct arch_cpu {
-  struct arch_cpu *self;
-} arch_cpu_t;
+typedef struct {
+  uint64_t cr2;
+  uint64_t gs;
+  uint64_t fs;
+  uint64_t es;
+  uint64_t ds;
+  uint64_t rax;
+  uint64_t rbx;
+  uint64_t rcx;
+  uint64_t rdx;
+  uint64_t r8;
+  uint64_t r9;
+  uint64_t r10;
+  uint64_t r11;
+  uint64_t r12;
+  uint64_t r13;
+  uint64_t r14;
+  uint64_t r15;
+  uint64_t rdi;
+  uint64_t rsi;
+  uint64_t rbp;
+  uint64_t error;
+  uint64_t rip;
+  uint64_t cs;
+  uint64_t rflags;
+  uint64_t rsp;
+  uint64_t ss;
+} __attribute__((packed)) arch_context_t;
 
-static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-  cpu->self = cpu;
-  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
-}
-
-static inline long hdr_arch_cpu_get_id(void) {
-  long id;
-  asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
-  return id;
-}
+void arch_ctx_print(arch_context_t *ctx);

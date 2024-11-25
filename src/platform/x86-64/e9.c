@@ -16,21 +16,9 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <kernel/platform/x86-64/e9.h>
+#include <kernel/platform/x86-64/io.h>
 
-#include <kernel/platform/x86-64/msr.h>
-
-typedef struct arch_cpu {
-  struct arch_cpu *self;
-} arch_cpu_t;
-
-static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-  cpu->self = cpu;
-  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
-}
-
-static inline long hdr_arch_cpu_get_id(void) {
-  long id;
-  asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
-  return id;
+void x86_64_e9_putc(char c) {
+  hdr_x86_64_io_outb(X86_64_IO_PORT_E9, c);
 }

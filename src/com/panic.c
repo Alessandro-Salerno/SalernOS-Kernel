@@ -16,21 +16,25 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <arch/context.h>
+#include <arch/cpu.h>
+#include <kernel/com/log.h>
+#include <kernel/com/panic.h>
+#include <lib/printf.h>
+#include <stddef.h>
 
-#include <kernel/platform/x86-64/msr.h>
+__attribute__((noreturn)) void com_panic(const char *msg, arch_context_t *ctx) {
+  kprintf("kernel panic: cpu=%u\n", hdr_arch_cpu_get_id());
 
-typedef struct arch_cpu {
-  struct arch_cpu *self;
-} arch_cpu_t;
+  if (NULL != msg) {
+    kprintf("%s\n", msg);
+  }
 
-static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-  cpu->self = cpu;
-  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
-}
+  if (NULL != ctx) {
+    arch_ctx_print(ctx);
+  }
 
-static inline long hdr_arch_cpu_get_id(void) {
-  long id;
-  asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
-  return id;
+  // TODO: disable interrupts
+  while (1)
+    ;
 }

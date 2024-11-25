@@ -17,12 +17,17 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/com/log.h>
+#include <kernel/platform/x86-64/e9.h>
+#include <lib/printf.h>
 #include <vendor/limine.h>
 
 arch_cpu_t BaseCpu;
 
-void kmain(void) {
+void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
+  com_log_set_hook(x86_64_e9_putc);
+  ASSERT(5 == 4);
   while (1)
     ;
 }

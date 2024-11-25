@@ -18,19 +18,21 @@
 
 #pragma once
 
-#include <kernel/platform/x86-64/msr.h>
+#include <kernel/com/panic.h>
+#include <kernel/com/util.h>
+#include <stddef.h>
 
-typedef struct arch_cpu {
-  struct arch_cpu *self;
-} arch_cpu_t;
+#define ASSERT(statement)                                        \
+  if (UNLIKELY(!(statement))) {                                  \
+    com_log_puts(__FILE__ ":");                                  \
+    com_log_puts(__func__);                                      \
+    com_log_puts(":" STR(__LINE__) ": " #statement " failed\n"); \
+    com_panic(NULL, NULL);                                       \
+  }
 
-static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-  cpu->self = cpu;
-  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
-}
+typedef void (*com_log_hook_t)(char);
 
-static inline long hdr_arch_cpu_get_id(void) {
-  long id;
-  asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
-  return id;
-}
+void com_log_set_hook(com_log_hook_t hook);
+void com_log_putc(char c);
+void com_log_puts(const char *s);
+void com_log_init();
