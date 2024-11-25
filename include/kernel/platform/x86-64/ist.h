@@ -16,20 +16,23 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/log.h>
-#include <kernel/platform/x86-64/e9.h>
-#include <kernel/platform/x86-64/gdt.h>
-#include <lib/printf.h>
-#include <vendor/limine.h>
+#pragma once
 
-static arch_cpu_t BaseCpu = {0};
+#include <stdint.h>
 
-void kernel_entry(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  com_log_set_hook(x86_64_e9_putc);
-  x86_64_gdt_init();
-  ASSERT(5 == 4);
-  while (1)
-    ;
-}
+typedef struct {
+  uint32_t reserved;
+  uint64_t rsp0;
+  uint64_t rsp1;
+  uint64_t rsp2;
+  uint64_t reserved2;
+  uint64_t ist1;
+  uint64_t ist2;
+  uint64_t ist3;
+  uint64_t ist4;
+  uint64_t ist5;
+  uint64_t ist6;
+  uint64_t ist7;
+  uint32_t reserved3[3];
+  uint32_t iopb;
+} __attribute__((packed)) x86_64_ist_t;

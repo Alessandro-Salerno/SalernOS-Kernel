@@ -18,15 +18,27 @@
 
 #pragma once
 
+#include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
 
 typedef struct arch_cpu {
+  void            *dummy1;
   struct arch_cpu *self;
+  void            *dummy2;
+  uint64_t         id;
+  uint64_t         gdt[7];
+  x86_64_ist_t     ist;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
   cpu->self = cpu;
   hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
+}
+
+static inline arch_cpu_t *hdr_arch_cpu_get() {
+  arch_cpu_t *cpu;
+  asm volatile("mov %%gs:8, %%rax" : "=a"(cpu) : : "memory");
+  return cpu;
 }
 
 static inline long hdr_arch_cpu_get_id(void) {
