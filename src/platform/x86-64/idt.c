@@ -16,25 +16,44 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
 #include <kernel/com/log.h>
-#include <kernel/platform/x86-64/e9.h>
-#include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
-#include <lib/printf.h>
-#include <vendor/limine.h>
+#include <stdint.h>
 
-static arch_cpu_t BaseCpu = {0};
+typedef struct {
+  uint16_t size;
+  uint64_t offset;
+} __attribute__((packed)) idtr_t;
 
-void kernel_entry(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  com_log_set_hook(x86_64_e9_putc);
-  x86_64_gdt_init();
-  x86_64_idt_init();
-  x86_64_idt_reload();
-  asm volatile("sti");
-  asm volatile("int $0x80");
-  // *((volatile int *)NULL) = 3;
-  while (1)
-    ;
+typedef struct {
+  uint16_t offset;
+  uint16_t segment;
+  uint8_t  ist;
+  uint8_t  flags;
+  uint16_t offset2;
+  uint32_t offset3;
+  uint32_t reserved;
+} __attribute__((packed)) idtentry_t;
+
+static idtentry_t     Idt[256];
+static idtr_t         Idtr = {.size = sizeof(Idt) - 1, .offset = (uint64_t)Idt};
+extern const uint64_t IsrTable[256];
+
+void x86_64_idt_init() {
+  LOG("initializing idt");
+
+  for (uint64_t i = 0; i < 256; i++) {
+    Idt[i].offset  = IsrTable[i] & 0xffff;
+    Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
+    Idt[i].ist     = 0;
+    Idt[i].flags   = 0x8E;
+    Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
+    Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
+  }
+}
+
+void x86_64_idt_reload() {
+  LOG("reloading idt");
+  asm volatile("lidt (%%rax)" : : "a"(&Idtr));
+  // TODO: implement rest of this function
 }

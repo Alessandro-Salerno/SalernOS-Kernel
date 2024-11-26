@@ -16,25 +16,12 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/log.h>
-#include <kernel/platform/x86-64/e9.h>
-#include <kernel/platform/x86-64/gdt.h>
-#include <kernel/platform/x86-64/idt.h>
+#pragma once
+
+#include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
-#include <vendor/limine.h>
 
-static arch_cpu_t BaseCpu = {0};
-
-void kernel_entry(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  com_log_set_hook(x86_64_e9_putc);
-  x86_64_gdt_init();
-  x86_64_idt_init();
-  x86_64_idt_reload();
-  asm volatile("sti");
-  asm volatile("int $0x80");
-  // *((volatile int *)NULL) = 3;
-  while (1)
-    ;
+void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
+  // TODO: implement this
+  kprintf("Interrupt %u\n", vec);
 }

@@ -20,7 +20,15 @@
 
 #include <kernel/com/panic.h>
 #include <kernel/com/util.h>
+#include <lib/printf.h>
 #include <stddef.h>
+
+#define LOG(...)                         \
+  com_log_puts(__FILE__ ":");            \
+  com_log_puts(__func__);                \
+  com_log_puts(":" STR(__LINE__) ":\t"); \
+  kprintf(__VA_ARGS__);                  \
+  com_log_putc('\n');
 
 #define ASSERT(statement)                                        \
   if (UNLIKELY(!(statement))) {                                  \
