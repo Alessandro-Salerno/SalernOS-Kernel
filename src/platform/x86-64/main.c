@@ -32,8 +32,8 @@ void kernel_entry(void) {
   x86_64_gdt_init();
   x86_64_idt_init();
   x86_64_idt_reload();
-  asm volatile("sti");
-  asm volatile("int $0x80");
+  *(volatile int *)NULL = 2;
+  // asm volatile("int $0x80");
   // *((volatile int *)NULL) = 3;
   while (1)
     ;

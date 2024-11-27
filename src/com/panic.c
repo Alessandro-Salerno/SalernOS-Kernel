@@ -21,20 +21,28 @@
 #include <kernel/com/log.h>
 #include <kernel/com/panic.h>
 #include <lib/printf.h>
+#include <stdarg.h>
 #include <stddef.h>
 
-__attribute__((noreturn)) void com_panic(const char *msg, arch_context_t *ctx) {
-  kprintf("kernel panic: cpu=%u\n", hdr_arch_cpu_get_id());
+#include "com/sys/interrupt.h"
 
-  if (NULL != msg) {
-    kprintf("%s\n", msg);
+__attribute__((noreturn)) void
+com_panic(arch_context_t *ctx, const char *fmt, ...) {
+  kprintf("kernel panic on cpu %u\n", hdr_arch_cpu_get_id());
+
+  if (NULL != fmt) {
+    va_list args;
+    va_start(args, fmt);
+    kvprintf(fmt, args);
+    va_end(args);
+    kprintf("\n");
   }
 
   if (NULL != ctx) {
     arch_ctx_print(ctx);
   }
 
-  // TODO: disable interrupts
+  com_sys_interrupt_set(false);
   while (1)
     ;
 }

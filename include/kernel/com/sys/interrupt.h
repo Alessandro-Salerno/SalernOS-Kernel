@@ -19,6 +19,21 @@
 #pragma once
 
 #include <arch/context.h>
+#include <stdbool.h>
 #include <stdint.h>
 
+typedef struct com_isr com_isr_t;
+typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
+typedef void (*com_intf_eoi_t)(com_isr_t *isr);
+
+typedef struct com_isr {
+  com_intf_isr_t func;
+  com_intf_eoi_t eoi;
+  uintmax_t      id;
+} com_isr_t;
+
+bool com_sys_interrupt_set(bool status);
+void com_sys_interrupt_register(uintmax_t      vec,
+                                com_intf_isr_t func,
+                                com_intf_eoi_t eoi);
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx);

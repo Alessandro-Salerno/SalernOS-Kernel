@@ -20,4 +20,5 @@
 
 #include <arch/context.h>
 
-__attribute__((noreturn)) void com_panic(const char *msg, arch_context_t *ctx);
+__attribute__((noreturn)) void
+com_panic(arch_context_t *ctx, const char *fmt, ...);

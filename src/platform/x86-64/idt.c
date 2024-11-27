@@ -17,8 +17,12 @@
 *************************************************************************/
 
 #include <kernel/com/log.h>
+#include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <stdint.h>
+
+#include "arch/context.h"
+#include "com/panic.h"
 
 typedef struct {
   uint16_t size;
@@ -39,6 +43,35 @@ static idtentry_t     Idt[256];
 static idtr_t         Idtr = {.size = sizeof(Idt) - 1, .offset = (uint64_t)Idt};
 extern const uint64_t IsrTable[256];
 
+static char *Exceptions[] = {"division by 0",
+                             "debug",
+                             "mmi",
+                             "breakpoint",
+                             "overflow",
+                             "bound range exceeded",
+                             "invalid opcode",
+                             "device not available",
+                             "double fault",
+                             "coprocessor segment overrun",
+                             "invalid tss",
+                             "segment not present",
+                             "stack-segment fault",
+                             "general protection fault",
+                             "page fault",
+                             "unknown",
+                             "x87 floating-point exception",
+                             "alignment check",
+                             "machine check",
+                             "simd exception"};
+
+static void generic_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
+  if ((isr->id & 0xff) < 19) {
+    com_panic(ctx, "cpu exception (%s)", Exceptions[isr->id & 0xff]);
+  }
+
+  com_panic(ctx, "cpu exception (unknown)");
+}
+
 void x86_64_idt_init() {
   LOG("initializing idt");
 
@@ -55,5 +88,10 @@ void x86_64_idt_init() {
 void x86_64_idt_reload() {
   LOG("reloading idt");
   asm volatile("lidt (%%rax)" : : "a"(&Idtr));
-  // TODO: implement rest of this function
+
+  for (uintmax_t i = 0; i < 32; i++) {
+    com_sys_interrupt_register(i, generic_exception_isr, NULL);
+  }
+
+  com_sys_interrupt_set(true);
 }

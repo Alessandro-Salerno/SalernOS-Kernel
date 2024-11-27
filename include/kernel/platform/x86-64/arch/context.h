@@ -20,6 +20,9 @@
 
 #include <stdint.h>
 
+#define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
+#define ARCH_CONTEXT_ISUSER(x)    (0x23 == (x)->cs)
+
 typedef struct {
   uint64_t cr2;
   uint64_t gs;

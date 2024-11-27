@@ -18,8 +18,10 @@
 
 #pragma once
 
+#include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <stdbool.h>
 
 typedef struct arch_cpu {
   void            *dummy1;
@@ -28,6 +30,8 @@ typedef struct arch_cpu {
   uint64_t         id;
   uint64_t         gdt[7];
   x86_64_ist_t     ist;
+  bool             intstatus;
+  com_isr_t        isr[256];
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
@@ -49,4 +53,12 @@ static inline long hdr_arch_cpu_get_id(void) {
 
 static inline void hdr_arch_cpu_pause(void) {
   asm volatile("pause");
+}
+
+static inline void hdr_arch_cpu_interrupt_disable(void) {
+  asm volatile("cli");
+}
+
+static inline void hdr_arch_cpu_interrupt_enable(void) {
+  asm volatile("sti");
 }
