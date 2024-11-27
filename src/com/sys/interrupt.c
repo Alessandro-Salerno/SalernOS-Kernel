@@ -51,6 +51,8 @@ void com_sys_interrupt_register(uintmax_t      vec,
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
+  // TODO: check if this should be cpu->intstatus = false
+  //        CHECK EVERYWHERE
   com_sys_interrupt_set(false);
   com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
 
