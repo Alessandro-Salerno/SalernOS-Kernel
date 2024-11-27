@@ -24,4 +24,5 @@
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
   // TODO: implement this
   kprintf("Interrupt %u\n", vec);
+  (void)ctx;
 }
