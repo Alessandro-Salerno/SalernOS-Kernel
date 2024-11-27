@@ -46,3 +46,7 @@ static inline long hdr_arch_cpu_get_id(void) {
   asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
   return id;
 }
+
+static inline void hdr_arch_cpu_pause(void) {
+  asm volatile("pause");
+}

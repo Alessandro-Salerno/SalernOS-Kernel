@@ -16,11 +16,24 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <kernel/com/sys/interrupt.h>
-#include <lib/printf.h>
+#pragma once
 
-void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
-  // TODO: implement this
-  kprintf("Interrupt %u\n", vec);
-  (void)ctx;
+#include <arch/cpu.h>
+#include <stdbool.h>
+
+typedef int spinlock_t;
+
+#define SPINLOCK_NEW() 0
+
+static inline void hdr_com_spinlock_aquire(spinlock_t *lock) {
+  while (!__sync_bool_compare_and_swap(lock, 0, 1))
+    hdr_arch_cpu_pause();
+}
+
+static inline bool hdr_com_spinlock_try(spinlock_t *lock) {
+  return __sync_bool_compare_and_swap(lock, 0, 1);
+}
+
+static inline void hdr_com_spinlock_release(spinlock_t *lock) {
+  *lock = 0;
 }
