@@ -16,15 +16,14 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/context.h>
 #include <arch/cpu.h>
+#include <com/panic.h>
 #include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "arch/context.h"
-#include "com/panic.h"
 
 bool com_sys_interrupt_set(bool status) {
   hdr_arch_cpu_interrupt_disable();
