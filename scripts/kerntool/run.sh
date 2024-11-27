@@ -24,6 +24,12 @@ if [ "$1" == "?" ]; then
   exit 0
 fi
 
+debug_flags=
+
+if [ "$1" == "debug" ]; then
+  debug_flags="-S -s"
+fi
+
 make \
   && ./kerntool mkiso \
-  && qemu-system-x86_64 -M q35 -m 4g -smp cpus=1 -no-shutdown -no-reboot -monitor stdio -debugcon file:/dev/stdout -serial file:/dev/stdout -netdev user,id=net0 -device virtio-net,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=netdump.dat -cdrom image.iso
+  && qemu-system-x86_64 -M q35 -m 4g -smp cpus=1 -no-shutdown -no-reboot -monitor stdio -debugcon file:/dev/stdout -serial file:/dev/stdout -netdev user,id=net0 -device virtio-net,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=netdump.dat -cdrom image.iso $debug_flags
