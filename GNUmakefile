@@ -22,7 +22,7 @@ CFLAGS := -g -O2 -pipe
 CPPFLAGS :=
 
 # User controllable nasm flags.
-NASMFLAGS := -felf64 -g -w-reloc-abs-qword
+NASMFLAGS := -felf64 -g
 
 # User controllable linker flags. We set none by default.
 LDFLAGS :=

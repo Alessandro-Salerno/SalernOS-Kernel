@@ -30,6 +30,10 @@ if [ "$1" == "debug" ]; then
   debug_flags="-S -s"
 fi
 
+if [ "$1" == "monitor" ]; then
+  debug_flags="-monitor stdio"
+fi
+
 make \
   && ./kerntool mkiso \
-  && qemu-system-x86_64 -M q35 -m 4g -smp cpus=1 -no-shutdown -no-reboot -monitor stdio -debugcon file:/dev/stdout -serial file:/dev/stdout -netdev user,id=net0 -device virtio-net,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=netdump.dat -cdrom image.iso $debug_flags
+  && qemu-system-x86_64 -M q35 -m 4g -smp cpus=1 -no-shutdown -no-reboot -nographic -debugcon file:/dev/stdout -serial file:/dev/stdout -netdev user,id=net0 -device virtio-net,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=netdump.dat -cdrom image.iso $debug_flags

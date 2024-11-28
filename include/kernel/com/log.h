@@ -23,11 +23,20 @@
 #include <lib/printf.h>
 #include <stddef.h>
 
-#define LOG(...)                         \
-  com_log_puts(__FILE__ ":");            \
-  com_log_puts(__func__);                \
-  com_log_puts(":" STR(__LINE__) ":\t"); \
-  kprintf(__VA_ARGS__);                  \
+#define LOG(...)                        \
+  com_log_puts("[  log  ] ");           \
+  com_log_puts(__FILE__ ":");           \
+  com_log_puts(__func__);               \
+  com_log_puts(":" STR(__LINE__) ": "); \
+  kprintf(__VA_ARGS__);                 \
+  com_log_putc('\n');
+
+#define DEBUG(...)                      \
+  com_log_puts("[ debug ] ");           \
+  com_log_puts(__FILE__ ":");           \
+  com_log_puts(__func__);               \
+  com_log_puts(":" STR(__LINE__) ": "); \
+  kprintf(__VA_ARGS__);                 \
   com_log_putc('\n');
 
 #define ASSERT(statement)                                        \
