@@ -6,4 +6,5 @@ limine
 *.dat
 iso_root/
 *.iso
+compile_flags.txt
 
