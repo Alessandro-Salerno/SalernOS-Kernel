@@ -25,7 +25,7 @@ typedef int spinlock_t;
 
 #define SPINLOCK_NEW() 0
 
-static inline void hdr_com_spinlock_aquire(spinlock_t *lock) {
+static inline void hdr_com_spinlock_acquire(spinlock_t *lock) {
   while (!__sync_bool_compare_and_swap(lock, 0, 1))
     hdr_arch_cpu_pause();
 }

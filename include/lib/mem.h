@@ -23,5 +23,4 @@
 
 void   kmemset(void *buff, size_t buffsize, uint8_t val);
 int8_t kmemcmp(void *buff1, void *buff2, size_t buffsize);
-
-void kmemcpy(void *dst, void *src, size_t buffsize);
+void   kmemcpy(void *dst, void *src, size_t buffsize);
