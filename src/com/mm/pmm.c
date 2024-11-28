@@ -17,180 +17,194 @@
 *************************************************************************/
 
 #include <kernel/com/log.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/spinlock.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <stdint.h>
 #include <vendor/limine.h>
 
 typedef struct Bitmap {
-  size_t   size;
-  uint8_t *buffer;
+  size_t    size;
+  uint8_t  *buffer;
+  uintmax_t index;
 } bmp_t;
-
-bool bmp_get(bmp_t *bmp, uint64_t idx) {
-  uint64_t byte_idx    = idx / 8;
-  uint8_t  bit_idx     = idx % 8;
-  uint8_t  bit_indexer = 0b10000000 >> bit_idx;
-
-  return (bmp->buffer[byte_idx] & bit_indexer) > 0;
-}
-
-void bmp_set(bmp_t *bmp, uint64_t idx, bool val) {
-  uint64_t byte_idx    = idx / 8;
-  uint8_t  bit_idx     = idx % 8;
-  uint8_t  bit_indexer = 0b10000000 >> bit_idx;
-
-  bmp->buffer[byte_idx] &= ~bit_indexer;
-  bmp->buffer[byte_idx] |= bit_indexer * val;
-}
 
 __attribute__((
     used,
     section(".limine_requests"))) static volatile struct limine_memmap_request
-    memoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+    MemoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
 
 static volatile struct limine_hhdm_request HhdmRequest = {
     .id       = LIMINE_HHDM_REQUEST,
     .revision = 0};
 
-static uint64_t liminebind_transint(uint64_t addr) {
-  return addr + (uint64_t)HhdmRequest.response->offset;
+static bmp_t PageBitmap;
+
+static uintmax_t MemSize;
+static uintmax_t UsableMem;
+static uintmax_t FreeMem;
+static uintmax_t ReservedMem;
+static uintmax_t UsedMem;
+
+// TODO: turn this into a mutex
+static spinlock_t Lock = SPINLOCK_NEW();
+
+// TODO: create some kind of global thing for this
+static inline uintptr_t liminebind_transint(uintptr_t addr) {
+  return addr + (uintptr_t)HhdmRequest.response->offset;
 }
 
-static bmp_t    pageBitmap;
-static uint64_t bitmapIndex;
+bool bmp_get(bmp_t *bmp, uintmax_t idx) {
+  uintmax_t byte_idx    = idx / 8;
+  uint8_t   bit_idx     = idx % 8;
+  uint8_t   bit_indexer = 0b10000000 >> bit_idx;
 
-static uint64_t MemSize;
-static uint64_t UsableMem;
-static uint64_t FreeMem;
-static uint64_t ReservedMem;
-static uint64_t UsedMem;
+  return (bmp->buffer[byte_idx] & bit_indexer) > 0;
+}
 
-static spinlock_t pmmLock = SPINLOCK_NEW();
+void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
+  uintmax_t byte_idx    = idx / 8;
+  uint8_t   bit_idx     = idx % 8;
+  uint8_t   bit_indexer = 0b10000000 >> bit_idx;
+
+  bmp->buffer[byte_idx] &= ~bit_indexer;
+  bmp->buffer[byte_idx] |= bit_indexer * val;
+}
 
 static void reserve_page(void *address, uint64_t *rsvmemcount) {
-  uint64_t idx = (uint64_t)(address) / 4096;
+  uintmax_t idx = (uintmax_t)address / 4096;
 
-  if (bmp_get(&pageBitmap, idx)) {
-    return;
-  }
+  ASSERT(!bmp_get(&PageBitmap, idx));
 
-  bmp_set(&pageBitmap, idx, 1);
+  bmp_set(&PageBitmap, idx, 1);
   FreeMem -= 4096;
   *rsvmemcount += 4096;
 }
 
 static void unreserve_page(void *address, uint64_t *rsvmemcount) {
-  uint64_t idx = (uint64_t)(address) / 4096;
+  uintmax_t idx = (uintmax_t)address / 4096;
 
-  if (!bmp_get(&pageBitmap, idx)) {
-    return;
-  }
+  ASSERT(bmp_get(&PageBitmap, idx));
 
-  bmp_set(&pageBitmap, idx, 0);
+  bmp_set(&PageBitmap, idx, 0);
   FreeMem += 4096;
   *rsvmemcount -= 4096;
 
-  bitmapIndex = (bitmapIndex > idx) ? idx : bitmapIndex;
+  if (PageBitmap.index > idx) {
+    PageBitmap.index = idx;
+  }
 }
 
-static void reserve_pages(void *address, uint64_t pagecount) {
-  for (uint64_t i = 0; i < pagecount; i++) {
-    reserve_page((void *)((uint64_t)(address) + (i * 4096)), &UsedMem);
+static void alloc_pages(void *address, uint64_t pagecount) {
+  for (uintmax_t i = 0; i < pagecount; i++) {
+    reserve_page((void *)((uintptr_t)address + (i * 4096)), &UsedMem);
   }
 }
 
 void unreserve_pages(void *address, uint64_t pagecount) {
-  for (uint64_t i = 0; i < pagecount; i++) {
-    unreserve_page((void *)((uint64_t)(address) + (i * 4096)), &ReservedMem);
+  for (uintmax_t i = 0; i < pagecount; i++) {
+    unreserve_page((void *)((uintptr_t)address + (i * 4096)), &ReservedMem);
   }
 }
 
 void *com_mm_pmm_alloc() {
-  hdr_com_spinlock_acquire(&pmmLock);
+  hdr_com_spinlock_acquire(&Lock);
   void *ret = NULL;
 
-  for (; bitmapIndex < pageBitmap.size * 8; bitmapIndex++) {
-    if (bmp_get(&pageBitmap, bitmapIndex) == 0) {
-      ret = (void *)(bitmapIndex * 4096);
-      reserve_pages(ret, 1);
+  for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
+    if (0 == bmp_get(&PageBitmap, PageBitmap.index)) {
+      ret = (void *)(PageBitmap.index * 4096);
+      alloc_pages(ret, 1);
       break;
     }
   }
 
-  hdr_com_spinlock_release(&pmmLock);
+  hdr_com_spinlock_release(&Lock);
   return ret;
 }
 
+void com_mm_pmm_free(void *page) {
+  hdr_com_spinlock_acquire(&Lock);
+  unreserve_page(page, &UsedMem);
+  hdr_com_spinlock_release(&Lock);
+}
+
+// TODO: make this arch-agnostic and limine-agnostic
+//        the solution would proably be to take all this info
+//        as parameters and let the implementation figure this out
 void com_mm_pmm_init() {
-  struct limine_memmap_response *memmap       = memoryMapRequest.response;
-  uint64_t                       highest_addr = 0;
+  struct limine_memmap_response *memmap       = MemoryMapRequest.response;
+  uintptr_t                      highest_addr = 0;
+
+  ASSERT(NULL != memmap);
 
   // Calculate memory map & bitmap size
-  for (uint64_t i = 0; i < memmap->entry_count; i++) {
+  for (uintmax_t i = 0; i < memmap->entry_count; i++) {
     struct limine_memmap_entry *entry = memmap->entries[i];
     MemSize += entry->length;
-    uint64_t seg_top = entry->base + entry->length;
+    uintptr_t seg_top = entry->base + entry->length;
 
-    DEBUG("segment: bse=%x length=%u top=%x usable=%u",
+    DEBUG("segment: base=%x top=%x usable=%u length=%u",
           entry->base,
-          entry->length,
           seg_top,
-          entry->type == LIMINE_MEMMAP_USABLE);
+          LIMINE_MEMMAP_USABLE == entry->type,
+          entry->length);
 
-    if (entry->type == LIMINE_MEMMAP_USABLE) {
-      UsableMem += entry->length;
-      if (seg_top > highest_addr)
-        highest_addr = seg_top;
+    if (LIMINE_MEMMAP_USABLE != entry->type) {
+      ReservedMem += entry->length;
       continue;
     }
 
-    ReservedMem += entry->length;
+    UsableMem += entry->length;
+    if (seg_top > highest_addr) {
+      highest_addr = seg_top;
+    }
   }
 
   DEBUG("searched all segments, found highest address at %x", highest_addr);
 
   // Compute the actual size of the bitmap
-  uint64_t highest_pgindex = highest_addr / 4096;
-  uint64_t bmp_sz          = highest_pgindex / 8 + 1;
+  uintptr_t highest_pgindex = highest_addr / 4096;
+  size_t    bmp_sz          = highest_pgindex / 8 + 1;
 
-  DEBUG("bitmap requirements: size=%u bytes", bmp_sz);
+  DEBUG("memory is %u pages, bitmap needs %u bytes", highest_pgindex, bmp_sz);
 
   // Find a segment that fits the bitmap and allocate it there
-  for (uint64_t i = 0; i < memmap->entry_count; i++) {
+  for (uintmax_t i = 0; i < memmap->entry_count; i++) {
     struct limine_memmap_entry *entry = memmap->entries[i];
 
-    if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= bmp_sz) {
-      uint64_t transbase = liminebind_transint(entry->base);
-      DEBUG("bitmap: index=%x base=%x size=%x", i, transbase, bmp_sz);
-      pageBitmap.buffer = (uint8_t *)transbase;
-      pageBitmap.size   = bmp_sz;
+    if (LIMINE_MEMMAP_USABLE == entry->type && entry->length >= bmp_sz) {
+      uintptr_t transbase = liminebind_transint(entry->base);
+      DEBUG("bitmap: base=%x size=%u segment=%u", transbase, bmp_sz, i);
+      PageBitmap.buffer = (uint8_t *)transbase;
+      PageBitmap.size   = bmp_sz;
 
       // Reserve the entire memory space
-      kmemset((void *)pageBitmap.buffer, bmp_sz, 0xff);
+      kmemset((void *)PageBitmap.buffer, bmp_sz, 0xff);
 
       // NOTE: This is just a small optiimzation
       // Shifting the base and length of the entry allows
       // us to skip reserving the bitmap.
-      // Thus, when freeing this netry, the bitmap will still
+      // Thus, when freeing this entry, the bitmap will still
       // be reserved
       entry->base += bmp_sz;
       entry->length -= bmp_sz;
 
-      LOG("memory reserved and bitmap allocated");
-
-      // If a good-enough segment ahs been found
+      // If a good-enough segment has been found
       // there's no need to continue
       break;
     }
   }
 
+  LOG("freeing usable pages");
+
   // Unreserve free memory
-  for (uint64_t i = 0; i < memmap->entry_count; i++) {
+  for (uintmax_t i = 0; i < memmap->entry_count; i++) {
     struct limine_memmap_entry *entry = memmap->entries[i];
 
-    if (entry->type == LIMINE_MEMMAP_USABLE) {
+    if (LIMINE_MEMMAP_USABLE == entry->type) {
       unreserve_pages((void *)entry->base, entry->length / 4096);
     }
   }
