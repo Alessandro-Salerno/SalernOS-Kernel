@@ -82,6 +82,39 @@ static const char *itoa(int64_t val) {
   return StrConvOutBuf;
 }
 
+static const char *xuitoa(uint64_t val) {
+  uint64_t size_test = val;
+  uint8_t  size      = 0;
+  uint8_t  idx       = 0;
+
+  while (size_test >= 16) {
+    size_test /= 16;
+    size++;
+  }
+
+  while (idx < size) {
+    uint8_t rem = val % 16;
+    val /= 16;
+    if (rem < 10) {
+      StrConvOutBuf[size - idx] = rem + '0';
+    } else {
+      StrConvOutBuf[size - idx] = rem - 10 + 'A';
+    }
+    idx++;
+  }
+
+  uint8_t rem = val % 16;
+  val /= 16;
+  if (rem < 10) {
+    StrConvOutBuf[size - idx] = rem + '0';
+  } else {
+    StrConvOutBuf[size - idx] = rem - 10 + 'A';
+  }
+  StrConvOutBuf[size + 1] = 0;
+
+  return StrConvOutBuf;
+}
+
 // TODO: make this thread-safe
 void kvprintf(const char *fmt, va_list args) {
   for (char *ptr = (char *)(fmt); 0 != *ptr; ptr++) {
@@ -90,6 +123,12 @@ void kvprintf(const char *fmt, va_list args) {
       switch (*(++ptr)) {
       case 'u':
         com_log_puts((const char *)(uitoa(va_arg(args, uint64_t))));
+        break;
+
+      case 'p':
+      case 'x':
+        com_log_puts("0x");
+        com_log_puts(xuitoa(va_arg(args, uint64_t)));
         break;
 
       case 'd':
