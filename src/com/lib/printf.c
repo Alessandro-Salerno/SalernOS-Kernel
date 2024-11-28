@@ -92,13 +92,19 @@ static const char *xuitoa(uint64_t val) {
     size++;
   }
 
+  uint64_t diff = 16 - size;
+
+  for (uint64_t i = 0; i < diff; i++) {
+    StrConvOutBuf[i] = '0';
+  }
+
   while (idx < size) {
     uint8_t rem = val % 16;
     val /= 16;
     if (rem < 10) {
-      StrConvOutBuf[size - idx] = rem + '0';
+      StrConvOutBuf[15 - idx] = rem + '0';
     } else {
-      StrConvOutBuf[size - idx] = rem - 10 + 'A';
+      StrConvOutBuf[15 - idx] = rem - 10 + 'A';
     }
     idx++;
   }
@@ -106,11 +112,11 @@ static const char *xuitoa(uint64_t val) {
   uint8_t rem = val % 16;
   val /= 16;
   if (rem < 10) {
-    StrConvOutBuf[size - idx] = rem + '0';
+    StrConvOutBuf[15 - idx] = rem + '0';
   } else {
-    StrConvOutBuf[size - idx] = rem - 10 + 'A';
+    StrConvOutBuf[15 - idx] = rem - 10 + 'A';
   }
-  StrConvOutBuf[size + 1] = 0;
+  StrConvOutBuf[16] = 0;
 
   return StrConvOutBuf;
 }
