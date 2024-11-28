@@ -27,8 +27,8 @@
 static arch_cpu_t BaseCpu = {0};
 
 // temporary
-extern void  mm_pmm_initialize();
-extern void *mm_pmm_alloc();
+extern void  com_mm_pmm_init();
+extern void *com_mm_pmm_alloc();
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -36,9 +36,9 @@ void kernel_entry(void) {
   x86_64_gdt_init();
   x86_64_idt_init();
   x86_64_idt_reload();
-  mm_pmm_initialize();
-  void *a = mm_pmm_alloc();
-  void *b = mm_pmm_alloc();
+  com_mm_pmm_init();
+  void *a = com_mm_pmm_alloc();
+  void *b = com_mm_pmm_alloc();
   DEBUG("a=%x b=%x", a, b);
   // *(volatile int *)NULL = 2;
   // asm volatile("int $0x80");
