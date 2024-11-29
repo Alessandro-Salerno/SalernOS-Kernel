@@ -28,19 +28,12 @@
 
 static arch_cpu_t BaseCpu = {0};
 
-__attribute__((
-    used,
-    section(
-        ".limine_requests"))) static volatile struct limine_hhdm_request hhdm =
-    (struct limine_hhdm_request){.id = LIMINE_HHDM_REQUEST, .revision = 0};
-
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
   com_log_set_hook(x86_64_e9_putc);
   x86_64_gdt_init();
   x86_64_idt_init();
   x86_64_idt_reload();
-  kprintf("%x\n", hhdm.response->offset);
   com_mm_pmm_init();
   void *a = com_mm_pmm_alloc();
   void *b = com_mm_pmm_alloc();
