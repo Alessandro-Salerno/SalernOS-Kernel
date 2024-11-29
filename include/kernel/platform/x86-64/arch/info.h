@@ -30,11 +30,11 @@
 #define ARCH_MEMMAP_IS_USABLE(entry) (LIMINE_MEMMAP_USABLE == entry->type)
 #define ARCH_MEMMAP_IS_RECLAIMABLE(entry) \
   (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type)
-#define ARCH_MEMMAP_IS_MAPPABLE(entry)                                       \
-  (LIMINE_MEMMAP_USABLE =                                                    \
-       entry->type || LIIMNE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
-       LIIMNE_MEMMAP_KERNEL_AND_MODULES == entry->type ||                    \
-       LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
+#define ARCH_MEMMAP_IS_MAPPABLE(entry)                    \
+  (LIMINE_MEMMAP_USABLE == entry->type ||                 \
+   LIIMNE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
+   LIIMNE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
+   LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
 // This type must contain the following fields:
 //  - uintmax_t (or any integer) type
