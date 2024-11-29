@@ -167,14 +167,6 @@ void com_mm_pmm_init() {
       // Reserve the entire memory space
       kmemset((void *)PageBitmap.buffer, bmp_sz, 0xff);
 
-      // NOTE: This is just a small optiimzation
-      // Shifting the base and length of the entry allows
-      // us to skip reserving the bitmap.
-      // Thus, when freeing this entry, the bitmap will still
-      // be reserved
-      entry->base += bmp_sz;
-      entry->length -= bmp_sz;
-
       // If a good-enough segment has been found
       // there's no need to continue
       break;
@@ -186,9 +178,18 @@ void com_mm_pmm_init() {
   // Unreserve free memory
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
     arch_memmap_entry_t *entry = memmap->entries[i];
+    void                *base  = (void *)entry->base;
+    uintmax_t            len   = entry->length;
+
+    // Avoid unreserving the page bitmap
+    // you don't want that
+    if ((void *)ARCH_HHDM_TO_PHYS(PageBitmap.buffer) == base) {
+      base += PageBitmap.size;
+      len -= PageBitmap.size;
+    }
 
     if (ARCH_MEMMAP_IS_USABLE(entry)) {
-      unreserve_pages((void *)entry->base, entry->length / ARCH_PAGE_SIZE);
+      unreserve_pages(base, len / ARCH_PAGE_SIZE);
     }
   }
 }

@@ -23,17 +23,17 @@
 #define ARCH_PAGE_SIZE 4096
 
 #define ARCH_PHYS_TO_HHDM(addr) \
-  ((uintptr_t)0xffff800000000000 + (uintptr_t)addr)
+  ((uintptr_t)0xffff800000000000 + (uintptr_t)(addr))
 #define ARCH_HHDM_TO_PHYS(addr) \
-  ((uintptr_t)addr - (uintptr_t)0xffff800000000000)
+  ((uintptr_t)(addr) - (uintptr_t)0xffff800000000000)
 
 #define ARCH_MEMMAP_IS_USABLE(entry) (LIMINE_MEMMAP_USABLE == entry->type)
 #define ARCH_MEMMAP_IS_RECLAIMABLE(entry) \
   (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type)
 #define ARCH_MEMMAP_IS_MAPPABLE(entry)                    \
   (LIMINE_MEMMAP_USABLE == entry->type ||                 \
-   LIIMNE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
-   LIIMNE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
+   LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
+   LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
    LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
 // This type must contain the following fields:
@@ -54,7 +54,11 @@ typedef struct limine_memmap_response arch_memmap_t;
 typedef struct limine_file arch_file_t;
 
 // This type must contain an arch_file_t pointer named "kernel_file"
-typedef struct limine_kernel_file_response    arch_kfile_t;
+typedef struct limine_kernel_file_response arch_kfile_t;
+
+// This type must contain the following fields:
+//  - uintptr_t (or uint64_t) virtual_base
+//  - uintptr_t (or uint64_t) physical_base
 typedef struct limine_kernel_address_response arch_kaddr_t;
 
 // This type must contain an integer named "offset"

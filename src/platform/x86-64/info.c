@@ -27,7 +27,18 @@ __attribute__((
     section(".limine_requests"))) static volatile struct limine_memmap_request
     MemoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
 
+__attribute__((used, section(".limine_requests"))) static volatile struct
+    limine_kernel_address_request KernelAddress =
+        (struct limine_kernel_address_request){
+            .id       = LIMINE_KERNEL_ADDRESS_REQUEST,
+            .revision = 0};
+
 arch_memmap_t *arch_info_get_memmap(void) {
   ASSERT(NULL != MemoryMapRequest.response);
   return MemoryMapRequest.response;
+}
+
+arch_kaddr_t *arch_info_get_kaddr(void) {
+  ASSERT(NULL != KernelAddress.response);
+  return KernelAddress.response;
 }

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -35,6 +36,7 @@ void kernel_entry(void) {
   x86_64_idt_init();
   x86_64_idt_reload();
   com_mm_pmm_init();
+  arch_mmu_init();
 
   // pmm tests
   void *a = com_mm_pmm_alloc();
@@ -49,7 +51,7 @@ void kernel_entry(void) {
   com_mm_pmm_free(d);
 
   // intentional page fault
-  *(volatile int *)NULL = 2;
+  // *(volatile int *)NULL = 2;
   // asm volatile("int $0x80");
   // *((volatile int *)NULL) = 3;
   while (1)
