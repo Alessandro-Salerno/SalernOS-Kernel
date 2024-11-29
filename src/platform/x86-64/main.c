@@ -35,6 +35,8 @@ void kernel_entry(void) {
   x86_64_idt_init();
   x86_64_idt_reload();
   com_mm_pmm_init();
+
+  // pmm tests
   void *a = com_mm_pmm_alloc();
   void *b = com_mm_pmm_alloc();
   DEBUG("a=%x b=%x", a, b);
@@ -43,6 +45,10 @@ void kernel_entry(void) {
   com_mm_pmm_free(a);
   void *d = com_mm_pmm_alloc();
   DEBUG("c=%x d=%x", c, d);
+  com_mm_pmm_free(c);
+  com_mm_pmm_free(d);
+
+  // intentional page fault
   *(volatile int *)NULL = 2;
   // asm volatile("int $0x80");
   // *((volatile int *)NULL) = 3;
