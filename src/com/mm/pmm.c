@@ -16,29 +16,21 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/info.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/spinlock.h>
+#include <kernel/platform/info.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
 #include <stdint.h>
-#include <vendor/limine.h>
 
 typedef struct Bitmap {
   size_t    size;
   uint8_t  *buffer;
   uintmax_t index;
 } bmp_t;
-
-__attribute__((
-    used,
-    section(".limine_requests"))) static volatile struct limine_memmap_request
-    MemoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
-
-static volatile struct limine_hhdm_request HhdmRequest = {
-    .id       = LIMINE_HHDM_REQUEST,
-    .revision = 0};
 
 static bmp_t PageBitmap;
 
@@ -50,11 +42,6 @@ static uintmax_t UsedMem;
 
 // TODO: turn this into a mutex
 static spinlock_t Lock = SPINLOCK_NEW();
-
-// TODO: create some kind of global thing for this
-static inline uintptr_t liminebind_transint(uintptr_t addr) {
-  return addr + (uintptr_t)HhdmRequest.response->offset;
-}
 
 bool bmp_get(bmp_t *bmp, uintmax_t idx) {
   uintmax_t byte_idx    = idx / 8;
@@ -131,28 +118,23 @@ void com_mm_pmm_free(void *page) {
   hdr_com_spinlock_release(&Lock);
 }
 
-// TODO: make this arch-agnostic and limine-agnostic
-//        the solution would proably be to take all this info
-//        as parameters and let the implementation figure this out
 void com_mm_pmm_init() {
-  struct limine_memmap_response *memmap       = MemoryMapRequest.response;
-  uintptr_t                      highest_addr = 0;
-
-  ASSERT(NULL != memmap);
+  arch_memmap_t *memmap       = arch_info_get_memmap();
+  uintptr_t      highest_addr = 0;
 
   // Calculate memory map & bitmap size
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-    struct limine_memmap_entry *entry = memmap->entries[i];
+    arch_memmap_entry_t *entry = memmap->entries[i];
     MemSize += entry->length;
     uintptr_t seg_top = entry->base + entry->length;
 
     DEBUG("segment: base=%x top=%x usable=%u length=%u",
           entry->base,
           seg_top,
-          LIMINE_MEMMAP_USABLE == entry->type,
+          ARCH_MEMMAP_IS_USABLE(entry),
           entry->length);
 
-    if (LIMINE_MEMMAP_USABLE != entry->type) {
+    if (!ARCH_MEMMAP_IS_USABLE(entry)) {
       ReservedMem += entry->length;
       continue;
     }
@@ -173,10 +155,10 @@ void com_mm_pmm_init() {
 
   // Find a segment that fits the bitmap and allocate it there
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-    struct limine_memmap_entry *entry = memmap->entries[i];
+    arch_memmap_entry_t *entry = memmap->entries[i];
 
-    if (LIMINE_MEMMAP_USABLE == entry->type && entry->length >= bmp_sz) {
-      uintptr_t transbase = liminebind_transint(entry->base);
+    if (ARCH_MEMMAP_IS_USABLE(entry) && entry->length >= bmp_sz) {
+      uintptr_t transbase = ARCH_PHYS_TO_HHDM(entry->base);
       DEBUG("bitmap: base=%x size=%u segment=%u", transbase, bmp_sz, i);
       PageBitmap.buffer = (uint8_t *)transbase;
       PageBitmap.size   = bmp_sz;
@@ -202,9 +184,9 @@ void com_mm_pmm_init() {
 
   // Unreserve free memory
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-    struct limine_memmap_entry *entry = memmap->entries[i];
+    arch_memmap_entry_t *entry = memmap->entries[i];
 
-    if (LIMINE_MEMMAP_USABLE == entry->type) {
+    if (ARCH_MEMMAP_IS_USABLE(entry)) {
       unreserve_pages((void *)entry->base, entry->length / 4096);
     }
   }
