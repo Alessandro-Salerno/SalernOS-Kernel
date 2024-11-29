@@ -61,23 +61,23 @@ void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
 }
 
 static void reserve_page(void *address, uint64_t *rsvmemcount) {
-  uintmax_t idx = (uintmax_t)address / 4096;
+  uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
   ASSERT(!bmp_get(&PageBitmap, idx));
 
   bmp_set(&PageBitmap, idx, 1);
-  FreeMem -= 4096;
-  *rsvmemcount += 4096;
+  FreeMem -= ARCH_PAGE_SIZE;
+  *rsvmemcount += ARCH_PAGE_SIZE;
 }
 
 static void unreserve_page(void *address, uint64_t *rsvmemcount) {
-  uintmax_t idx = (uintmax_t)address / 4096;
+  uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
   ASSERT(bmp_get(&PageBitmap, idx));
 
   bmp_set(&PageBitmap, idx, 0);
-  FreeMem += 4096;
-  *rsvmemcount -= 4096;
+  FreeMem += ARCH_PAGE_SIZE;
+  *rsvmemcount -= ARCH_PAGE_SIZE;
 
   if (PageBitmap.index > idx) {
     PageBitmap.index = idx;
@@ -86,13 +86,14 @@ static void unreserve_page(void *address, uint64_t *rsvmemcount) {
 
 static void alloc_pages(void *address, uint64_t pagecount) {
   for (uintmax_t i = 0; i < pagecount; i++) {
-    reserve_page((void *)((uintptr_t)address + (i * 4096)), &UsedMem);
+    reserve_page((void *)((uintptr_t)address + (i * ARCH_PAGE_SIZE)), &UsedMem);
   }
 }
 
 void unreserve_pages(void *address, uint64_t pagecount) {
   for (uintmax_t i = 0; i < pagecount; i++) {
-    unreserve_page((void *)((uintptr_t)address + (i * 4096)), &ReservedMem);
+    unreserve_page((void *)((uintptr_t)address + (i * ARCH_PAGE_SIZE)),
+                   &ReservedMem);
   }
 }
 
@@ -102,7 +103,7 @@ void *com_mm_pmm_alloc() {
 
   for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
     if (0 == bmp_get(&PageBitmap, PageBitmap.index)) {
-      ret = (void *)(PageBitmap.index * 4096);
+      ret = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
       alloc_pages(ret, 1);
       break;
     }
@@ -148,7 +149,7 @@ void com_mm_pmm_init() {
   DEBUG("searched all segments, found highest address at %x", highest_addr);
 
   // Compute the actual size of the bitmap
-  uintptr_t highest_pgindex = highest_addr / 4096;
+  uintptr_t highest_pgindex = highest_addr / ARCH_PAGE_SIZE;
   size_t    bmp_sz          = highest_pgindex / 8 + 1;
 
   DEBUG("memory is %u pages, bitmap needs %u bytes", highest_pgindex, bmp_sz);
@@ -187,7 +188,7 @@ void com_mm_pmm_init() {
     arch_memmap_entry_t *entry = memmap->entries[i];
 
     if (ARCH_MEMMAP_IS_USABLE(entry)) {
-      unreserve_pages((void *)entry->base, entry->length / 4096);
+      unreserve_pages((void *)entry->base, entry->length / ARCH_PAGE_SIZE);
     }
   }
 }
