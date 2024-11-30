@@ -21,6 +21,7 @@
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/platform/info.h>
+#include <kernel/platform/mmu.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -17,9 +17,9 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
