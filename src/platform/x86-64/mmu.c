@@ -24,6 +24,7 @@
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <threads.h>
 
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
@@ -117,18 +118,29 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 }
 
 arch_mmu_pagetable_t *arch_mmu_new_tabe(void) {
+  arch_mmu_pagetable_t *table = com_mm_pmm_alloc();
+
+  if (NULL == table) {
+    return NULL;
+  }
+
+  kmemcpy(table, RootTable, ARCH_PAGE_SIZE);
+  return table;
 }
 
 void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
+  // TODO: implement this
 }
 
 arch_mmu_pagetable_t arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
+  // TODO: implement this
 }
 
 bool arch_mmu_map(arch_mmu_pagetable_t *pt,
                   void                 *virt,
                   void                 *phys,
                   arch_mmu_flags_t      flags) {
+  return add_page(pt, virt, ((uint64_t)phys & ADDRMASK) | flags, 0);
 }
 
 void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
@@ -137,12 +149,15 @@ void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
 }
 
 bool arch_mmu_ispresent(arch_mmu_pagetable_t *pt, void *virt) {
+  // TODO: implement this
 }
 
 bool arch_mmu_iswritable(arch_mmu_pagetable_t *pt, void *virt) {
+  // TODO: implement this
 }
 
 bool arch_mmu_isdirty(arch_mmu_pagetable_t *pt, void *virt) {
+  // TODO: implement this
 }
 
 void arch_mmu_init(void) {

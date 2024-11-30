@@ -24,7 +24,6 @@
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <lib/printf.h>
-#include <stdio.h>
 #include <vendor/limine.h>
 
 static arch_cpu_t BaseCpu = {0};
