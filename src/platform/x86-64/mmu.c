@@ -27,6 +27,8 @@
 #include <stdint.h>
 #include <threads.h>
 
+#include "arch/cpu.h"
+
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
 #define PDMASK   (uint64_t)0b111111111000000000000000000000
@@ -244,4 +246,5 @@ void arch_mmu_init(void) {
   }
 
   arch_mmu_switch((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable));
+  hdr_arch_cpu_get()->root_page_table = RootTable;
 }

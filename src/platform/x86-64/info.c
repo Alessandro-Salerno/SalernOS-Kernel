@@ -33,6 +33,12 @@ __attribute__((used, section(".limine_requests"))) static volatile struct
             .id       = LIMINE_KERNEL_ADDRESS_REQUEST,
             .revision = 0};
 
+__attribute__((
+    used,
+    section(".limine_requests"))) static volatile struct limine_rsdp_request
+    RsdpRequest =
+        (struct limine_rsdp_request){.id = LIMINE_RSDP_REQUEST, .revision = 0};
+
 arch_memmap_t *arch_info_get_memmap(void) {
   ASSERT(NULL != MemoryMapRequest.response);
   return MemoryMapRequest.response;
@@ -41,4 +47,9 @@ arch_memmap_t *arch_info_get_memmap(void) {
 arch_kaddr_t *arch_info_get_kaddr(void) {
   ASSERT(NULL != KernelAddress.response);
   return KernelAddress.response;
+}
+
+arch_rsdp_t *arch_info_get_rsdp(void) {
+  ASSERT(NULL != RsdpRequest.response);
+  return RsdpRequest.response;
 }

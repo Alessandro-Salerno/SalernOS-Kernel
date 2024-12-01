@@ -63,3 +63,6 @@ typedef struct limine_kernel_address_response arch_kaddr_t;
 
 // This type must contain an integer named "offset"
 typedef struct limine_hhdm_response arch_hhdm_t;
+
+// This type must contain a field named "address" of type void pointer
+typedef struct limine_rsdp_response arch_rsdp_t;

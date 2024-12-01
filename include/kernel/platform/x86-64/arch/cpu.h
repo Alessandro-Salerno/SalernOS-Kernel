@@ -19,19 +19,21 @@
 #pragma once
 
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <stdbool.h>
 
 typedef struct arch_cpu {
-  void            *dummy1;
-  struct arch_cpu *self;
-  void            *dummy2;
-  uint64_t         id;
-  uint64_t         gdt[7];
-  x86_64_ist_t     ist;
-  bool             intstatus;
-  com_isr_t        isr[256];
+  void                 *dummy1;
+  struct arch_cpu      *self;
+  void                 *dummy2;
+  uint64_t              id;
+  uint64_t              gdt[7];
+  x86_64_ist_t          ist;
+  bool                  intstatus;
+  com_isr_t             isr[256];
+  arch_mmu_pagetable_t *root_page_table;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {

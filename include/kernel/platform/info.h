@@ -22,3 +22,4 @@
 
 arch_memmap_t *arch_info_get_memmap(void);
 arch_kaddr_t  *arch_info_get_kaddr(void);
+arch_rsdp_t   *arch_info_get_rsdp(void);

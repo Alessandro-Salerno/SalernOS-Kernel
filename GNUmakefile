@@ -32,6 +32,7 @@ override CFLAGS += \
 		-I include/ \
 		-I include/kernel/ \
 		-I include/kernel/platform/$(PLATFORM) \
+		-I include/vendor/ \
     -Wall \
     -Wextra \
     -std=gnu11 \
