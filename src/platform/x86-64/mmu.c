@@ -246,5 +246,5 @@ void arch_mmu_init(void) {
   }
 
   arch_mmu_switch((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable));
-  hdr_arch_cpu_get()->root_page_table = RootTable;
+  hdr_arch_cpu_get()->root_page_table = (void *)ARCH_HHDM_TO_PHYS(RootTable);
 }

@@ -16,51 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/log.h>
-#include <kernel/com/mm/pmm.h>
-#include <kernel/com/mm/slab.h>
-#include <kernel/platform/mmu.h>
-#include <kernel/platform/x86-64/apic.h>
-#include <kernel/platform/x86-64/e9.h>
-#include <kernel/platform/x86-64/gdt.h>
-#include <kernel/platform/x86-64/idt.h>
-#include <lib/printf.h>
-#include <vendor/limine.h>
+#pragma once
 
-static arch_cpu_t BaseCpu = {0};
-
-void kernel_entry(void) {
-  hdr_arch_cpu_set(&BaseCpu);
-  com_log_set_hook(x86_64_e9_putc);
-  x86_64_gdt_init();
-  x86_64_idt_init();
-  x86_64_idt_reload();
-  com_mm_pmm_init();
-  arch_mmu_init();
-
-  // pmm tests
-  void *a = com_mm_pmm_alloc();
-  void *b = com_mm_pmm_alloc();
-  DEBUG("a=%x b=%x", a, b);
-  com_mm_pmm_free(b);
-  void *c = com_mm_pmm_alloc();
-  com_mm_pmm_free(a);
-  void *d = com_mm_pmm_alloc();
-  DEBUG("c=%x d=%x", c, d);
-  com_mm_pmm_free(c);
-  com_mm_pmm_free(d);
-
-  void *slab_1 = com_mm_slab_alloc(256);
-  DEBUG("slab_1=%x", slab_1);
-
-  x86_64_lapic_bsp_init();
-  x86_64_lapic_init();
-
-  // intentional page fault
-  // *(volatile int *)NULL = 2;
-  // asm volatile("int $0x80");
-  // *((volatile int *)NULL) = 3;
-  while (1)
-    ;
-}
+void x86_64_lapic_bsp_init(void);
+void x86_64_lapic_init(void);
