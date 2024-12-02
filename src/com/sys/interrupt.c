@@ -25,6 +25,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "com/log.h"
+
 bool com_sys_interrupt_set(bool status) {
   hdr_arch_cpu_interrupt_disable();
   bool old                      = hdr_arch_cpu_get()->intstatus;
@@ -42,6 +44,7 @@ void com_sys_interrupt_register(uintmax_t      vec,
                                 com_intf_eoi_t eoi) {
   bool orig_status = com_sys_interrupt_set(false);
 
+  DEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
   com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
   isr->func      = func;
   isr->eoi       = eoi;
@@ -56,11 +59,13 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
   com_sys_interrupt_set(false);
   com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
 
-  if (NULL == isr || NULL == isr->func) {
+  if (NULL == isr) {
     com_panic(ctx, "isr not set for interrupt vector %u", vec);
   }
 
-  isr->func(isr, ctx);
+  if (NULL != isr->func) {
+    isr->func(isr, ctx);
+  }
 
   if (NULL != isr->eoi) {
     isr->eoi(isr);

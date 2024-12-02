@@ -28,6 +28,9 @@
 #include <lib/printf.h>
 #include <vendor/limine.h>
 
+#include "com/sys/interrupt.h"
+#include "com/sys/syscall.h"
+
 static arch_cpu_t BaseCpu = {0};
 
 void kernel_entry(void) {
@@ -54,8 +57,22 @@ void kernel_entry(void) {
   void *slab_1 = com_mm_slab_alloc(256);
   DEBUG("slab_1=%x", slab_1);
 
+  // TODO: remove this
+  com_sys_interrupt_register(0x30, NULL, NULL);
+
   x86_64_lapic_bsp_init();
   x86_64_lapic_init();
+
+  com_sys_syscall_init();
+
+  volatile const char *tester = "Hello from SalernOS syscall";
+
+  asm volatile("movq $0x0, %%rax\n"
+               "movq %0, %%rdi\n"
+               "int $0x80\n"
+               :
+               : "b"(tester)
+               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

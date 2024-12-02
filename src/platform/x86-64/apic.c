@@ -26,7 +26,12 @@
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/printf.h>
+#include <stddef.h>
 #include <stdint.h>
+
+#define LAPIC_ICR_EDGE      0x00000
+#define LAPIC_ICR_DEST_SELF 0x40000
+#define LAPIC_ICR_ASSERT    0x04000
 
 #define BSP_APIC_ADDR (void *)0xfee00000
 
@@ -104,14 +109,14 @@ void x86_64_lapic_bsp_init(void) {
                    ARCH_MMU_FLAGS_NOEXEC);
 
   calibrate();
-  com_sys_interrupt_register(0x30, timer_test, lapic_eoi);
+  com_sys_interrupt_register(0x40, timer_test, lapic_eoi);
 }
 
 void x86_64_lapic_init(void) {
   lapic_write(LAPIC_SIVR, 0x1ff);
-  lapic_write(LAPIC_LVT_TIMER, 0x30);
+  lapic_write(LAPIC_LVT_TIMER, 0x40);
   lapic_write(LAPIC_DIV_CONF, 0);
-  lapic_write(LAPIC_LVT_TIMER, 0x30 | 0x20000);
+  lapic_write(LAPIC_LVT_TIMER, 0x40 | 0x20000);
   lapic_write(LAPIC_INIT_COUNT,
               ((1000000UL * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
 }
