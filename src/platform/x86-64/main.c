@@ -57,9 +57,6 @@ void kernel_entry(void) {
   void *slab_1 = com_mm_slab_alloc(256);
   DEBUG("slab_1=%x", slab_1);
 
-  // TODO: remove this
-  com_sys_interrupt_register(0x30, NULL, NULL);
-
   x86_64_lapic_bsp_init();
   x86_64_lapic_init();
 
