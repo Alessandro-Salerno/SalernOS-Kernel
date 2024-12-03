@@ -20,6 +20,7 @@
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -27,9 +28,6 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <lib/printf.h>
 #include <vendor/limine.h>
-
-#include "com/sys/interrupt.h"
-#include "com/sys/syscall.h"
 
 static arch_cpu_t BaseCpu = {0};
 
