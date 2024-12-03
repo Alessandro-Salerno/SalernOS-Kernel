@@ -19,13 +19,14 @@
 #pragma once
 
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/thread.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <stdbool.h>
 
 typedef struct arch_cpu {
-  void                 *dummy1;
+  struct com_thread    *thread;
   struct arch_cpu      *self;
   void                 *dummy2;
   uint64_t              id;

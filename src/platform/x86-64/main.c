@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/info.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -30,6 +31,20 @@
 #include <vendor/limine.h>
 
 static arch_cpu_t BaseCpu = {0};
+
+static void user_test(void) {
+  volatile const char *tester = "Hello from SalernOS syscall";
+
+  asm volatile("movq $0x0, %%rax\n"
+               "movq %0, %%rdi\n"
+               "int $0x80\n"
+               :
+               : "b"(tester)
+               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+
+  while (1)
+    ;
+}
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -60,14 +75,20 @@ void kernel_entry(void) {
 
   com_sys_syscall_init();
 
-  volatile const char *tester = "Hello from SalernOS syscall";
-
-  asm volatile("movq $0x0, %%rax\n"
-               "movq %0, %%rdi\n"
-               "int $0x80\n"
-               :
-               : "b"(tester)
-               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+  arch_context_t ctx = {0};
+  ctx.cs             = 0x20 | 3;
+  ctx.ss             = 0x18 | 3;
+  void *ustack       = com_mm_pmm_alloc();
+  arch_mmu_map(hdr_arch_cpu_get()->root_page_table,
+               (void *)ARCH_PHYS_TO_HHDM(ustack),
+               ustack,
+               ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                   ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+  ctx.rsp = ARCH_PHYS_TO_HHDM(ustack) + 4095;
+  // asm volatile("movq %%rsp, %%rax" : "=a"(ctx.rsp) : : "memory");
+  ctx.rip = (uint64_t)user_test;
+  // ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+  arch_ctx_switch(&ctx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

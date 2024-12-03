@@ -163,6 +163,7 @@ bool arch_mmu_isdirty(arch_mmu_pagetable_t *pt, void *virt) {
   // TODO: implement this
 }
 
+// TODO: remove userspace mappings
 void arch_mmu_init(void) {
   // Allocate the kernel (root) page table
   LOG("initializing mmu");
@@ -176,7 +177,8 @@ void arch_mmu_init(void) {
     uint64_t *entry = com_mm_pmm_alloc();
     ASSERT(NULL != entry);
     kmemset((void *)ARCH_PHYS_TO_HHDM(entry), ARCH_PAGE_SIZE, 0);
-    RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_READ;
+    RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE |
+                   ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_USER;
   }
 
   // Mapp all the necessary memmap entries
@@ -192,7 +194,7 @@ void arch_mmu_init(void) {
       for (uintmax_t i = 0; i < entry->length; i += ARCH_PAGE_SIZE) {
         uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                             ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                            ARCH_MMU_FLAGS_NOEXEC;
+                            ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER;
         ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                         (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
                         pt_entry,
@@ -217,7 +219,8 @@ void arch_mmu_init(void) {
        i += ARCH_PAGE_SIZE) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
+                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                        ARCH_MMU_FLAGS_USER,
                     0));
   }
 
@@ -229,7 +232,7 @@ void arch_mmu_init(void) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_NOEXEC,
+                        ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER,
                     0));
   }
 
@@ -241,7 +244,8 @@ void arch_mmu_init(void) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
+                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |
+                        ARCH_MMU_FLAGS_USER,
                     0));
   }
 
