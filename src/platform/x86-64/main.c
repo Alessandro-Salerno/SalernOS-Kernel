@@ -33,7 +33,7 @@
 static arch_cpu_t BaseCpu = {0};
 
 static void user_test(void) {
-  volatile const char *tester = "Hello from SalernOS syscall";
+  volatile const char *tester = "Hello from SalernOS userspace";
 
   asm volatile("movq $0x0, %%rax\n"
                "movq %0, %%rdi\n"
@@ -85,7 +85,10 @@ void kernel_entry(void) {
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
   ctx.rsp = ARCH_PHYS_TO_HHDM(ustack) + 4095;
-  // asm volatile("movq %%rsp, %%rax" : "=a"(ctx.rsp) : : "memory");
+  asm volatile("movq %%rsp, %%rax"
+               : "=a"(hdr_arch_cpu_get()->ist.rsp0)
+               :
+               : "memory");
   ctx.rip = (uint64_t)user_test;
   // ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
   arch_ctx_switch(&ctx);

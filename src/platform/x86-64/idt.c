@@ -79,7 +79,7 @@ void x86_64_idt_init() {
     Idt[i].offset  = IsrTable[i] & 0xffff;
     Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
     Idt[i].ist     = 0;
-    Idt[i].flags   = 0xEE;
+    Idt[i].flags   = 0xEE; // TODO: make this optional
     Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
     Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
   }
