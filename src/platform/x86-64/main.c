@@ -75,6 +75,7 @@ void kernel_entry(void) {
   x86_64_lapic_init();
 
   com_sys_syscall_init();
+  x86_64_idt_set_user_invocable(0x80);
 
   arch_context_t ctx = {0};
   ctx.cs             = 0x20 | 3;

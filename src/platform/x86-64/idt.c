@@ -79,10 +79,15 @@ void x86_64_idt_init() {
     Idt[i].offset  = IsrTable[i] & 0xffff;
     Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
     Idt[i].ist     = 0;
-    Idt[i].flags   = 0xEE; // TODO: make this optional
+    Idt[i].flags   = 0x8E;
     Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
     Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
   }
+}
+
+void x86_64_idt_set_user_invocable(uintmax_t vec) {
+  DEBUG("allowing user invocation of interrupt %u", vec);
+  Idt[vec].flags = 0xEE;
 }
 
 void x86_64_idt_reload() {
