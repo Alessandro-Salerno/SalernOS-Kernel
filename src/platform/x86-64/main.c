@@ -32,15 +32,15 @@
 
 static arch_cpu_t BaseCpu = {0};
 
-__attribute__((section(".user_data"))) volatile const char *tester =
-    "Hello from SalernOS userspace";
+__attribute__((section(".user_data"))) volatile const char *user_message =
+    "Hello from SalernOS userspace\n";
 
 __attribute__((section(".user_text"))) void user_test(void) {
   asm volatile("movq $0x0, %%rax\n"
                "movq %0, %%rdi\n"
                "int $0x80\n"
                :
-               : "b"(tester)
+               : "b"(user_message)
                : "%rax", "%rdi", "%rcx", "%rdx", "memory");
 
   while (1)
@@ -77,11 +77,12 @@ void kernel_entry(void) {
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
 
-  arch_context_t ctx = {0};
-  ctx.cs             = 0x20 | 3;
-  ctx.ss             = 0x18 | 3;
-  void *ustack       = com_mm_pmm_alloc();
-  arch_mmu_map(hdr_arch_cpu_get()->root_page_table,
+  arch_context_t ctx            = {0};
+  ctx.cs                        = 0x20 | 3;
+  ctx.ss                        = 0x18 | 3;
+  arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
+  void                 *ustack  = com_mm_pmm_alloc();
+  arch_mmu_map(user_pt,
                (void *)ARCH_PHYS_TO_HHDM(ustack),
                ustack,
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
@@ -93,6 +94,7 @@ void kernel_entry(void) {
                : "memory");
   ctx.rip = (uint64_t)user_test;
   // ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+  arch_mmu_switch(user_pt);
   arch_ctx_switch(&ctx);
 
   // intentional page fault

@@ -124,14 +124,14 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
   return true;
 }
 
-arch_mmu_pagetable_t *arch_mmu_new_tabe(void) {
+arch_mmu_pagetable_t *arch_mmu_new_table(void) {
   arch_mmu_pagetable_t *table = com_mm_pmm_alloc();
 
   if (NULL == table) {
     return NULL;
   }
 
-  kmemcpy(table, RootTable, ARCH_PAGE_SIZE);
+  kmemcpy((void *)ARCH_PHYS_TO_HHDM(table), RootTable, ARCH_PAGE_SIZE);
   return table;
 }
 
@@ -251,8 +251,9 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG(
-      "mapping user text section (virtual: %x -> %x)", _TEXT_START, _TEXT_END);
+  DEBUG("mapping user text section (virtual: %x -> %x)",
+        _USER_TEXT_START,
+        _USER_TEXT_END);
   for (uintptr_t i = (uintptr_t)_USER_TEXT_START; i < (uintptr_t)_USER_TEXT_END;
        i += ARCH_PAGE_SIZE) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
@@ -262,8 +263,9 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG(
-      "mapping user data section (virtual: %x -> %x)", _TEXT_START, _TEXT_END);
+  DEBUG("mapping user data section (virtual: %x -> %x)",
+        _USER_DATA_START,
+        _USER_DATA_END);
   for (uintptr_t i = (uintptr_t)_USER_DATA_START; i < (uintptr_t)_USER_DATA_END;
        i += ARCH_PAGE_SIZE) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),

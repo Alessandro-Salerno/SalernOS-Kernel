@@ -21,7 +21,7 @@
 #include <arch/mmu.h>
 
 void                  arch_mmu_init(void);
-arch_mmu_pagetable_t *arch_mmu_new_tabe(void);
+arch_mmu_pagetable_t *arch_mmu_new_table(void);
 void                  arch_mmu_destroy_table(arch_mmu_pagetable_t *pt);
 arch_mmu_pagetable_t  arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt);
 bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
