@@ -32,9 +32,10 @@
 
 static arch_cpu_t BaseCpu = {0};
 
-static void user_test(void) {
-  volatile const char *tester = "Hello from SalernOS userspace";
+__attribute__((section(".user_data"))) volatile const char *tester =
+    "Hello from SalernOS userspace";
 
+__attribute__((section(".user_text"))) void user_test(void) {
   asm volatile("movq $0x0, %%rax\n"
                "movq %0, %%rdi\n"
                "int $0x80\n"

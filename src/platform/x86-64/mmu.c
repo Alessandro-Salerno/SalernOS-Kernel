@@ -45,6 +45,10 @@ extern uint8_t _RODATA_START[];
 extern uint8_t _RODATA_END[];
 extern uint8_t _DATA_START[];
 extern uint8_t _DATA_END[];
+extern uint8_t _USER_TEXT_START[];
+extern uint8_t _USER_TEXT_END[];
+extern uint8_t _USER_DATA_START[];
+extern uint8_t _USER_DATA_END[];
 
 static arch_mmu_pagetable_t *RootTable = NULL;
 
@@ -194,7 +198,7 @@ void arch_mmu_init(void) {
       for (uintmax_t i = 0; i < entry->length; i += ARCH_PAGE_SIZE) {
         uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                             ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                            ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER;
+                            ARCH_MMU_FLAGS_NOEXEC;
         ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                         (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
                         pt_entry,
@@ -219,8 +223,7 @@ void arch_mmu_init(void) {
        i += ARCH_PAGE_SIZE) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_USER,
+                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
                     0));
   }
 
@@ -232,7 +235,7 @@ void arch_mmu_init(void) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER,
+                        ARCH_MMU_FLAGS_NOEXEC,
                     0));
   }
 
@@ -240,6 +243,28 @@ void arch_mmu_init(void) {
         _DATA_START,
         _DATA_END);
   for (uintptr_t i = (uintptr_t)_DATA_START; i < (uintptr_t)_DATA_END;
+       i += ARCH_PAGE_SIZE) {
+    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+                    (uint64_t *)i,
+                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
+                    0));
+  }
+
+  DEBUG(
+      "mapping user text section (virtual: %x -> %x)", _TEXT_START, _TEXT_END);
+  for (uintptr_t i = (uintptr_t)_USER_TEXT_START; i < (uintptr_t)_USER_TEXT_END;
+       i += ARCH_PAGE_SIZE) {
+    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+                    (uint64_t *)i,
+                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                        ARCH_MMU_FLAGS_USER,
+                    0));
+  }
+
+  DEBUG(
+      "mapping user data section (virtual: %x -> %x)", _TEXT_START, _TEXT_END);
+  for (uintptr_t i = (uintptr_t)_USER_DATA_START; i < (uintptr_t)_USER_DATA_END;
        i += ARCH_PAGE_SIZE) {
     ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,

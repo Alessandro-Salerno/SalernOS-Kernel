@@ -13,6 +13,8 @@ PHDRS
     text PT_LOAD;
     rodata PT_LOAD;
     data PT_LOAD;
+    user_text PT_LOAD;
+    user_data PT_LOAD;
 }
 
 SECTIONS
@@ -66,6 +68,22 @@ SECTIONS
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
     _DATA_END = .;
+    _USER_TEXT_START = .;
+
+    .user_text : {
+        *(.user_text .user_text.*)
+    } :user_text
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    _USER_TEXT_END = .;
+    _USER_DATA_START = .;
+
+    .user_data : {
+        *(.user_data .user_data.*)
+    } :user_data
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    _USER_DATA_END = .;
 
     /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */
     /DISCARD/ : {
