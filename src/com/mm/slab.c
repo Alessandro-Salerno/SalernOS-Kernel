@@ -17,13 +17,12 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <kernel/com/log.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
+#include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "com/log.h"
-#include "com/mm/pmm.h"
-#include "lib/mem.h"
 
 #define NUM_SLABS (ARCH_PAGE_SIZE / 16)
 

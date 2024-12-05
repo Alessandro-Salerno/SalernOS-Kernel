@@ -20,11 +20,10 @@
 #include <arch/cpu.h>
 #include <kernel/com/log.h>
 #include <kernel/com/panic.h>
+#include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
 #include <stdarg.h>
 #include <stddef.h>
-
-#include "com/sys/interrupt.h"
 
 __attribute__((noreturn)) void
 com_panic(arch_context_t *ctx, const char *fmt, ...) {

@@ -25,6 +25,11 @@ static void dummy_hook(char c) {
 static volatile com_log_hook_t Hook = dummy_hook;
 
 void com_log_set_hook(com_log_hook_t hook) {
+  if (NULL == hook) {
+    Hook = dummy_hook;
+    return;
+  }
+
   Hook = hook;
 }
 
@@ -36,8 +41,4 @@ void com_log_puts(const char *s) {
   for (; 0 != *s; s++) {
     com_log_putc(*s);
   }
-}
-
-void com_log_init() {
-  // TODO: implement this
 }

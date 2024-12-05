@@ -17,10 +17,9 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <kernel/com/log.h>
 #include <kernel/platform/info.h>
 #include <vendor/limine.h>
-
-#include "com/log.h"
 
 __attribute__((
     used,

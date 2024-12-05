@@ -18,11 +18,10 @@
 
 #include <arch/context.h>
 #include <kernel/com/log.h>
+#include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
 #include <stdint.h>
-
-#include "com/sys/interrupt.h"
 
 #define MAX_SYSCALLS 512
 

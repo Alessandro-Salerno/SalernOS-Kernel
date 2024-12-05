@@ -52,4 +52,3 @@ typedef void (*com_log_hook_t)(char);
 void com_log_set_hook(com_log_hook_t hook);
 void com_log_putc(char c);
 void com_log_puts(const char *s);
-void com_log_init();

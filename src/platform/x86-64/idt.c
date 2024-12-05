@@ -16,13 +16,12 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/context.h>
 #include <kernel/com/log.h>
+#include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <stdint.h>
-
-#include "arch/context.h"
-#include "com/panic.h"
 
 typedef struct {
   uint16_t size;

@@ -19,13 +19,12 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <com/panic.h>
+#include <kernel/com/log.h>
 #include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "com/log.h"
 
 bool com_sys_interrupt_set(bool status) {
   hdr_arch_cpu_interrupt_disable();

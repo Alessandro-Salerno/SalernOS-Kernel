@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <kernel/com/log.h>
@@ -26,8 +27,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <threads.h>
-
-#include "arch/cpu.h"
 
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
