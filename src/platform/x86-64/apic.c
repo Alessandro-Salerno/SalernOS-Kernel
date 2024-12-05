@@ -63,14 +63,7 @@ static uint16_t pit_read(void) {
   return (uint16_t)low | ((uint16_t)high << 8);
 }
 
-__attribute__((used)) static void timer_test(com_isr_t      *isr,
-                                             arch_context_t *ctx) {
-  (void)isr;
-  (void)ctx;
-  kprintf("timer tick\n");
-}
-
-__attribute__((used)) static void lapic_eoi(com_isr_t *isr) {
+void x86_64_lapic_eoi(com_isr_t *isr) {
   (void)isr;
   lapic_write(LAPIC_EOI, 0);
 }
@@ -109,7 +102,6 @@ void x86_64_lapic_bsp_init(void) {
                    ARCH_MMU_FLAGS_NOEXEC);
 
   calibrate();
-  com_sys_interrupt_register(0x30, timer_test, lapic_eoi);
 }
 
 void x86_64_lapic_init(void) {

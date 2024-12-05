@@ -16,37 +16,38 @@
 
 section .text
 
-global arch_ctx_switch
-arch_ctx_switch:
+global arch_ctx_trampoline
+arch_ctx_trampoline:
 	; rdi is the pointer to the context struct
   cli
-	mov rsp, rdi
+	mov   rsp, rdi
 
-	add rsp, 24 ; cr2 gs and fs are not popped.
-	pop rax
-	mov es,rax
-	pop rax
-	mov ds,rax
-	pop rax
-	pop rbx
-	pop rcx
-	pop rdx
-	pop r8
-	pop r9
-	pop r10
-	pop r11
-	pop r12
-	pop r13
-	pop r14
-	pop r15
-	pop rdi
-	pop rsi
-	pop rbp
-	add rsp,8 ; remove error code
+	add   rsp, 24 ; cr2 gs and fs are not popped.
+	pop   rax
+	mov   es, rax
+	pop   rax
+	mov   ds, rax
+	pop   rax
+	pop   rbx
+	pop   rcx
+	pop   rdx
+	pop   r8
+	pop   r9
+	pop   r10
+	pop   r11
+	pop   r12
+	pop   r13
+	pop   r14
+	pop   r15
+	pop   rdi
+	pop   rsi
+	pop   rbp
+	add   rsp, 8 ; remove error code
 
 	; check if swapgs is needed
-	cmp qword [rsp+8], 0x23
-	jne .notneeded2
+	cmp   qword [rsp+8], 0x23
+	jne   .noswapgs
 	swapgs
-	.notneeded2:
+	.noswapgs:
 	o64 iret
+

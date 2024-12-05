@@ -96,7 +96,7 @@ void kernel_entry(void) {
   ctx.rip    = (uint64_t)user_test;
   ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
   arch_mmu_switch(user_pt);
-  arch_ctx_switch(&ctx);
+  arch_ctx_trampoline(&ctx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

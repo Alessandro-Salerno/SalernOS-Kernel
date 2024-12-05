@@ -53,4 +53,5 @@ typedef struct {
 } __attribute__((packed)) arch_context_t;
 
 void arch_ctx_print(arch_context_t *ctx);
-void arch_ctx_switch(arch_context_t *ctx);
+void arch_ctx_switch(arch_context_t *to, arch_context_t *from);
+void arch_ctx_trampoline(arch_context_t *ctx);

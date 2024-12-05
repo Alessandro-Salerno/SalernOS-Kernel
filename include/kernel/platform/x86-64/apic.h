@@ -18,5 +18,8 @@
 
 #pragma once
 
+#include <kernel/com/sys/interrupt.h>
+
+void x86_64_lapic_eoi(com_isr_t *isr);
 void x86_64_lapic_bsp_init(void);
 void x86_64_lapic_init(void);
