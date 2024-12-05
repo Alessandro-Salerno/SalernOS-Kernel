@@ -24,6 +24,7 @@
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct arch_cpu {
   struct com_thread    *thread;
@@ -35,6 +36,7 @@ typedef struct arch_cpu {
   bool                  intstatus;
   com_isr_t             isr[256];
   arch_mmu_pagetable_t *root_page_table;
+  uint64_t              lock_depth;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {

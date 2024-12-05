@@ -23,3 +23,6 @@
 
 #define LIKELY(x)   __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+
+#define USER_TEXT __attribute__((section(".user_text")))
+#define USER_DATA __attribute__((section(".user_data")))

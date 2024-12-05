@@ -22,6 +22,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -32,10 +33,10 @@
 
 static arch_cpu_t BaseCpu = {0};
 
-__attribute__((section(".user_data"))) volatile const char *user_message =
-    "Hello from SalernOS userspace\n";
+USER_DATA volatile const char *user_message =
+    "Hello from SalernOS userspace!\n";
 
-__attribute__((section(".user_text"))) void user_test(void) {
+USER_TEXT void user_test(void) {
   asm volatile("movq $0x0, %%rax\n"
                "movq %0, %%rdi\n"
                "int $0x80\n"
@@ -92,8 +93,8 @@ void kernel_entry(void) {
                : "=a"(hdr_arch_cpu_get()->ist.rsp0)
                :
                : "memory");
-  ctx.rip = (uint64_t)user_test;
-  // ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+  ctx.rip    = (uint64_t)user_test;
+  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
   arch_mmu_switch(user_pt);
   arch_ctx_switch(&ctx);
 
