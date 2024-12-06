@@ -28,10 +28,9 @@
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
+#include <kernel/platform/x86-64/msr.h>
 #include <lib/printf.h>
 #include <vendor/limine.h>
-
-#include "com/sys/interrupt.h"
 
 static arch_cpu_t            BaseCpu           = {0};
 static uint8_t               KernelStack[4096] = {0};
@@ -61,7 +60,8 @@ USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
     return;
   }
 
-  DEBUG("fake rescheduling");
+  DEBUG("fake rescheduling %x", hdr_arch_cpu_get());
+  hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)NULL);
 }
 
 void kernel_entry(void) {
