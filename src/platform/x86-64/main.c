@@ -31,21 +31,37 @@
 #include <lib/printf.h>
 #include <vendor/limine.h>
 
-static arch_cpu_t BaseCpu = {0};
+#include "com/sys/interrupt.h"
+
+static arch_cpu_t            BaseCpu           = {0};
+static uint8_t               KernelStack[4096] = {0};
+static arch_context_t        UserCtx           = {0};
+static arch_mmu_pagetable_t *UserPt            = NULL;
+static void                 *UserStack         = NULL;
+static bool                  Ready             = false;
 
 USER_DATA volatile const char *user_message =
     "Hello from SalernOS userspace!\n";
 
 USER_TEXT void user_test(void) {
-  asm volatile("movq $0x0, %%rax\n"
-               "movq %0, %%rdi\n"
-               "int $0x80\n"
-               :
-               : "b"(user_message)
-               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+  while (1) {
+    asm volatile("movq $0x0, %%rax\n"
+                 "movq %0, %%rdi\n"
+                 "int $0x80\n"
+                 :
+                 : "b"(user_message)
+                 : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+  }
+}
 
-  while (1)
-    ;
+USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
+  (void)isr;
+  (void)ctx;
+  if (!Ready) {
+    return;
+  }
+
+  DEBUG("fake rescheduling");
 }
 
 void kernel_entry(void) {
@@ -77,26 +93,24 @@ void kernel_entry(void) {
 
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
+  com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
 
-  arch_context_t ctx            = {0};
-  ctx.cs                        = 0x20 | 3;
-  ctx.ss                        = 0x18 | 3;
-  arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
-  void                 *ustack  = com_mm_pmm_alloc();
-  arch_mmu_map(user_pt,
-               (void *)ARCH_PHYS_TO_HHDM(ustack),
-               ustack,
+  UserCtx.cs = 0x20 | 3;
+  UserCtx.ss = 0x18 | 3;
+  UserPt     = arch_mmu_new_table();
+  UserStack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  arch_mmu_map(UserPt,
+               UserStack,
+               (void *)ARCH_HHDM_TO_PHYS(UserStack),
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  ctx.rsp = ARCH_PHYS_TO_HHDM(ustack) + 4095;
-  asm volatile("movq %%rsp, %%rax"
-               : "=a"(hdr_arch_cpu_get()->ist.rsp0)
-               :
-               : "memory");
-  ctx.rip    = (uint64_t)user_test;
-  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
-  arch_mmu_switch(user_pt);
-  arch_ctx_trampoline(&ctx);
+  UserCtx.rsp                  = (uint64_t)UserStack + 4095;
+  hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)&KernelStack[4095];
+  UserCtx.rip                  = (uint64_t)user_test;
+  UserCtx.rflags               = (1ul << 1) | (1ul << 9) | (1ul << 21);
+  arch_mmu_switch(UserPt);
+  Ready = true;
+  arch_ctx_trampoline(&UserCtx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

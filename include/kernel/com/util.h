@@ -26,3 +26,4 @@
 
 #define USER_TEXT __attribute__((section(".user_text")))
 #define USER_DATA __attribute__((section(".user_data")))
+#define USED      __attribute__((used))
