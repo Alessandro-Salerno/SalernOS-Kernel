@@ -34,22 +34,30 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-#include "arch/context.h"
-#include "arch/mmu.h"
-#include "com/sys/proc.h"
-#include "com/sys/thread.h"
-
 static arch_cpu_t BaseCpu = {0};
 
-USER_DATA volatile const char *user_message =
-    "Hello from SalernOS userspace!\n";
+USER_DATA volatile const char *Proc1Message = "Hello from process 1!\n";
 
-USER_TEXT void user_test(void) {
+USER_DATA volatile const char *Proc2Message = "Hello from process 2!\n";
+
+USER_TEXT void proc1entry(void) {
   asm volatile("movq $0x0, %%rax\n"
                "movq %0, %%rdi\n"
                "int $0x80\n"
                :
-               : "b"(user_message)
+               : "b"(Proc1Message)
+               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+
+  while (1)
+    ;
+}
+
+USER_TEXT void proc2entry(void) {
+  asm volatile("movq $0x0, %%rax\n"
+               "movq %0, %%rdi\n"
+               "int $0x80\n"
+               :
+               : "b"(Proc2Message)
                : "%rax", "%rdi", "%rcx", "%rdx", "memory");
 
   while (1)
@@ -61,6 +69,8 @@ USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
   com_thread_t *curr = cpu->thread;
   com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
+
+  kprintf("%x -> %x\n", curr, next);
 
   if (NULL == curr) {
     return;
@@ -139,6 +149,7 @@ USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   ctx->rsp = next_regs->rsp;
 
   cpu->ist.rsp0 = (uint64_t)next->kernel_stack;
+  cpu->thread   = next;
 }
 
 void kernel_entry(void) {
@@ -173,30 +184,55 @@ void kernel_entry(void) {
   x86_64_idt_set_user_invocable(0x80);
   com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
 
-  arch_context_t ctx            = {0};
-  ctx.cs                        = 0x20 | 3;
-  ctx.ss                        = 0x18 | 3;
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+
+  arch_context_t ctx = {0};
+  ctx.cs             = 0x20 | 3;
+  ctx.ss             = 0x18 | 3;
   arch_mmu_map(user_pt,
                ustack,
                (void *)ARCH_HHDM_TO_PHYS(ustack),
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  ctx.rsp              = (uint64_t)ustack + 4095;
-  ctx.rip              = (uint64_t)user_test;
-  ctx.rflags           = (1ul << 1) | (1ul << 9) | (1ul << 21);
+  ctx.rsp    = (uint64_t)ustack + 4095;
+  ctx.rip    = (uint64_t)proc1entry;
+  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+
   com_proc_t   *proc   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   com_thread_t *thread = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   thread->proc         = proc;
   thread->runnable     = true;
   thread->ctx          = ctx;
-  thread->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  thread->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + 4095;
   proc->page_table     = user_pt;
   proc->pid            = 1;
+
+  user_pt = arch_mmu_new_table();
+  ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  arch_mmu_map(user_pt,
+               ustack,
+               (void *)ARCH_HHDM_TO_PHYS(ustack),
+               ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                   ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+  com_proc_t   *proc2   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  com_thread_t *thread2 = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  thread2->proc         = proc2;
+  thread2->runnable     = true;
+  thread2->ctx          = ctx;
+  thread2->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + 4095;
+  thread2->ctx.rsp      = (uint64_t)ustack + 4095;
+  thread2->ctx.rip      = (uint64_t)proc2entry;
+  proc->page_table      = user_pt;
+  proc->pid             = 2;
+
   hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
+  hdr_arch_cpu_get()->thread   = thread;
+
   TAILQ_INSERT_HEAD(&BaseCpu.sched_queue, thread, threads);
-  arch_mmu_switch(user_pt);
+  TAILQ_INSERT_HEAD(&BaseCpu.sched_queue, thread2, threads);
+
+  arch_mmu_switch(proc->page_table);
   arch_ctx_trampoline(&ctx);
 
   // intentional page fault
