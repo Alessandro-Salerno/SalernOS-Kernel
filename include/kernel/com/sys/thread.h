@@ -22,6 +22,7 @@
 #include <arch/cpu.h>
 #include <kernel/com/sys/proc.h>
 #include <stdbool.h>
+#include <vendor/tailq.h>
 
 typedef struct com_thread {
   arch_context_t   ctx;
@@ -29,4 +30,5 @@ typedef struct com_thread {
   struct arch_cpu *cpu;
   bool             runnable;
   void            *kernel_stack;
+  TAILQ_ENTRY(com_thread) threads;
 } com_thread_t;

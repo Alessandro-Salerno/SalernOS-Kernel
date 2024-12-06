@@ -18,6 +18,16 @@
 
 #pragma once
 
-typedef struct {
+#include <arch/mmu.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
+typedef struct {
+  uint64_t              pid;
+  uint64_t              parent_pid;
+  bool                  exited;
+  int                   exit_status;
+  arch_mmu_pagetable_t *page_table;
+  size_t                num_children;
 } com_proc_t;
