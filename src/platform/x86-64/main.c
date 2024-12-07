@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/log.h>
@@ -106,47 +107,19 @@ USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   curr->cpu = NULL;
   next->cpu = cpu;
 
-  arch_context_t *prev_regs = &curr->ctx;
-  prev_regs->rax            = ctx->rax;
-  prev_regs->rbx            = ctx->rbx;
-  prev_regs->rcx            = ctx->rcx;
-  prev_regs->rdx            = ctx->rdx;
-  prev_regs->r8             = ctx->r8;
-  prev_regs->r9             = ctx->r9;
-  prev_regs->r10            = ctx->r10;
-  prev_regs->r11            = ctx->r11;
-  prev_regs->r12            = ctx->r12;
-  prev_regs->r13            = ctx->r13;
-  prev_regs->r14            = ctx->r14;
-  prev_regs->r15            = ctx->r15;
-  prev_regs->rdi            = ctx->rdi;
-  prev_regs->rsi            = ctx->rsi;
-  prev_regs->rbp            = ctx->rbp;
-  prev_regs->rip            = ctx->rip;
-  prev_regs->rsp            = ctx->rsp;
+  // Save the previous threads' context
+  ARCH_CONTEXT_COPY(&curr->ctx, ctx);
 
-  arch_context_t *next_regs = &next->ctx;
-  hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)next_regs->gs);
-  ctx->rax = next_regs->rax;
-  ctx->rbx = next_regs->rbx;
-  ctx->rcx = next_regs->rcx;
-  ctx->rdx = next_regs->rdx;
-  ctx->r8  = next_regs->r8;
-  ctx->r9  = next_regs->r9;
-  ctx->r10 = next_regs->r10;
-  ctx->r11 = next_regs->r11;
-  ctx->r12 = next_regs->r12;
-  ctx->r13 = next_regs->r13;
-  ctx->r14 = next_regs->r14;
-  ctx->r15 = next_regs->r15;
-  ctx->rdi = next_regs->rdi;
-  ctx->rsi = next_regs->rsi;
-  ctx->rbp = next_regs->rbp;
-  ctx->rip = next_regs->rip;
-  ctx->rsp = next_regs->rsp;
+  // Restore the next thread's context
+  ARCH_CONTEXT_COPY(ctx, &next->ctx);
 
-  cpu->ist.rsp0 = (uint64_t)next->kernel_stack;
-  cpu->thread   = next;
+  // Restore the next thread's thread-local pointer (e.g., GS)
+  ARCH_CONTEXT_RESTORE_TLC(&next->ctx);
+
+  // TODO: restore extra context (e.g., x87, SSE)
+
+  ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
+  cpu->thread = next;
 }
 
 void kernel_entry(void) {

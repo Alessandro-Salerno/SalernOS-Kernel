@@ -27,6 +27,9 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
+#define ARCH_CPU_SET_KERNEL_STACK(cpu, kstack) \
+  (cpu)->ist.rsp0 = (uint64_t)kstack
+
 TAILQ_HEAD(com_thread_tailq, com_thread);
 
 typedef struct arch_cpu {

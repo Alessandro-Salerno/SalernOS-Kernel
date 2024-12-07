@@ -23,12 +23,34 @@
 #define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
 #define ARCH_CONTEXT_ISUSER(x)    (0x23 == (x)->cs)
 
-#define ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry) \
-  ctx.cs     = 0x20 | 3;                                       \
-  ctx.ss     = 0x18 | 3;                                       \
-  ctx.rsp    = (uint64_t)stack + stack_size;                   \
-  ctx.rip    = (uint64_t)entry;                                \
-  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+#define ARCH_CONTEXT_THREAD_SET(src, stack, stack_size, entry) \
+  src.cs     = 0x20 | 3;                                       \
+  src.ss     = 0x18 | 3;                                       \
+  src.rsp    = (uint64_t)stack + stack_size;                   \
+  src.rip    = (uint64_t)entry;                                \
+  src.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+
+#define ARCH_CONTEXT_COPY(dst, src) \
+  (dst)->rax = (src)->rax;          \
+  (dst)->rbx = (src)->rbx;          \
+  (dst)->rcx = (src)->rcx;          \
+  (dst)->rdx = (src)->rdx;          \
+  (dst)->r8  = (src)->r8;           \
+  (dst)->r9  = (src)->r9;           \
+  (dst)->r10 = (src)->r10;          \
+  (dst)->r11 = (src)->r11;          \
+  (dst)->r12 = (src)->r12;          \
+  (dst)->r13 = (src)->r13;          \
+  (dst)->r14 = (src)->r14;          \
+  (dst)->r15 = (src)->r15;          \
+  (dst)->rdi = (src)->rdi;          \
+  (dst)->rsi = (src)->rsi;          \
+  (dst)->rbp = (src)->rbp;          \
+  (dst)->rip = (src)->rip;          \
+  (dst)->rsp = (src)->rsp;
+
+#define ARCH_CONTEXT_RESTORE_TLC(ctx) \
+  hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
 
 typedef struct {
   uint64_t cr2;
