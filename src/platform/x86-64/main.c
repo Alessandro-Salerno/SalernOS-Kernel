@@ -41,36 +41,32 @@ USER_DATA volatile const char *Proc1Message = "Hello from process 1!\n";
 USER_DATA volatile const char *Proc2Message = "Hello from process 2!\n";
 
 USER_TEXT void proc1entry(void) {
-  asm volatile("movq $0x0, %%rax\n"
-               "movq %0, %%rdi\n"
-               "int $0x80\n"
-               :
-               : "b"(Proc1Message)
-               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
-
-  while (1)
-    ;
+  while (1) {
+    asm volatile("movq $0x0, %%rax\n"
+                 "movq %0, %%rdi\n"
+                 "int $0x80\n"
+                 :
+                 : "b"(Proc1Message)
+                 : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+  }
 }
 
 USER_TEXT void proc2entry(void) {
-  asm volatile("movq $0x0, %%rax\n"
-               "movq %0, %%rdi\n"
-               "int $0x80\n"
-               :
-               : "b"(Proc2Message)
-               : "%rax", "%rdi", "%rcx", "%rdx", "memory");
-
-  while (1)
-    ;
+  while (1) {
+    asm volatile("movq $0x0, %%rax\n"
+                 "movq %0, %%rdi\n"
+                 "int $0x80\n"
+                 :
+                 : "b"(Proc2Message)
+                 : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+  }
 }
 
 USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
   com_thread_t *curr = cpu->thread;
-  com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
-
-  kprintf("%x -> %x\n", curr, next);
+  com_thread_t *next = TAILQ_NEXT(curr, threads);
 
   if (NULL == curr) {
     return;
@@ -223,14 +219,14 @@ void kernel_entry(void) {
   thread2->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + 4095;
   thread2->ctx.rsp      = (uint64_t)ustack + 4095;
   thread2->ctx.rip      = (uint64_t)proc2entry;
-  proc->page_table      = user_pt;
-  proc->pid             = 2;
+  proc2->page_table     = user_pt;
+  proc2->pid            = 2;
 
   hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
   hdr_arch_cpu_get()->thread   = thread;
 
-  TAILQ_INSERT_HEAD(&BaseCpu.sched_queue, thread, threads);
-  TAILQ_INSERT_HEAD(&BaseCpu.sched_queue, thread2, threads);
+  TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
+  TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
 
   arch_mmu_switch(proc->page_table);
   arch_ctx_trampoline(&ctx);
