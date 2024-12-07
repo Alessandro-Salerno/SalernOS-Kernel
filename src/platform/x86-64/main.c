@@ -66,7 +66,7 @@ USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
   com_thread_t *curr = cpu->thread;
-  com_thread_t *next = TAILQ_NEXT(curr, threads);
+  com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
   if (NULL == curr) {
     return;
@@ -225,7 +225,6 @@ void kernel_entry(void) {
   hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
   hdr_arch_cpu_get()->thread   = thread;
 
-  TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
   TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
 
   arch_mmu_switch(proc->page_table);
