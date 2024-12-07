@@ -41,9 +41,9 @@ static uintmax_t ReservedMem;
 static uintmax_t UsedMem;
 
 // TODO: turn this into a mutex
-static spinlock_t Lock = SPINLOCK_NEW();
+static com_spinlock_t Lock = COM_SPINLOCK_NEW();
 
-bool bmp_get(bmp_t *bmp, uintmax_t idx) {
+static bool bmp_get(bmp_t *bmp, uintmax_t idx) {
   uintmax_t byte_idx    = idx / 8;
   uint8_t   bit_idx     = idx % 8;
   uint8_t   bit_indexer = 0b10000000 >> bit_idx;
@@ -51,7 +51,7 @@ bool bmp_get(bmp_t *bmp, uintmax_t idx) {
   return (bmp->buffer[byte_idx] & bit_indexer) > 0;
 }
 
-void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
+static void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
   uintmax_t byte_idx    = idx / 8;
   uint8_t   bit_idx     = idx % 8;
   uint8_t   bit_indexer = 0b10000000 >> bit_idx;

@@ -22,11 +22,11 @@
 #include <kernel/com/log.h>
 #include <stdbool.h>
 
-typedef int spinlock_t;
+typedef int com_spinlock_t;
 
-#define SPINLOCK_NEW() 0
+#define COM_SPINLOCK_NEW() 0
 
-static inline void hdr_com_spinlock_acquire(spinlock_t *lock) {
+static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
   hdr_arch_cpu_interrupt_disable();
   hdr_arch_cpu_get()->lock_depth++;
   while (!__sync_bool_compare_and_swap(lock, 0, 1)) {
@@ -34,11 +34,11 @@ static inline void hdr_com_spinlock_acquire(spinlock_t *lock) {
   }
 }
 
-static inline bool hdr_com_spinlock_try(spinlock_t *lock) {
+static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
   return __sync_bool_compare_and_swap(lock, 0, 1);
 }
 
-static inline void hdr_com_spinlock_release(spinlock_t *lock) {
+static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
   ASSERT(0 < hdr_arch_cpu_get()->lock_depth);
   *lock = 0;
   hdr_arch_cpu_get()->lock_depth--;

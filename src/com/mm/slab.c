@@ -30,8 +30,8 @@ typedef struct {
   uintptr_t next;
 } slab_t;
 
-static slab_t     Slabs[NUM_SLABS];
-static spinlock_t Lock = SPINLOCK_NEW();
+static slab_t         Slabs[NUM_SLABS];
+static com_spinlock_t Lock = COM_SPINLOCK_NEW();
 
 static void init(slab_t *s, size_t entry_size) {
   entry_size = entry_size + (entry_size % 16);
