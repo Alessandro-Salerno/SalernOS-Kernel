@@ -29,8 +29,9 @@ typedef int spinlock_t;
 static inline void hdr_com_spinlock_acquire(spinlock_t *lock) {
   hdr_arch_cpu_interrupt_disable();
   hdr_arch_cpu_get()->lock_depth++;
-  while (!__sync_bool_compare_and_swap(lock, 0, 1))
+  while (!__sync_bool_compare_and_swap(lock, 0, 1)) {
     hdr_arch_cpu_pause();
+  }
 }
 
 static inline bool hdr_com_spinlock_try(spinlock_t *lock) {
@@ -42,7 +43,7 @@ static inline void hdr_com_spinlock_release(spinlock_t *lock) {
   *lock = 0;
   hdr_arch_cpu_get()->lock_depth--;
 
-  if (0 == hdr_arch_cpu_get()->lock_depth) {
+  if (0 == hdr_arch_cpu_get()->lock_depth && hdr_arch_cpu_get()->intstatus) {
     hdr_arch_cpu_interrupt_enable();
   }
 }
