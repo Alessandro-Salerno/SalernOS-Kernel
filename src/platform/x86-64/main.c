@@ -21,7 +21,9 @@
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
@@ -30,7 +32,6 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/printf.h>
-#include <threads.h>
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
@@ -182,27 +183,15 @@ void kernel_entry(void) {
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-
-  arch_context_t ctx = {0};
-  ctx.cs             = 0x20 | 3;
-  ctx.ss             = 0x18 | 3;
   arch_mmu_map(user_pt,
                ustack,
                (void *)ARCH_HHDM_TO_PHYS(ustack),
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  ctx.rsp    = (uint64_t)ustack + 4095;
-  ctx.rip    = (uint64_t)proc1entry;
-  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
-  com_proc_t   *proc   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  com_thread_t *thread = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  thread->proc         = proc;
-  thread->runnable     = true;
-  thread->ctx          = ctx;
-  thread->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + 4095;
-  proc->page_table     = user_pt;
-  proc->pid            = 1;
+  com_proc_t   *proc = com_sys_proc_new(user_pt, 0);
+  com_thread_t *thread =
+      com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc1entry);
 
   user_pt = arch_mmu_new_table();
   ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
@@ -211,16 +200,9 @@ void kernel_entry(void) {
                (void *)ARCH_HHDM_TO_PHYS(ustack),
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  com_proc_t   *proc2   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  com_thread_t *thread2 = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  thread2->proc         = proc2;
-  thread2->runnable     = true;
-  thread2->ctx          = ctx;
-  thread2->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + 4095;
-  thread2->ctx.rsp      = (uint64_t)ustack + 4095;
-  thread2->ctx.rip      = (uint64_t)proc2entry;
-  proc2->page_table     = user_pt;
-  proc2->pid            = 2;
+  com_proc_t   *proc2 = com_sys_proc_new(user_pt, 0);
+  com_thread_t *thread2 =
+      com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc2entry);
 
   hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
   hdr_arch_cpu_get()->thread   = thread;
@@ -228,7 +210,7 @@ void kernel_entry(void) {
   TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
 
   arch_mmu_switch(proc->page_table);
-  arch_ctx_trampoline(&ctx);
+  arch_ctx_trampoline(&thread->ctx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

@@ -32,3 +32,10 @@ typedef struct com_thread {
   void            *kernel_stack;
   TAILQ_ENTRY(com_thread) threads;
 } com_thread_t;
+
+com_thread_t *com_sys_thread_new(com_proc_t *proc,
+                                 void       *stack,
+                                 uintmax_t   stack_size,
+                                 void       *entry);
+
+void com_sys_thread_destroy(com_thread_t *thread);

@@ -23,6 +23,13 @@
 #define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
 #define ARCH_CONTEXT_ISUSER(x)    (0x23 == (x)->cs)
 
+#define ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry) \
+  ctx.cs     = 0x20 | 3;                                       \
+  ctx.ss     = 0x18 | 3;                                       \
+  ctx.rsp    = (uint64_t)stack + stack_size;                   \
+  ctx.rip    = (uint64_t)entry;                                \
+  ctx.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+
 typedef struct {
   uint64_t cr2;
   uint64_t gs;

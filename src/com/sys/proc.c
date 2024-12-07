@@ -16,23 +16,34 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
+#include <arch/info.h>
 #include <arch/mmu.h>
-#include <stdbool.h>
-#include <stddef.h>
+#include <kernel/com/mm/pmm.h>
+#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/platform/mmu.h>
 #include <stdint.h>
 
-typedef struct {
-  uint64_t              pid;
-  uint64_t              parent_pid;
-  bool                  exited;
-  int                   exit_status;
-  arch_mmu_pagetable_t *page_table;
-  size_t                num_children;
-} com_proc_t;
+static com_spinlock_t PidLock = COM_SPINLOCK_NEW();
+static uintmax_t      NextPid = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             uintmax_t             parent_pid);
+                             uintmax_t             parent_pid) {
+  com_proc_t *proc   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  proc->page_table   = page_table;
+  proc->exited       = false;
+  proc->exit_status  = 0;
+  proc->num_children = 0;
+  proc->parent_pid   = parent_pid;
 
-void com_sys_proc_destroy(com_proc_t *proc);
+  // TODO: use atomic operations (faster)
+  hdr_com_spinlock_acquire(&PidLock);
+  proc->pid = NextPid++;
+  hdr_com_spinlock_release(&PidLock);
+
+  return proc;
+}
+
+void com_sys_proc_destroy(com_proc_t *proc) {
+  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(proc));
+}
