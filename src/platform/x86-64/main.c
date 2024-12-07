@@ -23,6 +23,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
@@ -66,60 +67,7 @@ USER_TEXT void proc2entry(void) {
 
 USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
-  arch_cpu_t   *cpu  = hdr_arch_cpu_get();
-  com_thread_t *curr = cpu->thread;
-  com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
-
-  if (NULL == curr) {
-    return;
-  }
-
-  if (NULL == next) {
-    if (curr->runnable) {
-      return;
-    }
-
-    // TODO: idle thread
-  } else {
-    TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
-  }
-
-  // TODO: add idle thread check
-  if (curr->runnable) {
-    TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
-  }
-
-  arch_mmu_pagetable_t *prev_pt = NULL;
-  arch_mmu_pagetable_t *next_pt = NULL;
-
-  if (NULL != curr->proc) {
-    prev_pt = curr->proc->page_table;
-  }
-
-  if (NULL != next->proc) {
-    next_pt = next->proc->page_table;
-  }
-
-  if (NULL != next_pt && next_pt != prev_pt) {
-    arch_mmu_switch(next_pt);
-  }
-
-  curr->cpu = NULL;
-  next->cpu = cpu;
-
-  // Save the previous threads' context
-  ARCH_CONTEXT_COPY(&curr->ctx, ctx);
-
-  // Restore the next thread's context
-  ARCH_CONTEXT_COPY(ctx, &next->ctx);
-
-  // Restore the next thread's thread-local pointer (e.g., GS)
-  ARCH_CONTEXT_RESTORE_TLC(&next->ctx);
-
-  // TODO: restore extra context (e.g., x87, SSE)
-
-  ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
-  cpu->thread = next;
+  com_sys_sched_run(ctx);
 }
 
 void kernel_entry(void) {
