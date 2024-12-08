@@ -134,29 +134,29 @@ kerntool (Planned for the future):
 
 
 Roadmap for version 0.2.0 (in order):
-    - Basic x86-64 CPU features
-    - Basic E9 logging
-    - x86-64 GDT
-    - x86-64 IDT
-    - Basic DPC
-    - Basic PMM
-    - Basic MMU setup
-    - Basic VMM
-    - Basic memory allocator
-    - Limine command-line parser
-    - Basic ACPI support
-    - x86-64 APIC Part 1
-    - Timekeeper Part 1
-    - CPU Initialization
-    - x86-64 APIC Part 2
-    - Basic scheduler
-    - Timekeeper Part 2
-    - Basic x86-64 SMP
-    - Timekeeper Part 3
-    - + Other things that may be required by one
-        or more of the above (eg., proc)
+    [Y] Basic x86-64 CPU features
+    [Y] Basic E9 logging
+    [Y] x86-64 GDT
+    [Y] x86-64 IDT
+    [N] Basic DPC
+    [Y] Basic PMM
+    [Y] Basic MMU setup
+    [N] Basic VMM
+    [Y] Basic memory allocator
+    [N] Limine command-line parser
+    [N] Basic ACPI support
+    [Y] x86-64 APIC Part 1
+    [N] Timekeeper Part 1
+    [N] CPU Initialization
+    [N] x86-64 APIC Part 2
+    [Y] Basic scheduler
+    [N] Timekeeper Part 2
+    [N] Basic x86-64 SMP
+    [N] Timekeeper Part 3
+    [Y] + Other things that may be required by one
+          or more of the above (eg., proc)
 
     These goals are taken from the Astral Kernel at Astral/kernel-src/arch/x86-64/main.c.
-    The practical goal of version 0.2.0 is to get syncronized parallel output from two
+    The practical goal of version 0.2.0 is to get synchronized parallel output from two
     threads using the scheduler. Ideally, the output would come from a system call, but this
-    is not strictly required to meet the 0.2.0 criteria.
+    is not strictly required to meet the 0.2.0 criteria. ACHIEVED!
