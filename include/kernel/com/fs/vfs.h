@@ -21,6 +21,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define COM_VNODE_HOLD(node) \
+  __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_SEQ_CST)
+#define COM_VNODE_RELEASE(node) \
+  __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)
+
 typedef enum com_vnode_type {
   COM_VNODE_TYPE_FILE,
   COM_VNODE_TYPE_DIR,
@@ -44,26 +49,26 @@ typedef struct com_vnode {
 } com_vnode_t;
 
 typedef struct com_vnode_ops {
-  void (*close)(com_vnode_t *vnode);
-  void (*lookup)(com_vnode_t **out,
-                 com_vnode_t  *dir,
-                 const char   *name,
-                 size_t        len);
-  void (*create)(com_vnode_t **out,
-                 com_vnode_t  *dir,
-                 const char   *name,
-                 size_t        namelen,
-                 uintmax_t     attr);
-  void (*mkdir)(com_vnode_t **out,
-                com_vnode_t  *parent,
+  int (*close)(com_vnode_t *vnode);
+  int (*lookup)(com_vnode_t **out,
+                com_vnode_t  *dir,
+                const char   *name,
+                size_t        len);
+  int (*create)(com_vnode_t **out,
+                com_vnode_t  *dir,
                 const char   *name,
                 size_t        namelen,
                 uintmax_t     attr);
-  void (*link)(com_vnode_t *dir,
-               const char  *dstname,
-               size_t       dstnamelen,
-               com_vnode_t *src);
-  void (*unlink)(com_vnode_t *dir, const char *name, size_t namelen);
+  int (*mkdir)(com_vnode_t **out,
+               com_vnode_t  *parent,
+               const char   *name,
+               size_t        namelen,
+               uintmax_t     attr);
+  int (*link)(com_vnode_t *dir,
+              const char  *dstname,
+              size_t       dstnamelen,
+              com_vnode_t *src);
+  int (*unlink)(com_vnode_t *dir, const char *name, size_t namelen);
   int (*read)(void        *buf,
               size_t       buflen,
               com_vnode_t *node,
@@ -74,8 +79,10 @@ typedef struct com_vnode_ops {
                size_t       buflen,
                uintmax_t    off,
                uintmax_t    flags);
-  void (*resolve)(const char **path, size_t *pathlen, com_vnode_t *link);
-  void (*readdir)(void *buf, size_t *buflen, com_vnode_t *dir, uintmax_t off);
+  int (*resolve)(const char **path, size_t *pathlen, com_vnode_t *link);
+  int (*readdir)(void *buf, size_t *buflen, com_vnode_t *dir, uintmax_t off);
+  // TODO: add stat, mmap, munmap, getattr, setattr, poll, etc
+  int (*ioctl)(com_vnode_t *node, uintmax_t op, void *buf);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
