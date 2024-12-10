@@ -17,3 +17,19 @@
 *************************************************************************/
 
 #include <kernel/com/fs/vfs.h>
+
+int com_fs_vfs_lookup(com_vnode_t **out,
+                      const char   *path,
+                      size_t        pathlen,
+                      com_vnode_t  *root,
+                      com_vnode_t  *cwd) {
+  com_vnode_t *ret     = cwd;
+  const char  *pathend = path + pathlen;
+
+  if (0 < pathlen && COM_VFS_PATH_SEP == path[0]) {
+    path++;
+    ret = root;
+  }
+
+  return -1;
+}

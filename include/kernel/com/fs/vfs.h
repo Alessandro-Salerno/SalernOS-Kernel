@@ -21,6 +21,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define COM_VFS_PATH_SEP '/'
+
 #define COM_VNODE_HOLD(node) \
   __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_SEQ_CST)
 #define COM_VNODE_RELEASE(node) \
