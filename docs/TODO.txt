@@ -160,3 +160,17 @@ Roadmap for version 0.2.0 (in order):
     The practical goal of version 0.2.0 is to get synchronized parallel output from two
     threads using the scheduler. Ideally, the output would come from a system call, but this
     is not strictly required to meet the 0.2.0 criteria. ACHIEVED!
+
+Roadmap for version 0.2.1 (in order):
+    - VFS
+    - Page cache
+    - initrd/initramfs/tmpfs
+    - ELF loader & execution
+    - devfs
+    - pipefs
+    - Flanterm port
+    - PS/2 keyboard
+    - TTY
+    - Basic mlibc port
+
+    The end goal is to get a basic shell running (without fork, exec, etc).
