@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -45,9 +46,14 @@ typedef struct com_vnode {
   struct com_vfs       *mountpointof;
   struct com_vfs       *vfs;
   struct com_vnode_ops *ops;
-  com_vnode_type_t      type;
-  uintmax_t             num_ref;
-  void                 *extra;
+  struct {
+    struct com_vnode *next;
+    struct com_vnode *prev;
+  } vlink;
+  com_vnode_type_t type;
+  uintmax_t        num_ref;
+  bool             isroot;
+  void            *extra;
 } com_vnode_t;
 
 typedef struct com_vnode_ops {
@@ -92,3 +98,5 @@ typedef struct com_vfs_ops {
   void (*unmount)(com_vfs_t *vfs);
   void (*vget)(com_vnode_t **out, com_vfs_t *vfs, void *inode);
 } com_vfs_ops_t;
+
+void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink);

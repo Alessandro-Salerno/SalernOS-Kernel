@@ -26,7 +26,7 @@ void kmemset(void *buff, size_t buffsize, uint8_t val) {
     *(uint8_t *)((uint64_t)(buff) + i) = val;
 }
 
-int8_t kmemcmp(void *buff1, void *buff2, size_t buffsize) {
+int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
   for (uint64_t i = 0; i < buffsize; i++) {
     uint8_t buff1val = *(uint8_t *)(buff1 + i);
     uint8_t buff2val = *(uint8_t *)(buff2 + i);
@@ -47,4 +47,14 @@ void kmemcpy(void *dst, void *src, size_t buffsize) {
     uint8_t val               = *(uint8_t *)(src_off + i);
     *(uint8_t *)(dst_off + i) = val;
   }
+}
+
+void *kmemchr(const void *str, int c, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    if (c == *(uint8_t *)str) {
+      return (void *)&str[i];
+    }
+  }
+
+  return NULL;
 }
