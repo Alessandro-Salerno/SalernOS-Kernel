@@ -45,6 +45,9 @@ void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink) {
   }
 }
 
+int com_fs_vfs_close(com_vnode_t *vnode) {
+}
+
 int com_fs_vfs_lookup(com_vnode_t **out,
                       const char   *path,
                       size_t        pathlen,
@@ -85,7 +88,9 @@ int com_fs_vfs_lookup(com_vnode_t **out,
 
     if (!dot) {
       if (COM_VNODE_TYPE_DIR != ret->type) {
-        goto invtype;
+        COM_VNODE_RELEASE(ret);
+        *out = NULL;
+        return ENOTDIR;
       }
 
       com_vnode_t *dir = ret;
@@ -98,7 +103,16 @@ int com_fs_vfs_lookup(com_vnode_t **out,
         return ENOENT;
       }
 
-      // TODO: handle case in which ret is FS mountpoint
+      while (NULL != ret->mountpointof) {
+        if (dir != ret) {
+          COM_VNODE_RELEASE(dir);
+        }
+
+        dir = ret;
+        ret = ret->mountpointof->root;
+        COM_VNODE_HOLD(ret);
+      }
+
       // TODO: handle case in which ret is symlink
     }
 
@@ -107,9 +121,53 @@ int com_fs_vfs_lookup(com_vnode_t **out,
 
   *out = ret;
   return 0;
+}
 
-invtype:
-  COM_VNODE_RELEASE(ret);
-  *out = NULL;
-  return ENOTDIR;
+int com_fs_vfs_create(com_vnode_t **out,
+                      com_vnode_t  *dir,
+                      const char   *name,
+                      size_t        namelen,
+                      uintmax_t     attr) {
+}
+
+int com_fs_vfs_mkdir(com_vnode_t **out,
+                     com_vnode_t  *parent,
+                     const char   *name,
+                     size_t        namelen,
+                     uintmax_t     attr) {
+}
+
+int com_fs_vfs_link(com_vnode_t *dir,
+                    const char  *dstname,
+                    size_t       dstnamelen,
+                    com_vnode_t *src) {
+}
+
+int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen) {
+}
+
+int com_fs_vfs_read(void        *buf,
+                    size_t       buflen,
+                    com_vnode_t *node,
+                    uintmax_t    off,
+                    uintmax_t    flags) {
+}
+
+int com_fs_vfs_write(com_vnode_t *node,
+                     void        *buf,
+                     size_t       buflen,
+                     uintmax_t    off,
+                     uintmax_t    flags) {
+}
+
+int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link) {
+}
+
+int com_fs_vfs_readdir(void        *buf,
+                       size_t      *buflen,
+                       com_vnode_t *dir,
+                       uintmax_t    off) {
+}
+
+int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
 }
