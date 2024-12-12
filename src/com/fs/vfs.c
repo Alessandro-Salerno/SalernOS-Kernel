@@ -21,7 +21,7 @@
 #include <lib/mem.h>
 #include <stdbool.h>
 
-#define GET_VLINK(vn)              \
+#define GET_VLINK_CHILD(vn)        \
   while (NULL != vn->vlink.next) { \
     vn = vn->vlink.next;           \
   }
@@ -46,6 +46,8 @@ void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink) {
 }
 
 int com_fs_vfs_close(com_vnode_t *vnode) {
+  GET_VLINK_CHILD(vnode);
+  return vnode->ops->close(vnode);
 }
 
 int com_fs_vfs_lookup(com_vnode_t **out,
@@ -128,6 +130,7 @@ int com_fs_vfs_create(com_vnode_t **out,
                       const char   *name,
                       size_t        namelen,
                       uintmax_t     attr) {
+  return dir->ops->create(out, dir, name, namelen, attr);
 }
 
 int com_fs_vfs_mkdir(com_vnode_t **out,
@@ -135,15 +138,31 @@ int com_fs_vfs_mkdir(com_vnode_t **out,
                      const char   *name,
                      size_t        namelen,
                      uintmax_t     attr) {
+  return parent->ops->mkdir(out, parent, name, namelen, attr);
 }
 
 int com_fs_vfs_link(com_vnode_t *dir,
                     const char  *dstname,
                     size_t       dstnamelen,
                     com_vnode_t *src) {
+  if (0 == src->ops->link(dir, dstname, dstnamelen, src)) {
+    com_vnode_t *link = NULL;
+
+    if (0 == dir->ops->lookup(&link, dir, dstname, dstnamelen) &&
+        NULL != link) {
+      link->vlink.prev = src->vlink.prev;
+      link->vlink.next = src->vlink.next;
+      COM_VNODE_RELEASE(link);
+      return 0;
+    }
+  }
+
+  // TODO: improve error handling here
+  return ENOENT;
 }
 
 int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen) {
+  return dir->ops->unlink(dir, name, namelen);
 }
 
 int com_fs_vfs_read(void        *buf,
@@ -151,6 +170,8 @@ int com_fs_vfs_read(void        *buf,
                     com_vnode_t *node,
                     uintmax_t    off,
                     uintmax_t    flags) {
+  GET_VLINK_CHILD(node);
+  return node->ops->read(buf, buflen, node, off, flags);
 }
 
 int com_fs_vfs_write(com_vnode_t *node,
@@ -158,16 +179,22 @@ int com_fs_vfs_write(com_vnode_t *node,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags) {
+  GET_VLINK_CHILD(node);
+  return node->ops->write(node, buf, buflen, off, flags);
 }
 
 int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link) {
+  return link->ops->resolve(path, pathlen, link);
 }
 
 int com_fs_vfs_readdir(void        *buf,
                        size_t      *buflen,
                        com_vnode_t *dir,
                        uintmax_t    off) {
+  return dir->ops->readdir(buf, buflen, dir, off);
 }
 
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
+  GET_VLINK_CHILD(node);
+  return node->ops->ioctl(node, op, buf);
 }
