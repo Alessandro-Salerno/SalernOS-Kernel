@@ -37,7 +37,7 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-// static arch_cpu_t BaseCpu = {0};
+static arch_cpu_t BaseCpu = {0};
 //
 // USER_DATA volatile const char *Proc1Message = "Hello from process 1!\n";
 //
