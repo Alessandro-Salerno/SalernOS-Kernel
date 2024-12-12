@@ -94,9 +94,9 @@ typedef struct com_vnode_ops {
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
-  void (*mount)(com_vfs_t **out, com_vnode_t *mountpoint);
-  void (*unmount)(com_vfs_t *vfs);
-  void (*vget)(com_vnode_t **out, com_vfs_t *vfs, void *inode);
+  int (*mount)(com_vfs_t **out, com_vnode_t *mountpoint);
+  int (*unmount)(com_vfs_t *vfs);
+  int (*vget)(com_vnode_t **out, com_vfs_t *vfs, void *inode);
 } com_vfs_ops_t;
 
 void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink);

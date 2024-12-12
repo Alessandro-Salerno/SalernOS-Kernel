@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -33,7 +34,9 @@
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <lib/mem.h>
 #include <lib/printf.h>
+#include <stdint.h>
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
@@ -69,6 +72,176 @@ static arch_cpu_t BaseCpu = {0};
 //   (void)isr;
 //   com_sys_sched_run(ctx);
 // }
+
+#include <libaio.h>
+struct dummyfs_node {
+  char name[100];
+  union {
+    struct dummyfs_node *directory;
+    char                 buf[100];
+  };
+  com_vnode_t *vnode;
+  bool         present;
+};
+
+extern com_vfs_ops_t   DummyfsOps;
+extern com_vnode_ops_t DummyfsNodeOps;
+
+static int kstrcmp(const char *str1, const char *str2, size_t max) {
+  for (size_t i = 0; 0 != *str1 && 0 != *str2 && i < max; i++) {
+    if (*str1 != *str2) {
+      return 1;
+    }
+
+    str1++;
+    str2++;
+  }
+
+  return 0;
+}
+
+static int dummyfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
+  DEBUG("mounting dummyfs in /");
+  com_vfs_t *dummyfs        = com_mm_slab_alloc(sizeof(com_vfs_t));
+  dummyfs->mountpoint       = mountpoint;
+  dummyfs->ops              = &DummyfsOps;
+  com_vnode_t         *root = com_mm_slab_alloc(sizeof(com_vnode_t));
+  struct dummyfs_node *dfs_root =
+      com_mm_slab_alloc(sizeof(struct dummyfs_node));
+  root->type    = COM_VNODE_TYPE_DIR;
+  root->isroot  = true;
+  root->ops     = &DummyfsNodeOps;
+  root->extra   = dfs_root;
+  root->num_ref = 1;
+  dummyfs->root = root;
+
+  dfs_root->vnode   = root;
+  dfs_root->present = true;
+  dfs_root->name[0] = 0;
+  void *rootbuf     = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  kmemset(rootbuf, ARCH_PAGE_SIZE, 0);
+  dfs_root->directory = rootbuf;
+
+  if (NULL != mountpoint) {
+    mountpoint->mountpointof = dummyfs;
+  }
+
+  *out = dummyfs;
+  return 0;
+}
+
+static int dummyfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode) {
+  DEBUG("running dummyfs vget for inode %x", inode);
+  (void)vfs;
+  struct dummyfs_node *dn = inode;
+  *out                    = dn->vnode;
+  return 0;
+}
+
+static int dummyfs_create(com_vnode_t **out,
+                          com_vnode_t  *dir,
+                          const char   *name,
+                          size_t        namelen,
+                          uintmax_t     attr) {
+  com_vnode_t *vn = com_mm_slab_alloc(sizeof(com_vnode_t));
+
+  vn->vfs     = dir->vfs;
+  vn->ops     = dir->ops;
+  vn->type    = COM_VNODE_TYPE_FILE;
+  vn->isroot  = false;
+  vn->num_ref = 1;
+
+  struct dummyfs_node *dirbuf = ((struct dummyfs_node *)dir->extra)->directory;
+  struct dummyfs_node *first_free = NULL;
+
+  for (size_t i = 0; i < ARCH_PAGE_SIZE / sizeof(struct dummyfs_node) - 1;
+       i++) {
+    if (!dirbuf[i].present) {
+      DEBUG("dummyfs create: file created at index %u", i);
+      first_free          = &dirbuf[i];
+      first_free->present = true;
+      break;
+    }
+  }
+
+  ASSERT(NULL != first_free);
+
+  first_free->present = true;
+  kmemcpy(first_free->name, (void *)name, namelen);
+  first_free->name[namelen] = 0;
+  vn->extra                 = first_free;
+  first_free->vnode         = vn;
+
+  *out = vn;
+  return 0;
+}
+
+static int dummyfs_write(com_vnode_t *node,
+                         void        *buf,
+                         size_t       buflen,
+                         uintmax_t    off,
+                         uintmax_t    flags) {
+  (void)flags;
+  struct dummyfs_node *dn      = node->extra;
+  uint8_t             *bytebuf = buf;
+
+  for (size_t i = off; i < 100 && i - off < buflen + off; i++) {
+    dn->buf[i] = bytebuf[i - off];
+  }
+
+  return 0;
+}
+
+static int dummyfs_read(void        *buf,
+                        size_t       buflen,
+                        com_vnode_t *node,
+                        uintmax_t    off,
+                        uintmax_t    flags) {
+  (void)flags;
+  struct dummyfs_node *dn      = node->extra;
+  uint8_t             *bytebuf = buf;
+
+  for (size_t i = off; i < 100 && i - off < buflen; i++) {
+    bytebuf[i - off] = dn->buf[i];
+  }
+
+  return 0;
+}
+
+static int dummyfs_lookup(com_vnode_t **out,
+                          com_vnode_t  *dir,
+                          const char   *name,
+                          size_t        len) {
+  DEBUG("running dummyfs lookup on root=%u", dir->isroot);
+  struct dummyfs_node *dirbuf = ((struct dummyfs_node *)dir->extra)->directory;
+  struct dummyfs_node *found  = NULL;
+  size_t               max    = 100;
+  if (len < max) {
+    max = len;
+  }
+
+  for (size_t i = 0; i < ARCH_PAGE_SIZE / sizeof(struct dummyfs_node) - 1;
+       i++) {
+    DEBUG("dummyfs lookup: attempting index %u", i);
+    if (dirbuf[i].present && 0 == kstrcmp(dirbuf[i].name, name, max)) {
+      found          = &dirbuf[i];
+      found->present = true;
+      break;
+    }
+  }
+
+  ASSERT(NULL != found);
+
+  *out = found->vnode;
+  return 0;
+}
+
+com_vfs_ops_t DummyfsOps =
+    (com_vfs_ops_t){.mount = dummyfs_mount, .vget = dummyfs_vget};
+com_vnode_ops_t DummyfsNodeOps = (com_vnode_ops_t){.create = dummyfs_create,
+                                                   .write  = dummyfs_write,
+                                                   .read   = dummyfs_read,
+                                                   .lookup = dummyfs_lookup};
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -132,6 +305,23 @@ void kernel_entry(void) {
   //
   // arch_mmu_switch(proc->page_table);
   // arch_ctx_trampoline(&thread->ctx);
+
+  com_vfs_t *dummyfs = NULL;
+  dummyfs_mount(&dummyfs, NULL);
+  com_vnode_t *newfile = NULL;
+  DEBUG("creating /myfile.xt");
+  com_fs_vfs_create(&newfile, dummyfs->root, "myfile.txt", 10, 0);
+  ASSERT(NULL != newfile);
+  com_vnode_t *samefile = NULL;
+  com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, dummyfs->root, dummyfs->root);
+  DEBUG("orig=%x, lookup=%x", newfile, samefile);
+  ASSERT(newfile == samefile);
+  DEBUG("writing 'ciao' to /myfile.txt");
+  com_fs_vfs_write(samefile, "ciao", 4, 0, 0);
+  char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  kmemset(buf, ARCH_PAGE_SIZE, 0);
+  com_fs_vfs_read(buf, 5, samefile, 0, 0);
+  DEBUG("reading from /myfile.txt: %s", buf);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

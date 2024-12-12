@@ -26,9 +26,9 @@
     vn = vn->vlink.next;           \
   }
 
-#define SKIP_SEPARATORS(path, end)                 \
-  while (path != end && COM_VFS_PATH_SEP == '/') { \
-    path++;                                        \
+#define SKIP_SEPARATORS(path, end)                   \
+  while (path != end && COM_VFS_PATH_SEP == *path) { \
+    path++;                                          \
   }
 
 void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink) {
