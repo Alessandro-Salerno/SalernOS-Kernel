@@ -37,38 +37,38 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-static arch_cpu_t BaseCpu = {0};
-
-USER_DATA volatile const char *Proc1Message = "Hello from process 1!\n";
-
-USER_DATA volatile const char *Proc2Message = "Hello from process 2!\n";
-
-USER_TEXT void proc1entry(void) {
-  while (1) {
-    asm volatile("movq $0x0, %%rax\n"
-                 "movq %0, %%rdi\n"
-                 "int $0x80\n"
-                 :
-                 : "b"(Proc1Message)
-                 : "%rax", "%rdi", "%rcx", "%rdx", "memory");
-  }
-}
-
-USER_TEXT void proc2entry(void) {
-  while (1) {
-    asm volatile("movq $0x0, %%rax\n"
-                 "movq %0, %%rdi\n"
-                 "int $0x80\n"
-                 :
-                 : "b"(Proc2Message)
-                 : "%rax", "%rdi", "%rcx", "%rdx", "memory");
-  }
-}
-
-USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
-  (void)isr;
-  com_sys_sched_run(ctx);
-}
+// static arch_cpu_t BaseCpu = {0};
+//
+// USER_DATA volatile const char *Proc1Message = "Hello from process 1!\n";
+//
+// USER_DATA volatile const char *Proc2Message = "Hello from process 2!\n";
+//
+// USER_TEXT void proc1entry(void) {
+//   while (1) {
+//     asm volatile("movq $0x0, %%rax\n"
+//                  "movq %0, %%rdi\n"
+//                  "int $0x80\n"
+//                  :
+//                  : "b"(Proc1Message)
+//                  : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+//   }
+// }
+//
+// USER_TEXT void proc2entry(void) {
+//   while (1) {
+//     asm volatile("movq $0x0, %%rax\n"
+//                  "movq %0, %%rdi\n"
+//                  "int $0x80\n"
+//                  :
+//                  : "b"(Proc2Message)
+//                  : "%rax", "%rdi", "%rcx", "%rdx", "memory");
+//   }
+// }
+//
+// USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
+//   (void)isr;
+//   com_sys_sched_run(ctx);
+// }
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -95,43 +95,43 @@ void kernel_entry(void) {
   void *slab_1 = com_mm_slab_alloc(256);
   DEBUG("slab_1=%x", slab_1);
 
-  x86_64_lapic_bsp_init();
-  x86_64_lapic_init();
+  // x86_64_lapic_bsp_init();
+  // x86_64_lapic_init();
 
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
-  com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
+  // com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
 
-  arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
-  void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  arch_mmu_map(user_pt,
-               ustack,
-               (void *)ARCH_HHDM_TO_PHYS(ustack),
-               ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                   ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-
-  com_proc_t   *proc = com_sys_proc_new(user_pt, 0);
-  com_thread_t *thread =
-      com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc1entry);
-
-  user_pt = arch_mmu_new_table();
-  ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  arch_mmu_map(user_pt,
-               ustack,
-               (void *)ARCH_HHDM_TO_PHYS(ustack),
-               ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                   ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  com_proc_t   *proc2 = com_sys_proc_new(user_pt, 0);
-  com_thread_t *thread2 =
-      com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc2entry);
-
-  hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
-  hdr_arch_cpu_get()->thread   = thread;
-
-  TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
-
-  arch_mmu_switch(proc->page_table);
-  arch_ctx_trampoline(&thread->ctx);
+  // arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
+  // void                 *ustack  = (void
+  // *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()); arch_mmu_map(user_pt,
+  //              ustack,
+  //              (void *)ARCH_HHDM_TO_PHYS(ustack),
+  //              ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+  //                  ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+  //
+  // com_proc_t   *proc = com_sys_proc_new(user_pt, 0);
+  // com_thread_t *thread =
+  //     com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc1entry);
+  //
+  // user_pt = arch_mmu_new_table();
+  // ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  // arch_mmu_map(user_pt,
+  //              ustack,
+  //              (void *)ARCH_HHDM_TO_PHYS(ustack),
+  //              ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+  //                  ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+  // com_proc_t   *proc2 = com_sys_proc_new(user_pt, 0);
+  // com_thread_t *thread2 =
+  //     com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc2entry);
+  //
+  // hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
+  // hdr_arch_cpu_get()->thread   = thread;
+  //
+  // TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
+  //
+  // arch_mmu_switch(proc->page_table);
+  // arch_ctx_trampoline(&thread->ctx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;
