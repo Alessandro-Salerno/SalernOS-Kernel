@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/fs/pagecache.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
@@ -347,6 +348,13 @@ void kernel_entry(void) {
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, samefile, 0, 0);
   DEBUG("reading from /otherfs/myfile.txt: %s", buf);
+
+  com_pagecache_t *pc = com_fs_pagecache_new();
+  uintptr_t        p1, p2;
+  com_fs_pagecache_default(&p1, pc, 550);
+  com_fs_pagecache_default(&p2, pc, 550);
+  ASSERT(p1 == p2);
+  DEBUG("page cache page at %x", p1);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;
