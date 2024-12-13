@@ -113,6 +113,7 @@ static int dummyfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
   root->ops     = &DummyfsNodeOps;
   root->extra   = dfs_root;
   root->num_ref = 1;
+  root->vfs     = dummyfs;
   dummyfs->root = root;
 
   dfs_root->vnode   = root;
@@ -124,6 +125,7 @@ static int dummyfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
 
   if (NULL != mountpoint) {
     mountpoint->mountpointof = dummyfs;
+    mountpoint->type         = COM_VNODE_TYPE_DIR;
   }
 
   *out = dummyfs;
@@ -212,10 +214,11 @@ static int dummyfs_lookup(com_vnode_t **out,
                           com_vnode_t  *dir,
                           const char   *name,
                           size_t        len) {
-  DEBUG("running dummyfs lookup on root=%u", dir->isroot);
-  struct dummyfs_node *dirbuf = ((struct dummyfs_node *)dir->extra)->directory;
-  struct dummyfs_node *found  = NULL;
-  size_t               max    = 100;
+  struct dummyfs_node *inode  = ((struct dummyfs_node *)dir->extra);
+  struct dummyfs_node *dirbuf = inode->directory;
+  DEBUG("running dummyfs lookup on root=%u name=%s", dir->isroot, inode->name);
+  struct dummyfs_node *found = NULL;
+  size_t               max   = 100;
   if (len < max) {
     max = len;
   }
@@ -224,6 +227,7 @@ static int dummyfs_lookup(com_vnode_t **out,
        i++) {
     DEBUG("dummyfs lookup: attempting index %u", i);
     if (dirbuf[i].present && 0 == kstrcmp(dirbuf[i].name, name, max)) {
+      DEBUG("found: name=%s", dirbuf[i].name);
       found          = &dirbuf[i];
       found->present = true;
       break;
@@ -312,16 +316,37 @@ void kernel_entry(void) {
   DEBUG("creating /myfile.xt");
   com_fs_vfs_create(&newfile, dummyfs->root, "myfile.txt", 10, 0);
   ASSERT(NULL != newfile);
+  com_vnode_t *mp = NULL;
+  DEBUG("creating /otherfs mountpoint")
+  com_fs_vfs_create(&mp, dummyfs->root, "otherfs", 7, 0);
+  ASSERT(NULL != mp);
+  com_vfs_t *otherfs = NULL;
+  DEBUG("mounting otherfs")
+  dummyfs_mount(&otherfs, mp);
+  ASSERT(NULL != otherfs);
+  DEBUG("creating file in /otherfs/file.txt");
+  com_vnode_t *otherfile = NULL;
+  com_fs_vfs_create(&otherfile, otherfs->root, "file.txt", 8, 0);
+
   com_vnode_t *samefile = NULL;
   com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, dummyfs->root, dummyfs->root);
   DEBUG("orig=%x, lookup=%x", newfile, samefile);
   ASSERT(newfile == samefile);
-  DEBUG("writing 'ciao' to /myfile.txt");
+  com_fs_vfs_lookup(
+      &samefile, "/otherfs/file.txt", 17, dummyfs->root, dummyfs->root);
+  DEBUG("orig=%x, lookup=%x", otherfile, samefile);
+  ASSERT(otherfile == samefile);
+  // com_fs_vfs_lookup(
+  //     &samefile, "/otherfs/../myfile.txt", 22, dummyfs->root, dummyfs->root);
+  // DEBUG("orig=%x, lookup=%x", newfile, samefile);
+  // ASSERT(newfile == samefile);
+
+  DEBUG("writing 'ciao' to /otherfs/myfile.txt");
   com_fs_vfs_write(samefile, "ciao", 4, 0, 0);
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, samefile, 0, 0);
-  DEBUG("reading from /myfile.txt: %s", buf);
+  DEBUG("reading from /otherfs/myfile.txt: %s", buf);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

@@ -51,7 +51,7 @@ void kmemcpy(void *dst, void *src, size_t buffsize) {
 
 void *kmemchr(const void *str, int c, size_t n) {
   for (size_t i = 0; i < n; i++) {
-    if (c == *(uint8_t *)str) {
+    if (c == ((uint8_t *)str)[i]) {
       return (void *)&str[i];
     }
   }

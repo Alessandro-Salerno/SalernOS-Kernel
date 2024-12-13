@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <kernel/com/fs/vfs.h>
 #include <lib/mem.h>
+#include <lib/printf.h>
 #include <stdbool.h>
 
 #define GET_VLINK_CHILD(vn)        \
