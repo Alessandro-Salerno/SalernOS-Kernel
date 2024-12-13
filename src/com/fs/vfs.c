@@ -82,6 +82,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
     bool dot    = 1 == section_end - path && 0 == kmemcmp(path, ".", 1);
     bool dotdot = 2 == section_end - path && 0 == kmemcmp(path, "..", 2);
 
+    // TODO: fix this because it leads to the wrong directory
     while (dotdot && ret->isroot && NULL != ret->vfs->mountpoint) {
       com_vnode_t *old = ret;
       ret              = ret->vfs->mountpoint;
@@ -141,6 +142,8 @@ int com_fs_vfs_mkdir(com_vnode_t **out,
                      uintmax_t     attr) {
   return parent->ops->mkdir(out, parent, name, namelen, attr);
 }
+static int x;
+x = 2;
 
 int com_fs_vfs_link(com_vnode_t *dir,
                     const char  *dstname,
