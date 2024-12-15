@@ -20,6 +20,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/fs/pagecache.h>
+#include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
@@ -315,51 +316,25 @@ void kernel_entry(void) {
   // arch_mmu_switch(proc->page_table);
   // arch_ctx_trampoline(&thread->ctx);
 
-  com_vfs_t *dummyfs = NULL;
-  dummyfs_mount(&dummyfs, NULL);
+  com_vfs_t *root = NULL;
+  com_fs_tmpfs_mount(&root, NULL);
+
   com_vnode_t *newfile = NULL;
-  DEBUG("creating /myfile.xt");
-  com_fs_vfs_create(&newfile, dummyfs->root, "myfile.txt", 10, 0);
+  com_fs_vfs_create(&newfile, root->root, "myfile.txt", 10, 0);
   ASSERT(NULL != newfile);
-  com_vnode_t *mp = NULL;
-  DEBUG("creating /otherfs mountpoint")
-  com_fs_vfs_create(&mp, dummyfs->root, "otherfs", 7, 0);
-  ASSERT(NULL != mp);
-  com_vfs_t *otherfs = NULL;
-  DEBUG("mounting otherfs")
-  dummyfs_mount(&otherfs, mp);
-  ASSERT(NULL != otherfs);
-  DEBUG("creating file in /otherfs/file.txt");
-  com_vnode_t *otherfile = NULL;
-  com_fs_vfs_create(&otherfile, otherfs->root, "file.txt", 8, 0);
 
   com_vnode_t *samefile = NULL;
-  com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, dummyfs->root, dummyfs->root);
+  com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, root->root, root->root);
   DEBUG("orig=%x, lookup=%x", newfile, samefile);
   ASSERT(newfile == samefile);
-  com_fs_vfs_lookup(
-      &samefile, "/otherfs/file.txt", 17, dummyfs->root, dummyfs->root);
-  DEBUG("orig=%x, lookup=%x", otherfile, samefile);
-  ASSERT(otherfile == samefile);
-  // com_fs_vfs_lookup(
-  //     &samefile, "/otherfs/../myfile.txt", 22, dummyfs->root, dummyfs->root);
-  // DEBUG("orig=%x, lookup=%x", newfile, samefile);
-  // ASSERT(newfile == samefile);
 
-  DEBUG("writing 'ciao' to /otherfs/myfile.txt");
   size_t dump = 0;
+  DEBUG("writing 'ciao' to /myfile.txt");
   com_fs_vfs_write(&dump, samefile, "ciao", 4, 0, 0);
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, &dump, samefile, 0, 0);
-  DEBUG("reading from /otherfs/myfile.txt: %s", buf);
-
-  com_pagecache_t *pc = com_fs_pagecache_new();
-  uintptr_t        p1, p2;
-  com_fs_pagecache_default(&p1, pc, 550);
-  com_fs_pagecache_default(&p2, pc, 550);
-  ASSERT(p1 == p2);
-  DEBUG("page cache page at %x", p1);
+  DEBUG("reading from /myfile.txt: %s", buf);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;
