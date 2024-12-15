@@ -79,10 +79,12 @@ typedef struct com_vnode_ops {
   int (*unlink)(com_vnode_t *dir, const char *name, size_t namelen);
   int (*read)(void        *buf,
               size_t       buflen,
+              size_t      *bytes_read,
               com_vnode_t *node,
               uintmax_t    off,
               uintmax_t    flags);
-  int (*write)(com_vnode_t *node,
+  int (*write)(size_t      *bytes_written,
+               com_vnode_t *node,
                void        *buf,
                size_t       buflen,
                uintmax_t    off,
@@ -124,10 +126,12 @@ int com_fs_vfs_link(com_vnode_t *dir,
 int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen);
 int com_fs_vfs_read(void        *buf,
                     size_t       buflen,
+                    size_t      *bytes_read,
                     com_vnode_t *node,
                     uintmax_t    off,
                     uintmax_t    flags);
-int com_fs_vfs_write(com_vnode_t *node,
+int com_fs_vfs_write(size_t      *bytes_written,
+                     com_vnode_t *node,
                      void        *buf,
                      size_t       buflen,
                      uintmax_t    off,

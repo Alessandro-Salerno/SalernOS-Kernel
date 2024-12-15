@@ -39,7 +39,7 @@ int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
   return 0;
 }
 
-void kmemcpy(void *dst, void *src, size_t buffsize) {
+void kmemcpy(void *dst, const void *src, size_t buffsize) {
   uint64_t src_off = (uint64_t)src;
   uint64_t dst_off = (uint64_t)dst;
 

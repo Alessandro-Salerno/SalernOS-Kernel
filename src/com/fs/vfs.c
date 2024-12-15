@@ -142,8 +142,6 @@ int com_fs_vfs_mkdir(com_vnode_t **out,
                      uintmax_t     attr) {
   return parent->ops->mkdir(out, parent, name, namelen, attr);
 }
-static int x;
-x = 2;
 
 int com_fs_vfs_link(com_vnode_t *dir,
                     const char  *dstname,
@@ -171,20 +169,22 @@ int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen) {
 
 int com_fs_vfs_read(void        *buf,
                     size_t       buflen,
+                    size_t      *bytes_read,
                     com_vnode_t *node,
                     uintmax_t    off,
                     uintmax_t    flags) {
   GET_VLINK_CHILD(node);
-  return node->ops->read(buf, buflen, node, off, flags);
+  return node->ops->read(buf, buflen, bytes_read, node, off, flags);
 }
 
-int com_fs_vfs_write(com_vnode_t *node,
+int com_fs_vfs_write(size_t      *bytes_written,
+                     com_vnode_t *node,
                      void        *buf,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags) {
   GET_VLINK_CHILD(node);
-  return node->ops->write(node, buf, buflen, off, flags);
+  return node->ops->write(bytes_written, node, buf, buflen, off, flags);
 }
 
 int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link) {

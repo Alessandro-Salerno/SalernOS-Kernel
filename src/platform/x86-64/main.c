@@ -179,12 +179,14 @@ static int dummyfs_create(com_vnode_t **out,
   return 0;
 }
 
-static int dummyfs_write(com_vnode_t *node,
+static int dummyfs_write(size_t      *bytes_written,
+                         com_vnode_t *node,
                          void        *buf,
                          size_t       buflen,
                          uintmax_t    off,
                          uintmax_t    flags) {
   (void)flags;
+  (void)bytes_written;
   struct dummyfs_node *dn      = node->extra;
   uint8_t             *bytebuf = buf;
 
@@ -197,10 +199,12 @@ static int dummyfs_write(com_vnode_t *node,
 
 static int dummyfs_read(void        *buf,
                         size_t       buflen,
+                        size_t      *bytes_read,
                         com_vnode_t *node,
                         uintmax_t    off,
                         uintmax_t    flags) {
   (void)flags;
+  (void)bytes_read;
   struct dummyfs_node *dn      = node->extra;
   uint8_t             *bytebuf = buf;
 
@@ -343,10 +347,11 @@ void kernel_entry(void) {
   // ASSERT(newfile == samefile);
 
   DEBUG("writing 'ciao' to /otherfs/myfile.txt");
-  com_fs_vfs_write(samefile, "ciao", 4, 0, 0);
+  size_t dump = 0;
+  com_fs_vfs_write(&dump, samefile, "ciao", 4, 0, 0);
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
-  com_fs_vfs_read(buf, 5, samefile, 0, 0);
+  com_fs_vfs_read(buf, 5, &dump, samefile, 0, 0);
   DEBUG("reading from /otherfs/myfile.txt: %s", buf);
 
   com_pagecache_t *pc = com_fs_pagecache_new();
