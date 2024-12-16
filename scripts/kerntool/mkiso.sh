@@ -35,11 +35,12 @@ cp bin/vmsalernos iso_root/boot/
 mkdir -p iso_root/boot/limine
 cp limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
    limine/limine-uefi-cd.bin iso_root/boot/limine/
-cp initrd.tar iso_root/initrd
 
 mkdir -p iso_root/EFI/BOOT
 cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
 cp limine/BOOTIA32.EFI iso_root/EFI/BOOT/
+
+./kerntool mkinitrd
 
 xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
         -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \

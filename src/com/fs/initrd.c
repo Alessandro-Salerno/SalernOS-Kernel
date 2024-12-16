@@ -99,6 +99,11 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
       }
     }
 
+    // Skip creating the . directory
+    if (2 == file_path_len && '.' == file_path[0]) {
+      goto skip;
+    }
+
     DEBUG("extracting file %s", file_path);
 
     while (0 < file_path_len && '/' == file_path[file_path_len - 1]) {

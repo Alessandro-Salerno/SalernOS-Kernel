@@ -136,8 +136,7 @@ void kernel_entry(void) {
   // ASSERT(NULL != newfile);
 
   com_vnode_t *samefile = NULL;
-  com_fs_vfs_lookup(
-      &samefile, "/initrd/myfile.txt", 18, root->root, root->root);
+  com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, root->root, root->root);
   DEBUG("found file at: %x", samefile);
   ASSERT(NULL != samefile);
   // DEBUG("orig=%x, lookup=%x", newfile, samefile);
