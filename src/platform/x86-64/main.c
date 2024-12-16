@@ -19,7 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/fs/pagecache.h>
+#include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
@@ -30,6 +30,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
+#include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -85,21 +86,6 @@ void kernel_entry(void) {
   com_mm_pmm_init();
   arch_mmu_init();
 
-  // pmm tests
-  void *a = com_mm_pmm_alloc();
-  void *b = com_mm_pmm_alloc();
-  DEBUG("a=%x b=%x", a, b);
-  com_mm_pmm_free(b);
-  void *c = com_mm_pmm_alloc();
-  com_mm_pmm_free(a);
-  void *d = com_mm_pmm_alloc();
-  DEBUG("c=%x d=%x", c, d);
-  com_mm_pmm_free(c);
-  com_mm_pmm_free(d);
-
-  void *slab_1 = com_mm_slab_alloc(256);
-  DEBUG("slab_1=%x", slab_1);
-
   // x86_64_lapic_bsp_init();
   // x86_64_lapic_init();
 
@@ -141,18 +127,25 @@ void kernel_entry(void) {
   com_vfs_t *root = NULL;
   com_fs_tmpfs_mount(&root, NULL);
 
-  com_vnode_t *newfile = NULL;
-  com_fs_vfs_create(&newfile, root->root, "myfile.txt", 10, 0);
-  ASSERT(NULL != newfile);
+  arch_file_t *initrd = arch_info_get_initrd();
+  com_fs_initrd_make(root->root, initrd->address, initrd->size);
+  DEBUG("gets here");
+
+  // com_vnode_t *newfile = NULL;
+  // com_fs_vfs_create(&newfile, root->root, "myfile.txt", 10, 0);
+  // ASSERT(NULL != newfile);
 
   com_vnode_t *samefile = NULL;
-  com_fs_vfs_lookup(&samefile, "/myfile.txt", 11, root->root, root->root);
-  DEBUG("orig=%x, lookup=%x", newfile, samefile);
-  ASSERT(newfile == samefile);
+  com_fs_vfs_lookup(
+      &samefile, "/initrd/myfile.txt", 18, root->root, root->root);
+  DEBUG("found file at: %x", samefile);
+  ASSERT(NULL != samefile);
+  // DEBUG("orig=%x, lookup=%x", newfile, samefile);
+  // ASSERT(newfile == samefile);
 
   size_t dump = 0;
-  DEBUG("writing 'ciao' to /myfile.txt");
-  com_fs_vfs_write(&dump, samefile, "ciao", 4, 0, 0);
+  // DEBUG("writing 'ciao' to /myfile.txt");
+  // com_fs_vfs_write(&dump, samefile, "ciao", 4, 0, 0);
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, &dump, samefile, 0, 0);

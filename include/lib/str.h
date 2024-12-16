@@ -18,9 +18,6 @@
 
 #pragma once
 
-#include <arch/info.h>
+#include <stddef.h>
 
-arch_memmap_t *arch_info_get_memmap(void);
-arch_kaddr_t  *arch_info_get_kaddr(void);
-arch_rsdp_t   *arch_info_get_rsdp(void);
-arch_file_t   *arch_info_get_initrd(void);
+int kstrcmp(const char *s1, const char *s2);

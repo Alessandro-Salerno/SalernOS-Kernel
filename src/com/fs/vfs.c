@@ -102,7 +102,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
       dir->ops->lookup(&ret, dir, path, section_end - path);
 
       if (NULL == ret) {
-        COM_VNODE_RELEASE(ret);
+        COM_VNODE_RELEASE(dir);
         *out = NULL;
         return ENOENT;
       }

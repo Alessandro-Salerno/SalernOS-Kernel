@@ -16,11 +16,19 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <lib/str.h>
 
-#include <arch/info.h>
+int kstrcmp(const char *s1, const char *s2) {
+  // NOTE: this or is correct because if just one of the two is zero (thus one
+  // string is shorter), then the if will pass and the function will return -1
+  while (0 != *s1 || 0 != *s2) {
+    if (*s1 != *s2) {
+      return -1;
+    }
 
-arch_memmap_t *arch_info_get_memmap(void);
-arch_kaddr_t  *arch_info_get_kaddr(void);
-arch_rsdp_t   *arch_info_get_rsdp(void);
-arch_file_t   *arch_info_get_initrd(void);
+    s1++;
+    s2++;
+  }
+
+  return 0;
+}

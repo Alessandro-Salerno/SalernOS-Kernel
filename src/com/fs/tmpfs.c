@@ -289,7 +289,7 @@ int com_fs_tmpfs_read(void        *buf,
       kmemset((uint8_t *)buf + cur - off, end - cur, 0);
     }
 
-    read_count += cur - end;
+    read_count += end - cur;
     cur = end;
   }
 
@@ -339,7 +339,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
     kmemcpy((uint8_t *)page + (cur % ARCH_PAGE_SIZE),
             (uint8_t *)buf + cur - off,
             end - cur);
-    write_count += cur - end;
+    write_count += end - cur;
     cur = end;
   }
 
