@@ -62,8 +62,10 @@ static void create_node(com_vnode_t      **file,
   void  *contents  = (uint8_t *)hdr + 512;
   size_t file_size = oct_atoi(hdr->size, 11);
   size_t written   = 0;
+  COM_VNODE_HOLD((*file));
   ASSERT(0 == com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
   ASSERT(file_size == written);
+  COM_VNODE_RELEASE((*file));
 }
 
 void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
@@ -85,45 +87,49 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
     }
 
     size_t file_size     = oct_atoi(hdr->size, 11);
-    char  *file_name     = hdr->name;
-    size_t file_name_len = 100;
+    char  *file_path     = hdr->name;
+    size_t file_path_len = 100;
 
-    if (0 == file_name[99]) {
+    if (0 == file_path[99]) {
       // TODO: poor man's kstrlen, move this to lib/str.h
-      file_name_len = 0;
-      char *s       = file_name;
+      file_path_len = 0;
+      char *s       = file_path;
       while (0 != *s++) {
-        file_name_len++;
+        file_path_len++;
       }
     }
 
-    DEBUG("extracting file %s", file_name);
+    DEBUG("extracting file %s", file_path);
 
-    while (0 < file_name_len && '/' == file_name[file_name_len - 1]) {
+    while (0 < file_path_len && '/' == file_path[file_path_len - 1]) {
+      file_path_len--;
+    }
+
+    const char  *path_end = kmemchr(file_path, '/', file_path_len);
+    com_vnode_t *dir      = root;
+    // offset into file_path where the ACTUAL name starts
+    size_t file_name_off = 0;
+    // length of the ACTUAL name of the file (not the path)
+    size_t file_name_len = file_path_len;
+
+    // kmemchr returns NULL only if the character is not found, thus this can be
+    // read as: "if this is not a directory"
+    if (NULL != path_end) {
+      size_t sl_len = path_end - file_path;
+      com_fs_vfs_lookup(&dir, file_path, sl_len, root, root);
+      ASSERT(NULL != dir);
+      file_name_off = sl_len + 1;
+      file_name_len = file_path_len - sl_len - 1;
+    }
+
+    while (0 < file_name_len &&
+           '/' == file_path[file_name_off + file_name_len - 1]) {
       file_name_len--;
     }
 
-    const char  *path_end = kmemchr(file_name, '/', file_name_len);
-    com_vnode_t *dir      = root;
-    size_t       file_idx = 0;
-    size_t       file_len = file_name_len;
-
-    if (NULL != path_end) {
-      size_t sl_len = path_end - file_name;
-      com_fs_vfs_lookup(&dir, file_name, sl_len, root, root);
-      ASSERT(NULL != dir);
-      file_idx = sl_len + 1;
-      file_len = file_name_len - sl_len - 1;
-    }
-
-    while (0 < file_len && '/' == file_name[file_idx + file_len - 1]) {
-      file_len--;
-    }
-
     com_vnode_t *file = NULL;
-    create_node(&file, file_name + file_idx, file_len, dir, hdr);
+    create_node(&file, file_path + file_name_off, file_name_len, dir, hdr);
 
-    COM_VNODE_RELEASE(file);
     if (dir != root) {
       COM_VNODE_RELEASE(dir);
     }
