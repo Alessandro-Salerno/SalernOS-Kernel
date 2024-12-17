@@ -163,6 +163,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
       if (0 != ret) {
         goto cleanup;
       }
+      break;
     }
   }
 
