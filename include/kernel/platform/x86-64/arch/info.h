@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <vendor/limine.h>
 
 #define ARCH_PAGE_SIZE 4096
@@ -66,3 +67,6 @@ typedef struct limine_hhdm_response arch_hhdm_t;
 
 // This type must contain a field named "address" of type void pointer
 typedef struct limine_rsdp_response arch_rsdp_t;
+
+typedef uint64_t arch_elf_off_t;
+typedef uint64_t arch_elf_addr_t;

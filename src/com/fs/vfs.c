@@ -174,6 +174,13 @@ int com_fs_vfs_read(void        *buf,
                     uintmax_t    off,
                     uintmax_t    flags) {
   GET_VLINK_CHILD(node);
+
+  size_t dump = 0;
+  if (NULL == bytes_read) {
+    bytes_read = &dump;
+  }
+
+  *bytes_read = 0;
   return node->ops->read(buf, buflen, bytes_read, node, off, flags);
 }
 
@@ -184,6 +191,13 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      uintmax_t    off,
                      uintmax_t    flags) {
   GET_VLINK_CHILD(node);
+
+  size_t dump = 0;
+  if (NULL == bytes_written) {
+    bytes_written = &dump;
+  }
+
+  *bytes_written = 0;
   return node->ops->write(bytes_written, node, buf, buflen, off, flags);
 }
 
