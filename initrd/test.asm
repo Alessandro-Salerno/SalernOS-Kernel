@@ -1,11 +1,14 @@
-section .data
-hello:
-  db "Hello, world", 0
-
 section .text
 
 global _start
 _start:
-  mov rax, 0
-  mov rdi, [qword hello]
+  mov rax, qword 0
+  mov rdi, qword hello
   int 80h
+.nothing:
+  nop
+  jmp .nothing
+
+section .rodata
+hello:
+  db "Hello, world", 0

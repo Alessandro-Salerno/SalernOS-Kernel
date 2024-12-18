@@ -274,7 +274,7 @@ int com_fs_tmpfs_read(void        *buf,
     // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a mask to
     // floor the value to a multiple of ARCH_PAGE_SIZE. Then ARCH_PAGE_SIZE is
     // added to get the top address
-    uintptr_t base_page = page & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
+    uintptr_t base_page = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
     uintptr_t end       = base_page + ARCH_PAGE_SIZE;
 
     if (end > off + buflen) {
@@ -283,7 +283,7 @@ int com_fs_tmpfs_read(void        *buf,
 
     if (page_present) {
       kmemcpy((uint8_t *)buf + cur - off,
-              (uint8_t *)base_page + (cur % ARCH_PAGE_SIZE),
+              (uint8_t *)page + (cur % ARCH_PAGE_SIZE),
               end - cur);
     } else {
       kmemset((uint8_t *)buf + cur - off, end - cur, 0);
@@ -329,7 +329,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
     // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a mask to
     // floor the value to a multiple of ARCH_PAGE_SIZE. Then ARCH_PAGE_SIZE is
     // added to get the top address
-    uintptr_t base_page = page & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
+    uintptr_t base_page = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
     uintptr_t end       = base_page + ARCH_PAGE_SIZE;
 
     if (end > off + buflen) {

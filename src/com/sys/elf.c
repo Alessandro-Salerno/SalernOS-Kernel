@@ -25,6 +25,7 @@
 #include <kernel/platform/mmu.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 struct elf_header {
   uint32_t  magic;
