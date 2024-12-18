@@ -25,6 +25,7 @@
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -71,10 +72,10 @@ static arch_cpu_t BaseCpu = {0};
 //   }
 // }
 //
-// USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
-//   (void)isr;
-//   com_sys_sched_run(ctx);
-// }
+USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
+  (void)isr;
+  com_sys_sched_run(ctx);
+}
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -91,19 +92,7 @@ void kernel_entry(void) {
 
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
-  // com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
-
-  // arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
-  // void                 *ustack  = (void
-  // *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()); arch_mmu_map(user_pt,
-  //              ustack,
-  //              (void *)ARCH_HHDM_TO_PHYS(ustack),
-  //              ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-  //                  ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  //
-  // com_proc_t   *proc = com_sys_proc_new(user_pt, 0);
-  // com_thread_t *thread =
-  //     com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc1entry);
+  com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
   //
   // user_pt = arch_mmu_new_table();
   // ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
@@ -116,13 +105,6 @@ void kernel_entry(void) {
   // com_thread_t *thread2 =
   //     com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, proc2entry);
   //
-  // hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
-  // hdr_arch_cpu_get()->thread   = thread;
-  //
-  // TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
-  //
-  // arch_mmu_switch(proc->page_table);
-  // arch_ctx_trampoline(&thread->ctx);
 
   com_vfs_t *root = NULL;
   com_fs_tmpfs_mount(&root, NULL);
@@ -149,6 +131,31 @@ void kernel_entry(void) {
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, &dump, samefile, 0, 0);
   DEBUG("reading from /myfile.txt: %s", buf);
+
+  arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
+  void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+  arch_mmu_map(user_pt,
+               ustack,
+               (void *)ARCH_HHDM_TO_PHYS(ustack),
+               ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                   ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+
+  com_elf_data_t elf_data = {0};
+  ASSERT(0 == com_sys_elf64_load(
+                  &elf_data, "/test", 5, root->root, root->root, 0, user_pt));
+  DEBUG("elf entry at %x", elf_data.entry);
+
+  com_proc_t   *proc = com_sys_proc_new(user_pt, 0);
+  com_thread_t *thread =
+      com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, (void *)elf_data.entry);
+
+  hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
+  hdr_arch_cpu_get()->thread   = thread;
+  //
+  // TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
+  //
+  arch_mmu_switch(proc->page_table);
+  arch_ctx_trampoline(&thread->ctx);
 
   // intentional page fault
   // *(volatile int *)NULL = 2;

@@ -32,6 +32,7 @@ struct elf_header {
   uint8_t   endianness;
   uint8_t   ehdr_ver;
   uint8_t   abi;
+  uint64_t  unused;
   uint16_t  type;
   uint16_t  isa;
   uint32_t  elf_ver;
@@ -72,7 +73,7 @@ static int load(uintptr_t             vaddr,
     size_t rem      = ARCH_PAGE_SIZE - misalign;
 
     void *phys_page  = com_mm_pmm_alloc();
-    void *kvirt_page = (void *)ARCH_PHYS_TO_HHDM(phys_page);
+    void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
     arch_mmu_map(pt,
                  (void *)(cur - misalign),
                  phys_page,
