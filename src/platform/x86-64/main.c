@@ -46,11 +46,6 @@
 
 static arch_cpu_t BaseCpu = {0};
 
-USED static void sched(com_isr_t *isr, arch_context_t *ctx) {
-  (void)isr;
-  com_sys_sched_run(ctx);
-}
-
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
   TAILQ_INIT(&BaseCpu.sched_queue);
@@ -66,7 +61,7 @@ void kernel_entry(void) {
 
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
-  com_sys_interrupt_register(0x30, sched, x86_64_lapic_eoi);
+  com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
 
   com_vfs_t *rootfs = NULL;
   com_fs_tmpfs_mount(&rootfs, NULL);

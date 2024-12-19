@@ -28,6 +28,8 @@ mkdir -p ./initrd \
   && mkdir -p ./bin/initrd \
   && cp ./initrd/* ./bin/initrd/ \
   && cd ./bin/initrd/ \
+  && nasm -felf64 -g ./test.asm -o ./test.asm.o \
+  && ld ./test.asm.o -m elf_x86_64 -o ./test \
   && tar -cf ../initrd.tar . \
   && cd ../.. \
   && cp ./bin/initrd.tar ./iso_root/initrd

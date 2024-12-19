@@ -19,5 +19,7 @@
 #pragma once
 
 #include <arch/context.h>
+#include <kernel/com/sys/interrupt.h>
 
-void com_sys_sched_run(arch_context_t *ctx);
+void com_sys_sched_yield(arch_context_t *ctx);
+void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);

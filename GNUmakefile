@@ -58,7 +58,6 @@ override CPPFLAGS := \
 
 # Internal nasm flags that should not be changed by the user.
 override NASMFLAGS += \
-    -Wall \
     -f elf64
 
 # Internal linker flags that should not be changed by the user.

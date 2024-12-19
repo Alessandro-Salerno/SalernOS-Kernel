@@ -274,8 +274,8 @@ int com_fs_tmpfs_read(void        *buf,
     // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a mask to
     // floor the value to a multiple of ARCH_PAGE_SIZE. Then ARCH_PAGE_SIZE is
     // added to get the top address
-    uintptr_t base_page = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
-    uintptr_t end       = base_page + ARCH_PAGE_SIZE;
+    uintptr_t page_base = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
+    uintptr_t end       = page_base + ARCH_PAGE_SIZE;
 
     if (end > off + buflen) {
       end = off + buflen;
@@ -329,8 +329,8 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
     // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a mask to
     // floor the value to a multiple of ARCH_PAGE_SIZE. Then ARCH_PAGE_SIZE is
     // added to get the top address
-    uintptr_t base_page = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
-    uintptr_t end       = base_page + ARCH_PAGE_SIZE;
+    uintptr_t page_base = cur & ~((uintptr_t)ARCH_PAGE_SIZE - 1);
+    uintptr_t end       = page_base + ARCH_PAGE_SIZE;
 
     if (end > off + buflen) {
       end = off + buflen;

@@ -25,7 +25,7 @@
 #include <kernel/platform/mmu.h>
 #include <vendor/tailq.h>
 
-void com_sys_sched_run(arch_context_t *ctx) {
+void com_sys_sched_yield() {
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
   com_thread_t *curr = cpu->thread;
   com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
@@ -67,13 +67,25 @@ void com_sys_sched_run(arch_context_t *ctx) {
   curr->cpu = NULL;
   next->cpu = cpu;
 
-  // Save the previous threads' context
-  // ARCH_CONTEXT_COPY(&curr->ctx, ctx);
-
-  // Restore the next thread's context
-  // ARCH_CONTEXT_COPY(ctx, &next->ctx);
-
+  // Restore kernel stack
   ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
+
+  // Switch threads
+  // NOTE: this doesn't jump to userspace directly! Instead, this switches the
+  //        stack pointer and other registers so that when returning from the
+  //        underlying assembly function, control is handed to whatever address
+  //        is on the stack, which is most likely this function. Once the
+  //        execution gets back here, com_sys_sched_yield cna return to its
+  //        caller, which can be a hardware timer or anything else (e.g., wait).
+  //        Remember that, since the stack has changed, there's no guarantee
+  //        that this function will return to the same point from which it was
+  //        called, in fact, quite the opposite.
   cpu->thread = next;
   ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx);
+}
+
+void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
+  (void)isr;
+  (void)ctx;
+  com_sys_sched_yield();
 }

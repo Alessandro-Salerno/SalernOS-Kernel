@@ -24,6 +24,9 @@
 #define LIKELY(x)   __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+
 #define USER_TEXT __attribute__((section(".user_text")))
 #define USER_DATA __attribute__((section(".user_data")))
 #define USED      __attribute__((used))
