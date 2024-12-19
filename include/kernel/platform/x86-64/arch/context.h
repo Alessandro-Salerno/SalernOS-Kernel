@@ -85,4 +85,5 @@ typedef struct {
 
 void arch_ctx_print(arch_context_t *ctx);
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
+void x86_64_ctx_test_trampoline(void);
 void arch_ctx_trampoline(arch_context_t *ctx);

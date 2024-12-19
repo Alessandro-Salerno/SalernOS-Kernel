@@ -71,3 +71,7 @@ arch_ctx_trampoline:
 	.noswapgs:
 	o64 iret
 
+global x86_64_ctx_test_trampoline
+x86_64_ctx_test_trampoline:
+  mov rdi, rsp
+  jmp arch_ctx_trampoline
