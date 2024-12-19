@@ -70,5 +70,6 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     isr->eoi(isr);
   }
 
+  ARCH_CONTEXT_RESTORE_TLC(ctx);
   com_sys_interrupt_set(ARCH_CONTEXT_INTSTATUS(ctx));
 }

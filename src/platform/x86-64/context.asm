@@ -16,6 +16,26 @@
 
 section .text
 
+global x86_64_ctx_switch
+x86_64_ctx_switch:
+  mov qword [rsi + 48], rbx
+  mov qword [rsi + 152], rbp
+  mov qword [rsi + 104], r12
+  mov qword [rsi + 112], r13
+  mov qword [rsi + 120], r14
+  mov qword [rsi + 128], r15
+  mov qword [rsi + 192], rsp
+
+  mov rbx, qword [rdi + 48]
+  mov rbp, qword [rdi + 152]
+  mov r12, qword [rdi + 104]
+  mov r13, qword [rdi + 112]
+  mov r14, qword [rdi + 120]
+  mov r15, qword [rdi + 128]
+  mov rsp, qword [rdi + 192]
+
+  ret
+
 global arch_ctx_trampoline
 arch_ctx_trampoline:
 	; rdi is the pointer to the context struct

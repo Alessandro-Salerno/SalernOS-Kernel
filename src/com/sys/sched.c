@@ -68,16 +68,12 @@ void com_sys_sched_run(arch_context_t *ctx) {
   next->cpu = cpu;
 
   // Save the previous threads' context
-  ARCH_CONTEXT_COPY(&curr->ctx, ctx);
+  // ARCH_CONTEXT_COPY(&curr->ctx, ctx);
 
   // Restore the next thread's context
-  ARCH_CONTEXT_COPY(ctx, &next->ctx);
-
-  // Restore the next thread's thread-local pointer (e.g., GS)
-  ARCH_CONTEXT_RESTORE_TLC(&next->ctx);
-
-  // TODO: restore extra context (e.g., x87, SSE)
+  // ARCH_CONTEXT_COPY(ctx, &next->ctx);
 
   ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
   cpu->thread = next;
+  ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx);
 }
