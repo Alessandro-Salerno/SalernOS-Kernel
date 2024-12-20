@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
@@ -78,6 +79,9 @@ void kernel_entry(void) {
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, NULL, myfile_txt, 0, 0);
   DEBUG("reading from /myfile.txt: %s", buf);
+
+  com_vfs_t *devfs = NULL;
+  com_fs_devfs_init(&devfs, rootfs);
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());

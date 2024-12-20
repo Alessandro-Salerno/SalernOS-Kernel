@@ -58,6 +58,9 @@ struct tmpfs_node {
       const char *path;
       size_t      len;
     } link;
+    struct {
+      void *data;
+    } other;
   };
 };
 
@@ -155,10 +158,12 @@ int com_fs_tmpfs_create(com_vnode_t **out,
     return inner;
   }
 
-  struct tmpfs_node *tn = (*out)->extra;
-  tn->file.size         = 0;
-  tn->file.data         = com_fs_pagecache_new();
-  (*out)->type          = COM_VNODE_TYPE_FILE;
+  if (!(COM_VFS_CREAT_ATTR_GHOST & attr)) {
+    struct tmpfs_node *tn = (*out)->extra;
+    tn->file.size         = 0;
+    tn->file.data         = com_fs_pagecache_new();
+    (*out)->type          = COM_VNODE_TYPE_FILE;
+  }
 
   struct tmpfs_node *parent = dir->extra;
   hdr_com_spinlock_acquire(&parent->lock);
@@ -346,4 +351,16 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
   hdr_com_spinlock_release(&file->lock);
   *bytes_written = write_count;
   return 0;
+}
+
+// OTHER FUNCTIONS
+
+void com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data) {
+  struct tmpfs_node *n = vnode->extra;
+  n->other.data        = data;
+}
+
+void *com_fs_tmpfs_get_other(com_vnode_t *vnode) {
+  struct tmpfs_node *n = vnode->extra;
+  return n->other.data;
 }
