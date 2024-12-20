@@ -16,37 +16,22 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
-#include <arch/cpu.h>
-#include <arch/info.h>
-#include <kernel/com/log.h>
-#include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/thread.h>
-#include <stdint.h>
-#include <vendor/tailq.h>
+#pragma once
 
-com_thread_t *com_sys_thread_new(com_proc_t *proc,
-                                 void       *stack,
-                                 uintmax_t   stack_size,
-                                 void       *entry) {
-  arch_context_t ctx = {0};
-  ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
+#include <kernel/com/fs/vfs.h>
 
-  com_thread_t *thread = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  thread->proc         = proc;
-  thread->runnable     = true;
-  thread->ctx          = ctx;
-  thread->kernel_stack =
-      (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
+int com_fs_pipefs_read(void        *buf,
+                       size_t       buflen,
+                       size_t      *bytes_read,
+                       com_vnode_t *node,
+                       uintmax_t    off,
+                       uintmax_t    flags);
+int com_fs_pipefs_write(size_t      *bytes_written,
+                        com_vnode_t *node,
+                        void        *buf,
+                        size_t       buflen,
+                        uintmax_t    off,
+                        uintmax_t    flags);
+int com_fs_pipefs_close(com_vnode_t *vnode);
 
-  return thread;
-}
-
-void com_sys_thread_destroy(com_thread_t *thread) {
-  ASSERT(!thread->runnable);
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack));
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
-}
+void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);

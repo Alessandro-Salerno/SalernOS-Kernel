@@ -21,5 +21,9 @@
 #include <arch/context.h>
 #include <kernel/com/sys/interrupt.h>
 
-void com_sys_sched_yield(arch_context_t *ctx);
+void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
+
+// TODO: figure out types for these
+void com_sys_sched_wait(void *waiting_on, void *cond);
+void com_sys_sched_notify(void *waiters);

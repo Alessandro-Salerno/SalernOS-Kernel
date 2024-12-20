@@ -19,13 +19,14 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/mmu.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
 #include <vendor/tailq.h>
 
-void com_sys_sched_yield() {
+void com_sys_sched_yield(void) {
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
   com_thread_t *curr = cpu->thread;
   com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
@@ -88,4 +89,30 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
   (void)ctx;
   com_sys_sched_yield();
+}
+
+void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
+                        com_spinlock_t          *cond) {
+  com_thread_t *curr = hdr_arch_cpu_get()->thread;
+  curr->runnable     = false;
+  curr->waiting_on   = waiting_on;
+
+  TAILQ_INSERT_TAIL(waiting_on, curr, threads);
+  hdr_com_spinlock_release(cond);
+  com_sys_sched_yield();
+
+  // This point is reached AFTER the thread is notified
+  hdr_com_spinlock_acquire(cond);
+}
+
+void com_sys_sched_notify(struct com_thread_tailq *waiters) {
+  arch_cpu_t   *currcpu = hdr_arch_cpu_get();
+  com_thread_t *next    = TAILQ_FIRST(waiters);
+
+  if (NULL != next) {
+    TAILQ_REMOVE_HEAD(waiters, threads);
+    next->waiting_on = NULL;
+    TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
+    next->runnable = true;
+  }
 }

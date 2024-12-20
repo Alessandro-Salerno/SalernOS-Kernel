@@ -18,10 +18,12 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/fs/pipefs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
 #include <lib/mem.h>
@@ -44,7 +46,9 @@ struct pipefs_node {
 };
 
 static com_vfs_ops_t   PipefsOps;
-static com_vnode_ops_t PipefsNodeOps;
+static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
+                                        .write = com_fs_pipefs_write,
+                                        .close = com_fs_pipefs_close};
 
 int com_fs_pipefs_read(void        *buf,
                        size_t       buflen,
@@ -60,19 +64,15 @@ int com_fs_pipefs_read(void        *buf,
 
   size_t read_count = 0;
 
-  for (size_t left = buflen; 0 < left;) {
+  for (size_t left = buflen; left > 0;) {
     while (pipe->write == pipe->read && NULL != pipe->write_end) {
-      // TODO: wait
+      com_sys_sched_wait(&pipe->readers, &pipe->lock);
     }
 
     size_t diff   = pipe->write - pipe->read;
-    size_t readsz = left;
+    size_t readsz = MIN(left, diff);
     size_t modidx = pipe->read % PIPE_BUF_SZ;
     size_t end    = PIPE_BUF_SZ - modidx;
-
-    if (left > diff) {
-      readsz = diff;
-    }
 
     kmemcpy(buf, (uint8_t *)pipe->buf + modidx, MIN(readsz, end));
 
@@ -90,7 +90,7 @@ int com_fs_pipefs_read(void        *buf,
       break;
     }
 
-    // TODO: notify writers
+    com_sys_sched_notify(&pipe->writers);
   }
 
   hdr_com_spinlock_release(&pipe->lock);
@@ -106,6 +106,62 @@ int com_fs_pipefs_write(size_t      *bytes_written,
                         uintmax_t    flags) {
   (void)off;
   (void)flags;
+
+  struct pipefs_node *pipe = node->extra;
+  hdr_com_spinlock_acquire(&pipe->lock);
+
+  size_t req_space   = buflen;
+  size_t write_count = 0;
+
+  if (buflen > PIPE_BUF_SZ) {
+    // TODO: take a look here
+    req_space = 1;
+  }
+
+  for (size_t left = buflen; left > 0;) {
+    size_t av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
+
+    while (av_space < req_space) {
+      com_sys_sched_wait(&pipe->writers, &pipe->lock);
+      av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
+    }
+
+    size_t writesz = MIN(left, av_space);
+    size_t modidx  = pipe->write % PIPE_BUF_SZ;
+    size_t end     = PIPE_BUF_SZ - modidx;
+
+    kmemcpy(pipe->buf + modidx, buf, MIN(writesz, end));
+
+    if (writesz > end) {
+      kmemcpy(pipe->buf, (uint8_t *)buf + end, writesz - end);
+    }
+
+    pipe->write += writesz;
+    buf = (uint8_t *)buf + writesz;
+    left -= writesz;
+
+    com_sys_sched_notify(&pipe->readers);
+  }
+
+  hdr_com_spinlock_release(&pipe->lock);
+  *bytes_written = write_count;
+  return 0;
+}
+
+int com_fs_pipefs_close(com_vnode_t *vnode) {
+  struct pipefs_node *pipe = vnode->extra;
+  hdr_com_spinlock_acquire(&pipe->lock);
+
+  if (vnode == pipe->read_end) {
+    pipe->write_end = NULL;
+  } else if (vnode == pipe->write_end) {
+    pipe->write_end = NULL;
+    com_sys_sched_notify(&pipe->readers);
+  }
+
+  hdr_com_spinlock_release(&pipe->lock);
+  // TODO: free pipe?
+  return 0;
 }
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {

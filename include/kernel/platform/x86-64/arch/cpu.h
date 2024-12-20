@@ -33,16 +33,17 @@
 TAILQ_HEAD(com_thread_tailq, com_thread);
 
 typedef struct arch_cpu {
-  struct com_thread      *thread;
-  struct arch_cpu        *self;
-  void                   *dummy2;
-  uint64_t                id;
-  uint64_t                gdt[7];
-  x86_64_ist_t            ist;
-  bool                    intstatus;
-  com_isr_t               isr[256];
-  arch_mmu_pagetable_t   *root_page_table;
-  uint64_t                lock_depth;
+  struct com_thread    *thread;
+  struct arch_cpu      *self;
+  void                 *dummy2;
+  uint64_t              id;
+  uint64_t              gdt[7];
+  x86_64_ist_t          ist;
+  bool                  intstatus;
+  com_isr_t             isr[256];
+  arch_mmu_pagetable_t *root_page_table;
+  uint64_t              lock_depth;
+  // TODO: add sched_lock for SMP/kernel preemtpion
   struct com_thread_tailq sched_queue;
 } arch_cpu_t;
 
