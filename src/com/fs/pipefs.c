@@ -45,7 +45,6 @@ struct pipefs_node {
   com_vnode_t            *write_end;
 };
 
-static com_vfs_ops_t   PipefsOps;
 static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
                                         .write = com_fs_pipefs_write,
                                         .close = com_fs_pipefs_close};

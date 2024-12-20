@@ -82,12 +82,14 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
       break;
     }
 
+    size_t file_size = 0;
+
     // These two are not supported
     if (GNUTAR_LONG_NAME == hdr->type || GNUTAR_LONG_LINK == hdr->type) {
       goto skip;
     }
 
-    size_t file_size     = oct_atoi(hdr->size, 11);
+    file_size            = oct_atoi(hdr->size, 11);
     char  *file_path     = hdr->name;
     size_t file_path_len = 100;
 

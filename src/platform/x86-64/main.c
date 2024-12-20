@@ -39,6 +39,7 @@
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
+#include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
@@ -46,7 +47,21 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
+#include "com/sys/interrupt.h"
+
 static arch_cpu_t BaseCpu = {0};
+
+USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
+  (void)isr;
+  (void)ctx;
+  hdr_x86_64_io_inb(0x60);
+  com_fbterm_puts("Pressed\n");
+}
+
+USED void kbd_eoi(com_isr_t *isr) {
+  (void)isr;
+  hdr_x86_64_io_outb(0x20, 0x20);
+}
 
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
@@ -64,6 +79,18 @@ void kernel_entry(void) {
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
   com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
+
+  hdr_x86_64_io_outb(0x20, 0x11);
+  hdr_x86_64_io_outb(0xa0, 0x11);
+  hdr_x86_64_io_outb(0x21, 0x20);
+  hdr_x86_64_io_outb(0xa1, 0x28);
+  hdr_x86_64_io_outb(0x21, 4);
+  hdr_x86_64_io_outb(0xa1, 2);
+  hdr_x86_64_io_outb(0x21, 0x01);
+  hdr_x86_64_io_outb(0xa1, 0x01);
+  hdr_x86_64_io_outb(0x21, 0b11111101);
+  hdr_x86_64_io_outb(0xA1, 0b11111111);
+  com_sys_interrupt_register(0x21, kbd, kbd_eoi);
 
   com_vfs_t *rootfs = NULL;
   com_fs_tmpfs_mount(&rootfs, NULL);
