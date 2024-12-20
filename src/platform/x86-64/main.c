@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/fbterm.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
@@ -82,6 +83,9 @@ void kernel_entry(void) {
 
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
+
+  arch_framebuffer_t *fb = arch_info_get_fb();
+  com_fbterm_init(fb);
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());

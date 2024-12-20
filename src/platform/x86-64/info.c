@@ -46,6 +46,14 @@ __attribute__((
     ModuleRequest = (struct limine_module_request){.id = LIMINE_MODULE_REQUEST,
                                                    .revision = 0};
 
+__attribute__((
+    used,
+    section(
+        ".limine_response"))) static volatile struct limine_framebuffer_request
+    FramebufferRequest =
+        (struct limine_framebuffer_request){.id = LIMINE_FRAMEBUFFER_REQUEST,
+                                            .revision = 0};
+
 arch_memmap_t *arch_info_get_memmap(void) {
   ASSERT(NULL != MemoryMapRequest.response);
   return MemoryMapRequest.response;
@@ -74,4 +82,11 @@ arch_file_t *arch_info_get_initrd(void) {
   }
 
   ASSERT(!"no initrd found");
+}
+
+arch_framebuffer_t *arch_info_get_fb(void) {
+  ASSERT(NULL != FramebufferRequest.response);
+  ASSERT(0 < FramebufferRequest.response->framebuffer_count);
+
+  return FramebufferRequest.response->framebuffers[0];
 }

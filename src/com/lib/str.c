@@ -32,3 +32,11 @@ int kstrcmp(const char *s1, const char *s2) {
 
   return 0;
 }
+
+size_t kstrlen(const char *s) {
+  size_t n = 0;
+  for (; 0 != *s; s++) {
+    n++;
+  }
+  return n;
+}

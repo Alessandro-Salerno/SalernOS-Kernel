@@ -18,10 +18,18 @@
 
 #pragma once
 
-#include <arch/info.h>
+#include <lib/mem.h>
+#include <lib/printf.h>
+#include <lib/str.h>
 
-arch_memmap_t      *arch_info_get_memmap(void);
-arch_kaddr_t       *arch_info_get_kaddr(void);
-arch_rsdp_t        *arch_info_get_rsdp(void);
-arch_file_t        *arch_info_get_initrd(void);
-arch_framebuffer_t *arch_info_get_fb(void);
+#define memcpy(dst, src, sz) kmemcpy((dst), (src), (sz))
+#define memset(dst, val, sz) kmemset((dst), (sz), (val))
+#define memcmp(b1, b2, sz)   kmemcmp((b1), (b2), (sz))
+#define memchr(s, c, n)      kmemchr((s), (c), (n))
+
+#define strlen(s)      kstrlen((s))
+#define strcmp(s1, s2) kstrcmp((s1), (s2))
+
+#define printf(...) kprintf(__VA_ARGS__)
+
+#define FLANTERM_CUSTOM_CRT

@@ -20,6 +20,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
 #include <lib/mem.h>
+#include <lib/str.h>
 #include <stdint.h>
 
 #define GNUTAR_LONG_NAME 'L'
@@ -76,7 +77,7 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
 
     // If the first byte of the header is zero, than either the file has no name
     // or we've reached the last two blocks (end of file) that are filled with
-    // zers
+    // zeros
     if (0 == *(uint8_t *)hdr) {
       break;
     }
@@ -91,12 +92,7 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
     size_t file_path_len = 100;
 
     if (0 == file_path[99]) {
-      // TODO: poor man's kstrlen, move this to lib/str.h
-      file_path_len = 0;
-      char *s       = file_path;
-      while (0 != *s++) {
-        file_path_len++;
-      }
+      file_path_len = kstrlen(file_path);
     }
 
     // Skip creating the . directory

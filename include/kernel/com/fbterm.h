@@ -20,8 +20,6 @@
 
 #include <arch/info.h>
 
-arch_memmap_t      *arch_info_get_memmap(void);
-arch_kaddr_t       *arch_info_get_kaddr(void);
-arch_rsdp_t        *arch_info_get_rsdp(void);
-arch_file_t        *arch_info_get_initrd(void);
-arch_framebuffer_t *arch_info_get_fb(void);
+void com_fbterm_putc(char c);
+void com_fbterm_puts(const char *s);
+void com_fbterm_init(arch_framebuffer_t *fb);

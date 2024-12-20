@@ -68,5 +68,4 @@ typedef struct limine_hhdm_response arch_hhdm_t;
 // This type must contain a field named "address" of type void pointer
 typedef struct limine_rsdp_response arch_rsdp_t;
 
-typedef uint64_t arch_elf_off_t;
-typedef uint64_t arch_elf_addr_t;
+typedef struct limine_framebuffer arch_framebuffer_t;
