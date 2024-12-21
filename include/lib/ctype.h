@@ -18,11 +18,5 @@
 
 #pragma once
 
-#include <arch/info.h>
-#include <stddef.h>
-#include <stdint.h>
-
-void com_io_fbterm_putc(char c);
-void com_io_fbterm_puts(const char *s);
-void com_io_fbterm_putsn(const char *s, size_t n);
-void com_io_fbterm_init(arch_framebuffer_t *fb);
+#define KISLOWER(c) ((c) >= 'a' && (c) <= 'z')
+#define KISUPPER(c) ((c) >= 'A' && (c) <= 'Z')

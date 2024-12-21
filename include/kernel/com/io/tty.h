@@ -18,11 +18,15 @@
 
 #pragma once
 
-#include <arch/info.h>
-#include <stddef.h>
 #include <stdint.h>
 
-void com_io_fbterm_putc(char c);
-void com_io_fbterm_puts(const char *s);
-void com_io_fbterm_putsn(const char *s, size_t n);
-void com_io_fbterm_init(arch_framebuffer_t *fb);
+#define COM_IO_TTY_MOD_LCTRL  1UL
+#define COM_IO_TTY_MOD_RCTRL  2UL
+#define COM_IO_TTY_MOD_ARROW  4UL
+#define COM_IO_TTY_MOD_LSHIFT 8UL
+#define COM_IO_TTY_MOD_RSHIFT 16UL
+#define COM_IO_TTY_MOD_LALT   32UL
+#define COM_IO_TTY_MOD_RALT   64UL
+
+void com_io_tty_kbd_in(char c, uintmax_t mod);
+int  com_io_tty_init(void);

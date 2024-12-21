@@ -33,6 +33,10 @@ void com_io_fbterm_puts(const char *s) {
   flanterm_write(FlantermContext, s, kstrlen(s));
 }
 
+void com_io_fbterm_putsn(const char *s, size_t n) {
+  flanterm_write(FlantermContext, s, n);
+}
+
 void com_io_fbterm_init(arch_framebuffer_t *fb) {
   FlantermContext = flanterm_fb_init(NULL,
                                      NULL,

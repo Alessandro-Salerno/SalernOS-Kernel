@@ -24,6 +24,7 @@
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
+#include <kernel/com/io/tty.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -51,14 +52,89 @@
 
 static arch_cpu_t BaseCpu = {0};
 
+// from Astral & ke!
+static char asciitable[] = {
+    0,    '\033', '1', '2',  '3', '4', '5', '6', '7', '8', '9', '0', '-',  '=',
+    '\b', '\t',   'q', 'w',  'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[',  ']',
+    '\r', 0,      'a', 's',  'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
+    0,    '\\',   'z', 'x',  'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,    '*',
+    0,    ' ',    0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   0,    0,
+    0,    '7',    '8', '9',  '-', '4', '5', '6', '+', '1', '2', '3', '0',  '.',
+    0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
+    '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
+
 USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
   (void)ctx;
-  uint8_t code = hdr_x86_64_io_inb(0x60);
-  if (code >= 0x80) {
-    return;
+  static uint8_t   prev_code = 0;
+  static uintmax_t mod       = 0;
+  uint8_t          code      = hdr_x86_64_io_inb(0x60);
+
+  if (0xe0 == prev_code) {
+    if (0x53 == code) {
+      com_io_tty_kbd_in(127, 0);
+    }
+
+    switch (code) {
+    case 0x4b:
+      com_io_tty_kbd_in('D', COM_IO_TTY_MOD_ARROW);
+      break;
+
+    case 0x4d:
+      com_io_tty_kbd_in('C', COM_IO_TTY_MOD_ARROW);
+      break;
+
+    case 0x48:
+      com_io_tty_kbd_in('A', COM_IO_TTY_MOD_ARROW);
+      break;
+
+    case 0x50:
+      com_io_tty_kbd_in('B', COM_IO_TTY_MOD_ARROW);
+      break;
+    }
+  } else {
+    switch (code) {
+    case 0x2a:
+      mod = mod | COM_IO_TTY_MOD_LSHIFT;
+      break;
+
+    case 0xaa:
+      mod = mod & ~COM_IO_TTY_MOD_LSHIFT;
+      break;
+
+    case 0x36:
+      mod = mod | COM_IO_TTY_MOD_RSHIFT;
+      break;
+
+    case 0xb6:
+      mod = mod & ~COM_IO_TTY_MOD_RSHIFT;
+      break;
+
+    case 0x1d:
+      mod = mod | COM_IO_TTY_MOD_LCTRL;
+      break;
+
+    case 0x9d:
+      mod = mod & ~COM_IO_TTY_MOD_LCTRL;
+      break;
+
+    case 0x38:
+      mod = mod | COM_IO_TTY_MOD_LALT;
+      break;
+
+    case 0xb8:
+      mod = mod & ~COM_IO_TTY_MOD_LALT;
+      break;
+
+    default:
+      if (code < 0x80) {
+        com_io_tty_kbd_in(asciitable[code], mod);
+      }
+      break;
+    }
   }
-  com_io_fbterm_puts("Pressed\n");
+
+  prev_code = code;
 }
 
 USED void kbd_eoi(com_isr_t *isr) {
@@ -122,6 +198,8 @@ void kernel_entry(void) {
 
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
+
+  com_io_tty_init();
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
