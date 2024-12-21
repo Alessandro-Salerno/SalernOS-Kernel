@@ -245,8 +245,7 @@ end:
     com_sys_sched_notify(&tty->waitlist);
   }
 
-  // TODO: unlock here?
-  // hdr_com_spinlock_release(&tty->lock);
+  hdr_com_spinlock_release(&tty->lock);
 }
 
 int com_io_tty_init(void) {
@@ -278,7 +277,6 @@ int com_io_tty_init(void) {
   Tty.termios.c_iflag        = TTYDEF_IFLAG;
   Tty.termios.c_lflag        = TTYDEF_LFLAG;
   Tty.termios.c_oflag        = TTYDEF_OFLAG;
-  // TODO: why is ibaud/obaud not available?
   // Tty.termios.ibaud = Tty.termios.obaud = TTYDEF_SPEED;
 
   return ret;
