@@ -19,11 +19,11 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/fbterm.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/io/fbterm.h>
 #include <kernel/com/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -47,15 +47,18 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-#include "com/sys/interrupt.h"
+// #define X86_64_NO_E9_LOG
 
 static arch_cpu_t BaseCpu = {0};
 
 USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
   (void)ctx;
-  hdr_x86_64_io_inb(0x60);
-  com_fbterm_puts("Pressed\n");
+  uint8_t code = hdr_x86_64_io_inb(0x60);
+  if (code >= 0x80) {
+    return;
+  }
+  com_io_fbterm_puts("Pressed\n");
 }
 
 USED void kbd_eoi(com_isr_t *isr) {
@@ -66,7 +69,16 @@ USED void kbd_eoi(com_isr_t *isr) {
 void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
   TAILQ_INIT(&BaseCpu.sched_queue);
+
+  arch_framebuffer_t *fb = arch_info_get_fb();
+  com_io_fbterm_init(fb);
+
+#ifndef X86_64_NO_E9_LOG
   com_log_set_hook(x86_64_e9_putc);
+#else
+  com_log_set_hook(com_io_fbterm_putc);
+#endif
+
   x86_64_gdt_init();
   x86_64_idt_init();
   x86_64_idt_reload();
@@ -110,9 +122,6 @@ void kernel_entry(void) {
 
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
-
-  arch_framebuffer_t *fb = arch_info_get_fb();
-  com_fbterm_init(fb);
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
   void                 *ustack  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <kernel/com/io/fbterm.h>
 #include <lib/str.h>
 #include <stddef.h>
 #include <vendor/flanterm/backends/fb.h>
@@ -24,15 +25,15 @@
 
 static struct flanterm_context *FlantermContext;
 
-void com_fbterm_putc(char c) {
+void com_io_fbterm_putc(char c) {
   flanterm_write(FlantermContext, &c, 1);
 }
 
-void com_fbterm_puts(const char *s) {
+void com_io_fbterm_puts(const char *s) {
   flanterm_write(FlantermContext, s, kstrlen(s));
 }
 
-void com_fbterm_init(arch_framebuffer_t *fb) {
+void com_io_fbterm_init(arch_framebuffer_t *fb) {
   FlantermContext = flanterm_fb_init(NULL,
                                      NULL,
                                      fb->address,

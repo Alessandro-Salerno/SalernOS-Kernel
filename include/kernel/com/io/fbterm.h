@@ -20,6 +20,6 @@
 
 #include <arch/info.h>
 
-void com_fbterm_putc(char c);
-void com_fbterm_puts(const char *s);
-void com_fbterm_init(arch_framebuffer_t *fb);
+void com_io_fbterm_putc(char c);
+void com_io_fbterm_puts(const char *s);
+void com_io_fbterm_init(arch_framebuffer_t *fb);
