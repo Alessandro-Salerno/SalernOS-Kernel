@@ -23,7 +23,7 @@
 #include <vendor/flanterm/backends/fb.h>
 #include <vendor/flanterm/flanterm.h>
 
-static struct flanterm_context *FlantermContext;
+static volatile struct flanterm_context *FlantermContext = NULL;
 
 void com_io_fbterm_putc(char c) {
   flanterm_write(FlantermContext, &c, 1);

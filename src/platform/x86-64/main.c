@@ -161,13 +161,6 @@ void kernel_entry(void) {
   com_mm_pmm_init();
   arch_mmu_init();
 
-  x86_64_lapic_bsp_init();
-  x86_64_lapic_init();
-
-  com_sys_syscall_init();
-  x86_64_idt_set_user_invocable(0x80);
-  com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
-
   hdr_x86_64_io_outb(0x20, 0x11);
   hdr_x86_64_io_outb(0xa0, 0x11);
   hdr_x86_64_io_outb(0x21, 0x20);
@@ -179,6 +172,9 @@ void kernel_entry(void) {
   hdr_x86_64_io_outb(0x21, 0b11111101);
   hdr_x86_64_io_outb(0xA1, 0b11111111);
   com_sys_interrupt_register(0x21, kbd, kbd_eoi);
+
+  com_sys_syscall_init();
+  x86_64_idt_set_user_invocable(0x80);
 
   com_vfs_t *rootfs = NULL;
   com_fs_tmpfs_mount(&rootfs, NULL);
@@ -242,9 +238,14 @@ void kernel_entry(void) {
 
   TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
 
+  x86_64_lapic_bsp_init();
+  x86_64_lapic_init();
+  com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
+
   arch_mmu_switch(proc->page_table);
   arch_ctx_trampoline(&thread->ctx);
 
+  DEBUG("intstatus: %u", BaseCpu.intstatus);
   for (;;) {
     asm volatile("hlt");
   }
