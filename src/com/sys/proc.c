@@ -24,6 +24,8 @@
 #include <kernel/platform/mmu.h>
 #include <stdint.h>
 
+#include "com/fs/file.h"
+
 static com_spinlock_t PidLock = COM_SPINLOCK_NEW();
 static uintmax_t      NextPid = 1;
 
@@ -61,4 +63,22 @@ uintmax_t com_sys_proc_next_fd(com_proc_t *proc) {
   proc->next_fd++;
   hdr_com_spinlock_release(&proc->fd_lock);
   return ret;
+}
+
+com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
+  if (NULL == proc) {
+    return NULL;
+  }
+
+  if (fd < 0 || fd > 15) {
+    return NULL;
+  }
+
+  hdr_com_spinlock_acquire(&proc->fd_lock);
+  com_file_t *file = proc->fd[fd].file;
+  if (NULL != file) {
+    COM_FS_FILE_HOLD(file);
+  }
+  hdr_com_spinlock_release(&proc->fd_lock);
+  return file;
 }

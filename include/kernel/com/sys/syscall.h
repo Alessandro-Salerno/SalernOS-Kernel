@@ -23,7 +23,7 @@
 
 typedef struct {
   uintmax_t value;
-  uintmax_t errno;
+  uintmax_t err;
 } com_syscall_ret_t;
 
 typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t *ctx,
@@ -34,3 +34,11 @@ typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t *ctx,
 
 void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler);
 void com_sys_syscall_init(void);
+
+// SYSCALLS
+
+com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
+                                        uintmax_t       fd,
+                                        uintmax_t       bufptr,
+                                        uintmax_t       buflen,
+                                        uintmax_t       unused);

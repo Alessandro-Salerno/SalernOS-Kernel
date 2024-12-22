@@ -28,5 +28,5 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
   com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
   com_syscall_ret_t  ret = handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
   ctx->rax               = ret.value;
-  ctx->rdx               = ret.errno;
+  ctx->rdx               = ret.err;
 }

@@ -2,8 +2,10 @@ section .text
 
 global _start
 _start:
-  mov rax, qword 0
-  mov rdi, qword hello
+  mov rax, qword 1
+  mov rdi, qword 0
+  mov rsi, qword hello
+  mov rdx, qword 12
   int 80h
 .nothing:
   nop

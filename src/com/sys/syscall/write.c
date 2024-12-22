@@ -16,35 +16,47 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
-#include <arch/mmu.h>
+#include <arch/cpu.h>
+#include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/syscall.h>
 
-typedef struct {
-  uint64_t              pid;
-  uint64_t              parent_pid;
-  bool                  exited;
-  int                   exit_status;
-  arch_mmu_pagetable_t *page_table;
-  size_t                num_children;
+com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
+                                        uintmax_t       fd,
+                                        uintmax_t       bufptr,
+                                        uintmax_t       buflen,
+                                        uintmax_t       unused) {
+  (void)ctx;
+  (void)unused;
+  void             *buf = (void *)bufptr;
+  com_syscall_ret_t ret = {0};
 
-  com_vnode_t           *root;
-  _Atomic(com_vnode_t *) cwd;
-  // TODO: this is a lock... circular dependencies
-  int            fd_lock;
-  uintmax_t      next_fd;
-  com_filedesc_t fd[16];
-} com_proc_t;
+  com_proc_t *curr = hdr_arch_cpu_get()->thread->proc;
+  com_file_t *file = com_sys_proc_get_file(curr, fd);
 
-com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             uintmax_t             parent_pid,
-                             com_vnode_t          *root,
-                             com_vnode_t          *cwd);
-void        com_sys_proc_destroy(com_proc_t *proc);
-uintmax_t   com_sys_proc_next_fd(com_proc_t *proc);
-com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd);
+  if (NULL == file) {
+    ret.err = EBADF;
+    return ret;
+  }
+
+  size_t bytes_written = 0;
+  int    vfs_op =
+      com_fs_vfs_write(&bytes_written, file->vnode, buf, buflen, file->off, 0);
+
+  if (0 != vfs_op) {
+    ret.err = vfs_op;
+    goto cleanup;
+  }
+
+  hdr_com_spinlock_acquire(&file->off_lock);
+  file->off += bytes_written;
+  hdr_com_spinlock_release(&file->off_lock);
+
+  ret.value = bytes_written;
+cleanup:
+  COM_FS_FILE_RELEASE(file);
+  return ret;
+}

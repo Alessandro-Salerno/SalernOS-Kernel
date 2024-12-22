@@ -18,12 +18,10 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
-#include <kernel/com/fs/vfs.h>
 #include <kernel/com/log.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
-#include <lib/str.h>
 #include <stdint.h>
 
 #define MAX_SYSCALLS 512
@@ -39,10 +37,10 @@ static com_syscall_ret_t test_syscall(arch_context_t *ctx,
   (void)arg2;
   (void)arg3;
   (void)arg4;
-  // com_log_puts((const char *)arg1);
+  com_log_puts((const char *)arg1);
 
-  com_vnode_t *v = hdr_arch_cpu_get()->thread->proc->fd[0].file->vnode;
-  com_fs_vfs_write(NULL, v, (void *)arg1, kstrlen((const char *)arg1), 0, 0);
+  // com_vnode_t *v = hdr_arch_cpu_get()->thread->proc->fd[0].file->vnode;
+  // com_fs_vfs_write(NULL, v, (void *)arg1, kstrlen((const char *)arg1), 0, 0);
   return (com_syscall_ret_t){0, 0};
 }
 
@@ -58,5 +56,6 @@ void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {
 void com_sys_syscall_init(void) {
   LOG("initializing common system calls");
   com_sys_syscall_register(0x00, test_syscall);
+  com_sys_syscall_register(0x01, com_sys_syscall_write);
   com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

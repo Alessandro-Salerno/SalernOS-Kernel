@@ -19,10 +19,30 @@
 #pragma once
 
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/mm/slab.h>
 #include <stdint.h>
 
+#define COM_FS_FILE_HOLD(file) \
+  __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST)
+
+#define COM_FS_FILE_RELEASE(file)                                             \
+  ({                                                                          \
+    if (NULL != file->vnode) {                                                \
+      uintmax_t n = __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
+      if (0 == n) {                                                           \
+        COM_VNODE_RELEASE(file->vnode);                                       \
+        com_mm_slab_free(file, sizeof(com_file_t));                           \
+        file = NULL;                                                          \
+      }                                                                       \
+    }                                                                         \
+  })
+
 typedef struct com_file {
-  // TODO: this is a lock but I have circular dependencies if I include
+  // TODO: this is
+  // a lock but I
+  // have circular
+  // dependencies
+  // if I include
   // spinlock.h
   int       off_lock;
   uintmax_t off;
