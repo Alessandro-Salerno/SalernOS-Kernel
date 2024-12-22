@@ -18,13 +18,25 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
+#include <arch/info.h>
 #include <arch/mmu.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
-#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <vendor/tailq.h>
+
+static com_thread_t *IdleThread = NULL;
+
+static void sched_idle(void) {
+  hdr_arch_cpu_interrupt_enable();
+  for (;;) {
+    asm volatile("hlt");
+  }
+}
 
 void com_sys_sched_yield(void) {
   arch_cpu_t   *cpu  = hdr_arch_cpu_get();
@@ -40,13 +52,13 @@ void com_sys_sched_yield(void) {
       return;
     }
 
-    // TODO: idle thread
+    next = IdleThread;
+    DEBUG("rescheduling to idle");
   } else {
     TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
   }
 
-  // TODO: add idle thread check
-  if (curr->runnable) {
+  if (curr->runnable && curr != IdleThread) {
     TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
   }
 
@@ -97,7 +109,6 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
   curr->runnable     = false;
   curr->waiting_on   = waiting_on;
 
-  DEBUG("gets here");
   TAILQ_INSERT_TAIL(waiting_on, curr, threads);
   hdr_com_spinlock_release(cond);
   com_sys_sched_yield();
@@ -116,4 +127,14 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
     next->runnable = true;
   }
+}
+
+void com_sys_sched_init(void) {
+  IdleThread =
+      com_sys_thread_new(NULL,
+                         NULL /*(void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc())*/,
+                         ARCH_PAGE_SIZE,
+                         sched_idle);
+  IdleThread->ctx.rsp              = (uintmax_t)IdleThread->kernel_stack - 8;
+  *(uint64_t *)IdleThread->ctx.rsp = (uint64_t)sched_idle;
 }

@@ -27,3 +27,5 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 // TODO: com_thread_tailq cannot be used because of circular dependencies
 void com_sys_sched_wait(void *waiting_on, void *cond);
 void com_sys_sched_notify(void *waiters);
+
+void com_sys_sched_init(void);

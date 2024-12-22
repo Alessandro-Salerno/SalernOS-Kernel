@@ -65,6 +65,7 @@ static int tty_read(void     *buf,
   struct tty   *tty        = devdata;
   size_t        read_count = 0;
   com_thread_t *cur_thread = hdr_arch_cpu_get()->thread;
+  DEBUG("read lock %u", tty->lock);
   hdr_com_spinlock_acquire(&tty->lock);
 
   while (true) {
@@ -120,6 +121,7 @@ static int tty_read(void     *buf,
   }
 
   hdr_com_spinlock_release(&tty->lock);
+  DEBUG("read lock %u", tty->lock);
   *bytes_read = read_count;
   return 0;
 }
@@ -243,6 +245,7 @@ end:
 
   if (notify && !TAILQ_EMPTY(&tty->waitlist)) {
     com_sys_sched_notify(&tty->waitlist);
+    // TODO: sched_yield?
   }
 
   hdr_com_spinlock_release(&tty->lock);
