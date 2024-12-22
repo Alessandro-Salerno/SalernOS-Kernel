@@ -132,7 +132,8 @@ static int tty_write(size_t   *bytes_written,
                      size_t    buflen,
                      uintmax_t off,
                      uintmax_t flags) {
-  (void)devdata;
+  struct tty *tty = devdata;
+  tty->write      = 0;
   (void)off;
   (void)flags;
   com_io_fbterm_putsn(buf, buflen);
@@ -200,13 +201,17 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
     }
 
     if (tty->termios.c_cc[VERASE] == c) {
-      if (ECHOE & tty->termios.c_lflag) {
-        com_io_fbterm_puts("\b \b");
+      if (!(ICANON & tty->termios.c_lflag) || tty->write > 0) {
+        if (ECHOE & tty->termios.c_lflag) {
+          com_io_fbterm_puts("\b \b");
+        }
+
+        if (tty->write > 0) {
+          tty->write--;
+        }
       }
 
-      if (tty->write > 0) {
-        tty->write--;
-      }
+      handled = true;
     }
 
     // TODO: figure out what to do with VKILL (another thing I think I'll never
