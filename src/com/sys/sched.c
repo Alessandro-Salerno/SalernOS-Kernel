@@ -53,7 +53,6 @@ void com_sys_sched_yield(void) {
     }
 
     next = IdleThread;
-    DEBUG("rescheduling to idle");
   } else {
     TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
   }
