@@ -18,32 +18,22 @@
 
 #pragma once
 
-#include <arch/mmu.h>
-#include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
-  uint64_t              pid;
-  uint64_t              parent_pid;
-  bool                  exited;
-  int                   exit_status;
-  arch_mmu_pagetable_t *page_table;
-  size_t                num_children;
+typedef struct com_file {
+  // TODO: this is a lock but I have circular dependencies if I include
+  // spinlock.h
+  int       off_lock;
+  uintmax_t off;
+  uintmax_t flags;
+  uintmax_t num_ref; // this is used because multiple file descripts may point
+                     // to the same file (e.g., if stdout and stderr and the
+                     // same) or if the process was forked
+  com_vnode_t *vnode;
+} com_file_t;
 
-  com_vnode_t           *root;
-  _Atomic(com_vnode_t *) cwd;
-  // TODO: this is a lock... circular dependencies
-  int            fd_lock;
-  uintmax_t      next_fd;
-  com_filedesc_t fd[16];
-} com_proc_t;
-
-com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             uintmax_t             parent_pid,
-                             com_vnode_t          *root,
-                             com_vnode_t          *cwd);
-void        com_sys_proc_destroy(com_proc_t *proc);
-uintmax_t   com_sys_proc_next_fd(com_proc_t *proc);
+typedef struct com_filedesc {
+  com_file_t *file;
+  uintmax_t   flags;
+} com_filedesc_t;

@@ -28,22 +28,37 @@ static com_spinlock_t PidLock = COM_SPINLOCK_NEW();
 static uintmax_t      NextPid = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             uintmax_t             parent_pid) {
+                             uintmax_t             parent_pid,
+                             com_vnode_t          *root,
+                             com_vnode_t          *cwd) {
   com_proc_t *proc   = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   proc->page_table   = page_table;
   proc->exited       = false;
   proc->exit_status  = 0;
   proc->num_children = 0;
   proc->parent_pid   = parent_pid;
+  proc->root         = root;
+  proc->cwd          = cwd;
 
   // TODO: use atomic operations (faster)
   hdr_com_spinlock_acquire(&PidLock);
   proc->pid = NextPid++;
   hdr_com_spinlock_release(&PidLock);
 
+  proc->fd_lock = COM_SPINLOCK_NEW();
+  proc->next_fd = 0;
+
   return proc;
 }
 
 void com_sys_proc_destroy(com_proc_t *proc) {
   com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(proc));
+}
+
+uintmax_t com_sys_proc_next_fd(com_proc_t *proc) {
+  hdr_com_spinlock_acquire(&proc->fd_lock);
+  uintmax_t ret = proc->next_fd;
+  proc->next_fd++;
+  hdr_com_spinlock_release(&proc->fd_lock);
+  return ret;
 }

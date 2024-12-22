@@ -248,12 +248,15 @@ end:
   hdr_com_spinlock_release(&tty->lock);
 }
 
-int com_io_tty_init(void) {
+int com_io_tty_init(com_vnode_t **out) {
   LOG("initializing kernel tty");
   TAILQ_INIT(&Tty.waitlist);
   int ret = com_fs_devfs_register(&TtyDev, NULL, "tty0", 4, &TtyDevOps, &Tty);
 
   if (0 != ret) {
+    if (NULL != out) {
+      *out = NULL;
+    }
     return ret;
   }
 
@@ -278,6 +281,10 @@ int com_io_tty_init(void) {
   Tty.termios.c_lflag        = TTYDEF_LFLAG;
   Tty.termios.c_oflag        = TTYDEF_OFLAG;
   // Tty.termios.ibaud = Tty.termios.obaud = TTYDEF_SPEED;
+
+  if (NULL != out) {
+    *out = TtyDev;
+  }
 
   return ret;
 }
