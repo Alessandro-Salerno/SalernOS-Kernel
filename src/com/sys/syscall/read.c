@@ -16,45 +16,47 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
 #include <arch/cpu.h>
-#include <kernel/com/log.h>
-#include <kernel/com/sys/interrupt.h>
+#include <errno.h>
+#include <kernel/com/fs/file.h>
+#include <kernel/com/fs/vfs.h>
+#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <kernel/platform/syscall.h>
-#include <stdint.h>
 
-#define MAX_SYSCALLS 512
-
-volatile com_intf_syscall_t Com_Sys_Syscall_Table[MAX_SYSCALLS] = {0};
-
-static com_syscall_ret_t test_syscall(arch_context_t *ctx,
-                                      uintmax_t       arg1,
-                                      uintmax_t       arg2,
-                                      uintmax_t       arg3,
-                                      uintmax_t       arg4) {
+com_syscall_ret_t com_sys_syscall_read(arch_context_t *ctx,
+                                       uintmax_t       fd,
+                                       uintmax_t       bufptr,
+                                       uintmax_t       buflen,
+                                       uintmax_t       unused) {
   (void)ctx;
-  (void)arg2;
-  (void)arg3;
-  (void)arg4;
-  com_log_puts((const char *)arg1);
+  (void)unused;
+  void             *buf = (void *)bufptr;
+  com_syscall_ret_t ret = {0};
 
-  return (com_syscall_ret_t){0, 0};
-}
+  com_proc_t *curr = hdr_arch_cpu_get()->thread->proc;
+  com_file_t *file = com_sys_proc_get_file(curr, fd);
 
-void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {
-  ASSERT(number < MAX_SYSCALLS);
-  ASSERT(NULL == Com_Sys_Syscall_Table[number]);
+  if (NULL == file) {
+    ret.err = EBADF;
+    return ret;
+  }
 
-  DEBUG(
-      "registering handler at %x with number %u (%x)", handler, number, number);
-  Com_Sys_Syscall_Table[number] = handler;
-}
+  size_t bytes_read = 0;
+  int    vfs_op =
+      com_fs_vfs_read(buf, buflen, &bytes_read, file->vnode, file->off, 0);
 
-void com_sys_syscall_init(void) {
-  LOG("initializing common system calls");
-  com_sys_syscall_register(0x00, test_syscall);
-  com_sys_syscall_register(0x01, com_sys_syscall_write);
-  com_sys_syscall_register(0x02, com_sys_syscall_read);
-  com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
+  if (0 != vfs_op) {
+    ret.err = vfs_op;
+    goto cleanup;
+  }
+
+  hdr_com_spinlock_acquire(&file->off_lock);
+  file->off += bytes_read;
+  hdr_com_spinlock_release(&file->off_lock);
+
+  ret.value = bytes_read;
+cleanup:
+  COM_FS_FILE_RELEASE(file);
+  return ret;
 }

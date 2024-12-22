@@ -103,7 +103,7 @@ static int tty_read(void     *buf,
     }
 
     if (!can_read) {
-      com_sys_sched_wait(cur_thread, &tty->lock);
+      com_sys_sched_wait(&tty->waitlist, &tty->lock);
       continue;
     }
 

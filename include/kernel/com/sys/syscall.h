@@ -42,3 +42,8 @@ com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
                                         uintmax_t       bufptr,
                                         uintmax_t       buflen,
                                         uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_read(arch_context_t *ctx,
+                                       uintmax_t       fd,
+                                       uintmax_t       bufptr,
+                                       uintmax_t       buflen,
+                                       uintmax_t       unused);

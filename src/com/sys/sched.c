@@ -97,6 +97,7 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
   curr->runnable     = false;
   curr->waiting_on   = waiting_on;
 
+  DEBUG("gets here");
   TAILQ_INSERT_TAIL(waiting_on, curr, threads);
   hdr_com_spinlock_release(cond);
   com_sys_sched_yield();
