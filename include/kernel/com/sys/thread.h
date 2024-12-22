@@ -40,3 +40,4 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
                                  void       *entry);
 
 void com_sys_thread_destroy(com_thread_t *thread);
+void com_sys_thread_ready(com_thread_t *thread);

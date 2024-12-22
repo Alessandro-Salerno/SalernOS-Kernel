@@ -123,6 +123,27 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
   return true;
 }
 
+// Taken from ke
+// TODO: credit and replace with something more readable ;-)
+static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
+  uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
+  uint64_t new    = (uint64_t)com_mm_pmm_alloc();
+  uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
+
+  if (level == 0) {
+    kmemcpy(nvirt, virt, 4096);
+  } else {
+    for (size_t i = 0; i < 512; i++) {
+      if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
+        nvirt[i] = duplicate_recursive(
+            virt[i], level - 1, addr | ((i << (12 + (level - 1) * 9))));
+      }
+    }
+  }
+
+  return new | (entry & ~ADDRMASK);
+}
+
 arch_mmu_pagetable_t *arch_mmu_new_table(void) {
   arch_mmu_pagetable_t *table = com_mm_pmm_alloc();
 
@@ -138,8 +159,24 @@ void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
   // TODO: implement this
 }
 
-arch_mmu_pagetable_t arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
-  // TODO: implement this
+arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
+  arch_mmu_pagetable_t *new_pt = arch_mmu_new_table();
+
+  if (NULL == new_pt) {
+    return NULL;
+  }
+
+  arch_mmu_pagetable_t *new_virt =
+      (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(new_pt);
+  arch_mmu_pagetable_t *pt_virt = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(pt);
+
+  for (size_t i = 0; i < 256; i++) {
+    if (ARCH_MMU_FLAGS_PRESENT & pt_virt[i]) {
+      new_virt[i] = duplicate_recursive(pt_virt[i], 3, 0);
+    }
+  }
+
+  return new_pt;
 }
 
 bool arch_mmu_map(arch_mmu_pagetable_t *pt,

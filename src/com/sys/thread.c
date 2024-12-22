@@ -50,3 +50,9 @@ void com_sys_thread_destroy(com_thread_t *thread) {
   com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack));
   com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
 }
+
+void com_sys_thread_ready(com_thread_t *thread) {
+  arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
+  TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
+  thread->runnable = true;
+}

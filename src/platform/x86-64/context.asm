@@ -75,3 +75,8 @@ global x86_64_ctx_test_trampoline
 x86_64_ctx_test_trampoline:
   mov rdi, rsp
   jmp arch_ctx_trampoline
+
+global arch_ctx_fork_trampoline
+arch_ctx_fork_trampoline:
+  mov rdi, rsp
+  jmp arch_ctx_trampoline

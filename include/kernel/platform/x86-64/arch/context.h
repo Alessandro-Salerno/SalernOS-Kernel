@@ -30,6 +30,18 @@
   src.rip    = (uint64_t)entry;                                \
   src.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
+#define ARCH_CONTEXT_FORK(new_thread, orig_ctx)                          \
+  new_thread->ctx.rsp = (uint64_t)new_thread->kernel_stack;              \
+  new_thread->ctx.rsp -= sizeof(arch_context_t);                         \
+  {                                                                      \
+    arch_context_t *new_context = (void *)new_thread->ctx.rsp;           \
+    *new_context                = (orig_ctx); /* copy the old context */ \
+  }                                                                      \
+  new_thread->ctx.rsp -= 8;                                              \
+  *(uint64_t *)new_thread->ctx.rsp = (uint64_t)arch_ctx_fork_trampoline; \
+  new_thread->ctx.rax              = 0;                                  \
+  new_thread->ctx.rdx              = 0;
+
 #define ARCH_CONTEXT_COPY(dst, src) \
   (dst)->rax = (src)->rax;          \
   (dst)->rbx = (src)->rbx;          \
@@ -87,3 +99,4 @@ void arch_ctx_print(arch_context_t *ctx);
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
 void x86_64_ctx_test_trampoline(void);
 void arch_ctx_trampoline(arch_context_t *ctx);
+void arch_ctx_fork_trampoline(void);

@@ -28,10 +28,11 @@
 
 #define ARCH_MMU_ADDR_IS_USER(a) ((void *)a < USERSPACE_END)
 
-#define ARCH_MMU_FLAGS_READ   (uint64_t)1
-#define ARCH_MMU_FLAGS_WRITE  (uint64_t)2
-#define ARCH_MMU_FLAGS_USER   (uint64_t)4
-#define ARCH_MMU_FLAGS_NOEXEC ((uint64_t)1 << 63)
+#define ARCH_MMU_FLAGS_READ    (uint64_t)1
+#define ARCH_MMU_FLAGS_WRITE   (uint64_t)2
+#define ARCH_MMU_FLAGS_USER    (uint64_t)4
+#define ARCH_MMU_FLAGS_PRESENT (uint64_t)1
+#define ARCH_MMU_FLAGS_NOEXEC  ((uint64_t)1 << 63)
 
 #define ARCH_MMU_FLAGS_WB 0
 #define ARCH_MMU_FLAGS_WT (1 << 3)
