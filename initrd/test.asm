@@ -12,9 +12,9 @@ _start:
   mov rsi, qword buffer
   mov rdx, qword 20
   int 80h
-.nothing:
-  nop
-  jmp _start
+  mov rax, qword 3
+  mov rdi, qword path
+  int 80h
 
 section .data
 buffer: times 20 db 0
@@ -22,3 +22,6 @@ buffer: times 20 db 0
 section .rodata
 hello:
   db "Hello, world", 0
+
+path:
+  db "./test", 0

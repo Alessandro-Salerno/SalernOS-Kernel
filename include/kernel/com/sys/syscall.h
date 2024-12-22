@@ -47,3 +47,8 @@ com_syscall_ret_t com_sys_syscall_read(arch_context_t *ctx,
                                        uintmax_t       bufptr,
                                        uintmax_t       buflen,
                                        uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
+                                         uintmax_t       pathptr,
+                                         uintmax_t       argvptr,
+                                         uintmax_t       envptr,
+                                         uintmax_t       unused);

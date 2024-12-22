@@ -56,5 +56,6 @@ void com_sys_syscall_init(void) {
   com_sys_syscall_register(0x00, test_syscall);
   com_sys_syscall_register(0x01, com_sys_syscall_write);
   com_sys_syscall_register(0x02, com_sys_syscall_read);
+  com_sys_syscall_register(0x03, com_sys_syscall_execve);
   com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

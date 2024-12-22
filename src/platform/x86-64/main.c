@@ -220,6 +220,7 @@ void kernel_entry(void) {
          com_sys_elf64_load(
              &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
   DEBUG("elf entry at %x", elf_data.entry);
+  DEBUG("enf interpreter path: %s", elf_data.interpreter_path);
 
   com_proc_t *proc = com_sys_proc_new(user_pt, 0, rootfs->root, rootfs->root);
   com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
