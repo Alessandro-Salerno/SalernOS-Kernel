@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/info.h>
 #include <arch/mmu.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -77,7 +78,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
   uintptr_t stack_start = stack_end - (0x1000 * 64);
   void     *stack_phys  = NULL;
 
-  for (uintptr_t curr = stack_start; curr < stack_end; curr += 0x1000) {
+  for (uintptr_t curr = stack_start; curr < stack_end; curr += ARCH_PAGE_SIZE) {
     stack_phys = com_mm_pmm_alloc();
     arch_mmu_map(new_pt,
                  (void *)curr,
@@ -86,9 +87,10 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
                      ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
   }
 
-  // TODO: prepare stack for real
-  *ctx = (arch_context_t){0};
-  ARCH_CONTEXT_THREAD_SET((*ctx), stack_start, 0x1000 * 64, entry);
+  *ctx                = (arch_context_t){0};
+  uintptr_t stack_ptr = com_sys_elf64_prepare_stack(
+      prog_data, (uintptr_t)stack_phys + ARCH_PAGE_SIZE, stack_end, argv, env);
+  ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
 
   arch_mmu_switch(new_pt);
   arch_mmu_destroy_table(proc->page_table);

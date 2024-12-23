@@ -23,9 +23,27 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/platform/mmu.h>
+#include <lib/mem.h>
+#include <lib/str.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#define AT_NULL   0
+#define AT_IGNORE 1
+#define AT_EXECFD 2
+#define AT_PHDR   3
+#define AT_PHENT  4
+#define AT_PHNUM  5
+#define AT_PAGESZ 6
+#define AT_BASE   7
+#define AT_FLAGS  8
+#define AT_ENTRY  9
+#define AT_NOTELF 10
+#define AT_UID    11
+#define AT_EUID   12
+#define AT_GID    13
+#define AT_EGID
 
 struct elf_header {
   uint32_t  magic;
@@ -173,4 +191,67 @@ int com_sys_elf64_load(com_elf_data_t       *out,
 cleanup:
   COM_VNODE_RELEASE(elf_file);
   return ret;
+}
+
+// TODO: credit this, taken from ke (probably taken from somwhere else)
+uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
+                                      size_t         stack_end_phys,
+                                      size_t         stack_end_virt,
+                                      char *const    argv[],
+                                      char *const    envp[]) {
+#define PUSH(x) *(--stackptr) = (x)
+  uintptr_t *stackptr         = (uintptr_t *)ARCH_PHYS_TO_HHDM(stack_end_phys),
+            *orig             = stackptr;
+  size_t envc                 = 0;
+
+  for (; envp[envc]; envc++) {
+    size_t len = kstrlen(envp[envc]) + 1;
+    stackptr   = (uintptr_t *)((uintptr_t)stackptr - len);
+    kmemcpy(stackptr, envp[envc], len);
+  }
+
+  size_t argc = 0;
+  for (; argv[argc]; argc++) {
+    size_t len = kstrlen(argv[argc]) + 1;
+    stackptr   = (uintptr_t *)((uintptr_t)stackptr - len);
+    kmemcpy(stackptr, argv[argc], len);
+  }
+
+  stackptr = (uintptr_t *)((uintptr_t)stackptr & (~0xF));
+  if (((argc + envc + 1) & 1) != 0) {
+    stackptr--;
+  }
+
+  PUSH(0);
+  PUSH(0);
+
+  PUSH(elf_data.entry);
+  PUSH(AT_ENTRY);
+
+  PUSH(elf_data.phdr);
+  PUSH(AT_PHDR);
+
+  PUSH(elf_data.phent_sz);
+  PUSH(AT_PHENT);
+
+  PUSH(elf_data.phent_num);
+  PUSH(AT_PHNUM);
+
+  uintptr_t off = 0;
+
+  PUSH(0);
+  stackptr -= envc;
+  for (size_t i = 0; i < envc; i++) {
+    stackptr[i] = stack_end_virt - (off += kstrlen(envp[i]) + 1);
+  }
+
+  PUSH(0);
+  stackptr -= argc;
+  for (size_t i = 0; i < argc; i++) {
+    stackptr[i] = stack_end_virt - (off += kstrlen(argv[i]) + 1);
+  }
+
+  PUSH(argc);
+  return stack_end_virt - ((uintptr_t)orig - (uintptr_t)stackptr);
+#undef PUSH
 }
