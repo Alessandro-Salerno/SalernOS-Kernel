@@ -7,8 +7,9 @@ _start:
   mov rsi, qword argv
   mov rdx, qword envp
   int 80h
+.nothing:
   nop
-  jmp _start
+  jmp .nothing
 
 section .data
 buffer: times 20 db 0
@@ -18,7 +19,7 @@ hello:
   db "Hello, world", 0
 
 path:
-  db "./test", 0
+  db "./fresh", 0
 
 arg1: db "ciao", 0
 arg2: db "test", 0

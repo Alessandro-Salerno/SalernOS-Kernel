@@ -252,6 +252,7 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
   }
 
   PUSH(argc);
+  DEBUG("argc=%u", argc);
   return stack_end_virt - ((uintptr_t)orig - (uintptr_t)stackptr);
 #undef PUSH
 }

@@ -20,10 +20,11 @@
 #include <kernel/com/io/fbterm.h>
 #include <lib/str.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <vendor/flanterm/backends/fb.h>
 #include <vendor/flanterm/flanterm.h>
 
-static volatile struct flanterm_context *FlantermContext = NULL;
+static struct flanterm_context *FlantermContext = NULL;
 
 void com_io_fbterm_putc(char c) {
   flanterm_write(FlantermContext, &c, 1);
@@ -38,7 +39,8 @@ void com_io_fbterm_putsn(const char *s, size_t n) {
 }
 
 void com_io_fbterm_init(arch_framebuffer_t *fb) {
-  FlantermContext = flanterm_fb_init(NULL,
+  uint32_t default_fg = 0xffffffff;
+  FlantermContext     = flanterm_fb_init(NULL,
                                      NULL,
                                      fb->address,
                                      fb->width,
@@ -54,7 +56,7 @@ void com_io_fbterm_init(arch_framebuffer_t *fb) {
                                      NULL,
                                      NULL,
                                      NULL,
-                                     NULL,
+                                     &default_fg,
                                      NULL,
                                      NULL,
                                      NULL,
