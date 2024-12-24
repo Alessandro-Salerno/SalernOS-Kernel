@@ -40,8 +40,10 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
   proc->exit_status  = 0;
   proc->num_children = 0;
   proc->parent_pid   = parent_pid;
-  proc->root         = root;
-  proc->cwd          = cwd;
+  COM_VNODE_HOLD(root);
+  COM_VNODE_HOLD(cwd);
+  proc->root = root;
+  proc->cwd  = cwd;
 
   // TODO: use atomic operations (faster)
   hdr_com_spinlock_acquire(&PidLock);

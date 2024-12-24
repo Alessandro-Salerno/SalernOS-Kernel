@@ -44,7 +44,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
   (void)unused3;
   (void)unused4;
 
-  com_syscall_ret_t ret  = {0};
+  com_syscall_ret_t ret  = {-1, 0};
   com_proc_t       *proc = hdr_arch_cpu_get()->thread->proc;
 
   hdr_com_spinlock_acquire(&proc->fd_lock);
@@ -52,10 +52,8 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
 
   arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
 
-  COM_VNODE_HOLD(proc->root);
   com_proc_t *new_proc =
       com_sys_proc_new(new_pt, proc->pid, proc->root, proc->cwd);
-  COM_VNODE_RELEASE(proc->root);
   // TODO: do things with fs-base and pages (not implemented yet)
   com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
 
@@ -80,6 +78,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
   proc->num_children++;
   new_thread->runnable = false;
 
+  ret.value = new_proc->pid;
   com_sys_thread_ready(new_thread);
 
 end:
