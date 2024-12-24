@@ -157,8 +157,13 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
   bool is_shift_held = (COM_IO_TTY_MOD_LSHIFT | COM_IO_TTY_MOD_RSHIFT) & mod;
   bool is_ctrl_held  = COM_IO_TTY_MOD_LCTRL & mod;
   bool handled       = false;
-  bool notify        = true;
+  bool notify        = false;
   struct tty *tty    = &Tty;
+  char        eol    = tty->termios.c_cc[VEOL];
+
+  if (0 == eol) {
+    eol = '\n';
+  }
 
   if (CONTROL_DEL == c) {
     is_del = true;
@@ -189,7 +194,12 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
     }
 
     if (!(ICANON & tty->termios.c_lflag)) {
+      notify = true;
       goto end;
+    }
+
+    if (eol == c) {
+      notify = true;
     }
 
     if (tty->termios.c_cc[VEOF] == c) {
@@ -199,7 +209,7 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
     }
 
     if (tty->termios.c_cc[VERASE] == c) {
-      if (!(ICANON & tty->termios.c_lflag) || tty->write > 0) {
+      if (tty->write > 0) {
         if (ECHOE & tty->termios.c_lflag) {
           com_io_fbterm_puts("\b \b");
         }
@@ -248,7 +258,9 @@ end:
 
   if (notify && !TAILQ_EMPTY(&tty->waitlist)) {
     com_sys_sched_notify(&tty->waitlist);
-    // TODO: sched_yield?
+    hdr_com_spinlock_release(&tty->lock);
+    com_sys_sched_yield();
+    return;
   }
 
   hdr_com_spinlock_release(&tty->lock);
