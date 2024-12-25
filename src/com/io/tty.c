@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include "com/util.h"
 #define _GNU_SOURCE
 #define _BSD_SOURCE
 
@@ -107,15 +108,17 @@ static int tty_read(void     *buf,
       continue;
     }
 
-    kmemcpy((uint8_t *)buf + read_count, tty->buf, i);
-    kmemmove(tty->buf, (uint8_t *)tty->buf + i, tty->write - i);
-    tty->write -= i;
+    kmemcpy((uint8_t *)buf + read_count, tty->buf, MIN(buflen, i));
+    kmemmove(tty->buf,
+             (uint8_t *)tty->buf + MIN(buflen, i),
+             tty->write - MIN(buflen, i));
+    tty->write -= MIN(buflen, i);
 
     if (eof_found) {
       tty->write--;
     }
 
-    read_count += i;
+    read_count += MIN(buflen, i);
     break;
   }
 
@@ -130,8 +133,8 @@ static int tty_write(size_t   *bytes_written,
                      size_t    buflen,
                      uintmax_t off,
                      uintmax_t flags) {
-  struct tty *tty = devdata;
-  tty->write      = 0;
+  // struct tty *tty = devdata;
+  // tty->write      = 0;
   (void)off;
   (void)flags;
   com_io_fbterm_putsn(buf, buflen);
