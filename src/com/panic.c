@@ -21,6 +21,7 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/platform/context.h>
 #include <lib/printf.h>
 #include <stdarg.h>
 #include <stddef.h>

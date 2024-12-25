@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <arch/context.h>
+
 void arch_context_print(arch_context_t *ctx);
 void arch_context_trampoline(arch_context_t *ctx);
 void arch_context_fork_trampoline(void);

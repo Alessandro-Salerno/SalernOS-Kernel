@@ -29,6 +29,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
 #include <lib/str.h>
 #include <stddef.h>

@@ -25,8 +25,8 @@
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
-#include <kernel/com/io/tty.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/io/tty.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/elf.h>
@@ -34,6 +34,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/context.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
@@ -209,8 +210,8 @@ void kernel_entry(void) {
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
   com_elf_data_t elf_data = {0};
   KASSERT(0 ==
-         com_sys_elf64_load(
-             &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
+          com_sys_elf64_load(
+              &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
   KDEBUG("elf entry at %x", elf_data.entry);
   KDEBUG("enf interpreter path: %s", elf_data.interpreter_path);
 
