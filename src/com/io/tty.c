@@ -107,17 +107,17 @@ static int tty_read(void     *buf,
       continue;
     }
 
-    kmemcpy((uint8_t *)buf + read_count, tty->buf, MIN(buflen, i));
+    kmemcpy((uint8_t *)buf + read_count, tty->buf, KMIN(buflen, i));
     kmemmove(tty->buf,
-             (uint8_t *)tty->buf + MIN(buflen, i),
-             tty->write - MIN(buflen, i));
-    tty->write -= MIN(buflen, i);
+             (uint8_t *)tty->buf + KMIN(buflen, i),
+             tty->write - KMIN(buflen, i));
+    tty->write -= KMIN(buflen, i);
 
     if (eof_found) {
       tty->write--;
     }
 
-    read_count += MIN(buflen, i);
+    read_count += KMIN(buflen, i);
     break;
   }
 
@@ -267,7 +267,7 @@ end:
 }
 
 int com_io_tty_init(COM_FS_VFS_VNODE_t **out) {
-  LOG("initializing kernel tty");
+  KLOG("initializing kernel tty");
   TAILQ_INIT(&Tty.waitlist);
   int ret = com_fs_devfs_register(&TtyDev, NULL, "tty0", 4, &TtyDevOps, &Tty);
 

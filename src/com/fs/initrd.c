@@ -70,7 +70,7 @@ static void create_node(COM_FS_VFS_VNODE_t      **file,
 }
 
 void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
-  LOG("extracting initrd");
+  KLOG("extracting initrd");
 
   for (uintmax_t i = 0; i < tarsize;) {
     struct tar_header *hdr = (struct tar_header *)((uint8_t *)tar + i);
@@ -102,7 +102,7 @@ void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
       goto skip;
     }
 
-    DEBUG("extracting file %s", file_path);
+    KDEBUG("extracting file %s", file_path);
 
     while (0 < file_path_len && '/' == file_path[file_path_len - 1]) {
       file_path_len--;

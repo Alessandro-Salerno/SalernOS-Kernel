@@ -43,7 +43,7 @@ void com_sys_interrupt_register(uintmax_t      vec,
                                 com_intf_eoi_t eoi) {
   bool orig_status = com_sys_interrupt_set(false);
 
-  DEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
+  KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
   com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
   isr->func      = func;
   isr->eoi       = eoi;

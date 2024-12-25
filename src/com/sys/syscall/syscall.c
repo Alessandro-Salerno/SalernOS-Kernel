@@ -46,13 +46,13 @@ void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {
   ASSERT(number < MAX_SYSCALLS);
   ASSERT(NULL == Com_Sys_Syscall_Table[number]);
 
-  DEBUG(
+  KDEBUG(
       "registering handler at %x with number %u (%x)", handler, number, number);
   Com_Sys_Syscall_Table[number] = handler;
 }
 
 void com_sys_syscall_init(void) {
-  LOG("initializing common system calls");
+  KLOG("initializing common system calls");
   com_sys_syscall_register(0x00, test_syscall);
   com_sys_syscall_register(0x01, com_sys_syscall_write);
   com_sys_syscall_register(0x02, com_sys_syscall_read);

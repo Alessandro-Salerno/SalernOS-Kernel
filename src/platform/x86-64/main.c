@@ -186,13 +186,13 @@ void kernel_entry(void) {
 
   COM_FS_VFS_VNODE_t *myfile_txt = NULL;
   com_fs_vfs_lookup(&myfile_txt, "/myfile.txt", 11, rootfs->root, rootfs->root);
-  DEBUG("found /myfile.txt at: %x", myfile_txt);
+  KDEBUG("found /myfile.txt at: %x", myfile_txt);
   ASSERT(NULL != myfile_txt);
 
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
   com_fs_vfs_read(buf, 5, NULL, myfile_txt, 0, 0);
-  DEBUG("reading from /myfile.txt: %s", buf);
+  KDEBUG("reading from /myfile.txt: %s", buf);
 
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
@@ -211,8 +211,8 @@ void kernel_entry(void) {
   ASSERT(0 ==
          com_sys_elf64_load(
              &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
-  DEBUG("elf entry at %x", elf_data.entry);
-  DEBUG("enf interpreter path: %s", elf_data.interpreter_path);
+  KDEBUG("elf entry at %x", elf_data.entry);
+  KDEBUG("enf interpreter path: %s", elf_data.interpreter_path);
 
   com_proc_t *proc = com_sys_proc_new(user_pt, 0, rootfs->root, rootfs->root);
   com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
@@ -239,7 +239,7 @@ void kernel_entry(void) {
   arch_mmu_switch(proc->page_table);
   arch_context_trampoline(&thread->ctx);
 
-  DEBUG("intstatus: %u", BaseCpu.intstatus);
+  KDEBUG("intstatus: %u", BaseCpu.intstatus);
   for (;;) {
     asm volatile("hlt");
   }

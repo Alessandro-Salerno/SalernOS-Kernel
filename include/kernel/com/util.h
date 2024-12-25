@@ -18,14 +18,14 @@
 
 #pragma once
 
-#define STR_HELPER(x) #x
-#define STR(x)        STR_HELPER(x)
+#define KSTR_HELPER(x) #x
+#define KSTR(x)        KSTR_HELPER(x)
 
-#define LIKELY(x)   __builtin_expect(!!(x), 1)
-#define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define KLIKELY(x)   __builtin_expect(!!(x), 1)
+#define KUNKLIKELY(x) __builtin_expect(!!(x), 0)
 
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define KMIN(x, y) (((x) < (y)) ? (x) : (y))
+#define KMAX(x, y) (((x) > (y)) ? (x) : (y))
 
 #define USER_TEXT __attribute__((section(".user_text")))
 #define USER_DATA __attribute__((section(".user_data")))

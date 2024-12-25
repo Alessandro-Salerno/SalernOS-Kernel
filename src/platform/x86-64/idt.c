@@ -72,7 +72,7 @@ static void generic_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
 }
 
 void x86_64_idt_init() {
-  LOG("initializing idt");
+  KLOG("initializing idt");
 
   for (uint64_t i = 0; i < 256; i++) {
     Idt[i].offset  = IsrTable[i] & 0xffff;
@@ -85,12 +85,12 @@ void x86_64_idt_init() {
 }
 
 void x86_64_idt_set_user_invocable(uintmax_t vec) {
-  DEBUG("allowing user invocation of interrupt %u", vec);
+  KDEBUG("allowing user invocation of interrupt %u", vec);
   Idt[vec].flags = 0xEE;
 }
 
 void x86_64_idt_reload() {
-  LOG("reloading idt");
+  KLOG("reloading idt");
   asm volatile("lidt (%%rax)" : : "a"(&Idtr));
 
   for (uintmax_t i = 0; i < 32; i++) {

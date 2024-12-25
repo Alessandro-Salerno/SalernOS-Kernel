@@ -62,7 +62,7 @@ static int kstrcmp(const char *str1, const char *str2, size_t max) {
 // VFS OPS
 
 int com_fs_dummyfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode) {
-  DEBUG("running dummyfs vget for inode %x", inode);
+  KDEBUG("running dummyfs vget for inode %x", inode);
   (void)vfs;
   struct dummyfs_node *dn = inode;
   *out                    = dn->vnode;
@@ -70,7 +70,7 @@ int com_fs_dummyfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode) {
 }
 
 int com_fs_dummyfs_mount(com_vfs_t **out, COM_FS_VFS_VNODE_t *mountpoint) {
-  DEBUG("mounting dummyfs in /");
+  KDEBUG("mounting dummyfs in /");
   com_vfs_t *dummyfs        = com_mm_slab_alloc(sizeof(com_vfs_t));
   dummyfs->mountpoint       = mountpoint;
   dummyfs->ops              = &DummyfsOps;
@@ -123,7 +123,7 @@ int com_fs_dummyfs_create(COM_FS_VFS_VNODE_t **out,
   for (size_t i = 0; i < ARCH_PAGE_SIZE / sizeof(struct dummyfs_node) - 1;
        i++) {
     if (!dirbuf[i].present) {
-      DEBUG("dummyfs create: file created at index %u", i);
+      KDEBUG("dummyfs create: file created at index %u", i);
       first_free          = &dirbuf[i];
       first_free->present = true;
       break;
@@ -184,7 +184,7 @@ int com_fs_dummyfs_lookup(COM_FS_VFS_VNODE_t **out,
                           size_t        len) {
   struct dummyfs_node *inode  = ((struct dummyfs_node *)dir->extra);
   struct dummyfs_node *dirbuf = inode->directory;
-  DEBUG("running dummyfs lookup on root=%u name=%s", dir->isroot, inode->name);
+  KDEBUG("running dummyfs lookup on root=%u name=%s", dir->isroot, inode->name);
   struct dummyfs_node *found = NULL;
   size_t               max   = 100;
   if (len < max) {
@@ -193,9 +193,9 @@ int com_fs_dummyfs_lookup(COM_FS_VFS_VNODE_t **out,
 
   for (size_t i = 0; i < ARCH_PAGE_SIZE / sizeof(struct dummyfs_node) - 1;
        i++) {
-    DEBUG("dummyfs lookup: attempting index %u", i);
+    KDEBUG("dummyfs lookup: attempting index %u", i);
     if (dirbuf[i].present && 0 == kstrcmp(dirbuf[i].name, name, max)) {
-      DEBUG("found: name=%s", dirbuf[i].name);
+      KDEBUG("found: name=%s", dirbuf[i].name);
       found          = &dirbuf[i];
       found->present = true;
       break;

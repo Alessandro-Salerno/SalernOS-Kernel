@@ -210,19 +210,19 @@ bool arch_mmu_map(arch_mmu_pagetable_t *pt,
 }
 
 void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
-  DEBUG("switching to page table at address %x", pt);
+  KDEBUG("switching to page table at address %x", pt);
   asm volatile("mov %%rax, %%cr3" : : "a"(pt));
 }
 
 void arch_mmu_init(void) {
   // Allocate the kernel (root) page table
-  LOG("initializing mmu");
+  KLOG("initializing mmu");
   RootTable = com_mm_pmm_alloc();
   ASSERT(NULL != RootTable);
   RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
 
   // Map the higher half into the new page table
-  DEBUG("mapping higher half to kernel page table");
+  KDEBUG("mapping higher half to kernel page table");
   for (uintmax_t i = 256; i < 512; i++) {
     uint64_t *entry = com_mm_pmm_alloc();
     ASSERT(NULL != entry);
@@ -237,7 +237,7 @@ void arch_mmu_init(void) {
     arch_memmap_entry_t *entry = memmap->entries[i];
 
     if (ARCH_MEMMAP_IS_MAPPABLE(entry)) {
-      DEBUG("mapping page table entry range %x -> %x",
+      KDEBUG("mapping page table entry range %x -> %x",
             entry->base,
             entry->base + entry->length);
 
@@ -254,15 +254,15 @@ void arch_mmu_init(void) {
   }
 
   // Map the kernel itself (using image map)
-  DEBUG("mapping kernel image to page table");
+  KDEBUG("mapping kernel image to page table");
   arch_kaddr_t *kaddr    = arch_info_get_kaddr();
   uint64_t      vp_delta = kaddr->virtual_base - kaddr->physical_base;
-  DEBUG("kernel virt base: %x, kernel phys base: %x, delta: %x",
+  KDEBUG("kernel virt base: %x, kernel phys base: %x, delta: %x",
         kaddr->virtual_base,
         kaddr->physical_base,
         vp_delta);
 
-  DEBUG("mapping kernel text section (virtual: %x -> %x)",
+  KDEBUG("mapping kernel text section (virtual: %x -> %x)",
         _TEXT_START,
         _TEXT_END);
   for (uintptr_t i = (uintptr_t)_TEXT_START; i < (uintptr_t)_TEXT_END;
@@ -273,7 +273,7 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG("mapping kernel rodata section (virtual: %x -> %x)",
+  KDEBUG("mapping kernel rodata section (virtual: %x -> %x)",
         _RODATA_START,
         _RODATA_END);
   for (uintptr_t i = (uintptr_t)_RODATA_START; i < (uintptr_t)_RODATA_END;
@@ -285,7 +285,7 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG("mapping kernel data/bss/limine_requests sections (virtual: %x -> %x)",
+  KDEBUG("mapping kernel data/bss/limine_requests sections (virtual: %x -> %x)",
         _DATA_START,
         _DATA_END);
   for (uintptr_t i = (uintptr_t)_DATA_START; i < (uintptr_t)_DATA_END;
@@ -297,7 +297,7 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG("mapping user text section (virtual: %x -> %x)",
+  KDEBUG("mapping user text section (virtual: %x -> %x)",
         _USER_TEXT_START,
         _USER_TEXT_END);
   for (uintptr_t i = (uintptr_t)_USER_TEXT_START; i < (uintptr_t)_USER_TEXT_END;
@@ -309,7 +309,7 @@ void arch_mmu_init(void) {
                     0));
   }
 
-  DEBUG("mapping user data section (virtual: %x -> %x)",
+  KDEBUG("mapping user data section (virtual: %x -> %x)",
         _USER_DATA_START,
         _USER_DATA_END);
   for (uintptr_t i = (uintptr_t)_USER_DATA_START; i < (uintptr_t)_USER_DATA_END;

@@ -141,7 +141,7 @@ int com_fs_devfs_register(COM_FS_VFS_VNODE_t  **out,
 }
 
 int com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs) {
-  LOG("mounting devfs in /dev/");
+  KLOG("mounting devfs in /dev/");
   COM_FS_VFS_VNODE_t *devdir = NULL;
   int          ret    = com_fs_vfs_mkdir(&devdir, rootfs->root, "dev", 3, 0);
 

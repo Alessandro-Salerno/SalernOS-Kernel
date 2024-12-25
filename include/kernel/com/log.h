@@ -23,27 +23,27 @@
 #include <lib/printf.h>
 #include <stddef.h>
 
-#define LOG(...)                        \
+#define KLOG(...)                        \
   com_log_puts("[  log  ] ");           \
   com_log_puts(__FILE__ ":");           \
   com_log_puts(__func__);               \
-  com_log_puts(":" STR(__LINE__) ": "); \
+  com_log_puts(":" KSTR(__LINE__) ": "); \
   kprintf(__VA_ARGS__);                 \
   com_log_putc('\n');
 
-#define DEBUG(...)                      \
+#define KDEBUG(...)                      \
   com_log_puts("[ debug ] ");           \
   com_log_puts(__FILE__ ":");           \
   com_log_puts(__func__);               \
-  com_log_puts(":" STR(__LINE__) ": "); \
+  com_log_puts(":" KSTR(__LINE__) ": "); \
   kprintf(__VA_ARGS__);                 \
   com_log_putc('\n');
 
 #define ASSERT(statement)                                        \
-  if (UNLIKELY(!(statement))) {                                  \
+  if (KUNKLIKELY(!(statement))) {                                  \
     com_log_puts(__FILE__ ":");                                  \
     com_log_puts(__func__);                                      \
-    com_log_puts(":" STR(__LINE__) ": " #statement " failed\n"); \
+    com_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
     com_panic(NULL, NULL);                                       \
   }
 

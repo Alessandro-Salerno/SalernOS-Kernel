@@ -24,7 +24,7 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
   (void)isr;
-  // DEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
+  // KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
   //       ctx->rax,
   //       ctx->rdi,
   //       ctx->rsi,
@@ -34,5 +34,5 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
   com_syscall_ret_t  ret = handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
   ctx->rax               = ret.value;
   ctx->rdx               = ret.err;
-  // DEBUG("syscall ret (%u, %u)", ret.value, ret.err);
+  // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
 }

@@ -69,11 +69,11 @@ int com_fs_pipefs_read(void        *buf,
     }
 
     size_t diff   = pipe->write - pipe->read;
-    size_t readsz = MIN(left, diff);
+    size_t readsz = KMIN(left, diff);
     size_t modidx = pipe->read % PIPE_BUF_SZ;
     size_t end    = PIPE_BUF_SZ - modidx;
 
-    kmemcpy(buf, (uint8_t *)pipe->buf + modidx, MIN(readsz, end));
+    kmemcpy(buf, (uint8_t *)pipe->buf + modidx, KMIN(readsz, end));
 
     if (readsz > end) {
       kmemcpy((uint8_t *)buf + end, pipe->buf, readsz - end);
@@ -125,11 +125,11 @@ int com_fs_pipefs_write(size_t      *bytes_written,
       av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
     }
 
-    size_t writesz = MIN(left, av_space);
+    size_t writesz = KMIN(left, av_space);
     size_t modidx  = pipe->write % PIPE_BUF_SZ;
     size_t end     = PIPE_BUF_SZ - modidx;
 
-    kmemcpy(pipe->buf + modidx, buf, MIN(writesz, end));
+    kmemcpy(pipe->buf + modidx, buf, KMIN(writesz, end));
 
     if (writesz > end) {
       kmemcpy(pipe->buf, (uint8_t *)buf + end, writesz - end);

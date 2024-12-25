@@ -155,7 +155,7 @@ void com_mm_pmm_init() {
     MemSize += entry->length;
     uintptr_t seg_top = entry->base + entry->length;
 
-    DEBUG("segment: base=%x top=%x usable=%u length=%u",
+    KDEBUG("segment: base=%x top=%x usable=%u length=%u",
           entry->base,
           seg_top,
           ARCH_MEMMAP_IS_USABLE(entry),
@@ -172,13 +172,13 @@ void com_mm_pmm_init() {
     }
   }
 
-  DEBUG("searched all segments, found highest address at %x", highest_addr);
+  KDEBUG("searched all segments, found highest address at %x", highest_addr);
 
   // Compute the actual size of the bitmap
   uintptr_t highest_pgindex = highest_addr / ARCH_PAGE_SIZE;
   size_t    bmp_sz          = highest_pgindex / 8 + 1;
 
-  DEBUG("memory is %u pages, bitmap needs %u bytes", highest_pgindex, bmp_sz);
+  KDEBUG("memory is %u pages, bitmap needs %u bytes", highest_pgindex, bmp_sz);
 
   // Find a segment that fits the bitmap and allocate it there
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
@@ -186,7 +186,7 @@ void com_mm_pmm_init() {
 
     if (ARCH_MEMMAP_IS_USABLE(entry) && entry->length >= bmp_sz) {
       uintptr_t transbase = ARCH_PHYS_TO_HHDM(entry->base);
-      DEBUG("bitmap: base=%x size=%u segment=%u", transbase, bmp_sz, i);
+      KDEBUG("bitmap: base=%x size=%u segment=%u", transbase, bmp_sz, i);
       PageBitmap.buffer = (uint8_t *)transbase;
       PageBitmap.size   = bmp_sz;
 
@@ -199,7 +199,7 @@ void com_mm_pmm_init() {
     }
   }
 
-  LOG("freeing usable pages");
+  KLOG("freeing usable pages");
 
   // Unreserve free memory
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
