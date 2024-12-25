@@ -18,15 +18,18 @@
 
 #pragma once
 
+#include <vendor/tailq.h>
+struct com_thread;
+TAILQ_HEAD(com_thread_tailq, com_thread);
+
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <kernel/com/sys/proc.h>
 #include <stdbool.h>
-#include <vendor/tailq.h>
 
 typedef struct com_thread {
   arch_context_t   ctx;
-  com_proc_t      *proc;
+  struct com_proc *proc;
   struct arch_cpu *cpu;
   bool             runnable;
   void            *kernel_stack;
@@ -34,10 +37,10 @@ typedef struct com_thread {
   struct com_thread_tailq *waiting_on;
 } com_thread_t;
 
-com_thread_t *com_sys_thread_new(com_proc_t *proc,
-                                 void       *stack,
-                                 uintmax_t   stack_size,
-                                 void       *entry);
+com_thread_t *com_sys_thread_new(struct com_proc *proc,
+                                 void            *stack,
+                                 uintmax_t        stack_size,
+                                 void            *entry);
 
 void com_sys_thread_destroy(com_thread_t *thread);
 void com_sys_thread_ready(com_thread_t *thread);

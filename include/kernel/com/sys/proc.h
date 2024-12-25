@@ -21,11 +21,12 @@
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sys/thread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct com_proc {
   uint64_t              pid;
   uint64_t              parent_pid;
   bool                  exited;
@@ -39,6 +40,8 @@ typedef struct {
   int            fd_lock;
   uintmax_t      next_fd;
   com_filedesc_t fd[16];
+
+  struct com_thread_tailq waiters;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,

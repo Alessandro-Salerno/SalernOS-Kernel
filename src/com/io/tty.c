@@ -16,9 +16,8 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include "com/util.h"
 #define _GNU_SOURCE
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 
 #include <arch/cpu.h>
 #include <kernel/com/fs/devfs.h>
@@ -29,6 +28,7 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/com/util.h>
 #include <lib/ctype.h>
 #include <lib/mem.h>
 #include <stdbool.h>
@@ -63,9 +63,8 @@ static int tty_read(void     *buf,
                     uintmax_t flags) {
   (void)off;
   (void)flags;
-  struct tty   *tty        = devdata;
-  size_t        read_count = 0;
-  com_thread_t *cur_thread = hdr_arch_cpu_get()->thread;
+  struct tty *tty        = devdata;
+  size_t      read_count = 0;
   hdr_com_spinlock_acquire(&tty->lock);
 
   while (true) {
@@ -133,8 +132,7 @@ static int tty_write(size_t   *bytes_written,
                      size_t    buflen,
                      uintmax_t off,
                      uintmax_t flags) {
-  // struct tty *tty = devdata;
-  // tty->write      = 0;
+  (void)devdata;
   (void)off;
   (void)flags;
   com_io_fbterm_putsn(buf, buflen);
@@ -155,14 +153,13 @@ static com_dev_ops_t TtyDevOps = {.read  = tty_read,
                                   .ioctl = tty_ioctl};
 
 void com_io_tty_kbd_in(char c, uintmax_t mod) {
-  bool is_arrow      = COM_IO_TTY_MOD_ARROW & mod;
-  bool is_del        = false;
-  bool is_shift_held = (COM_IO_TTY_MOD_LSHIFT | COM_IO_TTY_MOD_RSHIFT) & mod;
-  bool is_ctrl_held  = COM_IO_TTY_MOD_LCTRL & mod;
-  bool handled       = false;
-  bool notify        = false;
-  struct tty *tty    = &Tty;
-  char        eol    = tty->termios.c_cc[VEOL];
+  bool        is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
+  bool        is_del       = false;
+  bool        is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
+  bool        handled      = false;
+  bool        notify       = false;
+  struct tty *tty          = &Tty;
+  char        eol          = tty->termios.c_cc[VEOL];
 
   if (0 == eol) {
     eol = '\n';

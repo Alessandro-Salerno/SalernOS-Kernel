@@ -21,10 +21,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-// TODO: make this thread-safe
-static char StrConvOutBuf[24];
-
-static const char *uitoa(uint64_t val) {
+static const char *uitoa(uint64_t val, char *s) {
   uint64_t size_test = val;
   uint8_t  size      = 0;
   uint8_t  idx       = 0;
@@ -37,26 +34,26 @@ static const char *uitoa(uint64_t val) {
   while (idx < size) {
     uint8_t rem = val % 10;
     val /= 10;
-    StrConvOutBuf[size - idx] = rem + '0';
+    s[size - idx] = rem + '0';
     idx++;
   }
 
   uint8_t rem = val % 10;
   val /= 10;
-  StrConvOutBuf[size - idx] = rem + '0';
-  StrConvOutBuf[size + 1]   = 0;
+  s[size - idx] = rem + '0';
+  s[size + 1]   = 0;
 
-  return StrConvOutBuf;
+  return s;
 }
 
-static const char *itoa(int64_t val) {
+static const char *itoa(int64_t val, char *s) {
   uint64_t size_test   = 10;
   uint8_t  size        = 0;
   uint8_t  idx         = 0;
   uint8_t  is_negative = 0;
 
-  is_negative      = val < 0;
-  StrConvOutBuf[0] = (val < 0) ? '-' : '+';
+  is_negative = val < 0;
+  s[0]        = (val < 0) ? '-' : '+';
 
   if (val < 0) {
     val *= -1;
@@ -70,19 +67,19 @@ static const char *itoa(int64_t val) {
   while (idx < size) {
     uint8_t rem = val % 10;
     val /= 10;
-    StrConvOutBuf[is_negative + size - idx] = rem + '0';
+    s[is_negative + size - idx] = rem + '0';
     idx++;
   }
 
   uint8_t rem = val % 10;
   val /= 10;
-  StrConvOutBuf[is_negative + size - idx] = rem + '0';
-  StrConvOutBuf[is_negative + size + 1]   = 0;
+  s[is_negative + size - idx] = rem + '0';
+  s[is_negative + size + 1]   = 0;
 
-  return StrConvOutBuf;
+  return s;
 }
 
-static const char *xuitoa(uint64_t val) {
+static const char *xuitoa(uint64_t val, char *s) {
   uint64_t size_test = val;
   uint8_t  size      = 0;
   uint8_t  idx       = 0;
@@ -95,16 +92,16 @@ static const char *xuitoa(uint64_t val) {
   uint64_t diff = 16 - size;
 
   for (uint64_t i = 0; i < diff; i++) {
-    StrConvOutBuf[i] = '0';
+    s[i] = '0';
   }
 
   while (idx < size) {
     uint8_t rem = val % 16;
     val /= 16;
     if (rem < 10) {
-      StrConvOutBuf[15 - idx] = rem + '0';
+      s[15 - idx] = rem + '0';
     } else {
-      StrConvOutBuf[15 - idx] = rem - 10 + 'A';
+      s[15 - idx] = rem - 10 + 'A';
     }
     idx++;
   }
@@ -112,34 +109,34 @@ static const char *xuitoa(uint64_t val) {
   uint8_t rem = val % 16;
   val /= 16;
   if (rem < 10) {
-    StrConvOutBuf[15 - idx] = rem + '0';
+    s[15 - idx] = rem + '0';
   } else {
-    StrConvOutBuf[15 - idx] = rem - 10 + 'A';
+    s[15 - idx] = rem - 10 + 'A';
   }
-  StrConvOutBuf[16] = 0;
+  s[16] = 0;
 
-  return StrConvOutBuf;
+  return s;
 }
 
-// TODO: make this thread-safe
 void kvprintf(const char *fmt, va_list args) {
   for (char *ptr = (char *)(fmt); 0 != *ptr; ptr++) {
+    char buf[24] = {0};
     switch (*ptr) {
     case '%': {
       switch (*(++ptr)) {
       case 'u':
-        com_log_puts((const char *)(uitoa(va_arg(args, uint64_t))));
+        com_log_puts((const char *)(uitoa(va_arg(args, uint64_t), buf)));
         break;
 
       case 'p':
       case 'x':
         com_log_puts("0x");
-        com_log_puts(xuitoa(va_arg(args, uint64_t)));
+        com_log_puts(xuitoa(va_arg(args, uint64_t), buf));
         break;
 
       case 'd':
       case 'i':
-        com_log_puts((const char *)(itoa(va_arg(args, int64_t))));
+        com_log_puts((const char *)(itoa(va_arg(args, int64_t), buf)));
         break;
 
       case 'c':
@@ -162,8 +159,8 @@ void kvprintf(const char *fmt, va_list args) {
 }
 
 void kprintf(const char *fmt, ...) {
-  va_list _arguments;
-  va_start(_arguments, fmt);
-  kvprintf(fmt, _arguments);
-  va_end(_arguments);
+  va_list args;
+  va_start(args, fmt);
+  kvprintf(fmt, args);
+  va_end(args);
 }

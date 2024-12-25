@@ -24,7 +24,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// TODO: convert this to structs like old kernel
 static uint64_t GdtTemplate[7] = {
     0x0000000000000000, // 0x00 null
     0x00af9b000000ffff, // 0x08 64-bit kernel code

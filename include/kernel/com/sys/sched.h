@@ -19,13 +19,15 @@
 #pragma once
 
 #include <arch/context.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/thread.h>
 
 void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 
-// TODO: com_thread_tailq cannot be used because of circular dependencies
-void com_sys_sched_wait(void *waiting_on, void *cond);
-void com_sys_sched_notify(void *waiters);
+void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
+                        com_spinlock_t          *cond);
+void com_sys_sched_notify(struct com_thread_tailq *waiters);
 
 void com_sys_sched_init(void);

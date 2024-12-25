@@ -29,6 +29,3 @@ bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
                                    void                 *phys,
                                    arch_mmu_flags_t      flags);
 void                  arch_mmu_switch(arch_mmu_pagetable_t *pt);
-bool                  arch_mmu_ispresent(arch_mmu_pagetable_t *pt, void *virt);
-bool                  arch_mmu_iswritable(arch_mmu_pagetable_t *pt, void *virt);
-bool                  arch_mmu_isdirty(arch_mmu_pagetable_t *pt, void *virt);

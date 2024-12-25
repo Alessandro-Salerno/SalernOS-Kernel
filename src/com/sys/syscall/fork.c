@@ -62,8 +62,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     goto end;
   }
 
-  // TODO: same as execve, make this better than i < 16
-  for (size_t i = 0; i < 16; i++) {
+  for (size_t i = 0; i < proc->next_fd; i++) {
     if (NULL != proc->fd[i].file) {
       new_proc->fd[i].flags = proc->fd[i].flags;
       COM_FS_FILE_HOLD(proc->fd[i].file);

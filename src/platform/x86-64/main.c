@@ -207,14 +207,6 @@ void kernel_entry(void) {
                (void *)ARCH_HHDM_TO_PHYS(ustack),
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-
-  // void *ustack2 = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  // arch_mmu_map(user_pt,
-  //              ustack2,
-  //              (void *)ARCH_HHDM_TO_PHYS(ustack2),
-  //              ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-  //                  ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-
   com_elf_data_t elf_data = {0};
   ASSERT(0 ==
          com_sys_elf64_load(
@@ -236,21 +228,8 @@ void kernel_entry(void) {
   com_thread_t *thread =
       com_sys_thread_new(proc, ustack, ARCH_PAGE_SIZE, (void *)elf_data.entry);
 
-  // com_proc_t   *proc2   = com_sys_proc_new(user_pt, 0);
-  // com_thread_t *thread2 = com_sys_thread_new(
-  //     proc2, ustack2, ARCH_PAGE_SIZE, (void *)elf_data.entry);
-  // // TODO: all of this shoud be done by fork
-  // thread2->ctx.rsp -= sizeof(thread2->ctx);
-  // kmemcpy((void *)thread2->ctx.rsp, &thread2->ctx, sizeof(thread2->ctx));
-  // ((arch_context_t *)thread2->ctx.rsp)->rsp =
-  //     (uint64_t)ustack2 + ARCH_PAGE_SIZE;
-  // thread2->ctx.rsp -= 8;
-  // *(uint64_t *)thread2->ctx.rsp = (uint64_t)x86_64_ctx_test_trampoline;
-
   hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
   hdr_arch_cpu_get()->thread   = thread;
-
-  // TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread2, threads);
 
   com_sys_sched_init();
   x86_64_lapic_bsp_init();

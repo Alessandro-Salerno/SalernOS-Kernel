@@ -144,6 +144,21 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
   return new | (entry & ~ADDRMASK);
 }
 
+void destroy_recursive(uint64_t entry, size_t level) {
+  uint64_t *directory = (void *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
+  void     *phys      = (void *)(entry & ADDRMASK);
+
+  if (0 != -level) {
+    for (size_t i = 0; i < 512; i++) {
+      if (ARCH_MMU_FLAGS_PRESENT & directory[i]) {
+        destroy_recursive(directory[i], level - 1);
+      }
+    }
+  }
+
+  com_mm_pmm_free(phys);
+}
+
 arch_mmu_pagetable_t *arch_mmu_new_table(void) {
   arch_mmu_pagetable_t *table = com_mm_pmm_alloc();
 
@@ -156,7 +171,15 @@ arch_mmu_pagetable_t *arch_mmu_new_table(void) {
 }
 
 void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
-  // TODO: implement this
+  arch_mmu_pagetable_t *pt_virt = (void *)ARCH_PHYS_TO_HHDM(pt);
+
+  for (size_t i = 0; i < 256; i++) {
+    if (ARCH_MMU_FLAGS_PRESENT & pt_virt[i]) {
+      destroy_recursive(pt_virt[i], 3);
+    }
+  }
+
+  com_mm_pmm_free(pt);
 }
 
 arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
@@ -191,19 +214,6 @@ void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
   asm volatile("mov %%rax, %%cr3" : : "a"(pt));
 }
 
-bool arch_mmu_ispresent(arch_mmu_pagetable_t *pt, void *virt) {
-  // TODO: implement this
-}
-
-bool arch_mmu_iswritable(arch_mmu_pagetable_t *pt, void *virt) {
-  // TODO: implement this
-}
-
-bool arch_mmu_isdirty(arch_mmu_pagetable_t *pt, void *virt) {
-  // TODO: implement this
-}
-
-// TODO: remove userspace mappings
 void arch_mmu_init(void) {
   // Allocate the kernel (root) page table
   LOG("initializing mmu");
