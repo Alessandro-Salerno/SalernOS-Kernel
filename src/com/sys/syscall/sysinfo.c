@@ -16,35 +16,39 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+// TODO: Replace this syscall with procfs
+
+#include <arch/cpu.h>
+#include <kernel/com/fs/file.h>
+#include <kernel/com/mm/pmm.h>
+#include <kernel/com/sys/syscall.h>
 #include <lib/str.h>
+#include <stdint.h>
 
-int kstrcmp(const char *s1, const char *s2) {
-  // NOTE: this or is correct because if just one of the two is zero (thus one
-  // string is shorter), then the if will pass and the function will return -1
-  while (0 != *s1 || 0 != *s2) {
-    if (*s1 != *s2) {
-      return -1;
-    }
+struct sysinfo {
+  char      cpu[64];
+  char      gpu[64];
+  char      kernel[64];
+  uintmax_t used_mem;
+  uintmax_t sys_mem;
+};
 
-    s1++;
-    s2++;
-  }
+com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
+                                          uintmax_t       bufptr,
+                                          uintmax_t       unused1,
+                                          uintmax_t       unused2,
+                                          uintmax_t       unused3) {
+  (void)unused1;
+  (void)unused2;
+  (void)unused3;
+  (void)ctx;
 
-  return 0;
-}
+  struct sysinfo *sysinfo = (void *)bufptr;
+  // kstrcpy(sysinfo->cpu, "Not implemented");
+  // kstrcpy(sysinfo->gpu, "Not implemented");
+  kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.1");
 
-size_t kstrlen(const char *s) {
-  size_t n = 0;
-  for (; 0 != *s; s++) {
-    n++;
-  }
-  return n;
-}
+  com_mm_pmm_get_info(&sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);
 
-void kstrcpy(char *dst, const char *src) {
-  size_t n = 0;
-  for (; 0 != src[n]; n++) {
-    dst[n] = src[n];
-  }
-  dst[n] = 0;
+  return (com_syscall_ret_t){0, 0};
 }

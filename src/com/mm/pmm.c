@@ -119,6 +119,32 @@ void com_mm_pmm_free(void *page) {
   hdr_com_spinlock_release(&Lock);
 }
 
+void com_mm_pmm_get_info(uintmax_t *used_mem,
+                         uintmax_t *free_mem,
+                         uintmax_t *reserved_mem,
+                         uintmax_t *sys_mem,
+                         uintmax_t *mem_size) {
+  if (NULL != used_mem) {
+    *used_mem = UsedMem;
+  }
+
+  if (NULL != free_mem) {
+    *free_mem = FreeMem;
+  }
+
+  if (NULL != reserved_mem) {
+    *reserved_mem = ReservedMem;
+  }
+
+  if (NULL != sys_mem) {
+    *sys_mem = UsableMem;
+  }
+
+  if (NULL != mem_size) {
+    *mem_size = MemSize;
+  }
+}
+
 void com_mm_pmm_init() {
   arch_memmap_t *memmap       = arch_info_get_memmap();
   uintptr_t      highest_addr = 0;

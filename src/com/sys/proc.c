@@ -73,7 +73,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
     return NULL;
   }
 
-  if (fd < 0 || fd > 15) {
+  if (fd > 15) {
     return NULL;
   }
 

@@ -57,3 +57,8 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
                                        uintmax_t       unused2,
                                        uintmax_t       unused3,
                                        uintmax_t       unused4);
+com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
+                                          uintmax_t       bufptr,
+                                          uintmax_t       unused1,
+                                          uintmax_t       unused2,
+                                          uintmax_t       unused3);
