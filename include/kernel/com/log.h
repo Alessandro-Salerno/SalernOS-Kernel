@@ -19,33 +19,9 @@
 #pragma once
 
 #include <kernel/com/panic.h>
-#include <kernel/com/util.h>
 #include <lib/printf.h>
+#include <lib/util.h>
 #include <stddef.h>
-
-#define KLOG(...)                        \
-  com_log_puts("[  log  ] ");           \
-  com_log_puts(__FILE__ ":");           \
-  com_log_puts(__func__);               \
-  com_log_puts(":" KSTR(__LINE__) ": "); \
-  kprintf(__VA_ARGS__);                 \
-  com_log_putc('\n');
-
-#define KDEBUG(...)                      \
-  com_log_puts("[ debug ] ");           \
-  com_log_puts(__FILE__ ":");           \
-  com_log_puts(__func__);               \
-  com_log_puts(":" KSTR(__LINE__) ": "); \
-  kprintf(__VA_ARGS__);                 \
-  com_log_putc('\n');
-
-#define ASSERT(statement)                                        \
-  if (KUNKLIKELY(!(statement))) {                                  \
-    com_log_puts(__FILE__ ":");                                  \
-    com_log_puts(__func__);                                      \
-    com_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
-    com_panic(NULL, NULL);                                       \
-  }
 
 typedef void (*com_log_hook_t)(char);
 

@@ -18,10 +18,12 @@
 
 #pragma once
 
+#include <kernel/com/log.h>
+
 #define KSTR_HELPER(x) #x
 #define KSTR(x)        KSTR_HELPER(x)
 
-#define KLIKELY(x)   __builtin_expect(!!(x), 1)
+#define KLIKELY(x)    __builtin_expect(!!(x), 1)
 #define KUNKLIKELY(x) __builtin_expect(!!(x), 0)
 
 #define KMIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -30,3 +32,27 @@
 #define USER_TEXT __attribute__((section(".user_text")))
 #define USER_DATA __attribute__((section(".user_data")))
 #define USED      __attribute__((used))
+
+#define KLOG(...)                        \
+  com_log_puts("[  log  ] ");            \
+  com_log_puts(__FILE__ ":");            \
+  com_log_puts(__func__);                \
+  com_log_puts(":" KSTR(__LINE__) ": "); \
+  kprintf(__VA_ARGS__);                  \
+  com_log_putc('\n');
+
+#define KDEBUG(...)                      \
+  com_log_puts("[ debug ] ");            \
+  com_log_puts(__FILE__ ":");            \
+  com_log_puts(__func__);                \
+  com_log_puts(":" KSTR(__LINE__) ": "); \
+  kprintf(__VA_ARGS__);                  \
+  com_log_putc('\n');
+
+#define ASSERT(statement)                                         \
+  if (KUNKLIKELY(!(statement))) {                                 \
+    com_log_puts(__FILE__ ":");                                   \
+    com_log_puts(__func__);                                       \
+    com_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
+    com_panic(NULL, NULL);                                        \
+  }

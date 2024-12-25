@@ -34,7 +34,6 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
-#include <kernel/com/util.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
@@ -45,6 +44,7 @@
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/util.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <vendor/limine.h>

@@ -28,9 +28,9 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <kernel/com/util.h>
 #include <lib/ctype.h>
 #include <lib/mem.h>
+#include <lib/util.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -51,7 +51,7 @@ struct tty {
 };
 
 static COM_FS_VFS_VNODE_t *TtyDev = NULL;
-static struct tty   Tty    = {0};
+static struct tty          Tty    = {0};
 
 // DEV OPS
 
