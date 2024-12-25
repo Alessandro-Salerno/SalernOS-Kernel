@@ -36,8 +36,8 @@ x86_64_ctx_switch:
 
   ret
 
-global arch_ctx_trampoline
-arch_ctx_trampoline:
+global arch_context_trampoline
+arch_context_trampoline:
 	; rdi is the pointer to the context struct
   cli
 	mov   rsp, rdi
@@ -74,9 +74,9 @@ arch_ctx_trampoline:
 global x86_64_ctx_test_trampoline
 x86_64_ctx_test_trampoline:
   mov rdi, rsp
-  jmp arch_ctx_trampoline
+  jmp arch_context_trampoline
 
-global arch_ctx_fork_trampoline
-arch_ctx_fork_trampoline:
+global arch_context_fork_trampoline
+arch_context_fork_trampoline:
   mov rdi, rsp
-  jmp arch_ctx_trampoline
+  jmp arch_context_trampoline

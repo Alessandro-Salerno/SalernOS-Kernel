@@ -23,15 +23,15 @@
 int com_fs_pipefs_read(void        *buf,
                        size_t       buflen,
                        size_t      *bytes_read,
-                       com_vnode_t *node,
+                       COM_FS_VFS_VNODE_t *node,
                        uintmax_t    off,
                        uintmax_t    flags);
 int com_fs_pipefs_write(size_t      *bytes_written,
-                        com_vnode_t *node,
+                        COM_FS_VFS_VNODE_t *node,
                         void        *buf,
                         size_t       buflen,
                         uintmax_t    off,
                         uintmax_t    flags);
-int com_fs_pipefs_close(com_vnode_t *vnode);
+int com_fs_pipefs_close(COM_FS_VFS_VNODE_t *vnode);
 
-void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);
+void com_fs_pipefs_new(COM_FS_VFS_VNODE_t **read, COM_FS_VFS_VNODE_t **write);

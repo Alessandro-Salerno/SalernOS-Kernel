@@ -38,7 +38,7 @@ com_panic(arch_context_t *ctx, const char *fmt, ...) {
   }
 
   if (NULL != ctx) {
-    arch_ctx_print(ctx);
+    arch_context_print(ctx);
   }
 
   com_sys_interrupt_set(false);

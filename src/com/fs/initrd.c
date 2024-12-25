@@ -49,10 +49,10 @@ static uintmax_t oct_atoi(const char *s, size_t len) {
   return val;
 }
 
-static void create_node(com_vnode_t      **file,
+static void create_node(COM_FS_VFS_VNODE_t      **file,
                         const char        *name,
                         size_t             namelen,
-                        com_vnode_t       *dir,
+                        COM_FS_VFS_VNODE_t       *dir,
                         struct tar_header *hdr) {
   if (GNUTAR_DIR == hdr->type) {
     ASSERT(0 == com_fs_vfs_mkdir(file, dir, name, namelen, 0));
@@ -63,13 +63,13 @@ static void create_node(com_vnode_t      **file,
   void  *contents  = (uint8_t *)hdr + 512;
   size_t file_size = oct_atoi(hdr->size, 11);
   size_t written   = 0;
-  COM_VNODE_HOLD((*file));
+  COM_FS_VFS_VNODE_HOLD((*file));
   ASSERT(0 == com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
   ASSERT(file_size == written);
-  COM_VNODE_RELEASE((*file));
+  COM_FS_VFS_VNODE_RELEASE((*file));
 }
 
-void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
+void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
   LOG("extracting initrd");
 
   for (uintmax_t i = 0; i < tarsize;) {
@@ -109,7 +109,7 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
     }
 
     const char  *path_end = kmemchr(file_path, '/', file_path_len);
-    com_vnode_t *dir      = root;
+    COM_FS_VFS_VNODE_t *dir      = root;
     // offset into file_path where the ACTUAL name starts
     size_t file_name_off = 0;
     // length of the ACTUAL name of the file (not the path)
@@ -130,11 +130,11 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
       file_name_len--;
     }
 
-    com_vnode_t *file = NULL;
+    COM_FS_VFS_VNODE_t *file = NULL;
     create_node(&file, file_path + file_name_off, file_name_len, dir, hdr);
 
     if (dir != root) {
-      COM_VNODE_RELEASE(dir);
+      COM_FS_VFS_VNODE_RELEASE(dir);
     }
 
   skip:

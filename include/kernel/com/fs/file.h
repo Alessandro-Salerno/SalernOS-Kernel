@@ -30,7 +30,7 @@
     if (NULL != file->vnode) {                                                \
       uintmax_t n = __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
       if (0 == n) {                                                           \
-        COM_VNODE_RELEASE(file->vnode);                                       \
+        COM_FS_VFS_VNODE_RELEASE(file->vnode);                                       \
         com_mm_slab_free(file, sizeof(com_file_t));                           \
         file = NULL;                                                          \
       }                                                                       \
@@ -50,7 +50,7 @@ typedef struct com_file {
   uintmax_t num_ref; // this is used because multiple file descripts may point
                      // to the same file (e.g., if stdout and stderr and the
                      // same) or if the process was forked
-  com_vnode_t *vnode;
+  COM_FS_VFS_VNODE_t *vnode;
 } com_file_t;
 
 typedef struct com_filedesc {

@@ -38,7 +38,7 @@
     *new_context                = (orig_ctx); /* copy the old context */ \
   }                                                                      \
   new_thread->ctx.rsp -= 8;                                              \
-  *(uint64_t *)new_thread->ctx.rsp = (uint64_t)arch_ctx_fork_trampoline; \
+  *(uint64_t *)new_thread->ctx.rsp = (uint64_t)arch_context_fork_trampoline; \
   new_thread->ctx.rax              = 0;                                  \
   new_thread->ctx.rdx              = 0;
 
@@ -95,8 +95,8 @@ typedef struct {
   uint64_t ss;
 } __attribute__((packed)) arch_context_t;
 
-void arch_ctx_print(arch_context_t *ctx);
+void arch_context_print(arch_context_t *ctx);
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
 void x86_64_ctx_test_trampoline(void);
-void arch_ctx_trampoline(arch_context_t *ctx);
-void arch_ctx_fork_trampoline(void);
+void arch_context_trampoline(arch_context_t *ctx);
+void arch_context_fork_trampoline(void);

@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <arch/context.h>
 #include <lib/printf.h>
 
-void arch_ctx_print(arch_context_t *ctx) {
+void arch_context_print(arch_context_t *ctx) {
   kprintf("\ncr2: %x  gs: %x\nrax: %x  fs: %x\nrbx: %x  es: "
           "%x\nrcx: %x  ds: %x\nrdx: %x  cs: %x\n r8: %x  ss: "
           "%x\n r9: %x r10: %x\nr11: %x r12: %x\nr13: %x "

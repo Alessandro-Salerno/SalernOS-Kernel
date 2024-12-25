@@ -184,7 +184,7 @@ void kernel_entry(void) {
   arch_file_t *initrd = arch_info_get_initrd();
   com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
-  com_vnode_t *myfile_txt = NULL;
+  COM_FS_VFS_VNODE_t *myfile_txt = NULL;
   com_fs_vfs_lookup(&myfile_txt, "/myfile.txt", 11, rootfs->root, rootfs->root);
   DEBUG("found /myfile.txt at: %x", myfile_txt);
   ASSERT(NULL != myfile_txt);
@@ -197,7 +197,7 @@ void kernel_entry(void) {
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
 
-  com_vnode_t *tty_dev = NULL;
+  COM_FS_VFS_VNODE_t *tty_dev = NULL;
   com_io_tty_init(&tty_dev);
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
@@ -237,7 +237,7 @@ void kernel_entry(void) {
   com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
 
   arch_mmu_switch(proc->page_table);
-  arch_ctx_trampoline(&thread->ctx);
+  arch_context_trampoline(&thread->ctx);
 
   DEBUG("intstatus: %u", BaseCpu.intstatus);
   for (;;) {

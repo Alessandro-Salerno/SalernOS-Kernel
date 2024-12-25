@@ -31,8 +31,8 @@ static uintmax_t      NextPid = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
-                             com_vnode_t          *root,
-                             com_vnode_t          *cwd) {
+                             COM_FS_VFS_VNODE_t          *root,
+                             COM_FS_VFS_VNODE_t          *cwd) {
   com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(proc, ARCH_PAGE_SIZE, 0);
   proc->page_table   = page_table;
@@ -40,8 +40,8 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
   proc->exit_status  = 0;
   proc->num_children = 0;
   proc->parent_pid   = parent_pid;
-  COM_VNODE_HOLD(root);
-  COM_VNODE_HOLD(cwd);
+  COM_FS_VFS_VNODE_HOLD(root);
+  COM_FS_VFS_VNODE_HOLD(cwd);
   proc->root = root;
   proc->cwd  = cwd;
 

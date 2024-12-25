@@ -20,4 +20,4 @@
 
 #include <kernel/com/fs/vfs.h>
 
-void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize);
+void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize);

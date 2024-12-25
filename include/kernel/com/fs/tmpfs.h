@@ -22,33 +22,33 @@
 
 // VFS OPS
 
-int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode);
-int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint);
+int com_fs_tmpfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode);
+int com_fs_tmpfs_mount(com_vfs_t **out, COM_FS_VFS_VNODE_t *mountpoint);
 
 // VNODE OPS
 
-int com_fs_tmpfs_create(com_vnode_t **out,
-                        com_vnode_t  *dir,
+int com_fs_tmpfs_create(COM_FS_VFS_VNODE_t **out,
+                        COM_FS_VFS_VNODE_t  *dir,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr);
-int com_fs_tmpfs_mkdir(com_vnode_t **out,
-                       com_vnode_t  *parent,
+int com_fs_tmpfs_mkdir(COM_FS_VFS_VNODE_t **out,
+                       COM_FS_VFS_VNODE_t  *parent,
                        const char   *name,
                        size_t        namelen,
                        uintmax_t     attr);
-int com_fs_tmpfs_lookup(com_vnode_t **out,
-                        com_vnode_t  *dir,
+int com_fs_tmpfs_lookup(COM_FS_VFS_VNODE_t **out,
+                        COM_FS_VFS_VNODE_t  *dir,
                         const char   *name,
                         size_t        len);
 int com_fs_tmpfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
-                      com_vnode_t *node,
+                      COM_FS_VFS_VNODE_t *node,
                       uintmax_t    off,
                       uintmax_t    flags);
 int com_fs_tmpfs_write(size_t      *bytes_written,
-                       com_vnode_t *node,
+                       COM_FS_VFS_VNODE_t *node,
                        void        *buf,
                        size_t       buflen,
                        uintmax_t    off,
@@ -56,5 +56,5 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 
 // OTHER FUNCTIONS
 
-void  com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data);
-void *com_fs_tmpfs_get_other(com_vnode_t *vnode);
+void  com_fs_tmpfs_set_other(COM_FS_VFS_VNODE_t *vnode, void *data);
+void *com_fs_tmpfs_get_other(COM_FS_VFS_VNODE_t *vnode);

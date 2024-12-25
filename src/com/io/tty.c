@@ -50,7 +50,7 @@ struct tty {
   size_t                  write;
 };
 
-static com_vnode_t *TtyDev = NULL;
+static COM_FS_VFS_VNODE_t *TtyDev = NULL;
 static struct tty   Tty    = {0};
 
 // DEV OPS
@@ -266,7 +266,7 @@ end:
   hdr_com_spinlock_release(&tty->lock);
 }
 
-int com_io_tty_init(com_vnode_t **out) {
+int com_io_tty_init(COM_FS_VFS_VNODE_t **out) {
   LOG("initializing kernel tty");
   TAILQ_INIT(&Tty.waitlist);
   int ret = com_fs_devfs_register(&TtyDev, NULL, "tty0", 4, &TtyDevOps, &Tty);
