@@ -17,7 +17,7 @@
 *************************************************************************/
 
 #include <arch/context.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/idt.h>

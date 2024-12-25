@@ -17,7 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <lib/mem.h>
 #include <printf.h>

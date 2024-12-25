@@ -19,7 +19,7 @@
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/slab.h>
 
 struct devfs_dev {

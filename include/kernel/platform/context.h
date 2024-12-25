@@ -18,32 +18,6 @@
 
 #pragma once
 
-#include <arch/cpu.h>
-#include <kernel/com/io/log.h>
-#include <stdbool.h>
-
-typedef int com_spinlock_t;
-
-#define COM_SPINLOCK_NEW() 0
-
-static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
-  hdr_arch_cpu_interrupt_disable();
-  hdr_arch_cpu_get()->lock_depth++;
-  while (!__sync_bool_compare_and_swap(lock, 0, 1)) {
-    hdr_arch_cpu_pause();
-  }
-}
-
-static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
-  return __sync_bool_compare_and_swap(lock, 0, 1);
-}
-
-static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
-  KASSERT(0 < hdr_arch_cpu_get()->lock_depth);
-  *lock = 0;
-  hdr_arch_cpu_get()->lock_depth--;
-
-  if (0 == hdr_arch_cpu_get()->lock_depth && hdr_arch_cpu_get()->intstatus) {
-    hdr_arch_cpu_interrupt_enable();
-  }
-}
+void arch_context_print(arch_context_t *ctx);
+void arch_context_trampoline(arch_context_t *ctx);
+void arch_context_fork_trampoline(void);

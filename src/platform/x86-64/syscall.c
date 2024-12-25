@@ -16,7 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
 

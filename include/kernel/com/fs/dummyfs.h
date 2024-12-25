@@ -24,7 +24,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 
 // VFS OPS
 

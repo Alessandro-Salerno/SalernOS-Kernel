@@ -19,7 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
@@ -46,7 +46,7 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {
-  ASSERT(!thread->runnable);
+  KASSERT(!thread->runnable);
   com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack));
   com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
 }

@@ -17,7 +17,7 @@
 *************************************************************************/
 
 #include <arch/info.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <lib/mem.h>
@@ -50,7 +50,7 @@ static void init(slab_t *s, size_t entry_size) {
 
 void *com_mm_slab_alloc(size_t size) {
   size_t i = (size + 15) / 16;
-  ASSERT(i < NUM_SLABS);
+  KASSERT(i < NUM_SLABS);
   slab_t *s = &Slabs[i];
 
   hdr_com_spinlock_acquire(&Lock);
@@ -71,7 +71,7 @@ void com_mm_slab_free(void *ptr, size_t size) {
   }
 
   size_t i = (size + 15) / 16;
-  ASSERT(i < NUM_SLABS);
+  KASSERT(i < NUM_SLABS);
   slab_t *s = &Slabs[i];
 
   hdr_com_spinlock_acquire(&Lock);

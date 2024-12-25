@@ -19,6 +19,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <kernel/platform/context.h>
 
 #define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
 #define ARCH_CONTEXT_ISUSER(x)    (0x23 == (x)->cs)
@@ -95,8 +96,5 @@ typedef struct {
   uint64_t ss;
 } __attribute__((packed)) arch_context_t;
 
-void arch_context_print(arch_context_t *ctx);
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
 void x86_64_ctx_test_trampoline(void);
-void arch_context_trampoline(arch_context_t *ctx);
-void arch_context_fork_trampoline(void);

@@ -24,7 +24,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
 #include <kernel/com/io/tty.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>

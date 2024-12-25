@@ -23,8 +23,8 @@
 #include <lib/util.h>
 #include <stddef.h>
 
-typedef void (*com_log_hook_t)(char);
+typedef void (*com_io_log_hook_t)(char);
 
-void com_log_set_hook(com_log_hook_t hook);
-void com_log_putc(char c);
-void com_log_puts(const char *s);
+void com_io_log_set_hook(com_io_log_hook_t hook);
+void com_io_log_putc(char c);
+void com_io_log_puts(const char *s);

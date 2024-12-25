@@ -19,7 +19,7 @@
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/platform/mmu.h>
@@ -143,7 +143,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
     goto cleanup;
   }
 
-  ASSERT(sizeof(struct elf_header) == bytes_read);
+  KASSERT(sizeof(struct elf_header) == bytes_read);
 
   out->phdr      = 0;
   out->phent_sz  = sizeof(struct elf_phdr);

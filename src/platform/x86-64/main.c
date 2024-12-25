@@ -26,7 +26,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
 #include <kernel/com/io/tty.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/elf.h>
@@ -152,9 +152,9 @@ void kernel_entry(void) {
   com_io_fbterm_init(fb);
 
 #ifndef X86_64_NO_E9_LOG
-  com_log_set_hook(x86_64_e9_putc);
+  com_io_log_set_hook(x86_64_e9_putc);
 #else
-  com_log_set_hook(com_io_fbterm_putc);
+  com_io_log_set_hook(com_io_fbterm_putc);
 #endif
 
   x86_64_gdt_init();
@@ -187,7 +187,7 @@ void kernel_entry(void) {
   COM_FS_VFS_VNODE_t *myfile_txt = NULL;
   com_fs_vfs_lookup(&myfile_txt, "/myfile.txt", 11, rootfs->root, rootfs->root);
   KDEBUG("found /myfile.txt at: %x", myfile_txt);
-  ASSERT(NULL != myfile_txt);
+  KASSERT(NULL != myfile_txt);
 
   char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(buf, ARCH_PAGE_SIZE, 0);
@@ -208,7 +208,7 @@ void kernel_entry(void) {
                ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
   com_elf_data_t elf_data = {0};
-  ASSERT(0 ==
+  KASSERT(0 ==
          com_sys_elf64_load(
              &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
   KDEBUG("elf entry at %x", elf_data.entry);

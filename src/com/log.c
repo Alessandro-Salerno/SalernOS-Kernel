@@ -16,15 +16,15 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 
 static void dummy_hook(char c) {
   (void)c;
 }
 
-static volatile com_log_hook_t Hook = dummy_hook;
+static volatile com_io_log_hook_t Hook = dummy_hook;
 
-void com_log_set_hook(com_log_hook_t hook) {
+void com_io_log_set_hook(com_io_log_hook_t hook) {
   if (NULL == hook) {
     Hook = dummy_hook;
     return;
@@ -33,12 +33,12 @@ void com_log_set_hook(com_log_hook_t hook) {
   Hook = hook;
 }
 
-void com_log_putc(char c) {
+void com_io_log_putc(char c) {
   Hook(c);
 }
 
-void com_log_puts(const char *s) {
+void com_io_log_puts(const char *s) {
   for (; 0 != *s; s++) {
-    com_log_putc(*s);
+    com_io_log_putc(*s);
   }
 }

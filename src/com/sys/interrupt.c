@@ -19,7 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <com/panic.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
 #include <stdbool.h>

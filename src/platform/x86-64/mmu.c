@@ -19,7 +19,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
@@ -218,14 +218,14 @@ void arch_mmu_init(void) {
   // Allocate the kernel (root) page table
   KLOG("initializing mmu");
   RootTable = com_mm_pmm_alloc();
-  ASSERT(NULL != RootTable);
+  KASSERT(NULL != RootTable);
   RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
 
   // Map the higher half into the new page table
   KDEBUG("mapping higher half to kernel page table");
   for (uintmax_t i = 256; i < 512; i++) {
     uint64_t *entry = com_mm_pmm_alloc();
-    ASSERT(NULL != entry);
+    KASSERT(NULL != entry);
     kmemset((void *)ARCH_PHYS_TO_HHDM(entry), ARCH_PAGE_SIZE, 0);
     RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE |
                    ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_USER;
@@ -245,7 +245,7 @@ void arch_mmu_init(void) {
         uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                             ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                             ARCH_MMU_FLAGS_NOEXEC;
-        ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                         (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
                         pt_entry,
                         0));
@@ -267,7 +267,7 @@ void arch_mmu_init(void) {
         _TEXT_END);
   for (uintptr_t i = (uintptr_t)_TEXT_START; i < (uintptr_t)_TEXT_END;
        i += ARCH_PAGE_SIZE) {
-    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+    KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
                     0));
@@ -278,7 +278,7 @@ void arch_mmu_init(void) {
         _RODATA_END);
   for (uintptr_t i = (uintptr_t)_RODATA_START; i < (uintptr_t)_RODATA_END;
        i += ARCH_PAGE_SIZE) {
-    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+    KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
                         ARCH_MMU_FLAGS_NOEXEC,
@@ -290,7 +290,7 @@ void arch_mmu_init(void) {
         _DATA_END);
   for (uintptr_t i = (uintptr_t)_DATA_START; i < (uintptr_t)_DATA_END;
        i += ARCH_PAGE_SIZE) {
-    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+    KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
@@ -302,7 +302,7 @@ void arch_mmu_init(void) {
         _USER_TEXT_END);
   for (uintptr_t i = (uintptr_t)_USER_TEXT_START; i < (uintptr_t)_USER_TEXT_END;
        i += ARCH_PAGE_SIZE) {
-    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+    KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
                         ARCH_MMU_FLAGS_USER,
@@ -314,7 +314,7 @@ void arch_mmu_init(void) {
         _USER_DATA_END);
   for (uintptr_t i = (uintptr_t)_USER_DATA_START; i < (uintptr_t)_USER_DATA_END;
        i += ARCH_PAGE_SIZE) {
-    ASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+    KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)i,
                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |

@@ -17,7 +17,7 @@
 *************************************************************************/
 
 #include <arch/info.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/spinlock.h>
@@ -63,7 +63,7 @@ static void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
 static void reserve_page(void *address, uint64_t *rsvmemcount) {
   uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
-  ASSERT(!bmp_get(&PageBitmap, idx));
+  KASSERT(!bmp_get(&PageBitmap, idx));
 
   bmp_set(&PageBitmap, idx, 1);
   FreeMem -= ARCH_PAGE_SIZE;
@@ -73,7 +73,7 @@ static void reserve_page(void *address, uint64_t *rsvmemcount) {
 static void unreserve_page(void *address, uint64_t *rsvmemcount) {
   uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
-  ASSERT(bmp_get(&PageBitmap, idx));
+  KASSERT(bmp_get(&PageBitmap, idx));
 
   bmp_set(&PageBitmap, idx, 0);
   FreeMem += ARCH_PAGE_SIZE;

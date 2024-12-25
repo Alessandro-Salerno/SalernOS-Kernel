@@ -21,7 +21,7 @@
 #include <kernel/com/fs/pagecache.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
 #include <lib/mem.h>
@@ -79,7 +79,7 @@ static int createat(struct tmpfs_dir_entry **outent,
                     size_t                   namelen,
                     uintmax_t                attr) {
   (void)attr;
-  ASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
+  KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
 
   struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
   tn_new->lock              = COM_SPINLOCK_NEW();
@@ -136,7 +136,7 @@ int com_fs_tmpfs_mount(com_vfs_t **out, COM_FS_VFS_VNODE_t *mountpoint) {
   tmpfs->ops        = &TmpfsOps;
 
   if (NULL != mountpoint) {
-    ASSERT(COM_FS_VFS_VNODE_TYPE_DIR == mountpoint->type);
+    KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == mountpoint->type);
     mountpoint->mountpointof = tmpfs;
   }
 
@@ -203,7 +203,7 @@ int com_fs_tmpfs_lookup(COM_FS_VFS_VNODE_t **out,
                         COM_FS_VFS_VNODE_t  *dir,
                         const char   *name,
                         size_t        len) {
-  ASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
+  KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
   struct tmpfs_node *dir_data = dir->extra;
   int                ret      = 0;
 

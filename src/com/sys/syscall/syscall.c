@@ -18,7 +18,7 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
@@ -37,14 +37,14 @@ static com_syscall_ret_t test_syscall(arch_context_t *ctx,
   (void)arg2;
   (void)arg3;
   (void)arg4;
-  com_log_puts((const char *)arg1);
+  com_io_log_puts((const char *)arg1);
 
   return (com_syscall_ret_t){0, 0};
 }
 
 void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {
-  ASSERT(number < MAX_SYSCALLS);
-  ASSERT(NULL == Com_Sys_Syscall_Table[number]);
+  KASSERT(number < MAX_SYSCALLS);
+  KASSERT(NULL == Com_Sys_Syscall_Table[number]);
 
   KDEBUG(
       "registering handler at %x with number %u (%x)", handler, number, number);

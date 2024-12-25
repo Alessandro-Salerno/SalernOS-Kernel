@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 
 #define KSTR_HELPER(x) #x
 #define KSTR(x)        KSTR_HELPER(x)
@@ -34,25 +34,25 @@
 #define USED      __attribute__((used))
 
 #define KLOG(...)                        \
-  com_log_puts("[  log  ] ");            \
-  com_log_puts(__FILE__ ":");            \
-  com_log_puts(__func__);                \
-  com_log_puts(":" KSTR(__LINE__) ": "); \
+  com_io_log_puts("[  log  ] ");            \
+  com_io_log_puts(__FILE__ ":");            \
+  com_io_log_puts(__func__);                \
+  com_io_log_puts(":" KSTR(__LINE__) ": "); \
   kprintf(__VA_ARGS__);                  \
-  com_log_putc('\n');
+  com_io_log_putc('\n');
 
 #define KDEBUG(...)                      \
-  com_log_puts("[ debug ] ");            \
-  com_log_puts(__FILE__ ":");            \
-  com_log_puts(__func__);                \
-  com_log_puts(":" KSTR(__LINE__) ": "); \
+  com_io_log_puts("[ debug ] ");            \
+  com_io_log_puts(__FILE__ ":");            \
+  com_io_log_puts(__func__);                \
+  com_io_log_puts(":" KSTR(__LINE__) ": "); \
   kprintf(__VA_ARGS__);                  \
-  com_log_putc('\n');
+  com_io_log_putc('\n');
 
-#define ASSERT(statement)                                         \
+#define KASSERT(statement)                                         \
   if (KUNKLIKELY(!(statement))) {                                 \
-    com_log_puts(__FILE__ ":");                                   \
-    com_log_puts(__func__);                                       \
-    com_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
+    com_io_log_puts(__FILE__ ":");                                   \
+    com_io_log_puts(__func__);                                       \
+    com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
     com_panic(NULL, NULL);                                        \
   }

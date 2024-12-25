@@ -16,7 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <lib/printf.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -125,26 +125,26 @@ void kvprintf(const char *fmt, va_list args) {
     case '%': {
       switch (*(++ptr)) {
       case 'u':
-        com_log_puts((const char *)(uitoa(va_arg(args, uint64_t), buf)));
+        com_io_log_puts((const char *)(uitoa(va_arg(args, uint64_t), buf)));
         break;
 
       case 'p':
       case 'x':
-        com_log_puts("0x");
-        com_log_puts(xuitoa(va_arg(args, uint64_t), buf));
+        com_io_log_puts("0x");
+        com_io_log_puts(xuitoa(va_arg(args, uint64_t), buf));
         break;
 
       case 'd':
       case 'i':
-        com_log_puts((const char *)(itoa(va_arg(args, int64_t), buf)));
+        com_io_log_puts((const char *)(itoa(va_arg(args, int64_t), buf)));
         break;
 
       case 'c':
-        com_log_putc((char)(va_arg(args, signed)));
+        com_io_log_putc((char)(va_arg(args, signed)));
         break;
 
       case 's':
-        com_log_puts((const char *)(va_arg(args, char *)));
+        com_io_log_puts((const char *)(va_arg(args, char *)));
         break;
       }
 
@@ -152,7 +152,7 @@ void kvprintf(const char *fmt, va_list args) {
     }
 
     default:
-      com_log_putc(*ptr);
+      com_io_log_putc(*ptr);
       break;
     }
   }

@@ -18,7 +18,7 @@
 
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <lib/mem.h>
 #include <lib/str.h>
 #include <stdint.h>
@@ -55,17 +55,17 @@ static void create_node(COM_FS_VFS_VNODE_t      **file,
                         COM_FS_VFS_VNODE_t       *dir,
                         struct tar_header *hdr) {
   if (GNUTAR_DIR == hdr->type) {
-    ASSERT(0 == com_fs_vfs_mkdir(file, dir, name, namelen, 0));
+    KASSERT(0 == com_fs_vfs_mkdir(file, dir, name, namelen, 0));
     return;
   }
 
-  ASSERT(0 == com_fs_vfs_create(file, dir, name, namelen, 0));
+  KASSERT(0 == com_fs_vfs_create(file, dir, name, namelen, 0));
   void  *contents  = (uint8_t *)hdr + 512;
   size_t file_size = oct_atoi(hdr->size, 11);
   size_t written   = 0;
   COM_FS_VFS_VNODE_HOLD((*file));
-  ASSERT(0 == com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
-  ASSERT(file_size == written);
+  KASSERT(0 == com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
+  KASSERT(file_size == written);
   COM_FS_VFS_VNODE_RELEASE((*file));
 }
 
@@ -120,7 +120,7 @@ void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
     if (NULL != path_end) {
       size_t sl_len = path_end - file_path;
       com_fs_vfs_lookup(&dir, file_path, sl_len, root, root);
-      ASSERT(NULL != dir);
+      KASSERT(NULL != dir);
       file_name_off = sl_len + 1;
       file_name_len = file_path_len - sl_len - 1;
     }

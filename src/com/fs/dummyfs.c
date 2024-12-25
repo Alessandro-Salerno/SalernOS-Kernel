@@ -23,7 +23,7 @@
 #include <arch/info.h>
 #include <kernel/com/fs/dummyfs.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/log.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
@@ -130,7 +130,7 @@ int com_fs_dummyfs_create(COM_FS_VFS_VNODE_t **out,
     }
   }
 
-  ASSERT(NULL != first_free);
+  KASSERT(NULL != first_free);
 
   first_free->present = true;
   kmemcpy(first_free->name, (void *)name, namelen);
@@ -202,7 +202,7 @@ int com_fs_dummyfs_lookup(COM_FS_VFS_VNODE_t **out,
     }
   }
 
-  ASSERT(NULL != found);
+  KASSERT(NULL != found);
 
   *out = found->vnode;
   return 0;
