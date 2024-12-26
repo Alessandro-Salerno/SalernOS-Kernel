@@ -28,4 +28,4 @@ if [ ! -f "./scripts/kerntool/$1.sh" ]; then
   error "unknown command '$1'"
 fi
 
-sh ./scripts/kerntool/$1.sh ${@:2}
+bash ./scripts/kerntool/$1.sh ${@:2}
