@@ -93,7 +93,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
   ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
 
   arch_mmu_switch(new_pt);
-  arch_mmu_destroy_table(proc->page_table);
+  // arch_mmu_destroy_table(proc->page_table);
   proc->page_table = new_pt;
 
   for (size_t i = 0; i < proc->next_fd; i++) {
