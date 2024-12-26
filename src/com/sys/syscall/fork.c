@@ -71,6 +71,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     }
   }
 
+  new_proc->next_fd = proc->next_fd;
   ARCH_CONTEXT_FORK(new_thread, *ctx);
 
   hdr_com_spinlock_release(&proc->fd_lock);
