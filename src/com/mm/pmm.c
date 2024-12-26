@@ -34,11 +34,11 @@ typedef struct Bitmap {
 
 static bmp_t PageBitmap;
 
-static uintmax_t MemSize;
-static uintmax_t UsableMem;
-static uintmax_t FreeMem;
-static uintmax_t ReservedMem;
-static uintmax_t UsedMem;
+static uintmax_t MemSize     = 0;
+static uintmax_t UsableMem   = 0;
+static uintmax_t FreeMem     = 0;
+static uintmax_t ReservedMem = 0;
+static uintmax_t UsedMem     = 0;
 
 // TODO: turn this into a mutex
 static com_spinlock_t Lock = COM_SPINLOCK_NEW();
@@ -60,7 +60,7 @@ static void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
   bmp->buffer[byte_idx] |= bit_indexer * val;
 }
 
-static void reserve_page(void *address, uint64_t *rsvmemcount) {
+static void reserve_page(void *address, uintmax_t *rsvmemcount) {
   uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
   KASSERT(!bmp_get(&PageBitmap, idx));
@@ -70,7 +70,7 @@ static void reserve_page(void *address, uint64_t *rsvmemcount) {
   *rsvmemcount += ARCH_PAGE_SIZE;
 }
 
-static void unreserve_page(void *address, uint64_t *rsvmemcount) {
+static void unreserve_page(void *address, uintmax_t *rsvmemcount) {
   uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
   KASSERT(bmp_get(&PageBitmap, idx));
@@ -156,10 +156,10 @@ void com_mm_pmm_init() {
     uintptr_t seg_top = entry->base + entry->length;
 
     KDEBUG("segment: base=%x top=%x usable=%u length=%u",
-          entry->base,
-          seg_top,
-          ARCH_MEMMAP_IS_USABLE(entry),
-          entry->length);
+           entry->base,
+           seg_top,
+           ARCH_MEMMAP_IS_USABLE(entry),
+           entry->length);
 
     if (!ARCH_MEMMAP_IS_USABLE(entry)) {
       ReservedMem += entry->length;

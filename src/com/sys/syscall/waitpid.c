@@ -16,46 +16,53 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
 #include <arch/cpu.h>
-#include <arch/info.h>
-#include <kernel/com/io/log.h>
-#include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
+#include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/thread.h>
+#include <kernel/com/sys/syscall.h>
 #include <stdint.h>
-#include <vendor/tailq.h>
 
-com_thread_t *com_sys_thread_new(com_proc_t *proc,
-                                 void       *stack,
-                                 uintmax_t   stack_size,
-                                 void       *entry) {
-  arch_context_t ctx = {0};
-  ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
+// TODO: handle case in which pid < 0 and proc groups
+// TODO: do stuff with signals and flags
+com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
+                                          uintmax_t       pid,
+                                          uintmax_t       statusptr,
+                                          uintmax_t       flags,
+                                          uintmax_t       unused) {
+  (void)ctx;
+  (void)unused;
+  com_proc_t       *curr   = hdr_arch_cpu_get()->thread->proc;
+  com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
+  com_syscall_ret_t ret    = {0, 0};
+  int              *status = (int *)statusptr;
 
-  com_thread_t *thread = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  thread->proc         = proc;
-  thread->runnable     = true;
-  thread->ctx          = ctx;
-  thread->kernel_stack =
-      (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
+  com_sys_proc_acquire_glock();
 
-  return thread;
-}
+  if (0 == curr->num_children) {
+    ret.err = ECHILD;
+    goto cleanup;
+  }
 
-void com_sys_thread_destroy(com_thread_t *thread) {
-  KASSERT(!thread->runnable);
-  thread->runnable   = false;
-  thread->waiting_on = NULL;
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
-                  ARCH_PAGE_SIZE);
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
-}
+  if (NULL == towait) {
+    ret.err = ENOENT;
+    goto cleanup;
+  }
 
-void com_sys_thread_ready(com_thread_t *thread) {
-  arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
-  TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-  thread->runnable = true;
+  while (1) {
+    if (towait->exited) {
+      *status   = towait->exit_status;
+      ret.value = pid;
+      goto cleanup;
+    }
+
+    (void)flags;
+    // TODO: handle flags
+
+    com_sys_proc_wait(curr);
+  }
+
+cleanup:
+  com_sys_proc_release_glock();
+  return ret;
 }

@@ -62,3 +62,13 @@ com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
                                           uintmax_t       unused1,
                                           uintmax_t       unused2,
                                           uintmax_t       unused3);
+com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
+                                          uintmax_t       pid,
+                                          uintmax_t       statusptr,
+                                          uintmax_t       flags,
+                                          uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
+                                       uintmax_t       status,
+                                       uintmax_t       unused1,
+                                       uintmax_t       unused2,
+                                       uintmax_t       unused3);

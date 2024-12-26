@@ -41,13 +41,18 @@ typedef struct com_proc {
   uintmax_t      next_fd;
   com_filedesc_t fd[16];
 
-  struct com_thread_tailq waiters;
+  struct com_thread_tailq waiting_on;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
-                             COM_FS_VFS_VNODE_t          *root,
-                             COM_FS_VFS_VNODE_t          *cwd);
+                             COM_FS_VFS_VNODE_t   *root,
+                             COM_FS_VFS_VNODE_t   *cwd);
 void        com_sys_proc_destroy(com_proc_t *proc);
 uintmax_t   com_sys_proc_next_fd(com_proc_t *proc);
 com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd);
+com_proc_t *com_sys_proc_get_by_pid(uintmax_t pid);
+void        com_sys_proc_acquire_glock(void);
+void        com_sys_proc_release_glock(void);
+void        com_sys_proc_wait(com_proc_t *proc);
+void        com_sys_proc_exit(com_proc_t *proc, int status);

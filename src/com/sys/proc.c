@@ -24,15 +24,22 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/platform/mmu.h>
 #include <lib/mem.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <vendor/tailq.h>
 
-static com_spinlock_t PidLock = COM_SPINLOCK_NEW();
-static uintmax_t      NextPid = 1;
+#include "com/sys/sched.h"
+#include "com/sys/thread.h"
+
+static com_spinlock_t PidLock        = COM_SPINLOCK_NEW();
+static com_spinlock_t GlobalProcLock = COM_SPINLOCK_NEW();
+static com_proc_t    *Processes[256] = {0};
+static uintmax_t      NextPid        = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
-                             COM_FS_VFS_VNODE_t          *root,
-                             COM_FS_VFS_VNODE_t          *cwd) {
+                             COM_FS_VFS_VNODE_t   *root,
+                             COM_FS_VFS_VNODE_t   *cwd) {
   com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(proc, ARCH_PAGE_SIZE, 0);
   proc->page_table   = page_table;
@@ -44,10 +51,12 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
   COM_FS_VFS_VNODE_HOLD(cwd);
   proc->root = root;
   proc->cwd  = cwd;
+  TAILQ_INIT(&proc->waiting_on);
 
   // TODO: use atomic operations (faster)
   hdr_com_spinlock_acquire(&PidLock);
-  proc->pid = NextPid++;
+  proc->pid                = NextPid++;
+  Processes[proc->pid - 1] = proc;
   hdr_com_spinlock_release(&PidLock);
 
   proc->fd_lock = COM_SPINLOCK_NEW();
@@ -84,4 +93,48 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
   }
   hdr_com_spinlock_release(&proc->fd_lock);
   return file;
+}
+
+com_proc_t *com_sys_proc_get_by_pid(uintmax_t pid) {
+  if (pid > 256 || 0 == pid) {
+    return NULL;
+  }
+
+  return Processes[pid - 1];
+}
+
+void com_sys_proc_acquire_glock(void) {
+  hdr_com_spinlock_acquire(&GlobalProcLock);
+}
+
+void com_sys_proc_release_glock(void) {
+  hdr_com_spinlock_release(&GlobalProcLock);
+}
+
+void com_sys_proc_wait(com_proc_t *proc) {
+  com_sys_sched_wait(&proc->waiting_on, &GlobalProcLock);
+}
+
+void com_sys_proc_exit(com_proc_t *proc, int status) {
+  com_sys_proc_acquire_glock();
+
+  com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
+  proc->exited       = true;
+  proc->exit_status  = status;
+
+  if (NULL != parent) {
+    com_sys_sched_notify(&parent->waiting_on);
+  }
+
+  com_sys_proc_release_glock();
+
+  hdr_com_spinlock_acquire(&proc->fd_lock);
+  for (size_t i = 0; i < proc->next_fd; i++) {
+    if (NULL != proc->fd[i].file) {
+      COM_FS_FILE_RELEASE(proc->fd[i].file);
+    }
+  }
+  hdr_com_spinlock_release(&proc->fd_lock);
+
+  com_sys_proc_destroy(proc);
 }

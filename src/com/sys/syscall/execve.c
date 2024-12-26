@@ -75,7 +75,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
   }
 
   uintptr_t stack_end   = 0x60000000; // TODO: why?
-  uintptr_t stack_start = stack_end - (0x1000 * 64);
+  uintptr_t stack_start = stack_end - (ARCH_PAGE_SIZE * 64);
   void     *stack_phys  = NULL;
 
   for (uintptr_t curr = stack_start; curr < stack_end; curr += ARCH_PAGE_SIZE) {
