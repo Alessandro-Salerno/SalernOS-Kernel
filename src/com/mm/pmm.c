@@ -24,6 +24,7 @@
 #include <kernel/platform/info.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/util.h>
 #include <stdint.h>
 
 typedef struct Bitmap {
@@ -110,6 +111,7 @@ void *com_mm_pmm_alloc() {
   }
 
   hdr_com_spinlock_release(&Lock);
+  KASSERT(NULL != ret);
   return ret;
 }
 
@@ -202,6 +204,7 @@ void com_mm_pmm_init() {
   KLOG("freeing usable pages");
 
   // Unreserve free memory
+  uintmax_t max_len = 0;
   for (uintmax_t i = 0; i < memmap->entry_count; i++) {
     arch_memmap_entry_t *entry = memmap->entries[i];
     void                *base  = (void *)entry->base;
@@ -216,6 +219,11 @@ void com_mm_pmm_init() {
 
     if (ARCH_MEMMAP_IS_USABLE(entry)) {
       unreserve_pages(base, len / ARCH_PAGE_SIZE);
+
+      if (len > max_len) {
+        max_len          = len;
+        PageBitmap.index = (uintptr_t)base / ARCH_PAGE_SIZE;
+      }
     }
   }
 }

@@ -179,7 +179,7 @@ void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
     }
   }
 
-  com_mm_pmm_free(pt);
+  // com_mm_pmm_free(pt);
 }
 
 arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
@@ -238,17 +238,17 @@ void arch_mmu_init(void) {
 
     if (ARCH_MEMMAP_IS_MAPPABLE(entry)) {
       KDEBUG("mapping page table entry range %x -> %x",
-            entry->base,
-            entry->base + entry->length);
+             entry->base,
+             entry->base + entry->length);
 
       for (uintmax_t i = 0; i < entry->length; i += ARCH_PAGE_SIZE) {
         uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                             ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                             ARCH_MMU_FLAGS_NOEXEC;
         KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                        (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
-                        pt_entry,
-                        0));
+                         (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
+                         pt_entry,
+                         0));
       }
     }
   }
@@ -258,68 +258,68 @@ void arch_mmu_init(void) {
   arch_kaddr_t *kaddr    = arch_info_get_kaddr();
   uint64_t      vp_delta = kaddr->virtual_base - kaddr->physical_base;
   KDEBUG("kernel virt base: %x, kernel phys base: %x, delta: %x",
-        kaddr->virtual_base,
-        kaddr->physical_base,
-        vp_delta);
+         kaddr->virtual_base,
+         kaddr->physical_base,
+         vp_delta);
 
   KDEBUG("mapping kernel text section (virtual: %x -> %x)",
-        _TEXT_START,
-        _TEXT_END);
+         _TEXT_START,
+         _TEXT_END);
   for (uintptr_t i = (uintptr_t)_TEXT_START; i < (uintptr_t)_TEXT_END;
        i += ARCH_PAGE_SIZE) {
     KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                    (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
-                    0));
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
+                     0));
   }
 
   KDEBUG("mapping kernel rodata section (virtual: %x -> %x)",
-        _RODATA_START,
-        _RODATA_END);
+         _RODATA_START,
+         _RODATA_END);
   for (uintptr_t i = (uintptr_t)_RODATA_START; i < (uintptr_t)_RODATA_END;
        i += ARCH_PAGE_SIZE) {
     KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                    (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_NOEXEC,
-                    0));
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_NOEXEC,
+                     0));
   }
 
   KDEBUG("mapping kernel data/bss/limine_requests sections (virtual: %x -> %x)",
-        _DATA_START,
-        _DATA_END);
+         _DATA_START,
+         _DATA_END);
   for (uintptr_t i = (uintptr_t)_DATA_START; i < (uintptr_t)_DATA_END;
        i += ARCH_PAGE_SIZE) {
     KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                    (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
-                    0));
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
+                     0));
   }
 
   KDEBUG("mapping user text section (virtual: %x -> %x)",
-        _USER_TEXT_START,
-        _USER_TEXT_END);
+         _USER_TEXT_START,
+         _USER_TEXT_END);
   for (uintptr_t i = (uintptr_t)_USER_TEXT_START; i < (uintptr_t)_USER_TEXT_END;
        i += ARCH_PAGE_SIZE) {
     KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                    (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_USER,
-                    0));
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_USER,
+                     0));
   }
 
   KDEBUG("mapping user data section (virtual: %x -> %x)",
-        _USER_DATA_START,
-        _USER_DATA_END);
+         _USER_DATA_START,
+         _USER_DATA_END);
   for (uintptr_t i = (uintptr_t)_USER_DATA_START; i < (uintptr_t)_USER_DATA_END;
        i += ARCH_PAGE_SIZE) {
     KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                    (uint64_t *)i,
-                    ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |
-                        ARCH_MMU_FLAGS_USER,
-                    0));
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |
+                         ARCH_MMU_FLAGS_USER,
+                     0));
   }
 
   arch_mmu_switch((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable));
