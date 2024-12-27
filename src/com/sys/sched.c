@@ -104,7 +104,7 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
-  com_thread_t *curr = hdr_arch_cpu_get()->thread;
+  com_thread_t *curr = hdr_arch_cpu_get_thread();
   curr->runnable     = false;
   curr->waiting_on   = waiting_on;
 

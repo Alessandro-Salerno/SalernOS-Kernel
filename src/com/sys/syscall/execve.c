@@ -44,7 +44,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
   char *const *env  = (void *)envptr;
 
   com_syscall_ret_t     ret    = {0};
-  com_proc_t           *proc   = hdr_arch_cpu_get()->thread->proc;
+  com_proc_t           *proc   = hdr_arch_cpu_get_thread()->proc;
   arch_mmu_pagetable_t *new_pt = arch_mmu_new_table();
 
   com_elf_data_t prog_data = {0};

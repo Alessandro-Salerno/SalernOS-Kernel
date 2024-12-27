@@ -50,10 +50,16 @@ static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
   hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
 }
 
-static inline arch_cpu_t *hdr_arch_cpu_get() {
+static inline arch_cpu_t *hdr_arch_cpu_get(void) {
   arch_cpu_t *cpu;
   asm volatile("mov %%gs:8, %%rax" : "=a"(cpu) : : "memory");
   return cpu;
+}
+
+static inline struct com_thread *hdr_arch_cpu_get_thread(void) {
+  struct com_thread *thread;
+  asm volatile("mov %%gs:0, %%rax" : "=a"(thread) : : "memory");
+  return thread;
 }
 
 static inline long hdr_arch_cpu_get_id(void) {

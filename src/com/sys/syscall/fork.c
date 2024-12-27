@@ -46,7 +46,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
   (void)unused4;
 
   com_syscall_ret_t ret  = {-1, 0};
-  com_proc_t       *proc = hdr_arch_cpu_get()->thread->proc;
+  com_proc_t       *proc = hdr_arch_cpu_get_thread()->proc;
 
   hdr_com_spinlock_acquire(&proc->fd_lock);
   // TODO: acquire pages lock (not yet implemented)

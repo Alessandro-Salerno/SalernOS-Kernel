@@ -32,7 +32,7 @@ com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
                                           uintmax_t       unused) {
   (void)ctx;
   (void)unused;
-  com_proc_t       *curr   = hdr_arch_cpu_get()->thread->proc;
+  com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
   com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
   com_syscall_ret_t ret    = {0, 0};
   int              *status = (int *)statusptr;
