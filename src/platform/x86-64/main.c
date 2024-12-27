@@ -149,6 +149,18 @@ void kernel_entry(void) {
   hdr_arch_cpu_set(&BaseCpu);
   TAILQ_INIT(&BaseCpu.sched_queue);
 
+  hdr_x86_64_io_outb(0x20, 0x11);
+  hdr_x86_64_io_outb(0xa0, 0x11);
+  hdr_x86_64_io_outb(0x21, 0x20);
+  hdr_x86_64_io_outb(0xa1, 0x28);
+  hdr_x86_64_io_outb(0x21, 4);
+  hdr_x86_64_io_outb(0xa1, 2);
+  hdr_x86_64_io_outb(0x21, 0x01);
+  hdr_x86_64_io_outb(0xa1, 0x01);
+  hdr_x86_64_io_outb(0x21, 0b11111101);
+  hdr_x86_64_io_outb(0xA1, 0b11111111);
+  com_sys_interrupt_register(0x21, kbd, kbd_eoi);
+
   arch_framebuffer_t *fb = arch_info_get_fb();
   com_io_fbterm_init(fb);
 
@@ -163,18 +175,6 @@ void kernel_entry(void) {
   x86_64_idt_reload();
   com_mm_pmm_init();
   arch_mmu_init();
-
-  hdr_x86_64_io_outb(0x20, 0x11);
-  hdr_x86_64_io_outb(0xa0, 0x11);
-  hdr_x86_64_io_outb(0x21, 0x20);
-  hdr_x86_64_io_outb(0xa1, 0x28);
-  hdr_x86_64_io_outb(0x21, 4);
-  hdr_x86_64_io_outb(0xa1, 2);
-  hdr_x86_64_io_outb(0x21, 0x01);
-  hdr_x86_64_io_outb(0xa1, 0x01);
-  hdr_x86_64_io_outb(0x21, 0b11111101);
-  hdr_x86_64_io_outb(0xA1, 0b11111111);
-  com_sys_interrupt_register(0x21, kbd, kbd_eoi);
 
   com_sys_syscall_init();
   x86_64_idt_set_user_invocable(0x80);
