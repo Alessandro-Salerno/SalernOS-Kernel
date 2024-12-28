@@ -39,35 +39,35 @@ typedef struct com_dev_ops {
 
 // VNODE OPS
 
-int com_fs_devfs_close(COM_FS_VFS_VNODE_t *vnode);
-int com_fs_devfs_create(COM_FS_VFS_VNODE_t **out,
-                        COM_FS_VFS_VNODE_t  *dir,
+int com_fs_devfs_close(com_vnode_t *vnode);
+int com_fs_devfs_create(com_vnode_t **out,
+                        com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr);
-int com_fs_devfs_mkdir(COM_FS_VFS_VNODE_t **out,
-                       COM_FS_VFS_VNODE_t  *parent,
+int com_fs_devfs_mkdir(com_vnode_t **out,
+                       com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
                        uintmax_t     attr);
 int com_fs_devfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
-                      COM_FS_VFS_VNODE_t *node,
+                      com_vnode_t *node,
                       uintmax_t    off,
                       uintmax_t    flags);
 int com_fs_devfs_write(size_t      *bytes_written,
-                       COM_FS_VFS_VNODE_t *node,
+                       com_vnode_t *node,
                        void        *buf,
                        size_t       buflen,
                        uintmax_t    off,
                        uintmax_t    flags);
-int com_fs_devfs_ioctl(COM_FS_VFS_VNODE_t *node, uintmax_t op, void *buf);
+int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 
 // OTHER FUNCTIONS
 
-int com_fs_devfs_register(COM_FS_VFS_VNODE_t  **out,
-                          COM_FS_VFS_VNODE_t   *dir,
+int com_fs_devfs_register(com_vnode_t  **out,
+                          com_vnode_t   *dir,
                           const char    *name,
                           size_t         namelen,
                           com_dev_ops_t *devops,

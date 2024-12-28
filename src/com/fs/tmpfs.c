@@ -39,7 +39,7 @@ struct tmpfs_dir_entry {
 TAILQ_HEAD(tmpfs_dir_entries, tmpfs_dir_entry);
 
 struct tmpfs_node {
-  COM_FS_VFS_VNODE_t *vnode;
+  com_vnode_t *vnode;
   size_t       num_links;
 
   // TODO: turn this into a mutex
@@ -65,7 +65,7 @@ struct tmpfs_node {
 };
 
 static com_vfs_ops_t   TmpfsOps     = {.mount = com_fs_tmpfs_mount};
-static COM_FS_VFS_VNODE_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
+static com_vnode_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
                                        .mkdir  = com_fs_tmpfs_mkdir,
                                        .lookup = com_fs_tmpfs_lookup,
                                        .read   = com_fs_tmpfs_read,
@@ -73,13 +73,13 @@ static COM_FS_VFS_VNODE_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
 
 // SUPPORT FUNCTIONS
 static int createat(struct tmpfs_dir_entry **outent,
-                    COM_FS_VFS_VNODE_t            **out,
-                    COM_FS_VFS_VNODE_t             *dir,
+                    com_vnode_t            **out,
+                    com_vnode_t             *dir,
                     const char              *name,
                     size_t                   namelen,
                     uintmax_t                attr) {
   (void)attr;
-  KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
+  KASSERT(com_vnode_tYPE_DIR == dir->type);
 
   struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
   tn_new->lock              = COM_SPINLOCK_NEW();
@@ -99,7 +99,7 @@ static int createat(struct tmpfs_dir_entry **outent,
 
 // VFS OPS
 
-int com_fs_tmpfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode) {
+int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode) {
   struct tmpfs_node *tnode = inode;
 
   if (NULL != tnode->vnode) {
@@ -108,7 +108,7 @@ int com_fs_tmpfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode) {
     return 0;
   }
 
-  COM_FS_VFS_VNODE_t *vnode  = com_mm_slab_alloc(sizeof(COM_FS_VFS_VNODE_t));
+  com_vnode_t *vnode  = com_mm_slab_alloc(sizeof(com_vnode_t));
   vnode->mountpointof = NULL;
   vnode->num_ref      = 1;
   vnode->vfs          = vfs;
@@ -120,23 +120,23 @@ int com_fs_tmpfs_vget(COM_FS_VFS_VNODE_t **out, com_vfs_t *vfs, void *inode) {
   return 0;
 }
 
-int com_fs_tmpfs_mount(com_vfs_t **out, COM_FS_VFS_VNODE_t *mountpoint) {
+int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
   com_vfs_t         *tmpfs   = com_mm_slab_alloc(sizeof(com_vfs_t));
   struct tmpfs_node *tn_root = com_mm_slab_alloc(sizeof(struct tmpfs_node));
-  COM_FS_VFS_VNODE_t       *vn_root = NULL;
+  com_vnode_t       *vn_root = NULL;
 
   tn_root->lock = COM_SPINLOCK_NEW();
   TAILQ_INIT(&tn_root->dir.entries);
   com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
   vn_root->isroot = true;
-  vn_root->type   = COM_FS_VFS_VNODE_TYPE_DIR;
+  vn_root->type   = com_vnode_tYPE_DIR;
 
   tmpfs->root       = vn_root;
   tmpfs->mountpoint = mountpoint;
   tmpfs->ops        = &TmpfsOps;
 
   if (NULL != mountpoint) {
-    KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == mountpoint->type);
+    KASSERT(com_vnode_tYPE_DIR == mountpoint->type);
     mountpoint->mountpointof = tmpfs;
   }
 
@@ -146,8 +146,8 @@ int com_fs_tmpfs_mount(com_vfs_t **out, COM_FS_VFS_VNODE_t *mountpoint) {
 
 // NODE OPS
 
-int com_fs_tmpfs_create(COM_FS_VFS_VNODE_t **out,
-                        COM_FS_VFS_VNODE_t  *dir,
+int com_fs_tmpfs_create(com_vnode_t **out,
+                        com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr) {
@@ -162,7 +162,7 @@ int com_fs_tmpfs_create(COM_FS_VFS_VNODE_t **out,
     struct tmpfs_node *tn = (*out)->extra;
     tn->file.size         = 0;
     tn->file.data         = com_fs_pagecache_new();
-    (*out)->type          = COM_FS_VFS_VNODE_TYPE_FILE;
+    (*out)->type          = com_vnode_tYPE_FILE;
   }
 
   struct tmpfs_node *parent = dir->extra;
@@ -173,8 +173,8 @@ int com_fs_tmpfs_create(COM_FS_VFS_VNODE_t **out,
   return 0;
 }
 
-int com_fs_tmpfs_mkdir(COM_FS_VFS_VNODE_t **out,
-                       COM_FS_VFS_VNODE_t  *parent,
+int com_fs_tmpfs_mkdir(com_vnode_t **out,
+                       com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
                        uintmax_t     attr) {
@@ -190,7 +190,7 @@ int com_fs_tmpfs_mkdir(COM_FS_VFS_VNODE_t **out,
 
   tn->dir.parent = parent_data;
   TAILQ_INIT(&tn->dir.entries);
-  (*out)->type = COM_FS_VFS_VNODE_TYPE_DIR;
+  (*out)->type = com_vnode_tYPE_DIR;
 
   hdr_com_spinlock_acquire(&parent_data->lock);
   TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
@@ -199,11 +199,11 @@ int com_fs_tmpfs_mkdir(COM_FS_VFS_VNODE_t **out,
   return 0;
 }
 
-int com_fs_tmpfs_lookup(COM_FS_VFS_VNODE_t **out,
-                        COM_FS_VFS_VNODE_t  *dir,
+int com_fs_tmpfs_lookup(com_vnode_t **out,
+                        com_vnode_t  *dir,
                         const char   *name,
                         size_t        len) {
-  KASSERT(COM_FS_VFS_VNODE_TYPE_DIR == dir->type);
+  KASSERT(com_vnode_tYPE_DIR == dir->type);
   struct tmpfs_node *dir_data = dir->extra;
   int                ret      = 0;
 
@@ -241,11 +241,11 @@ cleanup:
 int com_fs_tmpfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
-                      COM_FS_VFS_VNODE_t *node,
+                      com_vnode_t *node,
                       uintmax_t    off,
                       uintmax_t    flags) {
   (void)flags;
-  if (COM_FS_VFS_VNODE_TYPE_DIR == node->type) {
+  if (com_vnode_tYPE_DIR == node->type) {
     return EISDIR;
   }
 
@@ -305,13 +305,13 @@ int com_fs_tmpfs_read(void        *buf,
 
 // TODO: lock only the write side?
 int com_fs_tmpfs_write(size_t      *bytes_written,
-                       COM_FS_VFS_VNODE_t *node,
+                       com_vnode_t *node,
                        void        *buf,
                        size_t       buflen,
                        uintmax_t    off,
                        uintmax_t    flags) {
   (void)flags;
-  if (COM_FS_VFS_VNODE_TYPE_DIR == node->type) {
+  if (com_vnode_tYPE_DIR == node->type) {
     return EISDIR;
   }
 
@@ -355,12 +355,12 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 
 // OTHER FUNCTIONS
 
-void com_fs_tmpfs_set_other(COM_FS_VFS_VNODE_t *vnode, void *data) {
+void com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data) {
   struct tmpfs_node *n = vnode->extra;
   n->other.data        = data;
 }
 
-void *com_fs_tmpfs_get_other(COM_FS_VFS_VNODE_t *vnode) {
+void *com_fs_tmpfs_get_other(com_vnode_t *vnode) {
   struct tmpfs_node *n = vnode->extra;
   return n->other.data;
 }

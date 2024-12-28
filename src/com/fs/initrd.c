@@ -49,10 +49,10 @@ static uintmax_t oct_atoi(const char *s, size_t len) {
   return val;
 }
 
-static void create_node(COM_FS_VFS_VNODE_t      **file,
+static void create_node(com_vnode_t      **file,
                         const char        *name,
                         size_t             namelen,
-                        COM_FS_VFS_VNODE_t       *dir,
+                        com_vnode_t       *dir,
                         struct tar_header *hdr) {
   if (GNUTAR_DIR == hdr->type) {
     KASSERT(0 == com_fs_vfs_mkdir(file, dir, name, namelen, 0));
@@ -69,7 +69,7 @@ static void create_node(COM_FS_VFS_VNODE_t      **file,
   COM_FS_VFS_VNODE_RELEASE((*file));
 }
 
-void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
+void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
   KLOG("extracting initrd");
 
   for (uintmax_t i = 0; i < tarsize;) {
@@ -109,7 +109,7 @@ void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
     }
 
     const char  *path_end = kmemchr(file_path, '/', file_path_len);
-    COM_FS_VFS_VNODE_t *dir      = root;
+    com_vnode_t *dir      = root;
     // offset into file_path where the ACTUAL name starts
     size_t file_name_off = 0;
     // length of the ACTUAL name of the file (not the path)
@@ -130,7 +130,7 @@ void com_fs_initrd_make(COM_FS_VFS_VNODE_t *root, void *tar, size_t tarsize) {
       file_name_len--;
     }
 
-    COM_FS_VFS_VNODE_t *file = NULL;
+    com_vnode_t *file = NULL;
     create_node(&file, file_path + file_name_off, file_name_len, dir, hdr);
 
     if (dir != root) {

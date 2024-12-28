@@ -34,8 +34,8 @@ typedef struct com_proc {
   arch_mmu_pagetable_t *page_table;
   size_t                num_children;
 
-  COM_FS_VFS_VNODE_t           *root;
-  _Atomic(COM_FS_VFS_VNODE_t *) cwd;
+  com_vnode_t           *root;
+  _Atomic(com_vnode_t *) cwd;
   // TODO: this is a lock... circular dependencies
   int            fd_lock;
   uintmax_t      next_fd;
@@ -46,8 +46,8 @@ typedef struct com_proc {
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
-                             COM_FS_VFS_VNODE_t   *root,
-                             COM_FS_VFS_VNODE_t   *cwd);
+                             com_vnode_t   *root,
+                             com_vnode_t   *cwd);
 void        com_sys_proc_destroy(com_proc_t *proc);
 uintmax_t   com_sys_proc_next_fd(com_proc_t *proc);
 com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd);

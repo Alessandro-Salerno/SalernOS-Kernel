@@ -82,7 +82,7 @@ enum elf_phdr_type { PT_LOAD = 1, PT_INTERP = 3, PT_PHDR = 6 };
 
 static int load(uintptr_t             vaddr,
                 struct elf_phdr      *phdr,
-                COM_FS_VFS_VNODE_t          *elf_file,
+                com_vnode_t          *elf_file,
                 arch_mmu_pagetable_t *pt) {
   size_t   idx = 0;
   uint64_t fsz = phdr->file_sz;
@@ -123,11 +123,11 @@ static int load(uintptr_t             vaddr,
 int com_sys_elf64_load(com_elf_data_t       *out,
                        const char           *exec_path,
                        size_t                exec_path_len,
-                       COM_FS_VFS_VNODE_t          *root,
-                       COM_FS_VFS_VNODE_t          *cwd,
+                       com_vnode_t          *root,
+                       com_vnode_t          *cwd,
                        uintptr_t             virt_off,
                        arch_mmu_pagetable_t *pt) {
-  COM_FS_VFS_VNODE_t *elf_file = NULL;
+  com_vnode_t *elf_file = NULL;
   int ret = com_fs_vfs_lookup(&elf_file, exec_path, exec_path_len, root, cwd);
   if (0 != ret) {
     return ret;

@@ -185,7 +185,7 @@ void kernel_entry(void) {
   arch_file_t *initrd = arch_info_get_initrd();
   com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
-  COM_FS_VFS_VNODE_t *myfile_txt = NULL;
+  com_vnode_t *myfile_txt = NULL;
   com_fs_vfs_lookup(&myfile_txt, "/myfile.txt", 11, rootfs->root, rootfs->root);
   KDEBUG("found /myfile.txt at: %x", myfile_txt);
   KASSERT(NULL != myfile_txt);
@@ -198,7 +198,7 @@ void kernel_entry(void) {
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
 
-  COM_FS_VFS_VNODE_t *tty_dev = NULL;
+  com_vnode_t *tty_dev = NULL;
   com_io_tty_init(&tty_dev);
 
   arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();

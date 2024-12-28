@@ -23,13 +23,13 @@
 #include <kernel/com/mm/slab.h>
 
 struct devfs_dev {
-  COM_FS_VFS_VNODE_t   *vnode;
+  com_vnode_t   *vnode;
   com_dev_ops_t *devops;
   void          *devdata;
 };
 
-static COM_FS_VFS_VNODE_ops_t DevfsNodeOps =
-    (COM_FS_VFS_VNODE_ops_t){.read   = com_fs_devfs_read,
+static com_vnode_ops_t DevfsNodeOps =
+    (com_vnode_ops_t){.read   = com_fs_devfs_read,
                       .write  = com_fs_devfs_write,
                       .ioctl  = com_fs_devfs_ioctl,
                       .close  = com_fs_devfs_close,
@@ -42,17 +42,17 @@ static com_vfs_t *Devfs = NULL;
 // VNODE OPS
 
 // TODO: implement this
-int com_fs_devfs_close(COM_FS_VFS_VNODE_t *vnode) {
+int com_fs_devfs_close(com_vnode_t *vnode) {
   (void)vnode;
   return 0;
 }
 
-int com_fs_devfs_create(COM_FS_VFS_VNODE_t **out,
-                        COM_FS_VFS_VNODE_t  *dir,
+int com_fs_devfs_create(com_vnode_t **out,
+                        com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr) {
-  COM_FS_VFS_VNODE_t *new = NULL;
+  com_vnode_t *new = NULL;
   int ret          = com_fs_tmpfs_create(
       &new, dir, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
@@ -68,12 +68,12 @@ int com_fs_devfs_create(COM_FS_VFS_VNODE_t **out,
   return 0;
 }
 
-int com_fs_devfs_mkdir(COM_FS_VFS_VNODE_t **out,
-                       COM_FS_VFS_VNODE_t  *parent,
+int com_fs_devfs_mkdir(com_vnode_t **out,
+                       com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
                        uintmax_t     attr) {
-  COM_FS_VFS_VNODE_t *new = NULL;
+  com_vnode_t *new = NULL;
   int ret          = com_fs_tmpfs_mkdir(
       &new, parent, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
@@ -90,7 +90,7 @@ int com_fs_devfs_mkdir(COM_FS_VFS_VNODE_t **out,
 int com_fs_devfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
-                      COM_FS_VFS_VNODE_t *node,
+                      com_vnode_t *node,
                       uintmax_t    off,
                       uintmax_t    flags) {
   struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
@@ -98,7 +98,7 @@ int com_fs_devfs_read(void        *buf,
 }
 
 int com_fs_devfs_write(size_t      *bytes_written,
-                       COM_FS_VFS_VNODE_t *node,
+                       com_vnode_t *node,
                        void        *buf,
                        size_t       buflen,
                        uintmax_t    off,
@@ -108,15 +108,15 @@ int com_fs_devfs_write(size_t      *bytes_written,
       bytes_written, dev->devdata, buf, buflen, off, flags);
 }
 
-int com_fs_devfs_ioctl(COM_FS_VFS_VNODE_t *node, uintmax_t op, void *buf) {
+int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
   struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
   return dev->devops->ioctl(dev->devdata, op, buf);
 }
 
 // OTHER FUNCTIONS
 
-int com_fs_devfs_register(COM_FS_VFS_VNODE_t  **out,
-                          COM_FS_VFS_VNODE_t   *dir,
+int com_fs_devfs_register(com_vnode_t  **out,
+                          com_vnode_t   *dir,
                           const char    *name,
                           size_t         namelen,
                           com_dev_ops_t *devops,
@@ -125,7 +125,7 @@ int com_fs_devfs_register(COM_FS_VFS_VNODE_t  **out,
     dir = Devfs->root;
   }
 
-  COM_FS_VFS_VNODE_t *devnode = NULL;
+  com_vnode_t *devnode = NULL;
   int          ret     = com_fs_devfs_create(&devnode, dir, name, namelen, 0);
 
   if (0 != ret || NULL == devnode) {
@@ -142,7 +142,7 @@ int com_fs_devfs_register(COM_FS_VFS_VNODE_t  **out,
 
 int com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs) {
   KLOG("mounting devfs in /dev/");
-  COM_FS_VFS_VNODE_t *devdir = NULL;
+  com_vnode_t *devdir = NULL;
   int          ret    = com_fs_vfs_mkdir(&devdir, rootfs->root, "dev", 3, 0);
 
   if (0 != ret) {

@@ -34,8 +34,8 @@ typedef struct {
 int       com_sys_elf64_load(com_elf_data_t       *out,
                              const char           *exec_path,
                              size_t                exec_path_len,
-                             COM_FS_VFS_VNODE_t          *root,
-                             COM_FS_VFS_VNODE_t          *cwd,
+                             com_vnode_t          *root,
+                             com_vnode_t          *cwd,
                              uintptr_t             virt_off,
                              arch_mmu_pagetable_t *pt);
 uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,

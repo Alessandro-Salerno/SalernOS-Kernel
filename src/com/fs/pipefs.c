@@ -41,18 +41,18 @@ struct pipefs_node {
   com_spinlock_t          lock;
   struct com_thread_tailq readers;
   struct com_thread_tailq writers;
-  COM_FS_VFS_VNODE_t     *read_end;
-  COM_FS_VFS_VNODE_t     *write_end;
+  com_vnode_t     *read_end;
+  com_vnode_t     *write_end;
 };
 
-static COM_FS_VFS_VNODE_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
+static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
                                                .write = com_fs_pipefs_write,
                                                .close = com_fs_pipefs_close};
 
 int com_fs_pipefs_read(void               *buf,
                        size_t              buflen,
                        size_t             *bytes_read,
-                       COM_FS_VFS_VNODE_t *node,
+                       com_vnode_t *node,
                        uintmax_t           off,
                        uintmax_t           flags) {
   (void)off;
@@ -98,7 +98,7 @@ int com_fs_pipefs_read(void               *buf,
 }
 
 int com_fs_pipefs_write(size_t             *bytes_written,
-                        COM_FS_VFS_VNODE_t *node,
+                        com_vnode_t *node,
                         void               *buf,
                         size_t              buflen,
                         uintmax_t           off,
@@ -147,7 +147,7 @@ int com_fs_pipefs_write(size_t             *bytes_written,
   return 0;
 }
 
-int com_fs_pipefs_close(COM_FS_VFS_VNODE_t *vnode) {
+int com_fs_pipefs_close(com_vnode_t *vnode) {
   struct pipefs_node *pipe = vnode->extra;
   hdr_com_spinlock_acquire(&pipe->lock);
 
@@ -163,7 +163,7 @@ int com_fs_pipefs_close(COM_FS_VFS_VNODE_t *vnode) {
   return 0;
 }
 
-void com_fs_pipefs_new(COM_FS_VFS_VNODE_t **read, COM_FS_VFS_VNODE_t **write) {
+void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
   struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
   TAILQ_INIT(&pipe->readers);
   TAILQ_INIT(&pipe->writers);
@@ -172,7 +172,7 @@ void com_fs_pipefs_new(COM_FS_VFS_VNODE_t **read, COM_FS_VFS_VNODE_t **write) {
   pipe->lock  = COM_SPINLOCK_NEW();
   pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
-  COM_FS_VFS_VNODE_t *r = com_mm_slab_alloc(sizeof(COM_FS_VFS_VNODE_t));
+  com_vnode_t *r = com_mm_slab_alloc(sizeof(com_vnode_t));
   r->extra              = pipe;
   r->mountpointof       = NULL;
   r->ops                = &PipefsNodeOps;
@@ -180,7 +180,7 @@ void com_fs_pipefs_new(COM_FS_VFS_VNODE_t **read, COM_FS_VFS_VNODE_t **write) {
   r->num_ref            = 1;
   pipe->read_end        = r;
 
-  COM_FS_VFS_VNODE_t *w = com_mm_slab_alloc(sizeof(COM_FS_VFS_VNODE_t));
+  com_vnode_t *w = com_mm_slab_alloc(sizeof(com_vnode_t));
   w->extra              = pipe;
   w->mountpointof       = NULL;
   w->ops                = &PipefsNodeOps;

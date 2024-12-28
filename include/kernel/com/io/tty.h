@@ -30,4 +30,4 @@
 #define COM_IO_TTY_MOD_RALT   64UL
 
 void com_io_tty_kbd_in(char c, uintmax_t mod);
-int  com_io_tty_init(COM_FS_VFS_VNODE_t **out);
+int  com_io_tty_init(com_vnode_t **out);

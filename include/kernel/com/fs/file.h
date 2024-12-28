@@ -50,7 +50,7 @@ typedef struct com_file {
   uintmax_t num_ref; // this is used because multiple file descripts may point
                      // to the same file (e.g., if stdout and stderr and the
                      // same) or if the process was forked
-  COM_FS_VFS_VNODE_t *vnode;
+  com_vnode_t *vnode;
 } com_file_t;
 
 typedef struct com_filedesc {
