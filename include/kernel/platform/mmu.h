@@ -29,3 +29,4 @@ bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
                                    void                 *phys,
                                    arch_mmu_flags_t      flags);
 void                  arch_mmu_switch(arch_mmu_pagetable_t *pt);
+void                  arch_mmu_switch_default(void);

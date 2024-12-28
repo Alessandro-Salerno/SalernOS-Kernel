@@ -28,6 +28,8 @@
 #include <stdint.h>
 #include <threads.h>
 
+#include "lib/util.h"
+
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
 #define PDMASK   (uint64_t)0b111111111000000000000000000000
@@ -129,6 +131,7 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
   uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
   uint64_t new    = (uint64_t)com_mm_pmm_alloc();
   uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
+  kmemset(nvirt, ARCH_PAGE_SIZE, 0);
 
   if (level == 0) {
     kmemcpy(nvirt, virt, 4096);
@@ -179,7 +182,7 @@ void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
     }
   }
 
-  // com_mm_pmm_free(pt);
+  com_mm_pmm_free(pt);
 }
 
 arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
@@ -212,6 +215,10 @@ bool arch_mmu_map(arch_mmu_pagetable_t *pt,
 void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
   KDEBUG("switching to page table at address %x", pt);
   asm volatile("mov %%rax, %%cr3" : : "a"(pt));
+}
+
+void arch_mmu_switch_default(void) {
+  arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
 }
 
 void arch_mmu_init(void) {

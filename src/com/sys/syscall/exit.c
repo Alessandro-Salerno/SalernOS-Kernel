@@ -17,11 +17,15 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/mmu.h>
 #include <stdint.h>
+
+#include "lib/util.h"
 
 com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
                                        uintmax_t       status,
@@ -37,7 +41,7 @@ com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
   com_proc_t   *curr_proc   = curr_thread->proc;
 
   com_sys_proc_exit(curr_proc, (int)status);
-  com_sys_thread_destroy(curr_thread);
+  curr_thread->runnable = false;
   com_sys_sched_yield();
 
   // Unreachable

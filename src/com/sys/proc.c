@@ -22,14 +22,13 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
 #include <lib/mem.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
-
-#include "com/sys/sched.h"
-#include "com/sys/thread.h"
 
 static com_spinlock_t PidLock        = COM_SPINLOCK_NEW();
 static com_spinlock_t GlobalProcLock = COM_SPINLOCK_NEW();
@@ -38,8 +37,8 @@ static uintmax_t      NextPid        = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
-                             com_vnode_t   *root,
-                             com_vnode_t   *cwd) {
+                             com_vnode_t          *root,
+                             com_vnode_t          *cwd) {
   com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
   kmemset(proc, ARCH_PAGE_SIZE, 0);
   proc->page_table   = page_table;
@@ -55,6 +54,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
   // TODO: use atomic operations (faster)
   hdr_com_spinlock_acquire(&PidLock);
+  KASSERT(NextPid <= 256);
   proc->pid                = NextPid++;
   Processes[proc->pid - 1] = proc;
   hdr_com_spinlock_release(&PidLock);
@@ -135,6 +135,4 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     }
   }
   hdr_com_spinlock_release(&proc->fd_lock);
-
-  com_sys_proc_destroy(proc);
 }
