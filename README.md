@@ -1,5 +1,5 @@
 <p align="center">
-    <h1 align="center">SalernOS-Kernel</h1>
+    <h1 align="center">SalernOS Kernel</h1>
     <p align="center"> Tiny x86-64 Unix-like Kernel </p>
 </p>
 
