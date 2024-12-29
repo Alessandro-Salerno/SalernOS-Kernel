@@ -22,6 +22,7 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/mem.h>
 #include <lib/str.h>
 #include <stdint.h>
 
@@ -46,6 +47,8 @@ com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
   struct sysinfo *sysinfo = (void *)bufptr;
   // kstrcpy(sysinfo->cpu, "Not implemented");
   // kstrcpy(sysinfo->gpu, "Not implemented");
+  kmemset(sysinfo->cpu, 64, 0);
+  kmemset(sysinfo->gpu, 64, 0);
   kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.1");
 
   com_mm_pmm_get_info(&sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);

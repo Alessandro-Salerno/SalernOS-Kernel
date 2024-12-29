@@ -51,7 +51,7 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-// #define X86_64_NO_E9_LOG
+#define X86_64_NO_E9_LOG
 
 static arch_cpu_t BaseCpu = {0};
 

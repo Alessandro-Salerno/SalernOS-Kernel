@@ -228,6 +228,7 @@ void arch_mmu_init(void) {
   RootTable = com_mm_pmm_alloc();
   KASSERT(NULL != RootTable);
   RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
+  kmemset(RootTable, ARCH_PAGE_SIZE, 0);
 
   // Map the higher half into the new page table
   KDEBUG("mapping higher half to kernel page table");
