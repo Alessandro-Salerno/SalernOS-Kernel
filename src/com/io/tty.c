@@ -23,8 +23,8 @@
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
-#include <kernel/com/io/tty.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/io/tty.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
@@ -51,7 +51,7 @@ struct tty {
 };
 
 static com_vnode_t *TtyDev = NULL;
-static struct tty          Tty    = {0};
+static struct tty   Tty    = {0};
 
 // DEV OPS
 
@@ -175,10 +175,10 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
   }
 
   if (is_ctrl_held) {
-    c -= 64;
     if (KISLOWER(c)) {
       c -= 32;
     }
+    c -= 64;
   }
 
   hdr_com_spinlock_acquire(&tty->lock);
