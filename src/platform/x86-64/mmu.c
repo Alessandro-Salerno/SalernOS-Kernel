@@ -131,15 +131,16 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
   uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
   uint64_t new    = (uint64_t)com_mm_pmm_alloc();
   uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
-  kmemset(nvirt, ARCH_PAGE_SIZE, 0);
 
   if (level == 0) {
-    kmemcpy(nvirt, virt, 4096);
+    kmemcpy(nvirt, virt, ARCH_PAGE_SIZE);
   } else {
     for (size_t i = 0; i < 512; i++) {
       if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
         nvirt[i] = duplicate_recursive(
             virt[i], level - 1, addr | ((i << (12 + (level - 1) * 9))));
+      } else {
+        nvirt[i] = 0;
       }
     }
   }
