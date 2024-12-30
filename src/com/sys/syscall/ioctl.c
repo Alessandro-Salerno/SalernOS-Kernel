@@ -24,10 +24,10 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 
-com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
+com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
                                         uintmax_t       fd,
+                                        uintmax_t       op,
                                         uintmax_t       bufptr,
-                                        uintmax_t       buflen,
                                         uintmax_t       unused) {
   (void)ctx;
   (void)unused;
@@ -42,20 +42,13 @@ com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
     return ret;
   }
 
-  size_t bytes_written = 0;
-  int    vfs_op =
-      com_fs_vfs_write(&bytes_written, file->vnode, buf, buflen, file->off, 0);
+  int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
 
   if (0 != vfs_op) {
     ret.err = vfs_op;
     goto cleanup;
   }
 
-  hdr_com_spinlock_acquire(&file->off_lock);
-  file->off += bytes_written;
-  hdr_com_spinlock_release(&file->off_lock);
-
-  ret.value = bytes_written;
 cleanup:
   return ret;
 }

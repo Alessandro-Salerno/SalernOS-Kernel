@@ -88,9 +88,6 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
 
   hdr_com_spinlock_acquire(&proc->fd_lock);
   com_file_t *file = proc->fd[fd].file;
-  if (NULL != file) {
-    COM_FS_FILE_HOLD(file);
-  }
   hdr_com_spinlock_release(&proc->fd_lock);
   return file;
 }

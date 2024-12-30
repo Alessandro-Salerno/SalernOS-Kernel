@@ -72,3 +72,8 @@ com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
                                        uintmax_t       unused1,
                                        uintmax_t       unused2,
                                        uintmax_t       unused3);
+com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
+                                        uintmax_t       fd,
+                                        uintmax_t       op,
+                                        uintmax_t       bufptr,
+                                        uintmax_t       unused);

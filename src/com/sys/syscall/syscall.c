@@ -61,6 +61,7 @@ void com_sys_syscall_init(void) {
   com_sys_syscall_register(0x05, com_sys_syscall_sysinfo);
   com_sys_syscall_register(0x06, com_sys_syscall_waitpid);
   com_sys_syscall_register(0x07, com_sys_syscall_exit);
+  com_sys_syscall_register(0x08, com_sys_syscall_ioctl);
 
   com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }
