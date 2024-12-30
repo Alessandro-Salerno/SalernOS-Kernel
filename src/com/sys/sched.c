@@ -75,16 +75,14 @@ void com_sys_sched_yield(void) {
   }
 
   if (NULL != next_pt && next_pt != prev_pt) {
+    arch_mmu_switch(next_pt);
+
     if (NULL != curr && NULL != curr->proc && curr->proc->exited &&
         !curr->runnable) {
-      KDEBUG("sto if è passato");
-      arch_mmu_switch_default();
       arch_mmu_destroy_table(curr->proc->page_table);
       com_sys_proc_destroy(curr->proc);
       com_sys_thread_destroy(curr);
     }
-
-    arch_mmu_switch(next_pt);
   }
 
   curr->cpu = NULL;

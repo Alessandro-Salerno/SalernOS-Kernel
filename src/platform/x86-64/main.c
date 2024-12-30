@@ -185,16 +185,6 @@ void kernel_entry(void) {
   arch_file_t *initrd = arch_info_get_initrd();
   com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
-  com_vnode_t *myfile_txt = NULL;
-  com_fs_vfs_lookup(&myfile_txt, "/myfile.txt", 11, rootfs->root, rootfs->root);
-  KDEBUG("found /myfile.txt at: %x", myfile_txt);
-  KASSERT(NULL != myfile_txt);
-
-  char *buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  kmemset(buf, ARCH_PAGE_SIZE, 0);
-  com_fs_vfs_read(buf, 5, NULL, myfile_txt, 0, 0);
-  KDEBUG("reading from /myfile.txt: %s", buf);
-
   com_vfs_t *devfs = NULL;
   com_fs_devfs_init(&devfs, rootfs);
 

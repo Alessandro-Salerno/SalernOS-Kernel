@@ -25,8 +25,10 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <stdatomic.h>
+#include <stdint.h>
 
 #include "com/mm/slab.h"
+#include "lib/util.h"
 
 com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
                                        uintmax_t       pathptr,
@@ -54,6 +56,7 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
     // TODO: create file
   } else {
     com_vnode_t *cwd = atomic_load(&curr->cwd);
+    KDEBUG("opening file %s with root=%x cwd=%x", path, curr->root, cwd);
     int lk_ret = com_fs_vfs_lookup(&file_vn, path, pathlen, curr->root, cwd);
 
     if (0 != lk_ret) {
@@ -62,15 +65,14 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
     }
   }
 
-  hdr_com_spinlock_acquire(&curr->fd_lock);
-  int fd            = com_sys_proc_next_fd(curr);
+  uintmax_t fd      = com_sys_proc_next_fd(curr);
   curr->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
   com_file_t *file  = curr->fd[fd].file;
   file->vnode       = file_vn;
   file->flags       = flags;
   file->num_ref     = 1;
   file->off         = 0;
-  hdr_com_spinlock_release(&curr->fd_lock);
+  ret.value         = fd;
 
 cleanup:
   return ret;
