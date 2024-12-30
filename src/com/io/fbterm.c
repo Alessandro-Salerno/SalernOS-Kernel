@@ -38,6 +38,16 @@ void com_io_fbterm_putsn(const char *s, size_t n) {
   flanterm_write(FlantermContext, s, n);
 }
 
+void com_io_fbterm_get_size(size_t *rows, size_t *cols) {
+  if (NULL != rows) {
+    *rows = FlantermContext->rows;
+  }
+
+  if (NULL != cols) {
+    *cols = FlantermContext->cols;
+  }
+}
+
 void com_io_fbterm_init(arch_framebuffer_t *fb) {
   uint32_t default_fg = 0xffffffff;
   FlantermContext     = flanterm_fb_init(NULL,

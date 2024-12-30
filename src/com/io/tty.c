@@ -20,6 +20,7 @@
 #define _DEFAULT_SOURCE
 
 #include <arch/cpu.h>
+#include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/fbterm.h>
@@ -34,6 +35,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/ioctl.h>
 #include <sys/termios.h>
 #include <termios.h>
 #include <vendor/tailq.h>
@@ -140,12 +142,29 @@ static int tty_write(size_t   *bytes_written,
   return 0;
 }
 
-// TODO: implement this
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
-  (void)devdata;
-  (void)op;
-  (void)buf;
-  return 0;
+  struct tty *tty = devdata;
+
+  if (TIOCGWINSZ == op) {
+    struct winsize *ws = buf;
+    ws->ws_row         = tty->rows;
+    ws->ws_col         = tty->cols;
+    return 0;
+  }
+
+  if (TCGETS == op) {
+    struct termios *termios = buf;
+    *termios                = tty->termios;
+    return 0;
+  }
+
+  if (TCSETS == op || TCSETSF == op || TCSETSW == op) {
+    struct termios *termios = buf;
+    tty->termios            = *termios;
+    return 0;
+  }
+
+  return ENOSYS;
 }
 
 static com_dev_ops_t TtyDevOps = {.read  = tty_read,
@@ -278,6 +297,7 @@ int com_io_tty_init(com_vnode_t **out) {
     return ret;
   }
 
+  com_io_fbterm_get_size(&Tty.rows, &Tty.cols);
   Tty.termios.c_cc[VINTR]    = CINTR;
   Tty.termios.c_cc[VQUIT]    = CQUIT;
   Tty.termios.c_cc[VERASE]   = CERASE;
