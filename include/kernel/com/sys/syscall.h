@@ -77,3 +77,8 @@ com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
                                         uintmax_t       op,
                                         uintmax_t       bufptr,
                                         uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
+                                       uintmax_t       pathptr,
+                                       uintmax_t       pathlen,
+                                       uintmax_t       flags,
+                                       uintmax_t       unused);
