@@ -31,11 +31,11 @@
 #define COM_FS_VFS_VNODE_RELEASE(node) \
   __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)
 
-typedef enum com_vnode_type {
-  com_vnode_tYPE_FILE,
-  com_vnode_tYPE_DIR,
-  com_vnode_tYPE_LINK
-} com_vnode_type_t;
+typedef enum COM_VNODE_TYPE {
+  COM_VNODE_TYPE_FILE,
+  COM_VNODE_TYPE_DIR,
+  COM_VNODE_TYPE_LINK
+} COM_VNODE_TYPE_t;
 
 typedef struct com_vfs {
   struct com_vfs_ops *ops;
@@ -52,7 +52,7 @@ typedef struct COM_FS_VFS_VNODE {
     struct COM_FS_VFS_VNODE *next;
     struct COM_FS_VFS_VNODE *prev;
   } vlink;
-  com_vnode_type_t type;
+  COM_VNODE_TYPE_t type;
   uintmax_t        num_ref;
   bool             isroot;
   void            *extra;

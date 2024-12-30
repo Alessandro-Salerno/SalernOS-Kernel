@@ -77,7 +77,7 @@ int com_fs_dummyfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
   com_vnode_t         *root = com_mm_slab_alloc(sizeof(com_vnode_t));
   struct dummyfs_node *dfs_root =
       com_mm_slab_alloc(sizeof(struct dummyfs_node));
-  root->type    = com_vnode_tYPE_DIR;
+  root->type    = COM_VNODE_TYPE_DIR;
   root->isroot  = true;
   root->ops     = &DummyfsNodeOps;
   root->extra   = dfs_root;
@@ -94,7 +94,7 @@ int com_fs_dummyfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
 
   if (NULL != mountpoint) {
     mountpoint->mountpointof = dummyfs;
-    mountpoint->type         = com_vnode_tYPE_DIR;
+    mountpoint->type         = COM_VNODE_TYPE_DIR;
   }
 
   *out = dummyfs;
@@ -113,7 +113,7 @@ int com_fs_dummyfs_create(com_vnode_t **out,
 
   vn->vfs     = dir->vfs;
   vn->ops     = dir->ops;
-  vn->type    = com_vnode_tYPE_FILE;
+  vn->type    = COM_VNODE_TYPE_FILE;
   vn->isroot  = false;
   vn->num_ref = 1;
 

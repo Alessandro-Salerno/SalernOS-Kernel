@@ -79,7 +79,7 @@ static int createat(struct tmpfs_dir_entry **outent,
                     size_t                   namelen,
                     uintmax_t                attr) {
   (void)attr;
-  KASSERT(com_vnode_tYPE_DIR == dir->type);
+  KASSERT(COM_VNODE_TYPE_DIR == dir->type);
 
   struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
   tn_new->lock              = COM_SPINLOCK_NEW();
@@ -129,14 +129,14 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
   TAILQ_INIT(&tn_root->dir.entries);
   com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
   vn_root->isroot = true;
-  vn_root->type   = com_vnode_tYPE_DIR;
+  vn_root->type   = COM_VNODE_TYPE_DIR;
 
   tmpfs->root       = vn_root;
   tmpfs->mountpoint = mountpoint;
   tmpfs->ops        = &TmpfsOps;
 
   if (NULL != mountpoint) {
-    KASSERT(com_vnode_tYPE_DIR == mountpoint->type);
+    KASSERT(COM_VNODE_TYPE_DIR == mountpoint->type);
     mountpoint->mountpointof = tmpfs;
   }
 
@@ -162,7 +162,7 @@ int com_fs_tmpfs_create(com_vnode_t **out,
     struct tmpfs_node *tn = (*out)->extra;
     tn->file.size         = 0;
     tn->file.data         = com_fs_pagecache_new();
-    (*out)->type          = com_vnode_tYPE_FILE;
+    (*out)->type          = COM_VNODE_TYPE_FILE;
   }
 
   struct tmpfs_node *parent = dir->extra;
@@ -190,7 +190,7 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
 
   tn->dir.parent = parent_data;
   TAILQ_INIT(&tn->dir.entries);
-  (*out)->type = com_vnode_tYPE_DIR;
+  (*out)->type = COM_VNODE_TYPE_DIR;
 
   hdr_com_spinlock_acquire(&parent_data->lock);
   TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
@@ -203,7 +203,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        len) {
-  KASSERT(com_vnode_tYPE_DIR == dir->type);
+  KASSERT(COM_VNODE_TYPE_DIR == dir->type);
   struct tmpfs_node *dir_data = dir->extra;
   int                ret      = 0;
 
@@ -245,7 +245,7 @@ int com_fs_tmpfs_read(void        *buf,
                       uintmax_t    off,
                       uintmax_t    flags) {
   (void)flags;
-  if (com_vnode_tYPE_DIR == node->type) {
+  if (COM_VNODE_TYPE_DIR == node->type) {
     return EISDIR;
   }
 
@@ -311,7 +311,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
                        uintmax_t    off,
                        uintmax_t    flags) {
   (void)flags;
-  if (com_vnode_tYPE_DIR == node->type) {
+  if (COM_VNODE_TYPE_DIR == node->type) {
     return EISDIR;
   }
 

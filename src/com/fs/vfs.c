@@ -91,7 +91,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
     }
 
     if (!dot) {
-      if (com_vnode_tYPE_DIR != ret->type) {
+      if (COM_VNODE_TYPE_DIR != ret->type) {
         COM_FS_VFS_VNODE_RELEASE(ret);
         *out = NULL;
         return ENOTDIR;
