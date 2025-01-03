@@ -18,20 +18,18 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/fs/file.h>
-#include <kernel/com/fs/vfs.h>
+#include <arch/mmu.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/platform/mmu.h>
 #include <lib/util.h>
 #include <stdint.h>
 #include <sys/mman.h>
 
-#include "arch/mmu.h"
-#include "com/mm/pmm.h"
-#include "platform/mmu.h"
-
-#define ALLOC_BASE 1
+// TODO: change this, just like stack and other offsets
+#define ALLOC_BASE 0x100000000
 
 com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
                                        uintmax_t       hint,
