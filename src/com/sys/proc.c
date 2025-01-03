@@ -48,8 +48,10 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
   proc->parent_pid   = parent_pid;
   COM_FS_VFS_VNODE_HOLD(root);
   COM_FS_VFS_VNODE_HOLD(cwd);
-  proc->root = root;
-  proc->cwd  = cwd;
+  proc->root       = root;
+  proc->cwd        = cwd;
+  proc->pages_lock = COM_SPINLOCK_NEW();
+  proc->used_pages = 0;
   TAILQ_INIT(&proc->waiting_on);
 
   // TODO: use atomic operations (faster)

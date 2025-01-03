@@ -318,7 +318,7 @@ int com_io_tty_init(com_vnode_t **out) {
   Tty.termios.c_iflag        = TTYDEF_IFLAG;
   Tty.termios.c_lflag        = TTYDEF_LFLAG;
   Tty.termios.c_oflag        = TTYDEF_OFLAG;
-  // Tty.termios.ibaud = Tty.termios.obaud = TTYDEF_SPEED;
+  Tty.termios.c_ispeed = Tty.termios.c_ospeed = TTYDEF_SPEED;
 
   if (NULL != out) {
     *out = TtyDev;

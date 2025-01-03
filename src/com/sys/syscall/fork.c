@@ -49,7 +49,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
   com_proc_t       *proc = hdr_arch_cpu_get_thread()->proc;
 
   hdr_com_spinlock_acquire(&proc->fd_lock);
-  // TODO: acquire pages lock (not yet implemented)
+  hdr_com_spinlock_acquire(&proc->pages_lock);
 
   arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
 
@@ -71,10 +71,12 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     }
   }
 
-  new_proc->next_fd = proc->next_fd;
+  new_proc->next_fd    = proc->next_fd;
+  new_proc->used_pages = proc->used_pages;
   ARCH_CONTEXT_FORK(new_thread, *ctx);
 
   hdr_com_spinlock_release(&proc->fd_lock);
+  hdr_com_spinlock_release(&proc->pages_lock);
 
   proc->num_children++;
   new_thread->runnable = false;

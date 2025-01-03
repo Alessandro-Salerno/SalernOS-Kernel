@@ -82,3 +82,8 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
                                        uintmax_t       pathlen,
                                        uintmax_t       flags,
                                        uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
+                                       uintmax_t       hint,
+                                       uintmax_t       size,
+                                       uintmax_t       flags,
+                                       uintmax_t       unused);

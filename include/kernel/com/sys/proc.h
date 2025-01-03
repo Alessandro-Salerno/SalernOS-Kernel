@@ -41,6 +41,9 @@ typedef struct com_proc {
   uintmax_t      next_fd;
   com_filedesc_t fd[16];
 
+  int    pages_lock;
+  size_t used_pages;
+
   struct com_thread_tailq waiting_on;
 } com_proc_t;
 
