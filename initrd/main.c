@@ -191,33 +191,24 @@ void kernel_entry(void) {
     com_vnode_t *tty_dev = NULL;
     com_io_tty_init(&tty_dev);
 
-    arch_mmu_pagetable_t *user_pt = arch_mmu_new_table();
-    void *ustack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-    arch_mmu_map(user_pt,
-                 ustack,
-                 (void *)ARCH_HHDM_TO_PHYS(ustack),
-                 ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                     ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-    com_elf_data_t elf_data = {0};
+    char *const   argv[] = {"./fresh", NULL};
+    char *const   envp[] = {"TERM=linux", NULL};
+    com_proc_t   *proc = com_sys_proc_new(NULL, 0, rootfs->root, rootfs->root);
+    com_thread_t *thread = com_sys_thread_new(proc, NULL, 0, NULL);
     KASSERT(0 ==
-            com_sys_elf64_load(
-                &elf_data, "/test", 5, rootfs->root, rootfs->root, 0, user_pt));
-    KDEBUG("elf entry at %x", elf_data.entry);
-    KDEBUG("elf interpreter path: %s", elf_data.interpreter_path);
+            com_sys_elf64_prepare_proc(
+                &proc->page_table, "./fresh", argv, envp, proc, &thread->ctx));
 
-    com_proc_t *proc = com_sys_proc_new(user_pt, 0, rootfs->root, rootfs->root);
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
     stdfile->vnode      = tty_dev;
     stdfile->num_ref    = 3;
     proc->next_fd       = 3;
     com_filedesc_t stddesc;
-    stddesc.file         = stdfile;
-    stddesc.flags        = 0;
-    proc->fd[0]          = stddesc;
-    proc->fd[1]          = stddesc;
-    proc->fd[2]          = stddesc;
-    com_thread_t *thread = com_sys_thread_new(
-        proc, ustack, ARCH_PAGE_SIZE, (void *)elf_data.entry);
+    stddesc.file  = stdfile;
+    stddesc.flags = 0;
+    proc->fd[0]   = stddesc;
+    proc->fd[1]   = stddesc;
+    proc->fd[2]   = stddesc;
 
     hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
     hdr_arch_cpu_get()->thread   = thread;

@@ -19,6 +19,9 @@
 #pragma once
 
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/platform/context.h>
+#include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -43,3 +46,9 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
                                       size_t         stack_end_virt,
                                       char *const    argv[],
                                       char *const    envp[]);
+int       com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
+                                     const char            *path,
+                                     char *const            argv[],
+                                     char *const            env[],
+                                     com_proc_t            *proc,
+                                     arch_context_t        *ctx);
