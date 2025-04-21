@@ -40,50 +40,50 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
                                        uintmax_t       unused2,
                                        uintmax_t       unused3,
                                        uintmax_t       unused4) {
-  (void)unused1;
-  (void)unused2;
-  (void)unused3;
-  (void)unused4;
+    (void)unused1;
+    (void)unused2;
+    (void)unused3;
+    (void)unused4;
 
-  com_syscall_ret_t ret  = {-1, 0};
-  com_proc_t       *proc = hdr_arch_cpu_get_thread()->proc;
+    com_syscall_ret_t ret  = {-1, 0};
+    com_proc_t       *proc = hdr_arch_cpu_get_thread()->proc;
 
-  hdr_com_spinlock_acquire(&proc->fd_lock);
-  hdr_com_spinlock_acquire(&proc->pages_lock);
+    hdr_com_spinlock_acquire(&proc->fd_lock);
+    hdr_com_spinlock_acquire(&proc->pages_lock);
 
-  arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
+    arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
 
-  com_proc_t *new_proc =
-      com_sys_proc_new(new_pt, proc->pid, proc->root, proc->cwd);
-  // TODO: do things with fs-base and pages (not implemented yet)
-  com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
+    com_proc_t *new_proc =
+        com_sys_proc_new(new_pt, proc->pid, proc->root, proc->cwd);
+    // TODO: do things with fs-base and pages (not implemented yet)
+    com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
 
-  if (NULL == new_pt || NULL == new_proc || NULL == new_thread) {
-    ret.err = ENOMEM;
-    goto end;
-  }
-
-  for (size_t i = 0; i < proc->next_fd; i++) {
-    if (NULL != proc->fd[i].file) {
-      new_proc->fd[i].flags = proc->fd[i].flags;
-      COM_FS_FILE_HOLD(proc->fd[i].file);
-      new_proc->fd[i].file = proc->fd[i].file;
+    if (NULL == new_pt || NULL == new_proc || NULL == new_thread) {
+        ret.err = ENOMEM;
+        goto end;
     }
-  }
 
-  new_proc->next_fd    = proc->next_fd;
-  new_proc->used_pages = proc->used_pages;
-  ARCH_CONTEXT_FORK(new_thread, *ctx);
+    for (size_t i = 0; i < proc->next_fd; i++) {
+        if (NULL != proc->fd[i].file) {
+            new_proc->fd[i].flags = proc->fd[i].flags;
+            COM_FS_FILE_HOLD(proc->fd[i].file);
+            new_proc->fd[i].file = proc->fd[i].file;
+        }
+    }
 
-  hdr_com_spinlock_release(&proc->fd_lock);
-  hdr_com_spinlock_release(&proc->pages_lock);
+    new_proc->next_fd    = proc->next_fd;
+    new_proc->used_pages = proc->used_pages;
+    ARCH_CONTEXT_FORK(new_thread, *ctx);
 
-  proc->num_children++;
-  new_thread->runnable = false;
+    hdr_com_spinlock_release(&proc->fd_lock);
+    hdr_com_spinlock_release(&proc->pages_lock);
 
-  ret.value = new_proc->pid;
-  com_sys_thread_ready(new_thread);
+    proc->num_children++;
+    new_thread->runnable = false;
+
+    ret.value = new_proc->pid;
+    com_sys_thread_ready(new_thread);
 
 end:
-  return ret;
+    return ret;
 }

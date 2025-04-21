@@ -27,53 +27,53 @@
 static struct flanterm_context *FlantermContext = NULL;
 
 void com_io_fbterm_putc(char c) {
-  flanterm_write(FlantermContext, &c, 1);
+    flanterm_write(FlantermContext, &c, 1);
 }
 
 void com_io_fbterm_puts(const char *s) {
-  flanterm_write(FlantermContext, s, kstrlen(s));
+    flanterm_write(FlantermContext, s, kstrlen(s));
 }
 
 void com_io_fbterm_putsn(const char *s, size_t n) {
-  flanterm_write(FlantermContext, s, n);
+    flanterm_write(FlantermContext, s, n);
 }
 
 void com_io_fbterm_get_size(size_t *rows, size_t *cols) {
-  if (NULL != rows) {
-    *rows = FlantermContext->rows;
-  }
+    if (NULL != rows) {
+        *rows = FlantermContext->rows;
+    }
 
-  if (NULL != cols) {
-    *cols = FlantermContext->cols;
-  }
+    if (NULL != cols) {
+        *cols = FlantermContext->cols;
+    }
 }
 
 void com_io_fbterm_init(arch_framebuffer_t *fb) {
-  uint32_t default_fg = 0xffffffff;
-  FlantermContext     = flanterm_fb_init(NULL,
-                                     NULL,
-                                     fb->address,
-                                     fb->width,
-                                     fb->height,
-                                     fb->pitch,
-                                     fb->red_mask_size,
-                                     fb->red_mask_shift,
-                                     fb->green_mask_size,
-                                     fb->green_mask_shift,
-                                     fb->blue_mask_size,
-                                     fb->blue_mask_shift,
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     &default_fg,
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     0,
-                                     0,
-                                     1,
-                                     0,
-                                     0,
-                                     0);
+    uint32_t default_fg = 0xffffffff;
+    FlantermContext     = flanterm_fb_init(NULL,
+                                       NULL,
+                                       fb->address,
+                                       fb->width,
+                                       fb->height,
+                                       fb->pitch,
+                                       fb->red_mask_size,
+                                       fb->red_mask_shift,
+                                       fb->green_mask_size,
+                                       fb->green_mask_shift,
+                                       fb->blue_mask_size,
+                                       fb->blue_mask_shift,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &default_fg,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       0,
+                                       0,
+                                       1,
+                                       0,
+                                       0,
+                                       0);
 }

@@ -21,20 +21,20 @@
 #include <kernel/com/fs/vfs.h>
 
 typedef struct com_dev_ops {
-  int (*read)(void     *buf,
-              size_t    buflen,
-              size_t   *bytes_read,
-              void     *devdata,
-              uintmax_t off,
-              uintmax_t flags);
-  int (*write)(size_t   *bytes_written,
-               void     *devdata,
-               void     *buf,
-               size_t    buflen,
-               uintmax_t off,
-               uintmax_t flags);
-  int (*ioctl)(void *devdata, uintmax_t op, void *buf);
-  // TODO: add mmap, munmap and other fast things
+    int (*read)(void     *buf,
+                size_t    buflen,
+                size_t   *bytes_read,
+                void     *devdata,
+                uintmax_t off,
+                uintmax_t flags);
+    int (*write)(size_t   *bytes_written,
+                 void     *devdata,
+                 void     *buf,
+                 size_t    buflen,
+                 uintmax_t off,
+                 uintmax_t flags);
+    int (*ioctl)(void *devdata, uintmax_t op, void *buf);
+    // TODO: add mmap, munmap and other fast things
 } com_dev_ops_t;
 
 // VNODE OPS

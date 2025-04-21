@@ -36,30 +36,30 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
                                        uintmax_t       size,
                                        uintmax_t       flags,
                                        uintmax_t       unused) {
-  (void)ctx;
-  (void)unused;
-  (void)hint; // TODO: use hint
+    (void)ctx;
+    (void)unused;
+    (void)hint; // TODO: use hint
 
-  com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
 
-  flags &= 0xffffffff;
-  // TODO: support other flags
-  KASSERT(MAP_ANONYMOUS & flags);
+    flags &= 0xffffffff;
+    // TODO: support other flags
+    KASSERT(MAP_ANONYMOUS & flags);
 
-  size_t pages = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    size_t pages = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
 
-  hdr_com_spinlock_acquire(&curr->pages_lock);
-  uintptr_t virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
-  curr->used_pages += pages;
-  hdr_com_spinlock_release(&curr->pages_lock);
+    hdr_com_spinlock_acquire(&curr->pages_lock);
+    uintptr_t virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
+    curr->used_pages += pages;
+    hdr_com_spinlock_release(&curr->pages_lock);
 
-  for (size_t i = 0; i < pages; i++) {
-    arch_mmu_map(curr->page_table,
-                 (void *)(virt + i * ARCH_PAGE_SIZE),
-                 com_mm_pmm_alloc(),
-                 ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                     ARCH_MMU_FLAGS_USER);
-  }
+    for (size_t i = 0; i < pages; i++) {
+        arch_mmu_map(curr->page_table,
+                     (void *)(virt + i * ARCH_PAGE_SIZE),
+                     com_mm_pmm_alloc(),
+                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                         ARCH_MMU_FLAGS_USER);
+    }
 
-  return (com_syscall_ret_t){.value = virt, .err = 0};
+    return (com_syscall_ret_t){.value = virt, .err = 0};
 }

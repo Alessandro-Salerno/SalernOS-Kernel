@@ -23,37 +23,38 @@
 #include <stdint.h>
 
 #define COM_FS_FILE_HOLD(file) \
-  __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST)
+    __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST)
 
-#define COM_FS_FILE_RELEASE(file)                                             \
-  ({                                                                          \
-    if (NULL != file->vnode) {                                                \
-      uintmax_t n = __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
-      if (0 == n) {                                                           \
-        COM_FS_VFS_VNODE_RELEASE(file->vnode);                                       \
-        com_mm_slab_free(file, sizeof(com_file_t));                           \
-        file = NULL;                                                          \
-      }                                                                       \
-    }                                                                         \
-  })
+#define COM_FS_FILE_RELEASE(file)                                         \
+    ({                                                                    \
+        if (NULL != file->vnode) {                                        \
+            uintmax_t n =                                                 \
+                __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
+            if (0 == n) {                                                 \
+                COM_FS_VFS_VNODE_RELEASE(file->vnode);                    \
+                com_mm_slab_free(file, sizeof(com_file_t));               \
+                file = NULL;                                              \
+            }                                                             \
+        }                                                                 \
+    })
 
 typedef struct com_file {
-  // TODO: this is
-  // a lock but I
-  // have circular
-  // dependencies
-  // if I include
-  // spinlock.h
-  int       off_lock;
-  uintmax_t off;
-  uintmax_t flags;
-  uintmax_t num_ref; // this is used because multiple file descripts may point
-                     // to the same file (e.g., if stdout and stderr and the
-                     // same) or if the process was forked
-  com_vnode_t *vnode;
+    // TODO: this is
+    // a lock but I
+    // have circular
+    // dependencies
+    // if I include
+    // spinlock.h
+    int       off_lock;
+    uintmax_t off;
+    uintmax_t flags;
+    uintmax_t num_ref; // this is used because multiple file descripts may point
+                       // to the same file (e.g., if stdout and stderr and the
+                       // same) or if the process was forked
+    com_vnode_t *vnode;
 } com_file_t;
 
 typedef struct com_filedesc {
-  com_file_t *file;
-  uintmax_t   flags;
+    com_file_t *file;
+    uintmax_t   flags;
 } com_filedesc_t;

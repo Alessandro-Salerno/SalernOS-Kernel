@@ -27,24 +27,24 @@
 #include <stdint.h>
 
 typedef struct com_proc {
-  uint64_t              pid;
-  uint64_t              parent_pid;
-  bool                  exited;
-  int                   exit_status;
-  arch_mmu_pagetable_t *page_table;
-  size_t                num_children;
+    uint64_t              pid;
+    uint64_t              parent_pid;
+    bool                  exited;
+    int                   exit_status;
+    arch_mmu_pagetable_t *page_table;
+    size_t                num_children;
 
-  com_vnode_t           *root;
-  _Atomic(com_vnode_t *) cwd;
-  // TODO: this is a lock... circular dependencies
-  int            fd_lock;
-  uintmax_t      next_fd;
-  com_filedesc_t fd[16];
+    com_vnode_t           *root;
+    _Atomic(com_vnode_t *) cwd;
+    // TODO: this is a lock... circular dependencies
+    int            fd_lock;
+    uintmax_t      next_fd;
+    com_filedesc_t fd[16];
 
-  int    pages_lock;
-  size_t used_pages;
+    int    pages_lock;
+    size_t used_pages;
 
-  struct com_thread_tailq waiting_on;
+    struct com_thread_tailq waiting_on;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,

@@ -32,29 +32,30 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
                                  void       *stack,
                                  uintmax_t   stack_size,
                                  void       *entry) {
-  arch_context_t ctx = {0};
-  ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
+    arch_context_t ctx = {0};
+    ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
 
-  com_thread_t *thread = (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  thread->proc         = proc;
-  thread->runnable     = true;
-  thread->ctx          = ctx;
-  thread->kernel_stack =
-      (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
+    com_thread_t *thread =
+        (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    thread->proc     = proc;
+    thread->runnable = true;
+    thread->ctx      = ctx;
+    thread->kernel_stack =
+        (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
 
-  return thread;
+    return thread;
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {
-  thread->runnable   = false;
-  thread->waiting_on = NULL;
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
-                  ARCH_PAGE_SIZE);
-  com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
+    thread->runnable   = false;
+    thread->waiting_on = NULL;
+    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
+                    ARCH_PAGE_SIZE);
+    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
 }
 
 void com_sys_thread_ready(com_thread_t *thread) {
-  arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
-  TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-  thread->runnable = true;
+    arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
+    TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
+    thread->runnable = true;
 }

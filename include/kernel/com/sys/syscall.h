@@ -22,8 +22,8 @@
 #include <stdint.h>
 
 typedef struct {
-  uintmax_t value;
-  uintmax_t err;
+    uintmax_t value;
+    uintmax_t err;
 } com_syscall_ret_t;
 
 typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t *ctx,

@@ -24,18 +24,18 @@
 #include <stdint.h>
 
 typedef struct {
-  uint16_t size;
-  uint64_t offset;
+    uint16_t size;
+    uint64_t offset;
 } __attribute__((packed)) idtr_t;
 
 typedef struct {
-  uint16_t offset;
-  uint16_t segment;
-  uint8_t  ist;
-  uint8_t  flags;
-  uint16_t offset2;
-  uint32_t offset3;
-  uint32_t reserved;
+    uint16_t offset;
+    uint16_t segment;
+    uint8_t  ist;
+    uint8_t  flags;
+    uint16_t offset2;
+    uint32_t offset3;
+    uint32_t reserved;
 } __attribute__((packed)) idtentry_t;
 
 static idtentry_t     Idt[256];
@@ -64,38 +64,38 @@ static char *Exceptions[] = {"division by 0",
                              "simd exception"};
 
 static void generic_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
-  if ((isr->id & 0xff) < 19) {
-    com_panic(ctx, "cpu exception (%s)", Exceptions[isr->id & 0xff]);
-  }
+    if ((isr->id & 0xff) < 19) {
+        com_panic(ctx, "cpu exception (%s)", Exceptions[isr->id & 0xff]);
+    }
 
-  com_panic(ctx, "cpu exception (unknown)");
+    com_panic(ctx, "cpu exception (unknown)");
 }
 
 void x86_64_idt_init() {
-  KLOG("initializing idt");
+    KLOG("initializing idt");
 
-  for (uint64_t i = 0; i < 256; i++) {
-    Idt[i].offset  = IsrTable[i] & 0xffff;
-    Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
-    Idt[i].ist     = 0;
-    Idt[i].flags   = 0x8E;
-    Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
-    Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
-  }
+    for (uint64_t i = 0; i < 256; i++) {
+        Idt[i].offset  = IsrTable[i] & 0xffff;
+        Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
+        Idt[i].ist     = 0;
+        Idt[i].flags   = 0x8E;
+        Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
+        Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
+    }
 }
 
 void x86_64_idt_set_user_invocable(uintmax_t vec) {
-  KDEBUG("allowing user invocation of interrupt %u", vec);
-  Idt[vec].flags = 0xEE;
+    KDEBUG("allowing user invocation of interrupt %u", vec);
+    Idt[vec].flags = 0xEE;
 }
 
 void x86_64_idt_reload() {
-  KLOG("reloading idt");
-  asm volatile("lidt (%%rax)" : : "a"(&Idtr));
+    KLOG("reloading idt");
+    asm volatile("lidt (%%rax)" : : "a"(&Idtr));
 
-  for (uintmax_t i = 0; i < 32; i++) {
-    com_sys_interrupt_register(i, generic_exception_isr, NULL);
-  }
+    for (uintmax_t i = 0; i < 32; i++) {
+        com_sys_interrupt_register(i, generic_exception_isr, NULL);
+    }
 
-  com_sys_interrupt_set(true);
+    com_sys_interrupt_set(true);
 }

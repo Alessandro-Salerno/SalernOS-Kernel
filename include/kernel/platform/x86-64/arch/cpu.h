@@ -28,54 +28,54 @@
 #include <vendor/tailq.h>
 
 #define ARCH_CPU_SET_KERNEL_STACK(cpu, kstack) \
-  (cpu)->ist.rsp0 = (uint64_t)kstack
+    (cpu)->ist.rsp0 = (uint64_t)kstack
 
 typedef struct arch_cpu {
-  struct com_thread    *thread;
-  struct arch_cpu      *self;
-  void                 *dummy2;
-  uint64_t              id;
-  uint64_t              gdt[7];
-  x86_64_ist_t          ist;
-  bool                  intstatus;
-  com_isr_t             isr[256];
-  arch_mmu_pagetable_t *root_page_table;
-  uint64_t              lock_depth;
-  // TODO: add sched_lock for SMP/kernel preemtpion
-  struct com_thread_tailq sched_queue;
+    struct com_thread    *thread;
+    struct arch_cpu      *self;
+    void                 *dummy2;
+    uint64_t              id;
+    uint64_t              gdt[7];
+    x86_64_ist_t          ist;
+    bool                  intstatus;
+    com_isr_t             isr[256];
+    arch_mmu_pagetable_t *root_page_table;
+    uint64_t              lock_depth;
+    // TODO: add sched_lock for SMP/kernel preemtpion
+    struct com_thread_tailq sched_queue;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-  cpu->self = cpu;
-  hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
+    cpu->self = cpu;
+    hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
 }
 
 static inline arch_cpu_t *hdr_arch_cpu_get(void) {
-  arch_cpu_t *cpu;
-  asm volatile("mov %%gs:8, %%rax" : "=a"(cpu) : : "memory");
-  return cpu;
+    arch_cpu_t *cpu;
+    asm volatile("mov %%gs:8, %%rax" : "=a"(cpu) : : "memory");
+    return cpu;
 }
 
 static inline struct com_thread *hdr_arch_cpu_get_thread(void) {
-  struct com_thread *thread;
-  asm volatile("mov %%gs:0, %%rax" : "=a"(thread) : : "memory");
-  return thread;
+    struct com_thread *thread;
+    asm volatile("mov %%gs:0, %%rax" : "=a"(thread) : : "memory");
+    return thread;
 }
 
 static inline long hdr_arch_cpu_get_id(void) {
-  long id;
-  asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
-  return id;
+    long id;
+    asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
+    return id;
 }
 
 static inline void hdr_arch_cpu_pause(void) {
-  asm volatile("pause");
+    asm volatile("pause");
 }
 
 static inline void hdr_arch_cpu_interrupt_disable(void) {
-  asm volatile("cli");
+    asm volatile("cli");
 }
 
 static inline void hdr_arch_cpu_interrupt_enable(void) {
-  asm volatile("sti");
+    asm volatile("sti");
 }

@@ -27,49 +27,49 @@
 #include <stdint.h>
 
 bool com_sys_interrupt_set(bool status) {
-  hdr_arch_cpu_interrupt_disable();
-  bool old                      = hdr_arch_cpu_get()->intstatus;
-  hdr_arch_cpu_get()->intstatus = status;
+    hdr_arch_cpu_interrupt_disable();
+    bool old                      = hdr_arch_cpu_get()->intstatus;
+    hdr_arch_cpu_get()->intstatus = status;
 
-  if (status) {
-    hdr_arch_cpu_interrupt_enable();
-  }
+    if (status) {
+        hdr_arch_cpu_interrupt_enable();
+    }
 
-  return old;
+    return old;
 }
 
 void com_sys_interrupt_register(uintmax_t      vec,
                                 com_intf_isr_t func,
                                 com_intf_eoi_t eoi) {
-  bool orig_status = com_sys_interrupt_set(false);
+    bool orig_status = com_sys_interrupt_set(false);
 
-  KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
-  com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
-  isr->func      = func;
-  isr->eoi       = eoi;
-  isr->id        = (hdr_arch_cpu_get_id() << (sizeof(uintmax_t) * 8 / 2)) | vec;
+    KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
+    com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
+    isr->func      = func;
+    isr->eoi       = eoi;
+    isr->id = (hdr_arch_cpu_get_id() << (sizeof(uintmax_t) * 8 / 2)) | vec;
 
-  com_sys_interrupt_set(orig_status);
+    com_sys_interrupt_set(orig_status);
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
-  // TODO: check if this should be cpu->intstatus = false
-  //        CHECK EVERYWHERE
-  com_sys_interrupt_set(false);
-  com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
+    // TODO: check if this should be cpu->intstatus = false
+    //        CHECK EVERYWHERE
+    com_sys_interrupt_set(false);
+    com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
 
-  if (NULL == isr) {
-    com_panic(ctx, "isr not set for interrupt vector %u", vec);
-  }
+    if (NULL == isr) {
+        com_panic(ctx, "isr not set for interrupt vector %u", vec);
+    }
 
-  if (NULL != isr->func) {
-    isr->func(isr, ctx);
-  }
+    if (NULL != isr->func) {
+        isr->func(isr, ctx);
+    }
 
-  if (NULL != isr->eoi) {
-    isr->eoi(isr);
-  }
+    if (NULL != isr->eoi) {
+        isr->eoi(isr);
+    }
 
-  ARCH_CONTEXT_RESTORE_TLC(ctx);
-  com_sys_interrupt_set(ARCH_CONTEXT_INTSTATUS(ctx));
+    ARCH_CONTEXT_RESTORE_TLC(ctx);
+    com_sys_interrupt_set(ARCH_CONTEXT_INTSTATUS(ctx));
 }

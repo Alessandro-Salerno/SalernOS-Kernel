@@ -28,21 +28,21 @@
 
 __attribute__((noreturn)) void
 com_panic(arch_context_t *ctx, const char *fmt, ...) {
-  kprintf("kernel panic on cpu %u\n", hdr_arch_cpu_get_id());
+    kprintf("kernel panic on cpu %u\n", hdr_arch_cpu_get_id());
 
-  if (NULL != fmt) {
-    va_list args;
-    va_start(args, fmt);
-    kvprintf(fmt, args);
-    va_end(args);
-    kprintf("\n");
-  }
+    if (NULL != fmt) {
+        va_list args;
+        va_start(args, fmt);
+        kvprintf(fmt, args);
+        va_end(args);
+        kprintf("\n");
+    }
 
-  if (NULL != ctx) {
-    arch_context_print(ctx);
-  }
+    if (NULL != ctx) {
+        arch_context_print(ctx);
+    }
 
-  com_sys_interrupt_set(false);
-  while (1)
-    ;
+    com_sys_interrupt_set(false);
+    while (1)
+        ;
 }

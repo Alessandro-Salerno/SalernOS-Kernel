@@ -28,13 +28,13 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 #include <stdbool.h>
 
 typedef struct com_thread {
-  arch_context_t   ctx;
-  struct com_proc *proc;
-  struct arch_cpu *cpu;
-  bool             runnable;
-  void            *kernel_stack;
-  TAILQ_ENTRY(com_thread) threads;
-  struct com_thread_tailq *waiting_on;
+    arch_context_t   ctx;
+    struct com_proc *proc;
+    struct arch_cpu *cpu;
+    bool             runnable;
+    void            *kernel_stack;
+    TAILQ_ENTRY(com_thread) threads;
+    struct com_thread_tailq *waiting_on;
 } com_thread_t;
 
 com_thread_t *com_sys_thread_new(struct com_proc *proc,

@@ -24,18 +24,18 @@
 #define ARCH_PAGE_SIZE 4096
 
 #define ARCH_PHYS_TO_HHDM(addr) \
-  ((uintptr_t)0xffff800000000000 + (uintptr_t)(addr))
+    ((uintptr_t)0xffff800000000000 + (uintptr_t)(addr))
 #define ARCH_HHDM_TO_PHYS(addr) \
-  ((uintptr_t)(addr) - (uintptr_t)0xffff800000000000)
+    ((uintptr_t)(addr) - (uintptr_t)0xffff800000000000)
 
 #define ARCH_MEMMAP_IS_USABLE(entry) (LIMINE_MEMMAP_USABLE == entry->type)
 #define ARCH_MEMMAP_IS_RECLAIMABLE(entry) \
-  (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type)
-#define ARCH_MEMMAP_IS_MAPPABLE(entry)                    \
-  (LIMINE_MEMMAP_USABLE == entry->type ||                 \
-   LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
-   LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
-   LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
+    (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type)
+#define ARCH_MEMMAP_IS_MAPPABLE(entry)                      \
+    (LIMINE_MEMMAP_USABLE == entry->type ||                 \
+     LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
+     LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
+     LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
 // This type must contain the following fields:
 //  - uintmax_t (or any integer) type

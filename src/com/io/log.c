@@ -19,26 +19,26 @@
 #include <kernel/com/io/log.h>
 
 static void dummy_hook(char c) {
-  (void)c;
+    (void)c;
 }
 
 static volatile com_io_log_hook_t Hook = dummy_hook;
 
 void com_io_log_set_hook(com_io_log_hook_t hook) {
-  if (NULL == hook) {
-    Hook = dummy_hook;
-    return;
-  }
+    if (NULL == hook) {
+        Hook = dummy_hook;
+        return;
+    }
 
-  Hook = hook;
+    Hook = hook;
 }
 
 void com_io_log_putc(char c) {
-  Hook(c);
+    Hook(c);
 }
 
 void com_io_log_puts(const char *s) {
-  for (; 0 != *s; s++) {
-    com_io_log_putc(*s);
-  }
+    for (; 0 != *s; s++) {
+        com_io_log_putc(*s);
+    }
 }

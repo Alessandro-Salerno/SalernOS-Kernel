@@ -35,51 +35,51 @@ static uint64_t GdtTemplate[7] = {
 };
 
 typedef struct {
-  uint16_t size;
-  uint64_t address;
+    uint16_t size;
+    uint64_t address;
 } __attribute__((packed)) gdtr_t;
 
 void x86_64_gdt_init(void) {
-  KLOG("copying gdt template to cpu struct");
-  arch_cpu_t *cur_cpu = hdr_arch_cpu_get();
+    KLOG("copying gdt template to cpu struct");
+    arch_cpu_t *cur_cpu = hdr_arch_cpu_get();
 
-  cur_cpu->gdt[0] = GdtTemplate[0];
-  cur_cpu->gdt[1] = GdtTemplate[1];
-  cur_cpu->gdt[2] = GdtTemplate[2];
-  cur_cpu->gdt[3] = GdtTemplate[3];
-  cur_cpu->gdt[4] = GdtTemplate[4];
-  cur_cpu->gdt[5] = GdtTemplate[5];
-  cur_cpu->gdt[6] = GdtTemplate[6];
+    cur_cpu->gdt[0] = GdtTemplate[0];
+    cur_cpu->gdt[1] = GdtTemplate[1];
+    cur_cpu->gdt[2] = GdtTemplate[2];
+    cur_cpu->gdt[3] = GdtTemplate[3];
+    cur_cpu->gdt[4] = GdtTemplate[4];
+    cur_cpu->gdt[5] = GdtTemplate[5];
+    cur_cpu->gdt[6] = GdtTemplate[6];
 
-  KLOG("applying changes to gdt template");
-  uintptr_t ist_addr = (uintptr_t)&hdr_arch_cpu_get()->ist;
+    KLOG("applying changes to gdt template");
+    uintptr_t ist_addr = (uintptr_t)&hdr_arch_cpu_get()->ist;
 
-  // Add IST to GDT
-  cur_cpu->gdt[5] |= ((ist_addr & 0xff000000) << 32) |
-                     ((ist_addr & 0xff0000) << 16) |
-                     ((ist_addr & 0xffff) << 16) | sizeof(x86_64_ist_t);
-  cur_cpu->gdt[6] = (ist_addr >> 32) & 0xffffffff;
+    // Add IST to GDT
+    cur_cpu->gdt[5] |= ((ist_addr & 0xff000000) << 32) |
+                       ((ist_addr & 0xff0000) << 16) |
+                       ((ist_addr & 0xffff) << 16) | sizeof(x86_64_ist_t);
+    cur_cpu->gdt[6] = (ist_addr >> 32) & 0xffffffff;
 
-  gdtr_t gdtr = {.size    = sizeof(GdtTemplate) - 1,
-                 .address = (uintptr_t)&hdr_arch_cpu_get()->gdt};
+    gdtr_t gdtr = {.size    = sizeof(GdtTemplate) - 1,
+                   .address = (uintptr_t)&hdr_arch_cpu_get()->gdt};
 
-  KLOG("loading gdt");
-  asm volatile("lgdt (%%rax)" : : "a"(&gdtr) : "memory");
-  asm volatile("ltr %%ax" : : "a"(0x28));
-  asm volatile("swapgs;"
-               "mov $0, %%ax;"
-               "mov %%ax, %%gs;"
-               "mov %%ax, %%fs;"
-               "swapgs;"
-               "mov $0x10, %%ax;"
-               "mov %%ax, %%ds;"
-               "mov %%ax, %%es;"
-               "mov %%ax, %%ss;"
-               "pushq $0x8;"
-               "pushq $.reload;"
-               "retfq;"
-               ".reload:"
-               :
-               :
-               : "ax");
+    KLOG("loading gdt");
+    asm volatile("lgdt (%%rax)" : : "a"(&gdtr) : "memory");
+    asm volatile("ltr %%ax" : : "a"(0x28));
+    asm volatile("swapgs;"
+                 "mov $0, %%ax;"
+                 "mov %%ax, %%gs;"
+                 "mov %%ax, %%fs;"
+                 "swapgs;"
+                 "mov $0x10, %%ax;"
+                 "mov %%ax, %%ds;"
+                 "mov %%ax, %%es;"
+                 "mov %%ax, %%ss;"
+                 "pushq $0x8;"
+                 "pushq $.reload;"
+                 "retfq;"
+                 ".reload:"
+                 :
+                 :
+                 : "ax");
 }

@@ -27,58 +27,58 @@
 #define NUM_SLABS (ARCH_PAGE_SIZE / 16)
 
 typedef struct {
-  uintptr_t next;
+    uintptr_t next;
 } slab_t;
 
 static slab_t         Slabs[NUM_SLABS];
 static com_spinlock_t Lock = COM_SPINLOCK_NEW();
 
 static void init(slab_t *s, size_t entry_size) {
-  entry_size = entry_size + (entry_size % 16);
-  s->next    = ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-  size_t max = ARCH_PAGE_SIZE / entry_size - 1;
-  kmemset((void *)s->next, ARCH_PAGE_SIZE, 0xff);
-  uintptr_t *list_arr = (uintptr_t *)s->next;
-  size_t     off      = entry_size / sizeof(uintptr_t);
+    entry_size = entry_size + (entry_size % 16);
+    s->next    = ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    size_t max = ARCH_PAGE_SIZE / entry_size - 1;
+    kmemset((void *)s->next, ARCH_PAGE_SIZE, 0xff);
+    uintptr_t *list_arr = (uintptr_t *)s->next;
+    size_t     off      = entry_size / sizeof(uintptr_t);
 
-  for (size_t i = 0; i < max; i++) {
-    list_arr[i * off] = (uintptr_t)&list_arr[(i + 1) * off];
-  }
+    for (size_t i = 0; i < max; i++) {
+        list_arr[i * off] = (uintptr_t)&list_arr[(i + 1) * off];
+    }
 
-  list_arr[max * off] = (uintptr_t)NULL;
+    list_arr[max * off] = (uintptr_t)NULL;
 }
 
 void *com_mm_slab_alloc(size_t size) {
-  size_t i = (size + 15) / 16;
-  KASSERT(i < NUM_SLABS);
-  slab_t *s = &Slabs[i];
+    size_t i = (size + 15) / 16;
+    KASSERT(i < NUM_SLABS);
+    slab_t *s = &Slabs[i];
 
-  hdr_com_spinlock_acquire(&Lock);
-  if (0 == s->next) {
-    init(s, size);
-  }
-  uintptr_t *old_next = (uintptr_t *)s->next;
-  s->next             = *old_next;
-  hdr_com_spinlock_release(&Lock);
+    hdr_com_spinlock_acquire(&Lock);
+    if (0 == s->next) {
+        init(s, size);
+    }
+    uintptr_t *old_next = (uintptr_t *)s->next;
+    s->next             = *old_next;
+    hdr_com_spinlock_release(&Lock);
 
-  kmemset(old_next, size, 0);
-  return old_next;
+    kmemset(old_next, size, 0);
+    return old_next;
 }
 
 void com_mm_slab_free(void *ptr, size_t size) {
-  if (NULL == ptr) {
-    return;
-  }
+    if (NULL == ptr) {
+        return;
+    }
 
-  size_t i = (size + 15) / 16;
-  KASSERT(i < NUM_SLABS);
-  slab_t *s = &Slabs[i];
+    size_t i = (size + 15) / 16;
+    KASSERT(i < NUM_SLABS);
+    slab_t *s = &Slabs[i];
 
-  hdr_com_spinlock_acquire(&Lock);
-  uintptr_t *new_head = ptr;
-  *new_head           = s->next;
-  s->next             = (uintptr_t)new_head;
-  hdr_com_spinlock_release(&Lock);
+    hdr_com_spinlock_acquire(&Lock);
+    uintptr_t *new_head = ptr;
+    *new_head           = s->next;
+    s->next             = (uintptr_t)new_head;
+    hdr_com_spinlock_release(&Lock);
 
-  // TODO: free slab page if needed
+    // TODO: free slab page if needed
 }

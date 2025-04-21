@@ -33,26 +33,26 @@
 #define USER_DATA __attribute__((section(".user_data")))
 #define USED      __attribute__((used))
 
-#define KLOG(...)                        \
-  com_io_log_puts("[  log  ] ");            \
-  com_io_log_puts(__FILE__ ":");            \
-  com_io_log_puts(__func__);                \
-  com_io_log_puts(":" KSTR(__LINE__) ": "); \
-  kprintf(__VA_ARGS__);                  \
-  com_io_log_putc('\n');
+#define KLOG(...)                             \
+    com_io_log_puts("[  log  ] ");            \
+    com_io_log_puts(__FILE__ ":");            \
+    com_io_log_puts(__func__);                \
+    com_io_log_puts(":" KSTR(__LINE__) ": "); \
+    kprintf(__VA_ARGS__);                     \
+    com_io_log_putc('\n');
 
-#define KDEBUG(...)                      \
-  com_io_log_puts("[ debug ] ");            \
-  com_io_log_puts(__FILE__ ":");            \
-  com_io_log_puts(__func__);                \
-  com_io_log_puts(":" KSTR(__LINE__) ": "); \
-  kprintf(__VA_ARGS__);                  \
-  com_io_log_putc('\n');
+#define KDEBUG(...)                           \
+    com_io_log_puts("[ debug ] ");            \
+    com_io_log_puts(__FILE__ ":");            \
+    com_io_log_puts(__func__);                \
+    com_io_log_puts(":" KSTR(__LINE__) ": "); \
+    kprintf(__VA_ARGS__);                     \
+    com_io_log_putc('\n');
 
-#define KASSERT(statement)                                         \
-  if (KUNKLIKELY(!(statement))) {                                 \
-    com_io_log_puts(__FILE__ ":");                                   \
-    com_io_log_puts(__func__);                                       \
-    com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
-    com_panic(NULL, NULL);                                        \
-  }
+#define KASSERT(statement)                                               \
+    if (KUNKLIKELY(!(statement))) {                                      \
+        com_io_log_puts(__FILE__ ":");                                   \
+        com_io_log_puts(__func__);                                       \
+        com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
+        com_panic(NULL, NULL);                                           \
+    }

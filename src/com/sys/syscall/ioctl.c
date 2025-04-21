@@ -29,26 +29,26 @@ com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
                                         uintmax_t       op,
                                         uintmax_t       bufptr,
                                         uintmax_t       unused) {
-  (void)ctx;
-  (void)unused;
-  void             *buf = (void *)bufptr;
-  com_syscall_ret_t ret = {0};
+    (void)ctx;
+    (void)unused;
+    void             *buf = (void *)bufptr;
+    com_syscall_ret_t ret = {0};
 
-  com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
-  com_file_t *file = com_sys_proc_get_file(curr, fd);
+    com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
+    com_file_t *file = com_sys_proc_get_file(curr, fd);
 
-  if (NULL == file) {
-    ret.err = EBADF;
-    return ret;
-  }
+    if (NULL == file) {
+        ret.err = EBADF;
+        return ret;
+    }
 
-  int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
+    int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
 
-  if (0 != vfs_op) {
-    ret.err = vfs_op;
-    goto cleanup;
-  }
+    if (0 != vfs_op) {
+        ret.err = vfs_op;
+        goto cleanup;
+    }
 
 cleanup:
-  return ret;
+    return ret;
 }

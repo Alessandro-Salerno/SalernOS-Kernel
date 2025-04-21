@@ -37,75 +37,80 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
                                          uintmax_t       argvptr,
                                          uintmax_t       envptr,
                                          uintmax_t       unused) {
-  (void)unused;
+    (void)unused;
 
-  const char  *path = (void *)pathptr;
-  char *const *argv = (void *)argvptr;
-  char *const *env  = (void *)envptr;
+    const char  *path = (void *)pathptr;
+    char *const *argv = (void *)argvptr;
+    char *const *env  = (void *)envptr;
 
-  com_syscall_ret_t     ret    = {0};
-  com_proc_t           *proc   = hdr_arch_cpu_get_thread()->proc;
-  arch_mmu_pagetable_t *new_pt = arch_mmu_new_table();
+    com_syscall_ret_t     ret    = {0};
+    com_proc_t           *proc   = hdr_arch_cpu_get_thread()->proc;
+    arch_mmu_pagetable_t *new_pt = arch_mmu_new_table();
 
-  com_elf_data_t prog_data = {0};
-  int            status    = com_sys_elf64_load(
-      &prog_data, path, kstrlen(path), proc->root, proc->cwd, 0, new_pt);
-
-  if (0 != status) {
-    goto fail;
-  }
-
-  uintptr_t entry = prog_data.entry;
-
-  if (0 != prog_data.interpreter_path[0]) {
-    com_elf_data_t interp_data = {0};
-    status                     = com_sys_elf64_load(&interp_data,
-                                prog_data.interpreter_path,
-                                kstrlen(prog_data.interpreter_path),
-                                proc->root,
-                                proc->cwd,
-                                0x40000000, // TODO: why?
-                                new_pt);
+    com_elf_data_t prog_data = {0};
+    int            status    = com_sys_elf64_load(
+        &prog_data, path, kstrlen(path), proc->root, proc->cwd, 0, new_pt);
 
     if (0 != status) {
-      goto fail;
+        goto fail;
     }
 
-    entry = interp_data.entry;
-  }
+    uintptr_t entry = prog_data.entry;
 
-  uintptr_t stack_end   = 0x60000000; // TODO: why?
-  uintptr_t stack_start = stack_end - (ARCH_PAGE_SIZE * 64);
-  void     *stack_phys  = NULL;
+    if (0 != prog_data.interpreter_path[0]) {
+        com_elf_data_t interp_data = {0};
+        status                     = com_sys_elf64_load(&interp_data,
+                                    prog_data.interpreter_path,
+                                    kstrlen(prog_data.interpreter_path),
+                                    proc->root,
+                                    proc->cwd,
+                                    0x40000000, // TODO: why?
+                                    new_pt);
 
-  for (uintptr_t curr = stack_start; curr < stack_end; curr += ARCH_PAGE_SIZE) {
-    stack_phys = com_mm_pmm_alloc();
-    arch_mmu_map(new_pt,
-                 (void *)curr,
-                 stack_phys,
-                 ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                     ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-  }
+        if (0 != status) {
+            goto fail;
+        }
 
-  *ctx                = (arch_context_t){0};
-  uintptr_t stack_ptr = com_sys_elf64_prepare_stack(
-      prog_data, (uintptr_t)stack_phys + ARCH_PAGE_SIZE, stack_end, argv, env);
-  ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
-
-  arch_mmu_switch(new_pt);
-  arch_mmu_destroy_table(proc->page_table);
-  proc->page_table = new_pt;
-
-  for (size_t i = 0; i < proc->next_fd; i++) {
-    if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
-      COM_FS_FILE_RELEASE(proc->fd[i].file);
+        entry = interp_data.entry;
     }
-  }
 
-  return ret;
+    uintptr_t stack_end   = 0x60000000; // TODO: why?
+    uintptr_t stack_start = stack_end - (ARCH_PAGE_SIZE * 64);
+    void     *stack_phys  = NULL;
+
+    for (uintptr_t curr = stack_start; curr < stack_end;
+         curr += ARCH_PAGE_SIZE) {
+        stack_phys = com_mm_pmm_alloc();
+        arch_mmu_map(new_pt,
+                     (void *)curr,
+                     stack_phys,
+                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                         ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+    }
+
+    *ctx = (arch_context_t){0};
+    uintptr_t stack_ptr =
+        com_sys_elf64_prepare_stack(prog_data,
+                                    (uintptr_t)stack_phys + ARCH_PAGE_SIZE,
+                                    stack_end,
+                                    argv,
+                                    env);
+    ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
+
+    arch_mmu_switch(new_pt);
+    arch_mmu_destroy_table(proc->page_table);
+    proc->page_table = new_pt;
+
+    for (size_t i = 0; i < proc->next_fd; i++) {
+        if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
+            COM_FS_FILE_RELEASE(proc->fd[i].file);
+        }
+    }
+
+    return ret;
 
 fail:
-  ret.err = status;
-  arch_mmu_destroy_table(new_pt);
-  return ret;
+    ret.err = status;
+    arch_mmu_destroy_table(new_pt);
+    return ret;
 }

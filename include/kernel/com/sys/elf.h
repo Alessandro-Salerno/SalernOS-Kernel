@@ -24,11 +24,11 @@
 #include <stdint.h>
 
 typedef struct {
-  uintptr_t entry;
-  size_t    phdr;
-  size_t    phent_sz;
-  size_t    phent_num;
-  char      interpreter_path[64];
+    uintptr_t entry;
+    size_t    phdr;
+    size_t    phent_sz;
+    size_t    phent_num;
+    char      interpreter_path[64];
 } com_elf_data_t;
 
 int       com_sys_elf64_load(com_elf_data_t       *out,

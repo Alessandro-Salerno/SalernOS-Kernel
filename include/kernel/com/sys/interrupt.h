@@ -27,9 +27,9 @@ typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
 typedef void (*com_intf_eoi_t)(com_isr_t *isr);
 
 typedef struct com_isr {
-  com_intf_isr_t func;
-  com_intf_eoi_t eoi;
-  uintmax_t      id;
+    com_intf_isr_t func;
+    com_intf_eoi_t eoi;
+    uintmax_t      id;
 } com_isr_t;
 
 bool com_sys_interrupt_set(bool status);

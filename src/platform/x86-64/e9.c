@@ -20,5 +20,5 @@
 #include <kernel/platform/x86-64/io.h>
 
 void x86_64_e9_putc(char c) {
-  hdr_x86_64_io_outb(X86_64_IO_PORT_E9, c);
+    hdr_x86_64_io_outb(X86_64_IO_PORT_E9, c);
 }

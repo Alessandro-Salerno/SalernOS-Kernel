@@ -27,23 +27,23 @@ typedef int com_spinlock_t;
 #define COM_SPINLOCK_NEW() 0
 
 static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
-  hdr_arch_cpu_interrupt_disable();
-  hdr_arch_cpu_get()->lock_depth++;
-  while (!__sync_bool_compare_and_swap(lock, 0, 1)) {
-    hdr_arch_cpu_pause();
-  }
+    hdr_arch_cpu_interrupt_disable();
+    hdr_arch_cpu_get()->lock_depth++;
+    while (!__sync_bool_compare_and_swap(lock, 0, 1)) {
+        hdr_arch_cpu_pause();
+    }
 }
 
 static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
-  return __sync_bool_compare_and_swap(lock, 0, 1);
+    return __sync_bool_compare_and_swap(lock, 0, 1);
 }
 
 static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
-  KASSERT(0 < hdr_arch_cpu_get()->lock_depth);
-  *lock = 0;
-  hdr_arch_cpu_get()->lock_depth--;
+    KASSERT(0 < hdr_arch_cpu_get()->lock_depth);
+    *lock = 0;
+    hdr_arch_cpu_get()->lock_depth--;
 
-  if (0 == hdr_arch_cpu_get()->lock_depth && hdr_arch_cpu_get()->intstatus) {
-    hdr_arch_cpu_interrupt_enable();
-  }
+    if (0 == hdr_arch_cpu_get()->lock_depth && hdr_arch_cpu_get()->intstatus) {
+        hdr_arch_cpu_interrupt_enable();
+    }
 }

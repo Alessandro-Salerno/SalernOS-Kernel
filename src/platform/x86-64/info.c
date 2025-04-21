@@ -55,38 +55,38 @@ __attribute__((
                                             .revision = 0};
 
 arch_memmap_t *arch_info_get_memmap(void) {
-  KASSERT(NULL != MemoryMapRequest.response);
-  return MemoryMapRequest.response;
+    KASSERT(NULL != MemoryMapRequest.response);
+    return MemoryMapRequest.response;
 }
 
 arch_kaddr_t *arch_info_get_kaddr(void) {
-  KASSERT(NULL != KernelAddress.response);
-  return KernelAddress.response;
+    KASSERT(NULL != KernelAddress.response);
+    return KernelAddress.response;
 }
 
 arch_rsdp_t *arch_info_get_rsdp(void) {
-  KASSERT(NULL != RsdpRequest.response);
-  return RsdpRequest.response;
+    KASSERT(NULL != RsdpRequest.response);
+    return RsdpRequest.response;
 }
 
 arch_file_t *arch_info_get_initrd(void) {
-  KASSERT(NULL != ModuleRequest.response);
-  KASSERT(0 < ModuleRequest.response->module_count);
+    KASSERT(NULL != ModuleRequest.response);
+    KASSERT(0 < ModuleRequest.response->module_count);
 
-  for (uintmax_t i = 0; i < ModuleRequest.response->module_count; i++) {
-    arch_file_t *mod = ModuleRequest.response->modules[i];
+    for (uintmax_t i = 0; i < ModuleRequest.response->module_count; i++) {
+        arch_file_t *mod = ModuleRequest.response->modules[i];
 
-    if (0 == kstrcmp("/initrd", mod->path)) {
-      return mod;
+        if (0 == kstrcmp("/initrd", mod->path)) {
+            return mod;
+        }
     }
-  }
 
-  KASSERT(!"no initrd found");
+    KASSERT(!"no initrd found");
 }
 
 arch_framebuffer_t *arch_info_get_fb(void) {
-  KASSERT(NULL != FramebufferRequest.response);
-  KASSERT(0 < FramebufferRequest.response->framebuffer_count);
+    KASSERT(NULL != FramebufferRequest.response);
+    KASSERT(0 < FramebufferRequest.response->framebuffer_count);
 
-  return FramebufferRequest.response->framebuffers[0];
+    return FramebufferRequest.response->framebuffers[0];
 }

@@ -32,18 +32,18 @@ com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
                                        uintmax_t       unused1,
                                        uintmax_t       unused2,
                                        uintmax_t       unused3) {
-  (void)ctx;
-  (void)unused1;
-  (void)unused2;
-  (void)unused3;
+    (void)ctx;
+    (void)unused1;
+    (void)unused2;
+    (void)unused3;
 
-  com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-  com_proc_t   *curr_proc   = curr_thread->proc;
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
-  com_sys_proc_exit(curr_proc, (int)status);
-  curr_thread->runnable = false;
-  com_sys_sched_yield();
+    com_sys_proc_exit(curr_proc, (int)status);
+    curr_thread->runnable = false;
+    com_sys_sched_yield();
 
-  // Unreachable
-  return (com_syscall_ret_t){0, 0};
+    // Unreachable
+    return (com_syscall_ret_t){0, 0};
 }

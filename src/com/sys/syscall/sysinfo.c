@@ -27,11 +27,11 @@
 #include <stdint.h>
 
 struct sysinfo {
-  char      cpu[64];
-  char      gpu[64];
-  char      kernel[64];
-  uintmax_t used_mem;
-  uintmax_t sys_mem;
+    char      cpu[64];
+    char      gpu[64];
+    char      kernel[64];
+    uintmax_t used_mem;
+    uintmax_t sys_mem;
 };
 
 com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
@@ -39,19 +39,20 @@ com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
                                           uintmax_t       unused1,
                                           uintmax_t       unused2,
                                           uintmax_t       unused3) {
-  (void)unused1;
-  (void)unused2;
-  (void)unused3;
-  (void)ctx;
+    (void)unused1;
+    (void)unused2;
+    (void)unused3;
+    (void)ctx;
 
-  struct sysinfo *sysinfo = (void *)bufptr;
-  // kstrcpy(sysinfo->cpu, "Not implemented");
-  // kstrcpy(sysinfo->gpu, "Not implemented");
-  kmemset(sysinfo->cpu, 64, 0);
-  kmemset(sysinfo->gpu, 64, 0);
-  kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.2 (indev)");
+    struct sysinfo *sysinfo = (void *)bufptr;
+    // kstrcpy(sysinfo->cpu, "Not implemented");
+    // kstrcpy(sysinfo->gpu, "Not implemented");
+    kmemset(sysinfo->cpu, 64, 0);
+    kmemset(sysinfo->gpu, 64, 0);
+    kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.2 (indev)");
 
-  com_mm_pmm_get_info(&sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);
+    com_mm_pmm_get_info(
+        &sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);
 
-  return (com_syscall_ret_t){0, 0};
+    return (com_syscall_ret_t){0, 0};
 }

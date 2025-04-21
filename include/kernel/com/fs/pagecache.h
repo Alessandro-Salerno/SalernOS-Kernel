@@ -25,12 +25,12 @@
 #define COM_FS_PAGECACHE_LAYER_SIZE ARCH_PAGE_SIZE / sizeof(void *)
 
 typedef union com_pagecache {
-  struct {
-    union com_pagecache *next[COM_FS_PAGECACHE_LAYER_SIZE];
-  } inner;
-  struct {
-    uintptr_t data[COM_FS_PAGECACHE_LAYER_SIZE];
-  } leaf;
+    struct {
+        union com_pagecache *next[COM_FS_PAGECACHE_LAYER_SIZE];
+    } inner;
+    struct {
+        uintptr_t data[COM_FS_PAGECACHE_LAYER_SIZE];
+    } leaf;
 } com_pagecache_t;
 
 bool             com_fs_pagecache_get(uintptr_t       *out,

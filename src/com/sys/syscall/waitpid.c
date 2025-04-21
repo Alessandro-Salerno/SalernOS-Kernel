@@ -30,39 +30,39 @@ com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
                                           uintmax_t       statusptr,
                                           uintmax_t       flags,
                                           uintmax_t       unused) {
-  (void)ctx;
-  (void)unused;
-  com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
-  com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
-  com_syscall_ret_t ret    = {0, 0};
-  int              *status = (int *)statusptr;
+    (void)ctx;
+    (void)unused;
+    com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
+    com_syscall_ret_t ret    = {0, 0};
+    int              *status = (int *)statusptr;
 
-  com_sys_proc_acquire_glock();
+    com_sys_proc_acquire_glock();
 
-  if (0 == curr->num_children) {
-    ret.err = ECHILD;
-    goto cleanup;
-  }
-
-  if (NULL == towait) {
-    ret.err = ENOENT;
-    goto cleanup;
-  }
-
-  while (1) {
-    if (towait->exited) {
-      *status   = towait->exit_status;
-      ret.value = pid;
-      goto cleanup;
+    if (0 == curr->num_children) {
+        ret.err = ECHILD;
+        goto cleanup;
     }
 
-    (void)flags;
-    // TODO: handle flags
+    if (NULL == towait) {
+        ret.err = ENOENT;
+        goto cleanup;
+    }
 
-    com_sys_proc_wait(curr);
-  }
+    while (1) {
+        if (towait->exited) {
+            *status   = towait->exit_status;
+            ret.value = pid;
+            goto cleanup;
+        }
+
+        (void)flags;
+        // TODO: handle flags
+
+        com_sys_proc_wait(curr);
+    }
 
 cleanup:
-  com_sys_proc_release_glock();
-  return ret;
+    com_sys_proc_release_glock();
+    return ret;
 }
