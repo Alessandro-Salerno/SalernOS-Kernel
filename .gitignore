@@ -2,8 +2,5 @@ obj/
 .vscode/
 bin/
 .DS_Store
-limine
 *.dat
-iso_root/
-*.iso
 compile_flags.txt
