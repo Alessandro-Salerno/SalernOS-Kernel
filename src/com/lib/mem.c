@@ -50,10 +50,23 @@ void kmemcpy(void *dst, const void *src, size_t buffsize) {
 }
 
 void *kmemchr(const void *str, int c, size_t n) {
-    const char *s = str;
+    const unsigned char *s = str;
     for (size_t i = 0; i < n; i++) {
         if (c == s[i]) {
             return (void *)&s[i];
+        }
+    }
+
+    return NULL;
+}
+
+void *kmemrchr(const void *str, int c, size_t n) {
+    const unsigned char *s = str;
+    c                      = (unsigned char)c;
+
+    while (n--) {
+        if (s[n] == c) {
+            return (void *)(s + n);
         }
     }
 

@@ -30,14 +30,16 @@ typedef struct {
     uintptr_t next;
 } slab_t;
 
-static slab_t         Slabs[NUM_SLABS];
-static com_spinlock_t Lock = COM_SPINLOCK_NEW();
+static slab_t         Slabs[NUM_SLABS] = {0};
+static com_spinlock_t Lock             = COM_SPINLOCK_NEW();
 
 static void init(slab_t *s, size_t entry_size) {
-    entry_size = entry_size + (entry_size % 16);
-    s->next    = ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    entry_size     = (entry_size + 15) & ~15UL;
+    void *new_page = com_mm_pmm_alloc();
+    KASSERT(NULL != new_page);
+    s->next    = ARCH_PHYS_TO_HHDM(new_page);
     size_t max = ARCH_PAGE_SIZE / entry_size - 1;
-    kmemset((void *)s->next, ARCH_PAGE_SIZE, 0xff);
+    kmemset((void *)s->next, ARCH_PAGE_SIZE, 0);
     uintptr_t *list_arr = (uintptr_t *)s->next;
     size_t     off      = entry_size / sizeof(uintptr_t);
 
@@ -49,6 +51,8 @@ static void init(slab_t *s, size_t entry_size) {
 }
 
 void *com_mm_slab_alloc(size_t size) {
+    /*(void)size;
+    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());*/
     size_t i = (size + 15) / 16;
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];

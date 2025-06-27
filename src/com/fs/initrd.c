@@ -102,13 +102,14 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
             goto skip;
         }
 
-        KDEBUG("extracting file %s", file_path);
+        // KDEBUG("extracting file %s", file_path);
 
+        // Remove trailing /'es
         while (0 < file_path_len && '/' == file_path[file_path_len - 1]) {
             file_path_len--;
         }
 
-        const char  *path_end = kmemchr(file_path, '/', file_path_len);
+        const char  *path_end = kmemrchr(file_path, '/', file_path_len);
         com_vnode_t *dir      = root;
         // offset into file_path where the ACTUAL name starts
         size_t file_name_off = 0;
@@ -125,7 +126,7 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
             file_name_len = file_path_len - sl_len - 1;
         }
 
-        while (0 < file_name_len &&
+        while (file_name_len > 0 &&
                '/' == file_path[file_name_off + file_name_len - 1]) {
             file_name_len--;
         }

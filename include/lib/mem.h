@@ -25,4 +25,5 @@ void   kmemset(void *buff, size_t buffsize, uint8_t val);
 int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize);
 void   kmemcpy(void *dst, const void *src, size_t buffsize);
 void  *kmemchr(const void *str, int c, size_t n);
+void  *kmemrchr(const void *str, int c, size_t n);
 void  *kmemmove(void *dst, void *src, size_t n);

@@ -341,6 +341,8 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
             end = off + buflen;
         }
 
+        // TODO: this is probably correct, but if something goes wrong, check
+        // the mod
         kmemcpy((uint8_t *)page + (cur % ARCH_PAGE_SIZE),
                 (uint8_t *)buf + cur - off,
                 end - cur);
