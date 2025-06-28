@@ -38,6 +38,7 @@
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
+#include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
@@ -178,6 +179,10 @@ void kernel_entry(void) {
 
     com_sys_syscall_init();
     x86_64_idt_set_user_invocable(0x80);
+
+    KLOG("initializing fpu");
+    hdr_x86_64_cr_write0((hdr_x86_64_cr_read0() & ~(1 << 2)) | (1 << 1));
+    hdr_x86_64_cr_write4(hdr_x86_64_cr_read4() | (3 << 9));
 
     com_vfs_t *rootfs = NULL;
     com_fs_tmpfs_mount(&rootfs, NULL);
