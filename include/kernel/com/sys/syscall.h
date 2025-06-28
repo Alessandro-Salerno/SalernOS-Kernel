@@ -87,3 +87,8 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
                                        uintmax_t       size,
                                        uintmax_t       flags,
                                        uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
+                                       uintmax_t       fd,
+                                       uintmax_t       uoffset,
+                                       uintmax_t       uwhence,
+                                       uintmax_t       unused);

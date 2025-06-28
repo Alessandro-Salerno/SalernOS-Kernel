@@ -67,6 +67,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x09, com_sys_syscall_open);
     com_sys_syscall_register(0x0A, com_sys_syscall_mmap);
     com_sys_syscall_register(0x0B, arch_syscall_set_tls);
+    com_sys_syscall_register(0x0C, com_sys_syscall_seek);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

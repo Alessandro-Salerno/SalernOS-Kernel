@@ -26,52 +26,47 @@
 #include <kernel/com/sys/syscall.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 
-com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
-                                       uintmax_t       pathptr,
-                                       uintmax_t       pathlen,
-                                       uintmax_t       flags,
+com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
+                                       uintmax_t       fd,
+                                       uintmax_t       uoffset,
+                                       uintmax_t       uwhence,
                                        uintmax_t       unused) {
     (void)ctx;
     (void)unused;
-    char             *path    = (char *)pathptr;
-    com_syscall_ret_t ret     = {0};
-    com_proc_t       *curr    = hdr_arch_cpu_get_thread()->proc;
-    com_vnode_t      *file_vn = NULL;
 
-    if (O_CREAT & flags) {
-        com_vnode_t *exist = NULL;
-        com_vnode_t *cwd   = atomic_load(&curr->cwd);
-        int lk_ret = com_fs_vfs_lookup(&exist, path, pathlen, curr->root, cwd);
+    off_t offset = (off_t)uoffset;
+    int   whence = (int)uwhence;
 
-        if ((O_EXCL & flags) && 0 == lk_ret) {
-            COM_FS_VFS_VNODE_RELEASE(exist);
-            ret.err = EEXIST;
-            goto cleanup;
-        }
+    com_syscall_ret_t ret  = {0};
+    com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;
+    com_file_t       *file = com_sys_proc_get_file(curr, fd);
 
-        // TODO: create file
-    } else {
-        com_vnode_t *cwd = atomic_load(&curr->cwd);
-        KDEBUG("opening file %s with root=%x cwd=%x", path, curr->root, cwd);
-        int lk_ret =
-            com_fs_vfs_lookup(&file_vn, path, pathlen, curr->root, cwd);
-
-        if (0 != lk_ret) {
-            ret.err = lk_ret;
-            goto cleanup;
-        }
+    if (NULL == file) {
+        ret.err = EBADF;
+        goto cleanup;
     }
 
-    uintmax_t fd      = com_sys_proc_next_fd(curr);
-    curr->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *file  = curr->fd[fd].file;
-    file->vnode       = file_vn;
-    file->flags       = flags;
-    file->num_ref     = 1;
-    file->off         = 0;
-    ret.value         = fd;
+    // TODO: handle errors (no seek on pipes etc, no seek out of bounds)
 
+    hdr_com_spinlock_acquire(&file->off_lock);
+    off_t new_off = file->off;
+    switch (whence) {
+    case SEEK_SET:
+        new_off = offset;
+        break;
+    case SEEK_CUR:
+        new_off += offset;
+        break;
+    case SEEK_END:
+        ret.err = ENOSYS;
+        goto cleanup;
+    }
+
+    file->off = new_off;
+    ret.value = new_off;
 cleanup:
+    hdr_com_spinlock_release(&file->off_lock);
     return ret;
 }
