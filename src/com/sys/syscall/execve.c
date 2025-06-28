@@ -44,7 +44,8 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
     char *const *env  = (void *)envptr;
 
     com_syscall_ret_t     ret    = {0};
-    com_proc_t           *proc   = hdr_arch_cpu_get_thread()->proc;
+    com_thread_t         *thread = hdr_arch_cpu_get_thread();
+    com_proc_t           *proc   = thread->proc;
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status =
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
@@ -63,6 +64,8 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
         }
     }
 
+    ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
+    ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
     return ret;
 
 fail:

@@ -25,7 +25,7 @@ void arch_context_print(arch_context_t *ctx) {
             "%x\nrcx: %x  ds: %x\nrdx: %x  cs: %x\n r8: %x  ss: "
             "%x\n r9: %x r10: %x\nr11: %x r12: %x\nr13: %x "
             "r14: %x\nr15: %x rdi: %x\nrsi: %x rbp: %x\nrip: "
-            "%x rsp: %x\nerr: %x rfl: %x\n",
+            "%x rsp: %x\nerr: %x rfl: %x\n\n",
             ctx->cr2,
             ctx->gs,
             ctx->rax,
@@ -52,4 +52,7 @@ void arch_context_print(arch_context_t *ctx) {
             ctx->rsp,
             ctx->error,
             ctx->rflags);
+
+    kprintf("instruction at (%rip):\n\t");
+    kprintf("%x %x\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
 }

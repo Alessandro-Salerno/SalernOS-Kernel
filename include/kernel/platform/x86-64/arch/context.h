@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <lib/mem.h>
 #include <stdint.h>
 
 #define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
@@ -67,6 +68,23 @@
 #define ARCH_CONTEXT_RESTORE_TLC(ctx) \
     hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
 
+#define ARCH_CONTEXT_SAVE_EXTRA(xctx) \
+    asm volatile("fxsave (%0)" : : "r"(&((xctx).fpu)) : "memory")
+
+#define ARCH_CONTEXT_RESTORE_EXTRA(xctx) \
+    asm volatile("fxrstor (%0)" : : "r"(&((xctx).fpu)) : "memory")
+
+#define ARCH_CONTEXT_INIT_EXTRA(xctx)                      \
+    {                                                      \
+        kmemset((xctx).fpu, sizeof((xctx).fpu), 0);        \
+        uint16_t fcw   = 0x037f;                           \
+        uint16_t ftw   = 0xffff;                           \
+        uint32_t mxcsr = 0x1f80;                           \
+        kmemcpy((xctx).fpu + 0x00, &fcw, sizeof(fcw));     \
+        kmemcpy((xctx).fpu + 0x08, &ftw, sizeof(ftw));     \
+        kmemcpy((xctx).fpu + 0x18, &mxcsr, sizeof(mxcsr)); \
+    }
+
 typedef struct {
     uint64_t cr2;
     uint64_t gs;
@@ -95,6 +113,10 @@ typedef struct {
     uint64_t rsp;
     uint64_t ss;
 } __attribute__((packed)) arch_context_t;
+
+typedef struct {
+    uint8_t fpu[512] __attribute__((aligned(16)));
+} __attribute__((packed)) arch_context_extra_t;
 
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
 void x86_64_ctx_test_trampoline(void);

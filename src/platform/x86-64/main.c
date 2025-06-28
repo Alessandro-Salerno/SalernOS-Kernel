@@ -219,6 +219,7 @@ void kernel_entry(void) {
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
 
     arch_mmu_switch(proc->page_table);
+    ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
     arch_context_trampoline(&thread->ctx);
 
     KDEBUG("intstatus: %u", BaseCpu.intstatus);

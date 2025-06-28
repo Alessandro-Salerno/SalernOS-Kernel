@@ -74,6 +74,9 @@ void com_sys_sched_yield(void) {
         next_pt = next->proc->page_table;
     }
 
+    ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
+    ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
+
     if (NULL != next_pt && next_pt != prev_pt) {
         arch_mmu_switch(next_pt);
 

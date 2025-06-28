@@ -42,6 +42,7 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     thread->ctx      = ctx;
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
+    ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
 
     return thread;
 }
