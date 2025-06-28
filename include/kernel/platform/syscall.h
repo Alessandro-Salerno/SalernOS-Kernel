@@ -20,6 +20,12 @@
 
 #include <arch/context.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/syscall.h>
 #include <stdint.h>
 
-void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx);
+void              arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx);
+com_syscall_ret_t arch_syscall_set_tls(arch_context_t *ctx,
+                                       uintmax_t       ptr,
+                                       uintmax_t       unused1,
+                                       uintmax_t       unused2,
+                                       uintmax_t       unused3);

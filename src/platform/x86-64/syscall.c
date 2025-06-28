@@ -16,9 +16,11 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
+#include <kernel/platform/x86-64/msr.h>
 
 extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
@@ -36,4 +38,18 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     ctx->rax = ret.value;
     ctx->rdx = ret.err;
     // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
+}
+
+com_syscall_ret_t arch_syscall_set_tls(arch_context_t *ctx,
+                                       uintmax_t       ptr,
+                                       uintmax_t       unused1,
+                                       uintmax_t       unused2,
+                                       uintmax_t       unused3) {
+    (void)ctx;
+    (void)unused1;
+    (void)unused2;
+    (void)unused3;
+    hdr_arch_cpu_get_thread()->xctx.fsbase = ptr;
+    hdr_x86_64_msr_write(X86_64_MSR_FSBASE, ptr);
+    return (com_syscall_ret_t){.value = 0, .err = 0};
 }

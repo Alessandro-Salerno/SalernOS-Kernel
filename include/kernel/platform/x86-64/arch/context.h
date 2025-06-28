@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <kernel/platform/x86-64/msr.h>
 #include <lib/mem.h>
 #include <stdint.h>
 
@@ -71,8 +72,9 @@
 #define ARCH_CONTEXT_SAVE_EXTRA(xctx) \
     asm volatile("fxsave (%0)" : : "r"(&((xctx).fpu)) : "memory")
 
-#define ARCH_CONTEXT_RESTORE_EXTRA(xctx) \
-    asm volatile("fxrstor (%0)" : : "r"(&((xctx).fpu)) : "memory")
+#define ARCH_CONTEXT_RESTORE_EXTRA(xctx)                            \
+    asm volatile("fxrstor (%0)" : : "r"(&((xctx).fpu)) : "memory"); \
+    hdr_x86_64_msr_write(X86_64_MSR_FSBASE, (xctx).fsbase);
 
 #define ARCH_CONTEXT_INIT_EXTRA(xctx)                      \
     {                                                      \
@@ -83,6 +85,8 @@
         kmemcpy((xctx).fpu + 0x00, &fcw, sizeof(fcw));     \
         kmemcpy((xctx).fpu + 0x08, &ftw, sizeof(ftw));     \
         kmemcpy((xctx).fpu + 0x18, &mxcsr, sizeof(mxcsr)); \
+        (xctx).fsbase = 0;                                 \
+        (xctx).gsbase = 0;                                 \
     }
 
 typedef struct {
@@ -115,7 +119,9 @@ typedef struct {
 } __attribute__((packed)) arch_context_t;
 
 typedef struct {
-    uint8_t fpu[512] __attribute__((aligned(16)));
+    uint8_t  fpu[512] __attribute__((aligned(16)));
+    uint64_t fsbase;
+    uint64_t gsbase;
 } __attribute__((packed)) arch_context_extra_t;
 
 void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
