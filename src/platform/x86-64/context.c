@@ -53,6 +53,6 @@ void arch_context_print(arch_context_t *ctx) {
             ctx->error,
             ctx->rflags);
 
-    kprintf("instruction at (%rip):\n\t");
-    kprintf("%x %x\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
+    // kprintf("instruction at (%%rip):\n\t");
+    // kprintf("%x %x\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
 }

@@ -24,6 +24,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "lib/util.h"
+
 #define NUM_SLABS (ARCH_PAGE_SIZE / 16)
 
 typedef struct {
@@ -51,8 +53,6 @@ static void init(slab_t *s, size_t entry_size) {
 }
 
 void *com_mm_slab_alloc(size_t size) {
-    /*(void)size;
-    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());*/
     size_t i = (size + 15) / 16;
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];

@@ -63,11 +63,16 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
     }
 
     for (size_t i = 0; i < pages; i++) {
+        void *phys  = com_mm_pmm_alloc();
+        void *kvirt = (void *)ARCH_PHYS_TO_HHDM(phys);
         arch_mmu_map(curr->page_table,
                      (void *)(virt + i * ARCH_PAGE_SIZE),
-                     com_mm_pmm_alloc(),
+                     phys,
                      ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                          ARCH_MMU_FLAGS_USER);
+        if (MAP_ANONYMOUS & flags) {
+            kmemset(kvirt, ARCH_PAGE_SIZE, 0);
+        }
     }
 
     return (com_syscall_ret_t){.value = virt, .err = 0};

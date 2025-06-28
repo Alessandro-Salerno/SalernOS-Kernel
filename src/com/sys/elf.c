@@ -96,13 +96,14 @@ static int load(uintptr_t             vaddr,
 
         void *phys_page  = com_mm_pmm_alloc();
         void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
+        kmemset(kvirt_page, ARCH_PAGE_SIZE, 0);
         arch_mmu_map(pt,
                      (void *)(cur - misalign),
                      phys_page,
                      ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
                          ARCH_MMU_FLAGS_WRITE); // TODO: NO_EXEC for data?
 
-        if (0 < fsz) {
+        if (fsz > 0) {
             size_t len = fsz;
             if (rem < len) {
                 len = rem;
