@@ -19,6 +19,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
@@ -35,23 +36,31 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
                                        uintmax_t       hint,
                                        uintmax_t       size,
                                        uintmax_t       flags,
-                                       uintmax_t       unused) {
+                                       uintmax_t       ufd) {
     (void)ctx;
-    (void)unused;
-    (void)hint; // TODO: use hint
+
+    int fd = (int)ufd;
+
+    if (-1 != fd) {
+        return (com_syscall_ret_t){.err = ENOSYS};
+    }
 
     com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
 
     flags &= 0xffffffff;
-    // TODO: support other flags
-    KASSERT(MAP_ANONYMOUS & flags);
+    // KASSERT(MAP_ANONYMOUS & flags);
 
-    size_t pages = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    size_t    pages = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    uintptr_t virt;
 
-    hdr_com_spinlock_acquire(&curr->pages_lock);
-    uintptr_t virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
-    curr->used_pages += pages;
-    hdr_com_spinlock_release(&curr->pages_lock);
+    if (MAP_FIXED & flags) {
+        virt = hint;
+    } else {
+        hdr_com_spinlock_acquire(&curr->pages_lock);
+        virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
+        curr->used_pages += pages;
+        hdr_com_spinlock_release(&curr->pages_lock);
+    }
 
     for (size_t i = 0; i < pages; i++) {
         arch_mmu_map(curr->page_table,
