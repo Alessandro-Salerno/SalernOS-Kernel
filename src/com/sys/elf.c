@@ -30,8 +30,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "arch/context.h"
-
 #define AT_NULL   0
 #define AT_IGNORE 1
 #define AT_EXECFD 2
@@ -87,8 +85,8 @@ static int load(uintptr_t             vaddr,
                 struct elf_phdr      *phdr,
                 com_vnode_t          *elf_file,
                 arch_mmu_pagetable_t *pt) {
-    size_t   idx = 0;
-    uint64_t fsz = phdr->file_sz;
+    size_t  idx = 0;
+    int64_t fsz = phdr->file_sz;
 
     for (uintptr_t cur = vaddr; cur < (vaddr + phdr->mem_sz);) {
         size_t misalign = cur & (ARCH_PAGE_SIZE - 1);
@@ -96,7 +94,7 @@ static int load(uintptr_t             vaddr,
 
         void *phys_page  = com_mm_pmm_alloc();
         void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
-        kmemset(kvirt_page, ARCH_PAGE_SIZE, 0);
+        // kmemset(kvirt_page, ARCH_PAGE_SIZE, 0);
         arch_mmu_map(pt,
                      (void *)(cur - misalign),
                      phys_page,
@@ -104,11 +102,12 @@ static int load(uintptr_t             vaddr,
                          ARCH_MMU_FLAGS_WRITE); // TODO: NO_EXEC for data?
 
         if (fsz > 0) {
-            size_t len = fsz;
-            if (rem < len) {
-                len = rem;
-            }
+            size_t len = KMIN(rem, fsz);
 
+            KDEBUG("reading %u bytes at offset %u to kernel address %x",
+                   len,
+                   phdr->off + idx,
+                   kvirt_page);
             int ret = com_fs_vfs_read(
                 kvirt_page, len, NULL, elf_file, phdr->off + idx, 0);
             if (0 != ret) {
@@ -167,6 +166,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
 
         switch (phdr.type) {
         case PT_INTERP:
+            KDEBUG("found PT_INTERP at offset %u", phdr_off);
             ret = com_fs_vfs_read(out->interpreter_path,
                                   phdr.file_sz,
                                   &bytes_read,
@@ -183,6 +183,11 @@ int com_sys_elf64_load(com_elf_data_t       *out,
             break;
 
         case PT_LOAD:
+            KDEBUG("found PT_LOAD at offset %u with segment at offset %u and "
+                   "virt %x",
+                   phdr_off,
+                   phdr.off,
+                   phdr.virt_addr);
             ret = load(vaddr, &phdr, elf_file, pt);
             if (0 != ret) {
                 goto cleanup;
