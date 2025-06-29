@@ -85,16 +85,16 @@ static int load(uintptr_t             vaddr,
                 struct elf_phdr      *phdr,
                 com_vnode_t          *elf_file,
                 arch_mmu_pagetable_t *pt) {
-    size_t  idx = 0;
-    int64_t fsz = phdr->file_sz;
+    size_t   idx = 0;
+    intmax_t fsz = phdr->file_sz;
 
     for (uintptr_t cur = vaddr; cur < (vaddr + phdr->mem_sz);) {
-        size_t misalign = cur & (ARCH_PAGE_SIZE - 1);
-        size_t rem      = ARCH_PAGE_SIZE - misalign;
+        intmax_t misalign = cur & (ARCH_PAGE_SIZE - 1);
+        intmax_t rem      = ARCH_PAGE_SIZE - misalign;
 
         void *phys_page  = com_mm_pmm_alloc();
         void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
-        // kmemset(kvirt_page, ARCH_PAGE_SIZE, 0);
+        kmemset(kvirt_page, ARCH_PAGE_SIZE - misalign, 0);
         arch_mmu_map(pt,
                      (void *)(cur - misalign),
                      phys_page,
@@ -104,10 +104,6 @@ static int load(uintptr_t             vaddr,
         if (fsz > 0) {
             size_t len = KMIN(rem, fsz);
 
-            KDEBUG("reading %u bytes at offset %u to kernel address %x",
-                   len,
-                   phdr->off + idx,
-                   kvirt_page);
             int ret = com_fs_vfs_read(
                 kvirt_page, len, NULL, elf_file, phdr->off + idx, 0);
             if (0 != ret) {
