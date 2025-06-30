@@ -89,6 +89,13 @@
         (xctx).gsbase = 0;                                 \
     }
 
+#define ARCH_CONTEXT_FORK_EXTRA(child_xctx, parent_xctx)                     \
+    {                                                                        \
+        kmemcpy(                                                             \
+            (child_xctx).fpu, (parent_xctx).fpu, sizeof((parent_xctx).fpu)); \
+        (child_xctx).fsbase = (parent_xctx).fsbase;                          \
+    }
+
 typedef struct {
     uint64_t cr2;
     uint64_t gs;

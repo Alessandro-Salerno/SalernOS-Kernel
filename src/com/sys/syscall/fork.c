@@ -45,8 +45,9 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     (void)unused3;
     (void)unused4;
 
-    com_syscall_ret_t ret  = {-1, 0};
-    com_proc_t       *proc = hdr_arch_cpu_get_thread()->proc;
+    com_syscall_ret_t ret        = {-1, 0};
+    com_thread_t     *cur_thread = hdr_arch_cpu_get_thread();
+    com_proc_t       *proc       = cur_thread->proc;
 
     hdr_com_spinlock_acquire(&proc->fd_lock);
     hdr_com_spinlock_acquire(&proc->pages_lock);
@@ -55,8 +56,8 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
 
     com_proc_t *new_proc =
         com_sys_proc_new(new_pt, proc->pid, proc->root, proc->cwd);
-    // TODO: do things with fs-base and pages (not implemented yet)
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
+    ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, cur_thread->xctx);
 
     if (NULL == new_pt || NULL == new_proc || NULL == new_thread) {
         ret.err = ENOMEM;

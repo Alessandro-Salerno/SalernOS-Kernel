@@ -39,7 +39,7 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
     com_proc_t       *curr    = hdr_arch_cpu_get_thread()->proc;
     com_vnode_t      *file_vn = NULL;
 
-    if (O_CREAT & flags) {
+    /*if (O_CREAT & flags) {
         com_vnode_t *exist = NULL;
         com_vnode_t *cwd   = atomic_load(&curr->cwd);
         int lk_ret = com_fs_vfs_lookup(&exist, path, pathlen, curr->root, cwd);
@@ -51,7 +51,8 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
         }
 
         // TODO: create file
-    } else {
+    } else*/
+    {
         com_vnode_t *cwd = atomic_load(&curr->cwd);
         KDEBUG("opening file %s with root=%x cwd=%x", path, curr->root, cwd);
         int lk_ret =
