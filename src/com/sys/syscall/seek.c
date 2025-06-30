@@ -59,9 +59,16 @@ com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
     case SEEK_CUR:
         new_off += offset;
         break;
-    case SEEK_END:
-        ret.err = ENOSYS;
-        goto cleanup;
+    case SEEK_END: {
+        struct stat statbuf;
+        int         vfs_ret = com_fs_vfs_stat(&statbuf, file->vnode);
+        if (0 != vfs_ret) {
+            ret.err = vfs_ret;
+            goto cleanup;
+        }
+        new_off = statbuf.st_size + offset;
+        break;
+    }
     }
 
     file->off = new_off;

@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/stat.h>
 
 #define COM_VFS_PATH_SEP '/'
 
@@ -96,6 +97,7 @@ typedef struct com_fs_vfs_vnode_ops {
     // TODO: add stat, mmap, munmap, getattr, setattr, poll, etc
     int (*ioctl)(com_vnode_t *node, uintmax_t op, void *buf);
     int (*isatty)(com_vnode_t *node);
+    int (*stat)(struct stat *out, com_vnode_t *node);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -146,3 +148,4 @@ int com_fs_vfs_readdir(void        *buf,
                        uintmax_t    off);
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_vfs_isatty(com_vnode_t *node);
+int com_fs_vfs_stat(struct stat *out, com_vnode_t *node);

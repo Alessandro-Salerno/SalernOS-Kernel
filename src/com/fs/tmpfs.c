@@ -27,6 +27,7 @@
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <vendor/tailq.h>
 
 struct tmpfs_dir_entry {
@@ -70,7 +71,8 @@ static com_vnode_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
                                        .lookup = com_fs_tmpfs_lookup,
                                        .read   = com_fs_tmpfs_read,
                                        .write  = com_fs_tmpfs_write,
-                                       .isatty = com_fs_tmpfs_isatty};
+                                       .isatty = com_fs_tmpfs_isatty,
+                                       .stat   = com_fs_tmpfs_stat};
 
 // SUPPORT FUNCTIONS
 static int createat(struct tmpfs_dir_entry **outent,
@@ -359,6 +361,26 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 int com_fs_tmpfs_isatty(com_vnode_t *node) {
     (void)node;
     return ENOTTY;
+}
+
+int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
+    struct tmpfs_node *file = node->extra;
+    out->st_blksize         = 512;
+    out->st_ino             = (unsigned long)file;
+    out->st_mode =
+        01777; // TODO: this may cause issues (ke says it makes xorg "happy")
+
+    if (COM_VNODE_TYPE_FILE == node->type) {
+        out->st_mode |= S_IFREG;
+        out->st_size = file->file.size;
+    } else if (COM_VNODE_TYPE_DIR == node->type) {
+        out->st_mode |= S_IFDIR;
+    } else {
+        return ENOSYS;
+    }
+
+    // TODO: links
+    return 0;
 }
 
 // OTHER FUNCTIONS

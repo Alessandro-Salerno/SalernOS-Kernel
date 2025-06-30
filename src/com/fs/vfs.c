@@ -221,3 +221,9 @@ int com_fs_vfs_isatty(com_vnode_t *node) {
     GET_VLINK_CHILD(node);
     return node->ops->isatty(node);
 }
+
+int com_fs_vfs_stat(struct stat *out, com_vnode_t *node) {
+    // TODO: use vlink, but needs to me masked
+    kmemset(out, sizeof(struct stat), 0);
+    return node->ops->stat(out, node);
+}
