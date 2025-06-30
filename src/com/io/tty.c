@@ -168,9 +168,16 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     return ENOSYS;
 }
 
-static com_dev_ops_t TtyDevOps = {.read  = tty_read,
-                                  .write = tty_write,
-                                  .ioctl = tty_ioctl};
+// NOTE: returns 0 because it returns the value of errno
+int tty_isatty(void *devdata) {
+    (void)devdata;
+    return 0;
+}
+
+static com_dev_ops_t TtyDevOps = {.read   = tty_read,
+                                  .write  = tty_write,
+                                  .ioctl  = tty_ioctl,
+                                  .isatty = tty_isatty};
 
 void com_io_tty_kbd_in(char c, uintmax_t mod) {
     bool        is_arrow     = COM_IO_TTY_MOD_ARROW & mod;

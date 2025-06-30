@@ -34,6 +34,7 @@ typedef struct com_dev_ops {
                  uintmax_t off,
                  uintmax_t flags);
     int (*ioctl)(void *devdata, uintmax_t op, void *buf);
+    int (*isatty)(void *devdata);
     // TODO: add mmap, munmap and other fast things
 } com_dev_ops_t;
 
@@ -63,6 +64,7 @@ int com_fs_devfs_write(size_t      *bytes_written,
                        uintmax_t    off,
                        uintmax_t    flags);
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
+int com_fs_devfs_isatty(com_vnode_t *node);
 
 // OTHER FUNCTIONS
 

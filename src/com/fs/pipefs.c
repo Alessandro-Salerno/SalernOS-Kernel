@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <errno.h>
 #include <kernel/com/fs/pipefs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
@@ -45,9 +46,10 @@ struct pipefs_node {
     com_vnode_t            *write_end;
 };
 
-static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
-                                        .write = com_fs_pipefs_write,
-                                        .close = com_fs_pipefs_close};
+static com_vnode_ops_t PipefsNodeOps = {.read   = com_fs_pipefs_read,
+                                        .write  = com_fs_pipefs_write,
+                                        .close  = com_fs_pipefs_close,
+                                        .isatty = com_fs_pipefs_isatty};
 
 int com_fs_pipefs_read(void        *buf,
                        size_t       buflen,
@@ -161,6 +163,11 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
     hdr_com_spinlock_release(&pipe->lock);
     // TODO: free pipe?
     return 0;
+}
+
+int com_fs_pipefs_isatty(com_vnode_t *node) {
+    (void)node;
+    return ENOTTY;
 }
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {

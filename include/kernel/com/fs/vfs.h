@@ -31,34 +31,34 @@
 #define COM_FS_VFS_VNODE_RELEASE(node) \
     __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)
 
-typedef enum COM_VNODE_TYPE {
+typedef enum com_vnode_type {
     COM_VNODE_TYPE_FILE,
     COM_VNODE_TYPE_DIR,
     COM_VNODE_TYPE_LINK
-} COM_VNODE_TYPE_t;
+} com_vnode_type_t;
 
 typedef struct com_vfs {
     struct com_vfs_ops      *ops;
-    struct COM_FS_VFS_VNODE *mountpoint;
-    struct COM_FS_VFS_VNODE *root;
+    struct com_fs_vfs_vnode *mountpoint;
+    struct com_fs_vfs_vnode *root;
     void                    *extra;
 } com_vfs_t;
 
-typedef struct COM_FS_VFS_VNODE {
+typedef struct com_fs_vfs_vnode {
     struct com_vfs              *mountpointof;
     struct com_vfs              *vfs;
-    struct COM_FS_VFS_VNODE_ops *ops;
+    struct com_fs_vfs_vnode_ops *ops;
     struct {
-        struct COM_FS_VFS_VNODE *next;
-        struct COM_FS_VFS_VNODE *prev;
+        struct com_fs_vfs_vnode *next;
+        struct com_fs_vfs_vnode *prev;
     } vlink;
-    COM_VNODE_TYPE_t type;
+    com_vnode_type_t type;
     uintmax_t        num_ref;
     bool             isroot;
     void            *extra;
 } com_vnode_t;
 
-typedef struct COM_FS_VFS_VNODE_ops {
+typedef struct com_fs_vfs_vnode_ops {
     int (*close)(com_vnode_t *vnode);
     int (*lookup)(com_vnode_t **out,
                   com_vnode_t  *dir,
@@ -95,6 +95,7 @@ typedef struct COM_FS_VFS_VNODE_ops {
     int (*readdir)(void *buf, size_t *buflen, com_vnode_t *dir, uintmax_t off);
     // TODO: add stat, mmap, munmap, getattr, setattr, poll, etc
     int (*ioctl)(com_vnode_t *node, uintmax_t op, void *buf);
+    int (*isatty)(com_vnode_t *node);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -144,3 +145,4 @@ int com_fs_vfs_readdir(void        *buf,
                        com_vnode_t *dir,
                        uintmax_t    off);
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
+int com_fs_vfs_isatty(com_vnode_t *node);

@@ -22,6 +22,9 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/slab.h>
 
+// TODO: implement devfs with vlink by first implementing masks in vlink
+// right now I can't use vlink because forwarding is arbitrarly decided by vfs.c
+
 struct devfs_dev {
     com_vnode_t   *vnode;
     com_dev_ops_t *devops;
@@ -35,7 +38,8 @@ static com_vnode_ops_t DevfsNodeOps =
                       .close  = com_fs_devfs_close,
                       .create = com_fs_devfs_create,
                       .mkdir  = com_fs_devfs_mkdir,
-                      .lookup = com_fs_tmpfs_lookup};
+                      .lookup = com_fs_tmpfs_lookup,
+                      .isatty = com_fs_devfs_isatty};
 
 static com_vfs_t *Devfs = NULL;
 
@@ -111,6 +115,11 @@ int com_fs_devfs_write(size_t      *bytes_written,
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
     return dev->devops->ioctl(dev->devdata, op, buf);
+}
+
+int com_fs_devfs_isatty(com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+    return dev->devops->isatty(dev->devdata);
 }
 
 // OTHER FUNCTIONS

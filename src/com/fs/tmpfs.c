@@ -69,7 +69,8 @@ static com_vnode_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
                                        .mkdir  = com_fs_tmpfs_mkdir,
                                        .lookup = com_fs_tmpfs_lookup,
                                        .read   = com_fs_tmpfs_read,
-                                       .write  = com_fs_tmpfs_write};
+                                       .write  = com_fs_tmpfs_write,
+                                       .isatty = com_fs_tmpfs_isatty};
 
 // SUPPORT FUNCTIONS
 static int createat(struct tmpfs_dir_entry **outent,
@@ -353,6 +354,11 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
     hdr_com_spinlock_release(&file->lock);
     *bytes_written = write_count;
     return 0;
+}
+
+int com_fs_tmpfs_isatty(com_vnode_t *node) {
+    (void)node;
+    return ENOTTY;
 }
 
 // OTHER FUNCTIONS

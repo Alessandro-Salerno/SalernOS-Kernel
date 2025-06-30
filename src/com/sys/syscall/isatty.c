@@ -16,23 +16,46 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
+#include <arch/cpu.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/syscall.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
 
-int com_fs_pipefs_read(void        *buf,
-                       size_t       buflen,
-                       size_t      *bytes_read,
-                       com_vnode_t *node,
-                       uintmax_t    off,
-                       uintmax_t    flags);
-int com_fs_pipefs_write(size_t      *bytes_written,
-                        com_vnode_t *node,
-                        void        *buf,
-                        size_t       buflen,
-                        uintmax_t    off,
-                        uintmax_t    flags);
-int com_fs_pipefs_close(com_vnode_t *vnode);
-int com_fs_pipefs_isatty(com_vnode_t *node);
+com_syscall_ret_t com_sys_syscall_isatty(arch_context_t *ctx,
+                                         uintmax_t       fd,
+                                         uintmax_t       unused,
+                                         uintmax_t       unused1,
+                                         uintmax_t       unused2) {
+    (void)ctx;
+    (void)unused;
+    (void)unused1;
+    (void)unused2;
 
-void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);
+    com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;
+    com_file_t       *file = com_sys_proc_get_file(curr, fd);
+    com_syscall_ret_t ret  = {0};
+
+    if (NULL == file) {
+        ret.err = EBADF;
+        goto cleanup;
+    }
+
+    int vfs_ret = com_fs_vfs_isatty(file->vnode);
+
+    if (0 != vfs_ret) {
+        ret.err = vfs_ret;
+        goto cleanup;
+    }
+
+    ret.value = 1;
+
+cleanup:
+    return ret;
+}

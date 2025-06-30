@@ -216,3 +216,8 @@ int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
     GET_VLINK_CHILD(node);
     return node->ops->ioctl(node, op, buf);
 }
+
+int com_fs_vfs_isatty(com_vnode_t *node) {
+    GET_VLINK_CHILD(node);
+    return node->ops->isatty(node);
+}

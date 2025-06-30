@@ -92,3 +92,8 @@ com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
                                        uintmax_t       uoffset,
                                        uintmax_t       uwhence,
                                        uintmax_t       unused);
+com_syscall_ret_t com_sys_syscall_isatty(arch_context_t *ctx,
+                                         uintmax_t       fd,
+                                         uintmax_t       unused,
+                                         uintmax_t       unused1,
+                                         uintmax_t       unused2);
