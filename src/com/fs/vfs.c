@@ -227,3 +227,7 @@ int com_fs_vfs_stat(struct stat *out, com_vnode_t *node) {
     kmemset(out, sizeof(struct stat), 0);
     return node->ops->stat(out, node);
 }
+
+int com_fs_vfs_truncate(com_vnode_t *node, size_t size) {
+    return node->ops->truncate(node, size);
+}

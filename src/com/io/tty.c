@@ -274,6 +274,11 @@ end:
             com_io_fbterm_putsn(escape, len);
             handled = true;
         }
+
+        // temporary fix until I implement proper pty/tty
+        if (!(ICANON & tty->termios.c_lflag)) {
+            notify = true;
+        }
     } else if (!handled) {
         tty->buf[tty->write] = c;
         tty->write++;

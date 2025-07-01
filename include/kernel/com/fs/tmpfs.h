@@ -55,6 +55,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
                        uintmax_t    flags);
 int com_fs_tmpfs_isatty(com_vnode_t *node);
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node);
+int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size);
 
 // OTHER FUNCTIONS
 

@@ -66,13 +66,14 @@ struct tmpfs_node {
 };
 
 static com_vfs_ops_t   TmpfsOps     = {.mount = com_fs_tmpfs_mount};
-static com_vnode_ops_t TmpfsNodeOps = {.create = com_fs_tmpfs_create,
-                                       .mkdir  = com_fs_tmpfs_mkdir,
-                                       .lookup = com_fs_tmpfs_lookup,
-                                       .read   = com_fs_tmpfs_read,
-                                       .write  = com_fs_tmpfs_write,
-                                       .isatty = com_fs_tmpfs_isatty,
-                                       .stat   = com_fs_tmpfs_stat};
+static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
+                                       .mkdir    = com_fs_tmpfs_mkdir,
+                                       .lookup   = com_fs_tmpfs_lookup,
+                                       .read     = com_fs_tmpfs_read,
+                                       .write    = com_fs_tmpfs_write,
+                                       .isatty   = com_fs_tmpfs_isatty,
+                                       .stat     = com_fs_tmpfs_stat,
+                                       .truncate = com_fs_tmpfs_truncate};
 
 // SUPPORT FUNCTIONS
 static int createat(struct tmpfs_dir_entry **outent,
@@ -380,6 +381,19 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     }
 
     // TODO: links
+    return 0;
+}
+
+int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
+    if (COM_VNODE_TYPE_DIR == node->type) {
+        return EISDIR;
+    }
+
+    struct tmpfs_node *file = node->extra;
+    hdr_com_spinlock_acquire(&file->lock);
+    file->file.size = size;
+    // TODO: evict from page cache
+    hdr_com_spinlock_release(&file->lock);
     return 0;
 }
 

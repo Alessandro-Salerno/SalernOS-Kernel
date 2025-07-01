@@ -67,6 +67,16 @@ static char asciitable[] = {
     0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
     '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
 
+static char asciitableShifted[] = {
+    0,    '\033', '!', '@',  '#', '$', '%', '^', '&', '*', '(', ')', '_',  '+',
+    '\b', '\t',   'Q', 'W',  'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[',  ']',
+    '\r', 0,      'A', 'S',  'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"',  '~',
+    0,    '|',    'Z', 'X',  'C', 'V', 'B', 'N', 'M', '<', '>', '/', 0,    '*',
+    0,    ' ',    0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   0,    0,
+    0,    '7',    '8', '9',  '-', '4', '5', '6', '+', '1', '2', '3', '0',  '.',
+    0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
+    '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
+
 USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
@@ -77,6 +87,7 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
     if (0xe0 == prev_code) {
         if (0x53 == code) {
             com_io_tty_kbd_in(127, 0);
+            goto end;
         }
 
         switch (code) {
@@ -132,12 +143,18 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
 
         default:
             if (code < 0x80) {
-                com_io_tty_kbd_in(asciitable[code], mod);
+                if (COM_IO_TTY_MOD_LSHIFT & mod ||
+                    COM_IO_TTY_MOD_RSHIFT & mod) {
+                    com_io_tty_kbd_in(asciitableShifted[code], mod);
+                } else {
+                    com_io_tty_kbd_in(asciitable[code], mod);
+                }
             }
             break;
         }
     }
 
+end:
     prev_code = code;
 }
 
