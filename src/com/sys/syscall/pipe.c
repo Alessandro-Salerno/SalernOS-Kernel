@@ -17,40 +17,52 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <kernel/com/io/log.h>
+#include <fcntl.h>
+#include <kernel/com/fs/file.h>
+#include <kernel/com/fs/pipefs.h>
+#include <kernel/com/fs/vfs.h>
+#include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <kernel/platform/syscall.h>
-#include <kernel/platform/x86-64/msr.h>
+#include <stdint.h>
 
-extern com_intf_syscall_t Com_Sys_Syscall_Table[];
-
-void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
-    (void)isr;
-    hdr_arch_cpu_interrupt_enable();
-    // KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
-    //        ctx->rax,
-    //        ctx->rdi,
-    //        ctx->rsi,
-    //        ctx->rdx,
-    //        ctx->rip);
-    com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
-    com_syscall_ret_t  ret =
-        handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
-    ctx->rax = ret.value;
-    ctx->rdx = ret.err;
-    // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
-}
-
-com_syscall_ret_t arch_syscall_set_tls(arch_context_t *ctx,
-                                       uintmax_t       ptr,
+com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
+                                       uintmax_t       fildesptr,
+                                       uintmax_t       unused,
                                        uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3) {
+                                       uintmax_t       unused2) {
     (void)ctx;
+    (void)unused;
     (void)unused1;
     (void)unused2;
-    (void)unused3;
-    hdr_arch_cpu_get_thread()->xctx.fsbase = ptr;
-    hdr_x86_64_msr_write(X86_64_MSR_FSBASE, ptr);
-    return (com_syscall_ret_t){.value = 0, .err = 0};
+
+    int        *fildes = (int *)fildesptr;
+    com_proc_t *curr   = hdr_arch_cpu_get_thread()->proc;
+    // TODO: check if fds are available
+    uintmax_t rfd = com_sys_proc_next_fd(curr);
+    uintmax_t wfd = com_sys_proc_next_fd(curr);
+
+    com_vnode_t *read;
+    com_vnode_t *write;
+    com_fs_pipefs_new(&read, &write);
+
+    com_file_t *rf = com_mm_slab_alloc(sizeof(com_file_t));
+    rf->vnode      = read;
+    rf->flags      = 0;
+    rf->num_ref    = 1;
+    rf->off        = 0;
+
+    com_file_t *wf = com_mm_slab_alloc(sizeof(com_file_t));
+    wf->vnode      = write;
+    wf->flags      = 0;
+    wf->num_ref    = 1;
+    wf->off        = 0;
+
+    curr->fd[rfd].file = rf;
+    curr->fd[wfd].file = wf;
+
+    fildes[0] = rfd;
+    fildes[1] = wfd;
+
+    return (com_syscall_ret_t){0, 0};
 }

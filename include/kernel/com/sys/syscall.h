@@ -102,3 +102,8 @@ com_syscall_ret_t com_sys_syscall_truncate(arch_context_t *ctx,
                                            uintmax_t       size,
                                            uintmax_t       unused,
                                            uintmax_t       unused1);
+com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
+                                       uintmax_t       fildesptr,
+                                       uintmax_t       unused,
+                                       uintmax_t       unused1,
+                                       uintmax_t       unused2);
