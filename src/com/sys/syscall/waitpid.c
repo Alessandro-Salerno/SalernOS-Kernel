@@ -39,13 +39,9 @@ com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
 
     com_sys_proc_acquire_glock();
 
-    if (0 == curr->num_children) {
+    if (0 == curr->num_children || NULL == towait ||
+        towait->parent_pid != curr->pid) {
         ret.err = ECHILD;
-        goto cleanup;
-    }
-
-    if (NULL == towait) {
-        ret.err = ENOENT;
         goto cleanup;
     }
 
@@ -53,6 +49,7 @@ com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
         if (towait->exited) {
             *status   = towait->exit_status;
             ret.value = pid;
+            com_sys_proc_destroy(towait);
             goto cleanup;
         }
 
