@@ -133,7 +133,9 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     if (NULL != next) {
         TAILQ_REMOVE_HEAD(waiters, threads);
         next->waiting_on = NULL;
+        hdr_com_spinlock_acquire(&currcpu->sched_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
+        hdr_com_spinlock_release(&currcpu->sched_lock);
         next->runnable = true;
     }
 }

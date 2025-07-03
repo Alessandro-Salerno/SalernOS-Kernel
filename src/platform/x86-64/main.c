@@ -166,6 +166,7 @@ USED void kbd_eoi(com_isr_t *isr) {
 void kernel_entry(void) {
     hdr_arch_cpu_set(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
+    BaseCpu.sched_lock = COM_SPINLOCK_NEW();
 
     hdr_x86_64_io_outb(0x20, 0x11);
     hdr_x86_64_io_outb(0xa0, 0x11);
@@ -236,12 +237,12 @@ void kernel_entry(void) {
     hdr_arch_cpu_get()->thread   = thread;
 
     com_sys_sched_init();
-    x86_64_lapic_bsp_init();
-    x86_64_lapic_init();
-    com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
 
     arch_mmu_switch(proc->page_table);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
+    x86_64_lapic_bsp_init();
+    x86_64_lapic_init();
+    com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     arch_context_trampoline(&thread->ctx);
 
     KDEBUG("intstatus: %u", BaseCpu.intstatus);

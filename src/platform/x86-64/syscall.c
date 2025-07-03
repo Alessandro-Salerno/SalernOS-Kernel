@@ -26,17 +26,24 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
-    // KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
-    //        ctx->rax,
-    //        ctx->rdi,
-    //        ctx->rsi,
-    //        ctx->rdx,
-    //        ctx->rip);
+    /*KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
+           ctx->rax,
+           ctx->rdi,
+           ctx->rsi,
+           ctx->rdx,
+           ctx->rip);*/
+    hdr_arch_cpu_get()->lock_depth = 0;
+    // hdr_arch_cpu_interrupt_enable();
     com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
     com_syscall_ret_t  ret =
         handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
     ctx->rax = ret.value;
     ctx->rdx = ret.err;
+    // KDEBUG("lock depth = %d", hdr_arch_cpu_get()->lock_depth);
+    // KDEBUG("sched lock = %d", hdr_arch_cpu_get()->sched_lock);
+    KASSERT(0 == hdr_arch_cpu_get()->lock_depth);
+    hdr_arch_cpu_interrupt_disable();
+    hdr_arch_cpu_get()->lock_depth = 1;
     // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
 }
 

@@ -110,5 +110,5 @@ void x86_64_lapic_init(void) {
     lapic_write(LAPIC_DIV_CONF, 0);
     lapic_write(LAPIC_LVT_TIMER, 0x30 | 0x20000);
     lapic_write(LAPIC_INIT_COUNT,
-                ((1000000UL * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
+                ((100000uL * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
 }
