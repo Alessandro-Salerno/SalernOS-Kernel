@@ -32,6 +32,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// TODO: when processes will have more than one thread, there could be a
+// race condition where two threads try to run exec() and all of this
+// explodes. There should be a sort of "exec" lock
 com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
                                          uintmax_t       pathptr,
                                          uintmax_t       argvptr,

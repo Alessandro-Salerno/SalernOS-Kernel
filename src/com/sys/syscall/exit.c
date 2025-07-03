@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <arch/mmu.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -25,8 +26,7 @@
 #include <kernel/platform/mmu.h>
 #include <stdint.h>
 
-#include "lib/util.h"
-
+// TODO: what happens if two threads of the same process call exit?
 com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
                                        uintmax_t       status,
                                        uintmax_t       unused1,
@@ -41,7 +41,9 @@ com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_sys_proc_exit(curr_proc, (int)status);
+    hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->sched_lock);
     curr_thread->runnable = false;
+    hdr_com_spinlock_release(&hdr_arch_cpu_get()->sched_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();

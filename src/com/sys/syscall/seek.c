@@ -75,5 +75,6 @@ com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
     ret.value = new_off;
 cleanup:
     hdr_com_spinlock_release(&file->off_lock);
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

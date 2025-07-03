@@ -27,7 +27,7 @@
 
 #define COM_FS_FILE_RELEASE(file)                                         \
     ({                                                                    \
-        if (NULL != file->vnode) {                                        \
+        if (NULL != file && NULL != file->vnode) {                        \
             uintmax_t n =                                                 \
                 __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
             if (0 == n) {                                                 \
@@ -36,6 +36,7 @@
                 file = NULL;                                              \
             }                                                             \
         }                                                                 \
+        file = NULL;                                                      \
     })
 
 typedef struct com_file {

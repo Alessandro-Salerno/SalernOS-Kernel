@@ -79,7 +79,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     hdr_com_spinlock_release(&proc->fd_lock);
     hdr_com_spinlock_release(&proc->pages_lock);
 
-    proc->num_children++;
+    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
     new_thread->runnable = false;
 
     ret.value = new_proc->pid;

@@ -50,5 +50,6 @@ com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
     }
 
 cleanup:
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

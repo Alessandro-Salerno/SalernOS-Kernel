@@ -49,5 +49,6 @@ com_syscall_ret_t com_sys_syscall_truncate(arch_context_t *ctx,
     ret.err = com_fs_vfs_truncate(file->vnode, size);
 
 cleanup:
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

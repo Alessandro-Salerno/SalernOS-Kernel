@@ -57,5 +57,6 @@ com_syscall_ret_t com_sys_syscall_isatty(arch_context_t *ctx,
     ret.value = 1;
 
 cleanup:
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

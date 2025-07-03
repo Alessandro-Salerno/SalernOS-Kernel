@@ -57,5 +57,6 @@ com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
 
     ret.value = bytes_written;
 cleanup:
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }
