@@ -184,7 +184,7 @@ void kernel_entry(void) {
     com_io_fbterm_init(fb);
 
 #ifndef X86_64_NO_E9_LOG
-    com_io_log_set_hook(x86_64_e9_putc);
+    com_io_log_set_hook(NULL);
 #else
     com_io_log_set_hook(com_io_fbterm_putc);
 #endif

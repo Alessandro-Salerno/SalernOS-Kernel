@@ -39,16 +39,19 @@ static void sched_idle(void) {
 }
 
 void com_sys_sched_yield(void) {
-    arch_cpu_t   *cpu  = hdr_arch_cpu_get();
+    arch_cpu_t *cpu = hdr_arch_cpu_get();
+    hdr_com_spinlock_acquire(&cpu->sched_lock);
     com_thread_t *curr = cpu->thread;
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
+        hdr_com_spinlock_release(&cpu->sched_lock);
         return;
     }
 
     if (NULL == next) {
         if (curr->runnable) {
+            hdr_com_spinlock_release(&cpu->sched_lock);
             return;
         }
 
@@ -103,6 +106,7 @@ void com_sys_sched_yield(void) {
     //        guarantee that this function will return to the same point from
     //        which it was called, in fact, quite the opposite.
     cpu->thread = next;
+    hdr_com_spinlock_release(&cpu->sched_lock);
     ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx);
 }
 
@@ -115,8 +119,10 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
     com_thread_t *curr = hdr_arch_cpu_get_thread();
-    curr->runnable     = false;
-    curr->waiting_on   = waiting_on;
+    hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->sched_lock);
+    curr->runnable = false;
+    hdr_com_spinlock_release(&hdr_arch_cpu_get()->sched_lock);
+    curr->waiting_on = waiting_on;
 
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
     hdr_com_spinlock_release(cond);
@@ -135,8 +141,8 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
         next->waiting_on = NULL;
         hdr_com_spinlock_acquire(&currcpu->sched_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-        hdr_com_spinlock_release(&currcpu->sched_lock);
         next->runnable = true;
+        hdr_com_spinlock_release(&currcpu->sched_lock);
     }
 }
 

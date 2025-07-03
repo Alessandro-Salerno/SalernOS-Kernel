@@ -59,6 +59,7 @@ void com_sys_thread_ready(com_thread_t *thread) {
     arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
     hdr_com_spinlock_acquire(&curr_cpu->sched_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-    hdr_com_spinlock_release(&curr_cpu->sched_lock);
     thread->runnable = true;
+    hdr_com_spinlock_release(&curr_cpu->sched_lock);
+    KDEBUG("thread is now runnable");
 }

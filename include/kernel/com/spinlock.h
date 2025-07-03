@@ -50,6 +50,6 @@ static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
     int oldval = hdr_arch_cpu_get()->lock_depth--;
     KASSERT(oldval != 0);
     if (oldval == 1) {
-        // hdr_arch_cpu_interrupt_enable();
+        hdr_arch_cpu_interrupt_enable();
     }
 }

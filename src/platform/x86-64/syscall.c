@@ -33,7 +33,7 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
            ctx->rdx,
            ctx->rip);*/
     hdr_arch_cpu_get()->lock_depth = 0;
-    // hdr_arch_cpu_interrupt_enable();
+    hdr_arch_cpu_interrupt_enable();
     com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
     com_syscall_ret_t  ret =
         handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
