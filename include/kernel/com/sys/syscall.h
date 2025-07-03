@@ -107,3 +107,8 @@ com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
                                        uintmax_t       unused,
                                        uintmax_t       unused1,
                                        uintmax_t       unused2);
+com_syscall_ret_t com_sys_syscall_getpid(arch_context_t *ctx,
+                                         uintmax_t       unused,
+                                         uintmax_t       unused1,
+                                         uintmax_t       unused2,
+                                         uintmax_t       unused3);

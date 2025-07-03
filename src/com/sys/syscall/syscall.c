@@ -72,6 +72,7 @@ void com_sys_syscall_init(void) {
     // TODO: add stat syscall with code 0x0E
     com_sys_syscall_register(0x0F, com_sys_syscall_truncate);
     com_sys_syscall_register(0x10, com_sys_syscall_pipe);
+    com_sys_syscall_register(0x11, com_sys_syscall_getpid);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

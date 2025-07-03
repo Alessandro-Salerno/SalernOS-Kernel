@@ -26,7 +26,6 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
-    hdr_arch_cpu_interrupt_enable();
     // KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
     //        ctx->rax,
     //        ctx->rdi,

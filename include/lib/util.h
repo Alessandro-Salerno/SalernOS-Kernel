@@ -33,6 +33,8 @@
 #define USER_DATA __attribute__((section(".user_data")))
 #define USED      __attribute__((used))
 
+#ifndef DISABLE_LOGGING
+
 #define KLOG(...)                             \
     com_io_log_puts("[  log  ] ");            \
     com_io_log_puts(__FILE__ ":");            \
@@ -48,6 +50,10 @@
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
     kprintf(__VA_ARGS__);                     \
     com_io_log_putc('\n');
+#else
+#define KLOG(...)
+#define KDEBUG(...)
+#endif
 
 #define KASSERT(statement)                                               \
     if (KUNKLIKELY(!(statement))) {                                      \

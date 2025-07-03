@@ -17,32 +17,19 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
-#include <kernel/com/sys/thread.h>
-#include <kernel/platform/mmu.h>
-#include <stdint.h>
 
-#include "lib/util.h"
-
-com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
-                                       uintmax_t       status,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3) {
+com_syscall_ret_t com_sys_syscall_getpid(arch_context_t *ctx,
+                                         uintmax_t       unused,
+                                         uintmax_t       unused1,
+                                         uintmax_t       unused2,
+                                         uintmax_t       unused3) {
     (void)ctx;
+    (void)unused;
     (void)unused1;
     (void)unused2;
     (void)unused3;
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    com_sys_proc_exit(curr_proc, (int)status);
-    curr_thread->runnable = false;
-    com_sys_sched_yield();
-
-    __builtin_unreachable();
+    return (com_syscall_ret_t){hdr_arch_cpu_get_thread()->proc->pid, 0};
 }

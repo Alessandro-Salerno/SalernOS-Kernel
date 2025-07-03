@@ -29,8 +29,6 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-#include "lib/util.h"
-
 static com_thread_t *IdleThread = NULL;
 
 static void sched_idle(void) {
@@ -80,8 +78,8 @@ void com_sys_sched_yield(void) {
         if (NULL != curr && NULL != curr->proc && curr->proc->exited &&
             !curr->runnable) {
             arch_mmu_destroy_table(curr->proc->page_table);
-            com_sys_proc_destroy(curr->proc);
-            com_sys_thread_destroy(curr);
+            // com_sys_proc_destroy(curr->proc);
+            // com_sys_thread_destroy(curr);
         } else if (NULL != curr) {
             ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
         }
