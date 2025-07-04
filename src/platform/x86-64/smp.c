@@ -65,8 +65,8 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     arch_mmu_switch_default();
 
-    x86_64_lapic_init();
     ARCH_CPU_SET_KERNEL_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
+    x86_64_lapic_init();
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {
@@ -75,6 +75,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
     cpu->idle_thread->lock_depth = 0;
+    cpu->thread                  = cpu->idle_thread;
 
     KDEBUG("cpu %u ready");
     asm("sti");
@@ -83,6 +84,9 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
         asm("hlt");
     }
 }
+
+arch_cpu_t *Cpus;
+size_t      NumCpus;
 
 void x86_64_smp_init(void) {
     KLOG("initializng smp");
@@ -96,6 +100,8 @@ void x86_64_smp_init(void) {
 
     arch_cpu_t *cpus       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     size_t      avail_cpus = KMIN(MAX_CPUS, smp->cpu_count);
+    Cpus                   = cpus;
+    NumCpus                = avail_cpus;
     kmemset(cpus, ARCH_PAGE_SIZE, 0);
     KDEBUG("found %u cpus, using max = %u, initializing %u cpus",
            smp->cpu_count,
@@ -120,4 +126,14 @@ void x86_64_smp_init(void) {
             asm("pause");
         }
     }
+}
+
+arch_cpu_t *x86_64_smp_get_random(void) {
+    static com_spinlock_t lock = COM_SPINLOCK_NEW();
+    static int            i    = 0;
+    hdr_com_spinlock_acquire(&lock);
+    i               = (i + 1) % NumCpus;
+    arch_cpu_t *ret = &Cpus[i];
+    hdr_com_spinlock_release(&lock);
+    return ret;
 }

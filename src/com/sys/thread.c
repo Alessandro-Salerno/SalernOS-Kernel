@@ -25,6 +25,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/x86-64/smp.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
@@ -57,10 +58,10 @@ void com_sys_thread_destroy(com_thread_t *thread) {
 }
 
 void com_sys_thread_ready(com_thread_t *thread) {
-    arch_cpu_t *curr_cpu = hdr_arch_cpu_get();
+    arch_cpu_t *curr_cpu = x86_64_smp_get_random();
     hdr_com_spinlock_acquire(&curr_cpu->sched_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
     thread->runnable = true;
     hdr_com_spinlock_release(&curr_cpu->sched_lock);
-    KDEBUG("thread is now runnable");
+    KDEBUG("thread is now runnable on cpu %u", curr_cpu->id);
 }

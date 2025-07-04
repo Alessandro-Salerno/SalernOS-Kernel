@@ -18,4 +18,7 @@
 
 #pragma once
 
-void x86_64_smp_init(void);
+#include <arch/cpu.h>
+
+void        x86_64_smp_init(void);
+arch_cpu_t *x86_64_smp_get_random();
