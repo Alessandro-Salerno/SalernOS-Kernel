@@ -30,6 +30,8 @@
 #define ARCH_CPU_SET_KERNEL_STACK(cpu, kstack) \
     (cpu)->ist.rsp0 = (uint64_t)kstack
 
+#define ARCH_CPU_HALT() asm volatile("hlt");
+
 typedef struct arch_cpu {
     struct com_thread      *thread;
     struct arch_cpu        *self;
@@ -42,6 +44,7 @@ typedef struct arch_cpu {
     arch_mmu_pagetable_t   *root_page_table;
     int                     sched_lock;
     struct com_thread_tailq sched_queue;
+    struct com_thread      *idle_thread;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {

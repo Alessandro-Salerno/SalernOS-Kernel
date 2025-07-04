@@ -29,12 +29,10 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static com_thread_t *IdleThread = NULL;
-
 static void sched_idle(void) {
     hdr_arch_cpu_interrupt_enable();
     for (;;) {
-        asm volatile("hlt");
+        ARCH_CPU_HALT();
     }
 }
 
@@ -55,12 +53,12 @@ void com_sys_sched_yield(void) {
             return;
         }
 
-        next = IdleThread;
+        next = cpu->idle_thread;
     } else {
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
     }
 
-    if (curr->runnable && curr != IdleThread) {
+    if (curr->runnable && curr != cpu->idle_thread) {
         TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
     }
 
@@ -147,11 +145,13 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
 }
 
 void com_sys_sched_init(void) {
-    IdleThread = com_sys_thread_new(
+    arch_cpu_t *curr_cpu  = hdr_arch_cpu_get();
+    curr_cpu->idle_thread = com_sys_thread_new(
         NULL,
         NULL /*(void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc())*/,
         ARCH_PAGE_SIZE,
         sched_idle);
-    IdleThread->ctx.rsp              = (uintmax_t)IdleThread->kernel_stack - 8;
-    *(uint64_t *)IdleThread->ctx.rsp = (uint64_t)sched_idle;
+    curr_cpu->idle_thread->ctx.rsp =
+        (uintmax_t)curr_cpu->idle_thread->kernel_stack - 8;
+    *(uint64_t *)curr_cpu->idle_thread->ctx.rsp = (uint64_t)sched_idle;
 }
