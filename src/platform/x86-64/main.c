@@ -167,6 +167,7 @@ void kernel_entry(void) {
     hdr_arch_cpu_set(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
     BaseCpu.sched_lock = COM_SPINLOCK_NEW();
+    // BaseCpu.lock_depth = 1;
 
     hdr_x86_64_io_outb(0x20, 0x11);
     hdr_x86_64_io_outb(0xa0, 0x11);
@@ -184,7 +185,7 @@ void kernel_entry(void) {
     com_io_fbterm_init(fb);
 
 #ifndef X86_64_NO_E9_LOG
-    com_io_log_set_hook(NULL);
+    com_io_log_set_hook(x86_64_e9_putc);
 #else
     com_io_log_set_hook(com_io_fbterm_putc);
 #endif

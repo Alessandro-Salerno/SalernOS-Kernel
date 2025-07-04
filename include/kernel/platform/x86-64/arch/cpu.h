@@ -40,7 +40,6 @@ typedef struct arch_cpu {
     bool                    intstatus;
     com_isr_t               isr[256];
     arch_mmu_pagetable_t   *root_page_table;
-    uint64_t                lock_depth;
     int                     sched_lock;
     struct com_thread_tailq sched_queue;
 } arch_cpu_t;

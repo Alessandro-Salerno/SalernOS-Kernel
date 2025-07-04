@@ -28,7 +28,10 @@ typedef int com_spinlock_t;
 
 static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
     hdr_arch_cpu_interrupt_disable();
-    hdr_arch_cpu_get()->lock_depth++;
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    if (NULL != curr_thread) {
+        curr_thread->lock_depth++;
+    }
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
         if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
@@ -47,9 +50,12 @@ static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
 
 static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
     __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
-    int oldval = hdr_arch_cpu_get()->lock_depth--;
-    KASSERT(oldval != 0);
-    if (oldval == 1) {
-        hdr_arch_cpu_interrupt_enable();
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    if (NULL != curr_thread) {
+        uintmax_t oldval = curr_thread->lock_depth--;
+        KASSERT(oldval != 0);
+        if (oldval == 1) {
+            hdr_arch_cpu_interrupt_enable();
+        }
     }
 }
