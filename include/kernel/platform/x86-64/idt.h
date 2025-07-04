@@ -23,3 +23,4 @@
 void x86_64_idt_set_user_invocable(uintmax_t vec);
 void x86_64_idt_init();
 void x86_64_idt_reload();
+void x86_64_idt_stub(void);

@@ -18,13 +18,16 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
-#include <com/panic.h>
+#include <arch/info.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
 #include <lib/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+static com_isr_t InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
 
 bool com_sys_interrupt_set(bool status) {
     hdr_arch_cpu_interrupt_disable();
@@ -44,19 +47,17 @@ void com_sys_interrupt_register(uintmax_t      vec,
     bool orig_status = com_sys_interrupt_set(false);
 
     KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
-    com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
+    com_isr_t *isr = &InterruptTable[vec];
     isr->func      = func;
     isr->eoi       = eoi;
-    isr->id = (hdr_arch_cpu_get_id() << (sizeof(uintmax_t) * 8 / 2)) | vec;
+    isr->vec       = vec;
 
     com_sys_interrupt_set(orig_status);
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
-    // TODO: check if this should be cpu->intstatus = false
-    //        CHECK EVERYWHERE
     com_sys_interrupt_set(false);
-    com_isr_t *isr = &hdr_arch_cpu_get()->isr[vec];
+    com_isr_t *isr = &InterruptTable[vec];
 
     if (NULL == isr) {
         com_panic(ctx, "isr not set for interrupt vector %u", vec);

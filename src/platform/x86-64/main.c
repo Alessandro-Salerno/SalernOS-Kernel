@@ -44,6 +44,7 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <kernel/platform/x86-64/smp.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
 #include <lib/util.h>
@@ -185,23 +186,19 @@ void kernel_entry(void) {
     com_io_fbterm_init(fb);
 
 #ifndef X86_64_NO_E9_LOG
-    com_io_log_set_hook(NULL);
+    com_io_log_set_hook(x86_64_e9_putc);
 #else
     com_io_log_set_hook(com_io_fbterm_putc);
 #endif
-
-    x86_64_gdt_init();
-    x86_64_idt_init();
-    x86_64_idt_reload();
     com_mm_pmm_init();
     arch_mmu_init();
 
+    x86_64_idt_stub();
     com_sys_syscall_init();
-    x86_64_idt_set_user_invocable(0x80);
 
-    KLOG("initializing fpu");
-    hdr_x86_64_cr_write0((hdr_x86_64_cr_read0() & ~(1 << 2)) | (1 << 1));
-    hdr_x86_64_cr_write4(hdr_x86_64_cr_read4() | (3 << 9));
+    x86_64_lapic_bsp_init();
+    x86_64_smp_init();
+    com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
 
     com_vfs_t *rootfs = NULL;
     com_fs_tmpfs_mount(&rootfs, NULL);
@@ -237,16 +234,11 @@ void kernel_entry(void) {
     hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
     hdr_arch_cpu_get()->thread   = thread;
 
-    com_sys_sched_init();
-
     arch_mmu_switch(proc->page_table);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
-    x86_64_lapic_bsp_init();
-    x86_64_lapic_init();
-    com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
+    asm volatile("sti");
     arch_context_trampoline(&thread->ctx);
 
-    KDEBUG("intstatus: %u", BaseCpu.intstatus);
     for (;;) {
         asm volatile("hlt");
     }

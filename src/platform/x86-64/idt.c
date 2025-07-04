@@ -64,8 +64,8 @@ static char *Exceptions[] = {"division by 0",
                              "simd exception"};
 
 static void generic_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
-    if ((isr->id & 0xff) < 19) {
-        com_panic(ctx, "cpu exception (%s)", Exceptions[isr->id & 0xff]);
+    if (isr->vec < 19) {
+        com_panic(ctx, "cpu exception (%s)", Exceptions[isr->vec]);
     }
 
     com_panic(ctx, "cpu exception (unknown)");
@@ -92,10 +92,10 @@ void x86_64_idt_set_user_invocable(uintmax_t vec) {
 void x86_64_idt_reload() {
     KLOG("reloading idt");
     asm volatile("lidt (%%rax)" : : "a"(&Idtr));
+}
 
+void x86_64_idt_stub(void) {
     for (uintmax_t i = 0; i < 32; i++) {
         com_sys_interrupt_register(i, generic_exception_isr, NULL);
     }
-
-    com_sys_interrupt_set(true);
 }

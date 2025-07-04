@@ -21,7 +21,8 @@
 #include <stdint.h>
 #include <vendor/limine.h>
 
-#define ARCH_PAGE_SIZE 4096
+#define ARCH_PAGE_SIZE      4096
+#define ARCH_NUM_INTERRUPTS 256
 
 #define ARCH_PHYS_TO_HHDM(addr) \
     ((uintptr_t)0xffff800000000000 + (uintptr_t)(addr))
