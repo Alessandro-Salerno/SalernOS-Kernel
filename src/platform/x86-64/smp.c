@@ -19,6 +19,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
@@ -45,6 +46,7 @@ static int Sentinel;
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     hdr_arch_cpu_interrupt_disable();
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
+    cpu->sched_lock = COM_SPINLOCK_NEW();
     KDEBUG("initializing cpu %u", cpu->id);
     hdr_arch_cpu_set(cpu);
 
