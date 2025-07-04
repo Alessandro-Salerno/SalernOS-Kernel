@@ -74,7 +74,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
-    cpu->idle_thread->lock_depth = 0;
+    cpu->idle_thread->lock_depth = 1;
     cpu->thread                  = cpu->idle_thread;
 
     asm("sti");

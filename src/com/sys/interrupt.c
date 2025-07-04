@@ -29,34 +29,17 @@
 
 static com_isr_t InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
 
-bool com_sys_interrupt_set(bool status) {
-    hdr_arch_cpu_interrupt_disable();
-    bool old                      = hdr_arch_cpu_get()->intstatus;
-    hdr_arch_cpu_get()->intstatus = status;
-
-    if (status) {
-        hdr_arch_cpu_interrupt_enable();
-    }
-
-    return old;
-}
-
 void com_sys_interrupt_register(uintmax_t      vec,
                                 com_intf_isr_t func,
                                 com_intf_eoi_t eoi) {
-    bool orig_status = com_sys_interrupt_set(false);
-
     KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
     com_isr_t *isr = &InterruptTable[vec];
     isr->func      = func;
     isr->eoi       = eoi;
     isr->vec       = vec;
-
-    com_sys_interrupt_set(orig_status);
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
-    com_sys_interrupt_set(false);
     com_isr_t *isr = &InterruptTable[vec];
 
     if (NULL == isr) {
@@ -70,7 +53,4 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     if (NULL != isr->eoi) {
         isr->eoi(isr);
     }
-
-    ARCH_CONTEXT_RESTORE_TLC(ctx);
-    com_sys_interrupt_set(ARCH_CONTEXT_INTSTATUS(ctx));
 }

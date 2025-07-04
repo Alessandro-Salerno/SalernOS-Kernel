@@ -19,6 +19,7 @@ section .text
 %assign i 0
 %rep 256
 x86_64_isr_%+i:
+    cli
 ; Push a value to the stack in order to follow
 ; the guidelines of the Intel SDM on ISR stack contents
 %if i <> 8 && i <> 10 && i <> 11 && i <> 12 && i <> 13 && i <> 14
@@ -82,10 +83,8 @@ x86_64_isr_common:
   mov   rdi, rbp  ; Save interrupt vector
   mov   rsi, rsp  ; Save interrupt context
 
-  cld
   extern com_sys_interrupt_isr
   call  com_sys_interrupt_isr
-  cli
 
   ; Pop context from stack
   add   rsp, 24 ; cr2, gs, and fs are not popped
