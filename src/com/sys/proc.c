@@ -30,10 +30,12 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static com_spinlock_t PidLock        = COM_SPINLOCK_NEW();
-static com_spinlock_t GlobalProcLock = COM_SPINLOCK_NEW();
-static com_proc_t    *Processes[256] = {0};
-static uintmax_t      NextPid        = 1;
+#define MAX_PROCS 1024
+
+static com_spinlock_t PidLock              = COM_SPINLOCK_NEW();
+static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
+static com_proc_t    *Processes[MAX_PROCS] = {0};
+static uintmax_t      NextPid              = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              uintmax_t             parent_pid,
@@ -56,7 +58,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
     // TODO: use atomic operations (faster)
     hdr_com_spinlock_acquire(&PidLock);
-    KASSERT(NextPid <= 256);
+    KASSERT(NextPid <= MAX_PROCS);
     proc->pid                = NextPid++;
     Processes[proc->pid - 1] = proc;
     hdr_com_spinlock_release(&PidLock);
@@ -101,7 +103,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
 }
 
 com_proc_t *com_sys_proc_get_by_pid(uintmax_t pid) {
-    if (pid > 256 || 0 == pid) {
+    if (pid > MAX_PROCS || 0 == pid) {
         return NULL;
     }
 
