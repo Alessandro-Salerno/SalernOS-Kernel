@@ -41,7 +41,8 @@ __attribute__((
     SmpRequest =
         (struct limine_smp_request){.id = LIMINE_SMP_REQUEST, .revision = 0};
 
-static int Sentinel;
+static int     Sentinel;
+static uint8_t TemporaryStack[512 * MAX_CPUS];
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     hdr_arch_cpu_interrupt_disable();
@@ -65,6 +66,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     arch_mmu_switch_default();
 
     x86_64_lapic_init();
+    ARCH_CPU_SET_KERNEL_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {
@@ -74,6 +76,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
     cpu->idle_thread->lock_depth = 0;
 
+    KDEBUG("cpu %u ready");
     asm("sti");
     while (1) {
         asm("sti");
