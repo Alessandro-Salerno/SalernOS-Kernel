@@ -17,6 +17,9 @@
 *************************************************************************/
 
 #include <kernel/com/io/log.h>
+#include <kernel/com/spinlock.h>
+
+static com_spinlock_t LogLock = COM_SPINLOCK_NEW();
 
 static void dummy_hook(char c) {
     (void)c;
@@ -41,4 +44,12 @@ void com_io_log_puts(const char *s) {
     for (; 0 != *s; s++) {
         com_io_log_putc(*s);
     }
+}
+
+void com_io_log_acquire(void) {
+    hdr_com_spinlock_acquire(&LogLock);
+}
+
+void com_io_log_release(void) {
+    hdr_com_spinlock_release(&LogLock);
 }

@@ -48,8 +48,8 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     hdr_arch_cpu_interrupt_disable();
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
     cpu->sched_lock = COM_SPINLOCK_NEW();
-    KDEBUG("initializing cpu %u", cpu->id);
     hdr_arch_cpu_set(cpu);
+    KDEBUG("initializing cpu %u", cpu->id);
 
     x86_64_gdt_init();
     x86_64_idt_init();
@@ -77,7 +77,6 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     cpu->idle_thread->lock_depth = 0;
     cpu->thread                  = cpu->idle_thread;
 
-    KDEBUG("cpu %u ready");
     asm("sti");
     while (1) {
         asm("sti");

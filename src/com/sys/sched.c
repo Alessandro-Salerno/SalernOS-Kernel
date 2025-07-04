@@ -78,8 +78,10 @@ void com_sys_sched_yield(void) {
 
         if (NULL != curr && NULL != curr->proc && curr->proc->exited &&
             !curr->runnable) {
+            /*hdr_com_spinlock_acquire(&curr->proc->pages_lock);
             arch_mmu_destroy_table(curr->proc->page_table);
             com_sys_thread_destroy(curr);
+            hdr_com_spinlock_release(&curr->proc->pages_lock);*/
         } else if (NULL != curr) {
             ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
         }

@@ -76,10 +76,9 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     new_proc->used_pages = proc->used_pages;
     ARCH_CONTEXT_FORK(new_thread, *ctx);
 
+    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
     hdr_com_spinlock_release(&proc->fd_lock);
     hdr_com_spinlock_release(&proc->pages_lock);
-
-    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
     new_thread->runnable = false;
 
     ret.value = new_proc->pid;

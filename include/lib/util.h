@@ -36,27 +36,34 @@
 #ifndef DISABLE_LOGGING
 
 #define KLOG(...)                             \
+    com_io_log_acquire();                     \
     com_io_log_puts("[  log  ] ");            \
     com_io_log_puts(__FILE__ ":");            \
     com_io_log_puts(__func__);                \
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
     kprintf(__VA_ARGS__);                     \
-    com_io_log_putc('\n');
+    com_io_log_putc('\n');                    \
+    com_io_log_release();
 
 #define KDEBUG(...)                           \
+    com_io_log_acquire();                     \
     com_io_log_puts("[ debug ] ");            \
     com_io_log_puts(__FILE__ ":");            \
     com_io_log_puts(__func__);                \
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
     kprintf(__VA_ARGS__);                     \
-    com_io_log_putc('\n');
+    com_io_log_putc('\n');                    \
+    com_io_log_release();
 #else
 #define KLOG(...)
 #define KDEBUG(...)
 #endif
 
+// NOTE: this does not release the lock because noone else should print
+// afterwards
 #define KASSERT(statement)                                               \
     if (KUNKLIKELY(!(statement))) {                                      \
+        com_io_log_acquire();                                            \
         com_io_log_puts(__FILE__ ":");                                   \
         com_io_log_puts(__func__);                                       \
         com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \

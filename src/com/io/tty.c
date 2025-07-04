@@ -47,6 +47,7 @@ struct tty {
     size_t                  cols;
     struct termios          termios;
     com_spinlock_t          lock;
+    com_spinlock_t          write_lock;
     struct com_thread_tailq waitlist;
     uint8_t                 buf[2048];
     size_t                  write;
@@ -138,7 +139,9 @@ static int tty_write(size_t   *bytes_written,
     (void)devdata;
     (void)off;
     (void)flags;
+    hdr_com_spinlock_acquire(&Tty.write_lock);
     com_io_fbterm_putsn(buf, buflen);
+    hdr_com_spinlock_release(&Tty.write_lock);
     *bytes_written = buflen;
     return 0;
 }

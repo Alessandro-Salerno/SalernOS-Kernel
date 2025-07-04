@@ -28,3 +28,5 @@ typedef void (*com_io_log_hook_t)(char);
 void com_io_log_set_hook(com_io_log_hook_t hook);
 void com_io_log_putc(char c);
 void com_io_log_puts(const char *s);
+void com_io_log_acquire(void);
+void com_io_log_release(void);

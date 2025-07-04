@@ -133,11 +133,11 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
     com_sys_proc_release_glock();
 
-    hdr_com_spinlock_acquire(&proc->fd_lock);
+    /*hdr_com_spinlock_acquire(&proc->fd_lock);
     for (size_t i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
     }
-    hdr_com_spinlock_release(&proc->fd_lock);
+    hdr_com_spinlock_release(&proc->fd_lock);*/
 }

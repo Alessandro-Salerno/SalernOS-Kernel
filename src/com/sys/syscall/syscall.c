@@ -37,7 +37,9 @@ static com_syscall_ret_t test_syscall(arch_context_t *ctx,
     (void)arg2;
     (void)arg3;
     (void)arg4;
+    com_io_log_acquire();
     com_io_log_puts((const char *)arg1);
+    com_io_log_release();
 
     return (com_syscall_ret_t){0, 0};
 }
