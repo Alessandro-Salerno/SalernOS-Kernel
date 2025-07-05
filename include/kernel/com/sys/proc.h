@@ -44,7 +44,7 @@ typedef struct com_proc {
     int    pages_lock;
     size_t used_pages;
 
-    struct com_thread_tailq waiting_on;
+    struct com_thread_tailq notifications;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,

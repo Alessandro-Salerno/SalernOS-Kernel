@@ -54,7 +54,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->cwd        = cwd;
     proc->pages_lock = COM_SPINLOCK_NEW();
     proc->used_pages = 0;
-    TAILQ_INIT(&proc->waiting_on);
+    TAILQ_INIT(&proc->notifications);
 
     // TODO: use atomic operations (faster)
     hdr_com_spinlock_acquire(&PidLock);
@@ -119,7 +119,7 @@ void com_sys_proc_release_glock(void) {
 }
 
 void com_sys_proc_wait(com_proc_t *proc) {
-    com_sys_sched_wait(&proc->waiting_on, &GlobalProcLock);
+    com_sys_sched_wait(&proc->notifications, &GlobalProcLock);
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {
@@ -130,7 +130,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     proc->exit_status  = status;
 
     if (NULL != parent) {
-        com_sys_sched_notify(&parent->waiting_on);
+        com_sys_sched_notify(&parent->notifications);
     }
 
     com_sys_proc_release_glock();

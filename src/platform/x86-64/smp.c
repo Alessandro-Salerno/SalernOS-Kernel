@@ -46,8 +46,8 @@ static uint8_t TemporaryStack[512 * MAX_CPUS];
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     hdr_arch_cpu_interrupt_disable();
-    arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
-    cpu->sched_lock = COM_SPINLOCK_NEW();
+    arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
+    cpu->runqueue_lock = COM_SPINLOCK_NEW();
     hdr_arch_cpu_set(cpu);
     KDEBUG("initializing cpu %u", cpu->id);
 
@@ -73,7 +73,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
-    cpu->idle_thread->lock_depth = 1;
+    cpu->idle_thread->lock_depth = 0;
     cpu->thread                  = cpu->idle_thread;
     ARCH_CPU_SET_KERNEL_STACK(cpu, cpu->idle_thread->kernel_stack);
 

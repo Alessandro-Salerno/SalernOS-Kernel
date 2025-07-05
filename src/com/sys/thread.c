@@ -42,6 +42,7 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     thread->runnable   = true;
     thread->ctx        = ctx;
     thread->lock_depth = 1;
+    thread->sched_lock = COM_SPINLOCK_NEW();
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
@@ -58,10 +59,13 @@ void com_sys_thread_destroy(com_thread_t *thread) {
 }
 
 void com_sys_thread_ready(com_thread_t *thread) {
+    hdr_com_spinlock_acquire(&thread->sched_lock);
     arch_cpu_t *curr_cpu = x86_64_smp_get_random();
-    hdr_com_spinlock_acquire(&curr_cpu->sched_lock);
+    hdr_com_spinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
     thread->runnable = true;
-    hdr_com_spinlock_release(&curr_cpu->sched_lock);
-    KDEBUG("thread is now runnable");
+    thread->cpu      = curr_cpu;
+    hdr_com_spinlock_release(&curr_cpu->runqueue_lock);
+    hdr_com_spinlock_release(&thread->sched_lock);
+    KDEBUG("thread is now runnable on cpu %u", curr_cpu->id);
 }

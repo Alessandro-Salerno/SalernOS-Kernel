@@ -30,13 +30,15 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 typedef struct com_thread {
     arch_context_t       ctx;
     arch_context_extra_t xctx;
-    struct com_proc     *proc;
-    struct arch_cpu     *cpu;
-    bool                 runnable;
-    void                *kernel_stack;
+    // TODO: fix int to spinlock here too
+    int              sched_lock; // must be here
+    struct com_proc *proc;
+    struct arch_cpu *cpu;
+    bool             runnable;
+    void            *kernel_stack;
     TAILQ_ENTRY(com_thread) threads;
     struct com_thread_tailq *waiting_on;
-    uintmax_t                lock_depth;
+    int                      lock_depth;
 } com_thread_t;
 
 com_thread_t *com_sys_thread_new(struct com_proc *proc,

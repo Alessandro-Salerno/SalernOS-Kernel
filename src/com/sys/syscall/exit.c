@@ -41,9 +41,9 @@ com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_sys_proc_exit(curr_proc, (int)status);
-    hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->sched_lock);
+    hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
     curr_thread->runnable = false;
-    hdr_com_spinlock_release(&hdr_arch_cpu_get()->sched_lock);
+    hdr_com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();

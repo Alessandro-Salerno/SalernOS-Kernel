@@ -41,7 +41,7 @@ typedef struct arch_cpu {
     x86_64_ist_t            ist;
     bool                    intstatus;
     arch_mmu_pagetable_t   *root_page_table;
-    int                     sched_lock;
+    int                     runqueue_lock;
     struct com_thread_tailq sched_queue;
     struct com_thread      *idle_thread;
 } arch_cpu_t;

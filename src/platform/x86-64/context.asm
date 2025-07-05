@@ -34,6 +34,8 @@ x86_64_ctx_switch:
   mov r15, qword [rdi + 128]
   mov rsp, qword [rdi + 192]
 
+    mov [rdx], dword 0
+
   ret
 
 global arch_context_trampoline

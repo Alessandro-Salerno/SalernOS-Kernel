@@ -22,7 +22,11 @@
 #include <kernel/platform/syscall.h>
 #include <kernel/platform/x86-64/msr.h>
 
+#include "arch/context.h"
+
 extern com_intf_syscall_t Com_Sys_Syscall_Table[];
+
+// #define X86_64_SYSCALL_LOG
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
@@ -43,15 +47,34 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                ? curr_thread->cpu->id
                : -1);
 #endif
+    arch_context_t orig_ctx               = *ctx;
     hdr_arch_cpu_get_thread()->lock_depth = 0;
     hdr_arch_cpu_interrupt_enable();
     com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
-    com_syscall_ret_t  ret =
+    KASSERT(NULL != handler);
+    com_syscall_ret_t ret =
         handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
     ctx->rax = ret.value;
     ctx->rdx = ret.err;
     // KDEBUG("lock depth = %d", hdr_arch_cpu_get()->lock_depth);
     // KDEBUG("sched lock = %d", hdr_arch_cpu_get()->sched_lock);
+    if (0 != curr_thread->lock_depth) {
+        KDEBUG("in syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
+               "cpu=%d) lock depth check failed with value %d",
+               orig_ctx.rax,
+               orig_ctx.rdi,
+               orig_ctx.rsi,
+               orig_ctx.rdx,
+               orig_ctx.rcx,
+               orig_ctx.rip,
+               (NULL != curr_thread && NULL != curr_thread->proc)
+                   ? curr_thread->proc->pid
+                   : -1,
+               (NULL != curr_thread && NULL != curr_thread->cpu)
+                   ? curr_thread->cpu->id
+                   : -1,
+               curr_thread->lock_depth);
+    }
     KASSERT(0 == hdr_arch_cpu_get_thread()->lock_depth);
     hdr_arch_cpu_interrupt_disable();
     hdr_arch_cpu_get_thread()->lock_depth = 1;

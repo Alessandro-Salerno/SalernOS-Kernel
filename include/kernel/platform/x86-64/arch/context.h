@@ -64,7 +64,8 @@
     (dst)->rip = (src)->rip;        \
     (dst)->rsp = (src)->rsp;
 
-#define ARCH_CONTEXT_SWITCH(to, from) x86_64_ctx_switch((to), (from))
+#define ARCH_CONTEXT_SWITCH(to, from, from_sched_lock) \
+    x86_64_ctx_switch((to), (from), (from_sched_lock))
 
 #define ARCH_CONTEXT_RESTORE_TLC(ctx) \
     hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
@@ -131,5 +132,7 @@ typedef struct {
     uint64_t gsbase;
 } __attribute__((packed)) arch_context_extra_t;
 
-void x86_64_ctx_switch(arch_context_t *to, arch_context_t *from);
+void x86_64_ctx_switch(arch_context_t *to,
+                       arch_context_t *from,
+                       int            *from_sched_lock);
 void x86_64_ctx_test_trampoline(void);
