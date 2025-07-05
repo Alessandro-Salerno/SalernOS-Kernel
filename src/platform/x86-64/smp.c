@@ -65,7 +65,6 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     arch_mmu_switch_default();
 
-    ARCH_CPU_SET_KERNEL_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
     x86_64_lapic_init();
 }
 
@@ -76,6 +75,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
     cpu->idle_thread->lock_depth = 1;
     cpu->thread                  = cpu->idle_thread;
+    ARCH_CPU_SET_KERNEL_STACK(cpu, cpu->idle_thread->kernel_stack);
 
     asm("sti");
     while (1) {
@@ -131,8 +131,12 @@ arch_cpu_t *x86_64_smp_get_random(void) {
     static com_spinlock_t lock = COM_SPINLOCK_NEW();
     static int            i    = 0;
     hdr_com_spinlock_acquire(&lock);
+    arch_cpu_t *ret = &Cpus[i % NumCpus];
     i               = (i + 1) % NumCpus;
-    arch_cpu_t *ret = &Cpus[i];
     hdr_com_spinlock_release(&lock);
     return ret;
+}
+
+arch_cpu_t *x86_64_smp_get_cpu(size_t cpu) {
+    return &Cpus[cpu];
 }

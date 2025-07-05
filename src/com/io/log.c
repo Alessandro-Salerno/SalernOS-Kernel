@@ -20,6 +20,7 @@
 #include <kernel/com/spinlock.h>
 
 static com_spinlock_t LogLock = COM_SPINLOCK_NEW();
+static bool           InPanic = false;
 
 static void dummy_hook(char c) {
     (void)c;
@@ -47,9 +48,17 @@ void com_io_log_puts(const char *s) {
 }
 
 void com_io_log_acquire(void) {
+    while (InPanic)
+        ;
     hdr_com_spinlock_acquire(&LogLock);
 }
 
 void com_io_log_release(void) {
+    while (InPanic)
+        ;
     hdr_com_spinlock_release(&LogLock);
+}
+
+void com_io_log_panic(void) {
+    InPanic = true;
 }

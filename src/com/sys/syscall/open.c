@@ -65,7 +65,8 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
         }
     }
 
-    uintmax_t fd      = com_sys_proc_next_fd(curr);
+    uintmax_t fd = com_sys_proc_next_fd(curr);
+    KASSERT(fd > 2);
     curr->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
     com_file_t *file  = curr->fd[fd].file;
     file->vnode       = file_vn;

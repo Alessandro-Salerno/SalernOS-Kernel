@@ -22,3 +22,4 @@
 
 void        x86_64_smp_init(void);
 arch_cpu_t *x86_64_smp_get_random();
+arch_cpu_t *x86_64_smp_get_cpu(size_t cpu);

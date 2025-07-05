@@ -26,12 +26,23 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
-    /*KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x",
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+#ifdef X86_64_SYSCALL_LOG
+    KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
+           "cpu=%d)",
            ctx->rax,
            ctx->rdi,
            ctx->rsi,
            ctx->rdx,
-           ctx->rip);*/
+           ctx->rcx,
+           ctx->rip,
+           (NULL != curr_thread && NULL != curr_thread->proc)
+               ? curr_thread->proc->pid
+               : -1,
+           (NULL != curr_thread && NULL != curr_thread->cpu)
+               ? curr_thread->cpu->id
+               : -1);
+#endif
     hdr_arch_cpu_get_thread()->lock_depth = 0;
     hdr_arch_cpu_interrupt_enable();
     com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];

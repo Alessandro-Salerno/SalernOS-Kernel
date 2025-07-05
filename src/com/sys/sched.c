@@ -100,7 +100,7 @@ void com_sys_sched_yield(void) {
     //        stack pointer and other registers so that when returning from the
     //        underlying assembly function, control is handed to whatever
     //        address is on the stack, which is most likely this function. Once
-    //        the execution gets back here, com_sys_sched_yield cna return to
+    //        the execution gets back here, com_sys_sched_yield can return to
     //        its caller, which can be a hardware timer or anything else (e.g.,
     //        wait). Remember that, since the stack has changed, there's no
     //        guarantee that this function will return to the same point from
@@ -116,8 +116,11 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_sys_sched_yield();
 }
 
+com_spinlock_t wait_lock = COM_SPINLOCK_NEW();
+
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
+    hdr_com_spinlock_acquire(&wait_lock);
     com_thread_t *curr = hdr_arch_cpu_get_thread();
     hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->sched_lock);
     curr->runnable = false;
@@ -126,13 +129,17 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
 
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
     hdr_com_spinlock_release(cond);
+    hdr_com_spinlock_release(&wait_lock);
     com_sys_sched_yield();
 
     // This point is reached AFTER the thread is notified
     hdr_com_spinlock_acquire(cond);
 }
 
+com_spinlock_t notify_lock = COM_SPINLOCK_NEW();
+
 void com_sys_sched_notify(struct com_thread_tailq *waiters) {
+    hdr_com_spinlock_acquire(&notify_lock);
     arch_cpu_t   *currcpu = hdr_arch_cpu_get();
     com_thread_t *next    = TAILQ_FIRST(waiters);
 
@@ -144,6 +151,7 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
         next->runnable = true;
         hdr_com_spinlock_release(&currcpu->sched_lock);
     }
+    hdr_com_spinlock_release(&notify_lock);
 }
 
 void com_sys_sched_init(void) {

@@ -29,6 +29,7 @@
 __attribute__((noreturn)) void
 com_panic(arch_context_t *ctx, const char *fmt, ...) {
     hdr_arch_cpu_interrupt_disable();
+    com_io_log_panic();
     kprintf("kernel panic on cpu %u\n", hdr_arch_cpu_get_id());
 
     if (NULL != fmt) {

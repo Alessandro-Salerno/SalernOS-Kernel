@@ -39,8 +39,8 @@ com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
 
     com_sys_proc_acquire_glock();
 
-    if (0 == curr->num_children || NULL == towait ||
-        towait->parent_pid != curr->pid) {
+    if (0 == __atomic_load_n(&curr->num_children, __ATOMIC_RELAXED) ||
+        NULL == towait || towait->parent_pid != curr->pid) {
         ret.err = ECHILD;
         goto cleanup;
     }

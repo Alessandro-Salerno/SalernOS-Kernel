@@ -30,3 +30,4 @@ void com_io_log_putc(char c);
 void com_io_log_puts(const char *s);
 void com_io_log_acquire(void);
 void com_io_log_release(void);
+void com_io_log_panic(void);

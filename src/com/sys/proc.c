@@ -72,7 +72,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 void com_sys_proc_destroy(com_proc_t *proc) {
     com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
     if (NULL != parent) {
-        parent->num_children--;
+        __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
     Processes[proc->pid - 1] = NULL;
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(proc));
