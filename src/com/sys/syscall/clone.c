@@ -16,35 +16,34 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
-#include <vendor/tailq.h>
-struct com_thread;
-TAILQ_HEAD(com_thread_tailq, com_thread);
-
-#include <arch/context.h>
 #include <arch/cpu.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <kernel/com/fs/file.h>
+#include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
-#include <stdbool.h>
+#include <kernel/com/sys/syscall.h>
+#include <kernel/platform/context.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
 
-typedef struct com_thread {
-    arch_context_t       ctx;
-    arch_context_extra_t xctx;
-    com_spinlock_t       sched_lock;
-    struct com_proc     *proc;
-    struct arch_cpu     *cpu;
-    bool                 runnable;
-    void                *kernel_stack;
-    TAILQ_ENTRY(com_thread) threads;
-    struct com_thread_tailq *waiting_on;
-    int                      lock_depth;
-    int                      tid;
-} com_thread_t;
+com_syscall_ret_t com_sys_syscall_clone(arch_context_t *ctx,
+                                        uintmax_t       new_ip,
+                                        uintmax_t       new_sp,
+                                        uintmax_t       unused,
+                                        uintmax_t       unused1) {
+    (void)ctx;
+    (void)unused;
+    (void)unused1;
 
-com_thread_t *com_sys_thread_new(struct com_proc *proc,
-                                 void            *stack,
-                                 uintmax_t        stack_size,
-                                 void            *entry);
-void          com_sys_thread_destroy(com_thread_t *thread);
-void          com_sys_thread_ready(com_thread_t *thread);
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_proc_t   *curr_proc   = curr_thread->proc;
+
+    com_thread_t *new_thread = com_sys_thread_new(curr_proc, NULL, 0, NULL);
+    ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
+    ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
+
+    return (com_syscall_ret_t){new_thread->tid, 0};
+}

@@ -112,3 +112,8 @@ com_syscall_ret_t com_sys_syscall_getpid(arch_context_t *ctx,
                                          uintmax_t       unused1,
                                          uintmax_t       unused2,
                                          uintmax_t       unused3);
+com_syscall_ret_t com_sys_syscall_clone(arch_context_t *ctx,
+                                        uintmax_t       new_ip,
+                                        uintmax_t       new_sp,
+                                        uintmax_t       unused,
+                                        uintmax_t       unused1);

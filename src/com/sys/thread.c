@@ -26,8 +26,11 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
+
+static int NextTid = 0;
 
 com_thread_t *com_sys_thread_new(com_proc_t *proc,
                                  void       *stack,
@@ -46,6 +49,11 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
+    thread->tid = __atomic_add_fetch(&NextTid, 1, __ATOMIC_SEQ_CST);
+
+    if (NULL != proc) {
+        com_sys_proc_add_thread(proc, thread);
+    }
 
     return thread;
 }

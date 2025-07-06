@@ -49,11 +49,13 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->parent_pid   = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
-    proc->root       = root;
-    proc->cwd        = cwd;
-    proc->pages_lock = COM_SPINLOCK_NEW();
-    proc->used_pages = 0;
+    proc->root         = root;
+    proc->cwd          = cwd;
+    proc->pages_lock   = COM_SPINLOCK_NEW();
+    proc->threads_lock = COM_SPINLOCK_NEW();
+    proc->used_pages   = 0;
     TAILQ_INIT(&proc->notifications);
+    TAILQ_INIT(&proc->threads);
 
     // TODO: use atomic operations (faster)
     com_spinlock_acquire(&PidLock);
@@ -119,6 +121,12 @@ void com_sys_proc_release_glock(void) {
 
 void com_sys_proc_wait(com_proc_t *proc) {
     com_sys_sched_wait(&proc->notifications, &GlobalProcLock);
+}
+
+void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
+    com_spinlock_acquire(&proc->threads_lock);
+    TAILQ_INSERT_TAIL(&proc->threads, thread, threads);
+    com_spinlock_release(&proc->threads_lock);
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {

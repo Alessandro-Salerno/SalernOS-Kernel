@@ -26,11 +26,11 @@
 #define ARCH_CONTEXT_ISUSER(x)    (0x23 == (x)->cs)
 
 #define ARCH_CONTEXT_THREAD_SET(src, stack, stack_size, entry) \
-    src.cs     = 0x20 | 3;                                     \
-    src.ss     = 0x18 | 3;                                     \
-    src.rsp    = (uint64_t)stack + stack_size;                 \
-    src.rip    = (uint64_t)entry;                              \
-    src.rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
+    (src).cs     = 0x20 | 3;                                   \
+    (src).ss     = 0x18 | 3;                                   \
+    (src).rsp    = (uint64_t)(stack) + (stack_size);           \
+    (src).rip    = (uint64_t)(entry);                          \
+    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
 #define ARCH_CONTEXT_FORK(new_thread, orig_ctx)                              \
     new_thread->ctx.rsp = (uint64_t)new_thread->kernel_stack;                \
@@ -45,24 +45,16 @@
         new_context->rdx = 0;                                                \
     }
 
-#define ARCH_CONTEXT_COPY(dst, src) \
-    (dst)->rax = (src)->rax;        \
-    (dst)->rbx = (src)->rbx;        \
-    (dst)->rcx = (src)->rcx;        \
-    (dst)->rdx = (src)->rdx;        \
-    (dst)->r8  = (src)->r8;         \
-    (dst)->r9  = (src)->r9;         \
-    (dst)->r10 = (src)->r10;        \
-    (dst)->r11 = (src)->r11;        \
-    (dst)->r12 = (src)->r12;        \
-    (dst)->r13 = (src)->r13;        \
-    (dst)->r14 = (src)->r14;        \
-    (dst)->r15 = (src)->r15;        \
-    (dst)->rdi = (src)->rdi;        \
-    (dst)->rsi = (src)->rsi;        \
-    (dst)->rbp = (src)->rbp;        \
-    (dst)->rip = (src)->rip;        \
-    (dst)->rsp = (src)->rsp;
+#define ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp)              \
+    new_thread->ctx.rsp = (uint64_t)new_thread->kernel_stack;       \
+    new_thread->ctx.rsp -= sizeof(arch_context_t);                  \
+    {                                                               \
+        arch_context_t *new_context = (void *)new_thread->ctx.rsp;  \
+        new_thread->ctx.rsp -= 8;                                   \
+        *(uint64_t *)new_thread->ctx.rsp =                          \
+            (uint64_t)arch_context_fork_trampoline;                 \
+        ARCH_CONTEXT_THREAD_SET((*new_context), new_sp, 0, new_ip); \
+    }
 
 #define ARCH_CONTEXT_SWITCH(to, from, from_sched_lock) \
     x86_64_ctx_switch((to), (from), (from_sched_lock))
