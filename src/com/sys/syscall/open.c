@@ -24,6 +24,7 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
 

@@ -28,8 +28,6 @@
 #include <stdint.h>
 #include <threads.h>
 
-#include "lib/util.h"
-
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
 #define PDMASK   (uint64_t)0b111111111000000000000000000000

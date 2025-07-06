@@ -100,7 +100,7 @@ void unreserve_pages(void *address, uint64_t pagecount) {
 }
 
 void *com_mm_pmm_alloc() {
-    hdr_com_spinlock_acquire(&Lock);
+    com_spinlock_acquire(&Lock);
     void *ret = NULL;
 
     for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
@@ -111,15 +111,15 @@ void *com_mm_pmm_alloc() {
         }
     }
 
-    hdr_com_spinlock_release(&Lock);
+    com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
     return ret;
 }
 
 void com_mm_pmm_free(void *page) {
-    hdr_com_spinlock_acquire(&Lock);
+    com_spinlock_acquire(&Lock);
     unreserve_page(page, &UsedMem);
-    hdr_com_spinlock_release(&Lock);
+    com_spinlock_release(&Lock);
 }
 
 void com_mm_pmm_get_info(uintmax_t *used_mem,

@@ -50,7 +50,7 @@ com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
 
     // TODO: handle errors (no seek on pipes etc, no seek out of bounds)
 
-    hdr_com_spinlock_acquire(&file->off_lock);
+    com_spinlock_acquire(&file->off_lock);
     off_t new_off = file->off;
     switch (whence) {
     case SEEK_SET:
@@ -74,7 +74,7 @@ com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
     file->off = new_off;
     ret.value = new_off;
 cleanup:
-    hdr_com_spinlock_release(&file->off_lock);
+    com_spinlock_release(&file->off_lock);
     COM_FS_FILE_RELEASE(file);
     return ret;
 }

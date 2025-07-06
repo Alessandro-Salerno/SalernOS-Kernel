@@ -68,7 +68,7 @@ static int tty_read(void     *buf,
     (void)flags;
     struct tty *tty        = devdata;
     size_t      read_count = 0;
-    hdr_com_spinlock_acquire(&tty->lock);
+    com_spinlock_acquire(&tty->lock);
 
     while (true) {
         bool can_read  = false;
@@ -125,7 +125,7 @@ static int tty_read(void     *buf,
         break;
     }
 
-    hdr_com_spinlock_release(&tty->lock);
+    com_spinlock_release(&tty->lock);
     *bytes_read = read_count;
     return 0;
 }
@@ -139,9 +139,9 @@ static int tty_write(size_t   *bytes_written,
     (void)devdata;
     (void)off;
     (void)flags;
-    hdr_com_spinlock_acquire(&Tty.write_lock);
+    com_spinlock_acquire(&Tty.write_lock);
     com_io_fbterm_putsn(buf, buflen);
-    hdr_com_spinlock_release(&Tty.write_lock);
+    com_spinlock_release(&Tty.write_lock);
     *bytes_written = buflen;
     return 0;
 }
@@ -211,7 +211,7 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
         c -= 64;
     }
 
-    hdr_com_spinlock_acquire(&tty->lock);
+    com_spinlock_acquire(&tty->lock);
 
     if (!is_arrow) {
         // TODO: implement POSIX signals
@@ -293,12 +293,12 @@ end:
 
     if (notify && !TAILQ_EMPTY(&tty->waitlist)) {
         com_sys_sched_notify(&tty->waitlist);
-        hdr_com_spinlock_release(&tty->lock);
+        com_spinlock_release(&tty->lock);
         com_sys_sched_yield();
         return;
     }
 
-    hdr_com_spinlock_release(&tty->lock);
+    com_spinlock_release(&tty->lock);
 }
 
 int com_io_tty_init(com_vnode_t **out) {

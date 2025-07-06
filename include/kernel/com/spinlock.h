@@ -18,53 +18,11 @@
 
 #pragma once
 
-#include <arch/cpu.h>
-#include <kernel/com/io/log.h>
 #include <stdbool.h>
 
 typedef int com_spinlock_t;
 
 #define COM_SPINLOCK_NEW() 0
 
-static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
-    hdr_arch_cpu_interrupt_disable();
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    if (NULL != curr_thread) {
-        curr_thread->lock_depth++;
-    }
-    while (true) {
-        // this is before the spinning since hopefully the lock is uncontended
-        if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
-            return;
-        }
-        // spin with no ordering constraints
-        while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
-            hdr_arch_cpu_pause();
-        }
-    }
-}
-
-static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
-    return __sync_bool_compare_and_swap(lock, 0, 1);
-}
-
-static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
-    if (!(*lock)) {
-        KDEBUG("trying to unlock unlocked lock at %x",
-               __builtin_return_address(0));
-    }
-    KASSERT(1 == *lock);
-    __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    if (NULL != curr_thread) {
-        int oldval = curr_thread->lock_depth--;
-        if (oldval == 0) {
-            KDEBUG("trying to unlock with depth 0 at %x",
-                   __builtin_return_address(0));
-        }
-        KASSERT(oldval != 0);
-        if (oldval == 1) {
-            hdr_arch_cpu_interrupt_enable();
-        }
-    }
-}
+void com_spinlock_acquire(com_spinlock_t *lock);
+void com_spinlock_release(com_spinlock_t *lock);

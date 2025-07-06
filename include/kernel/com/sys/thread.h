@@ -24,18 +24,18 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 
 #include <arch/context.h>
 #include <arch/cpu.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <stdbool.h>
 
 typedef struct com_thread {
     arch_context_t       ctx;
     arch_context_extra_t xctx;
-    // TODO: fix int to spinlock here too
-    int              sched_lock;
-    struct com_proc *proc;
-    struct arch_cpu *cpu;
-    bool             runnable;
-    void            *kernel_stack;
+    com_spinlock_t       sched_lock;
+    struct com_proc     *proc;
+    struct arch_cpu     *cpu;
+    bool                 runnable;
+    void                *kernel_stack;
     TAILQ_ENTRY(com_thread) threads;
     struct com_thread_tailq *waiting_on;
     int                      lock_depth;
@@ -45,6 +45,5 @@ com_thread_t *com_sys_thread_new(struct com_proc *proc,
                                  void            *stack,
                                  uintmax_t        stack_size,
                                  void            *entry);
-
-void com_sys_thread_destroy(com_thread_t *thread);
-void com_sys_thread_ready(com_thread_t *thread);
+void          com_sys_thread_destroy(com_thread_t *thread);
+void          com_sys_thread_ready(com_thread_t *thread);

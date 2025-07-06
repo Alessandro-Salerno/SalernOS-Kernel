@@ -56,10 +56,10 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
     if (MAP_FIXED & flags) {
         virt = hint;
     } else {
-        hdr_com_spinlock_acquire(&curr->pages_lock);
+        com_spinlock_acquire(&curr->pages_lock);
         virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
         curr->used_pages += pages;
-        hdr_com_spinlock_release(&curr->pages_lock);
+        com_spinlock_release(&curr->pages_lock);
     }
 
     for (size_t i = 0; i < pages; i++) {

@@ -17,34 +17,46 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
-#include <kernel/platform/mmu.h>
-#include <stdint.h>
 
-// TODO: what happens if two threads of the same process call exit?
-com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
-                                       uintmax_t       status,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3) {
-    (void)ctx;
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
-
+void com_spinlock_acquire(com_spinlock_t *lock) {
+    hdr_arch_cpu_interrupt_disable();
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    if (NULL != curr_thread) {
+        curr_thread->lock_depth++;
+    }
+    while (true) {
+        // this is before the spinning since hopefully the lock is uncontended
+        if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
+            return;
+        }
+        // spin with no ordering constraints
+        while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
+            hdr_arch_cpu_pause();
+        }
+    }
+}
 
-    com_sys_proc_exit(curr_proc, (int)status);
-    com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
-    curr_thread->runnable = false;
-    com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
-    com_sys_sched_yield();
-
-    __builtin_unreachable();
+void com_spinlock_release(com_spinlock_t *lock) {
+    if (!(*lock)) {
+        KDEBUG("trying to unlock unlocked lock at %x",
+               __builtin_return_address(0));
+    }
+    KASSERT(1 == *lock);
+    __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    if (NULL != curr_thread) {
+        int oldval = curr_thread->lock_depth--;
+        if (oldval == 0) {
+            KDEBUG("trying to unlock with depth 0 at %x",
+                   __builtin_return_address(0));
+        }
+        KASSERT(oldval != 0);
+        if (oldval == 1) {
+            hdr_arch_cpu_interrupt_enable();
+        }
+    }
 }

@@ -49,8 +49,8 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     com_thread_t     *cur_thread = hdr_arch_cpu_get_thread();
     com_proc_t       *proc       = cur_thread->proc;
 
-    hdr_com_spinlock_acquire(&proc->fd_lock);
-    hdr_com_spinlock_acquire(&proc->pages_lock);
+    com_spinlock_acquire(&proc->fd_lock);
+    com_spinlock_acquire(&proc->pages_lock);
 
     arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
 
@@ -77,8 +77,8 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     ARCH_CONTEXT_FORK(new_thread, *ctx);
 
     __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
-    hdr_com_spinlock_release(&proc->fd_lock);
-    hdr_com_spinlock_release(&proc->pages_lock);
+    com_spinlock_release(&proc->fd_lock);
+    com_spinlock_release(&proc->pages_lock);
     new_thread->runnable = false;
 
     ret.value = new_proc->pid;

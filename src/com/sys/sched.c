@@ -25,6 +25,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -39,20 +40,20 @@ static void sched_idle(void) {
 
 void com_sys_sched_yield_nolock(void) {
     arch_cpu_t *cpu = hdr_arch_cpu_get();
-    hdr_com_spinlock_acquire(&cpu->runqueue_lock);
+    com_spinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
     KASSERT(curr->sched_lock);
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
-        hdr_com_spinlock_release(&cpu->runqueue_lock);
+        com_spinlock_release(&cpu->runqueue_lock);
         return;
     }
 
     if (NULL == next) {
         if (curr->runnable) {
-            hdr_com_spinlock_release(&cpu->runqueue_lock);
-            hdr_com_spinlock_release(&curr->sched_lock);
+            com_spinlock_release(&cpu->runqueue_lock);
+            com_spinlock_release(&curr->sched_lock);
             return;
         }
 
@@ -66,9 +67,9 @@ void com_sys_sched_yield_nolock(void) {
     }
     // TODO: ke does this, but it doesn't work here
     /*if (next != curr && next != cpu->idle_thread) {
-        hdr_com_spinlock_release(&next->sched_lock);
+        com_spinlock_release(&next->sched_lock);
     }*/
-    hdr_com_spinlock_release(&cpu->runqueue_lock);
+    com_spinlock_release(&cpu->runqueue_lock);
 
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
@@ -86,10 +87,10 @@ void com_sys_sched_yield_nolock(void) {
 
         if (NULL != curr && NULL != curr->proc && curr->proc->exited &&
             !curr->runnable) {
-            /*hdr_com_spinlock_acquire(&curr->proc->pages_lock);
+            /*com_spinlock_acquire(&curr->proc->pages_lock);
             arch_mmu_destroy_table(curr->proc->page_table);
             com_sys_thread_destroy(curr);
-            hdr_com_spinlock_release(&curr->proc->pages_lock);*/
+            com_spinlock_release(&curr->proc->pages_lock);*/
         } else if (NULL != curr) {
             ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
         }
@@ -120,7 +121,7 @@ void com_sys_sched_yield_nolock(void) {
 }
 
 void com_sys_sched_yield(void) {
-    hdr_com_spinlock_acquire(&hdr_arch_cpu_get_thread()->sched_lock);
+    com_spinlock_acquire(&hdr_arch_cpu_get_thread()->sched_lock);
     com_sys_sched_yield_nolock();
     // lock released elsewhere
 }
@@ -134,43 +135,43 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
     com_thread_t *curr = hdr_arch_cpu_get_thread();
-    hdr_com_spinlock_acquire(&curr->sched_lock);
-    hdr_com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
+    com_spinlock_acquire(&curr->sched_lock);
+    com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
     if (NULL != curr->cpu) {
         curr->cpu = NULL;
     }
     curr->runnable   = false;
     curr->waiting_on = waiting_on;
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
-    hdr_com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
+    com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
 
-    hdr_com_spinlock_release(cond);
+    com_spinlock_release(cond);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
-    hdr_com_spinlock_acquire(cond);
+    com_spinlock_acquire(cond);
 }
 
 void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     arch_cpu_t   *currcpu     = hdr_arch_cpu_get();
     com_thread_t *next        = TAILQ_FIRST(waiters);
-    hdr_com_spinlock_acquire(&curr_thread->sched_lock);
+    com_spinlock_acquire(&curr_thread->sched_lock);
 
     if (NULL != next) {
-        hdr_com_spinlock_acquire(&next->sched_lock);
+        com_spinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         // KASSERT(next->waiting_on == waiters);
         TAILQ_REMOVE_HEAD(waiters, threads);
         next->waiting_on = NULL;
-        hdr_com_spinlock_acquire(&currcpu->runqueue_lock);
+        com_spinlock_acquire(&currcpu->runqueue_lock);
         next->cpu = currcpu;
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
         next->runnable = true;
-        hdr_com_spinlock_release(&currcpu->runqueue_lock);
-        hdr_com_spinlock_release(&next->sched_lock);
+        com_spinlock_release(&currcpu->runqueue_lock);
+        com_spinlock_release(&next->sched_lock);
     }
-    hdr_com_spinlock_release(&curr_thread->sched_lock);
+    com_spinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_init(void) {

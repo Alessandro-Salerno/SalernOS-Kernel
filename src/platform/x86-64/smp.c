@@ -131,10 +131,10 @@ void x86_64_smp_init(void) {
 arch_cpu_t *x86_64_smp_get_random(void) {
     static com_spinlock_t lock = COM_SPINLOCK_NEW();
     static int            i    = 0;
-    hdr_com_spinlock_acquire(&lock);
+    com_spinlock_acquire(&lock);
     arch_cpu_t *ret = &Cpus[i % NumCpus];
     i               = (i + 1) % NumCpus;
-    hdr_com_spinlock_release(&lock);
+    com_spinlock_release(&lock);
     return ret;
 }
 

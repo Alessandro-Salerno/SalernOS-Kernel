@@ -51,9 +51,9 @@ com_syscall_ret_t com_sys_syscall_read(arch_context_t *ctx,
         goto cleanup;
     }
 
-    hdr_com_spinlock_acquire(&file->off_lock);
+    com_spinlock_acquire(&file->off_lock);
     file->off += bytes_read;
-    hdr_com_spinlock_release(&file->off_lock);
+    com_spinlock_release(&file->off_lock);
 
     ret.value = bytes_read;
 cleanup:

@@ -21,10 +21,13 @@
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define COM_SYS_PROC_MAX_FDS 16
 
 typedef struct com_proc {
     int                   pid;
@@ -36,13 +39,12 @@ typedef struct com_proc {
 
     com_vnode_t           *root;
     _Atomic(com_vnode_t *) cwd;
-    // TODO: this is a lock... circular dependencies
-    int            fd_lock;
-    int            next_fd;
-    com_filedesc_t fd[16];
+    com_spinlock_t         fd_lock;
+    int                    next_fd;
+    com_filedesc_t         fd[COM_SYS_PROC_MAX_FDS];
 
-    int    pages_lock;
-    size_t used_pages;
+    com_spinlock_t pages_lock;
+    size_t         used_pages;
 
     struct com_thread_tailq notifications;
 } com_proc_t;

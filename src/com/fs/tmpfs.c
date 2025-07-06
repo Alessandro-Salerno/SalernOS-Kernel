@@ -170,9 +170,9 @@ int com_fs_tmpfs_create(com_vnode_t **out,
     }
 
     struct tmpfs_node *parent = dir->extra;
-    hdr_com_spinlock_acquire(&parent->lock);
+    com_spinlock_acquire(&parent->lock);
     TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
-    hdr_com_spinlock_release(&parent->lock);
+    com_spinlock_release(&parent->lock);
 
     return 0;
 }
@@ -196,9 +196,9 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
     TAILQ_INIT(&tn->dir.entries);
     (*out)->type = COM_VNODE_TYPE_DIR;
 
-    hdr_com_spinlock_acquire(&parent_data->lock);
+    com_spinlock_acquire(&parent_data->lock);
     TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
-    hdr_com_spinlock_release(&parent_data->lock);
+    com_spinlock_release(&parent_data->lock);
 
     return 0;
 }
@@ -222,7 +222,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
         return 0;
     }
 
-    hdr_com_spinlock_acquire(&dir_data->lock);
+    com_spinlock_acquire(&dir_data->lock);
 
     struct tmpfs_dir_entry *entry, *_;
     TAILQ_FOREACH_SAFE(entry, &dir_data->dir.entries, entries, _) {
@@ -237,7 +237,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
     ret  = ENOENT;
 
 cleanup:
-    hdr_com_spinlock_release(&dir_data->lock);
+    com_spinlock_release(&dir_data->lock);
     return ret;
 }
 
@@ -273,7 +273,7 @@ int com_fs_tmpfs_read(void        *buf,
     }
 
     size_t read_count = 0;
-    hdr_com_spinlock_acquire(&file->lock);
+    com_spinlock_acquire(&file->lock);
 
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
@@ -302,7 +302,7 @@ int com_fs_tmpfs_read(void        *buf,
         cur = end;
     }
 
-    hdr_com_spinlock_release(&file->lock);
+    com_spinlock_release(&file->lock);
     *bytes_read = read_count;
     return 0;
 }
@@ -325,7 +325,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 
     struct tmpfs_node *file        = node->extra;
     size_t             write_count = 0;
-    hdr_com_spinlock_acquire(&file->lock);
+    com_spinlock_acquire(&file->lock);
 
     if (off + buflen > file->file.size) {
         file->file.size = off + buflen;
@@ -354,7 +354,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
         cur = end;
     }
 
-    hdr_com_spinlock_release(&file->lock);
+    com_spinlock_release(&file->lock);
     *bytes_written = write_count;
     return 0;
 }
@@ -390,10 +390,10 @@ int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
     }
 
     struct tmpfs_node *file = node->extra;
-    hdr_com_spinlock_acquire(&file->lock);
+    com_spinlock_acquire(&file->lock);
     file->file.size = size;
     // TODO: evict from page cache
-    hdr_com_spinlock_release(&file->lock);
+    com_spinlock_release(&file->lock);
     return 0;
 }
 

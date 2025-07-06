@@ -61,7 +61,7 @@ int com_fs_pipefs_read(void        *buf,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    hdr_com_spinlock_acquire(&pipe->lock);
+    com_spinlock_acquire(&pipe->lock);
 
     size_t read_count = 0;
 
@@ -94,7 +94,7 @@ int com_fs_pipefs_read(void        *buf,
         com_sys_sched_notify(&pipe->writers);
     }
 
-    hdr_com_spinlock_release(&pipe->lock);
+    com_spinlock_release(&pipe->lock);
     *bytes_read = read_count;
     return 0;
 }
@@ -109,7 +109,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    hdr_com_spinlock_acquire(&pipe->lock);
+    com_spinlock_acquire(&pipe->lock);
 
     size_t req_space   = buflen;
     size_t write_count = 0;
@@ -144,14 +144,14 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         com_sys_sched_notify(&pipe->readers);
     }
 
-    hdr_com_spinlock_release(&pipe->lock);
+    com_spinlock_release(&pipe->lock);
     *bytes_written = write_count;
     return 0;
 }
 
 int com_fs_pipefs_close(com_vnode_t *vnode) {
     struct pipefs_node *pipe = vnode->extra;
-    hdr_com_spinlock_acquire(&pipe->lock);
+    com_spinlock_acquire(&pipe->lock);
 
     if (vnode == pipe->read_end) {
         pipe->write_end = NULL;
@@ -160,7 +160,7 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
         com_sys_sched_notify(&pipe->readers);
     }
 
-    hdr_com_spinlock_release(&pipe->lock);
+    com_spinlock_release(&pipe->lock);
     // TODO: free pipe?
     return 0;
 }

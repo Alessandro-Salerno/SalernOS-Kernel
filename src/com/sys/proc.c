@@ -20,7 +20,6 @@
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
@@ -57,11 +56,11 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     TAILQ_INIT(&proc->notifications);
 
     // TODO: use atomic operations (faster)
-    hdr_com_spinlock_acquire(&PidLock);
+    com_spinlock_acquire(&PidLock);
     KASSERT(NextPid <= MAX_PROCS);
     proc->pid                = NextPid++;
     Processes[proc->pid - 1] = proc;
-    hdr_com_spinlock_release(&PidLock);
+    com_spinlock_release(&PidLock);
 
     proc->fd_lock = COM_SPINLOCK_NEW();
     proc->next_fd = 0;
@@ -79,10 +78,10 @@ void com_sys_proc_destroy(com_proc_t *proc) {
 }
 
 int com_sys_proc_next_fd(com_proc_t *proc) {
-    hdr_com_spinlock_acquire(&proc->fd_lock);
+    com_spinlock_acquire(&proc->fd_lock);
     int ret = proc->next_fd;
     proc->next_fd++;
-    hdr_com_spinlock_release(&proc->fd_lock);
+    com_spinlock_release(&proc->fd_lock);
     return ret;
 }
 
@@ -91,13 +90,13 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    if (fd > 15) {
+    if (fd > COM_SYS_PROC_MAX_FDS) {
         return NULL;
     }
 
-    hdr_com_spinlock_acquire(&proc->fd_lock);
+    com_spinlock_acquire(&proc->fd_lock);
     com_file_t *file = proc->fd[fd].file;
-    hdr_com_spinlock_release(&proc->fd_lock);
+    com_spinlock_release(&proc->fd_lock);
     COM_FS_FILE_HOLD(file);
     return file;
 }
@@ -111,11 +110,11 @@ com_proc_t *com_sys_proc_get_by_pid(int pid) {
 }
 
 void com_sys_proc_acquire_glock(void) {
-    hdr_com_spinlock_acquire(&GlobalProcLock);
+    com_spinlock_acquire(&GlobalProcLock);
 }
 
 void com_sys_proc_release_glock(void) {
-    hdr_com_spinlock_release(&GlobalProcLock);
+    com_spinlock_release(&GlobalProcLock);
 }
 
 void com_sys_proc_wait(com_proc_t *proc) {
@@ -135,11 +134,11 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
     com_sys_proc_release_glock();
 
-    hdr_com_spinlock_acquire(&proc->fd_lock);
+    com_spinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
     }
-    hdr_com_spinlock_release(&proc->fd_lock);
+    com_spinlock_release(&proc->fd_lock);
 }

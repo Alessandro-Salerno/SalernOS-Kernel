@@ -22,8 +22,6 @@
 #include <kernel/platform/syscall.h>
 #include <kernel/platform/x86-64/msr.h>
 
-#include "arch/context.h"
-
 extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 // #define X86_64_SYSCALL_LOG

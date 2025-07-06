@@ -50,13 +50,13 @@ void com_io_log_puts(const char *s) {
 void com_io_log_acquire(void) {
     while (InPanic)
         ;
-    hdr_com_spinlock_acquire(&LogLock);
+    com_spinlock_acquire(&LogLock);
 }
 
 void com_io_log_release(void) {
     while (InPanic)
         ;
-    hdr_com_spinlock_release(&LogLock);
+    com_spinlock_release(&LogLock);
 }
 
 void com_io_log_panic(void) {

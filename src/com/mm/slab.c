@@ -57,13 +57,13 @@ void *com_mm_slab_alloc(size_t size) {
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];
 
-    hdr_com_spinlock_acquire(&Lock);
+    com_spinlock_acquire(&Lock);
     if (0 == s->next) {
         init(s, size);
     }
     uintptr_t *old_next = (uintptr_t *)s->next;
     s->next             = *old_next;
-    hdr_com_spinlock_release(&Lock);
+    com_spinlock_release(&Lock);
 
     kmemset(old_next, size, 0);
     return old_next;
@@ -78,11 +78,11 @@ void com_mm_slab_free(void *ptr, size_t size) {
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];
 
-    hdr_com_spinlock_acquire(&Lock);
+    com_spinlock_acquire(&Lock);
     uintptr_t *new_head = ptr;
     *new_head           = s->next;
     s->next             = (uintptr_t)new_head;
-    hdr_com_spinlock_release(&Lock);
+    com_spinlock_release(&Lock);
 
     // TODO: free slab page if needed
 }
