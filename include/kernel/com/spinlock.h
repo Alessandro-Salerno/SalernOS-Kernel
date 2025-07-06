@@ -26,8 +26,7 @@ typedef int com_spinlock_t;
 
 #define COM_SPINLOCK_NEW() 0
 
-__attribute__((noinline)) static void
-hdr_com_spinlock_acquire(com_spinlock_t *lock) {
+static inline void hdr_com_spinlock_acquire(com_spinlock_t *lock) {
     hdr_arch_cpu_interrupt_disable();
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     if (NULL != curr_thread) {
@@ -49,8 +48,7 @@ static inline bool hdr_com_spinlock_try(com_spinlock_t *lock) {
     return __sync_bool_compare_and_swap(lock, 0, 1);
 }
 
-__attribute__((noinline)) static void
-hdr_com_spinlock_release(com_spinlock_t *lock) {
+static inline void hdr_com_spinlock_release(com_spinlock_t *lock) {
     if (!(*lock)) {
         KDEBUG("trying to unlock unlocked lock at %x",
                __builtin_return_address(0));

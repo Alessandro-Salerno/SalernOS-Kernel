@@ -35,10 +35,10 @@
 static com_spinlock_t PidLock              = COM_SPINLOCK_NEW();
 static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
 static com_proc_t    *Processes[MAX_PROCS] = {0};
-static uintmax_t      NextPid              = 1;
+static int            NextPid              = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             uintmax_t             parent_pid,
+                             int                   parent_pid,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd) {
     com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
@@ -78,15 +78,15 @@ void com_sys_proc_destroy(com_proc_t *proc) {
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(proc));
 }
 
-uintmax_t com_sys_proc_next_fd(com_proc_t *proc) {
+int com_sys_proc_next_fd(com_proc_t *proc) {
     hdr_com_spinlock_acquire(&proc->fd_lock);
-    uintmax_t ret = proc->next_fd;
+    int ret = proc->next_fd;
     proc->next_fd++;
     hdr_com_spinlock_release(&proc->fd_lock);
     return ret;
 }
 
-com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
+com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
     if (NULL == proc) {
         return NULL;
     }
@@ -102,7 +102,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, uintmax_t fd) {
     return file;
 }
 
-com_proc_t *com_sys_proc_get_by_pid(uintmax_t pid) {
+com_proc_t *com_sys_proc_get_by_pid(int pid) {
     if (pid > MAX_PROCS || 0 == pid) {
         return NULL;
     }
@@ -135,11 +135,11 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
     com_sys_proc_release_glock();
 
-    /*hdr_com_spinlock_acquire(&proc->fd_lock);
-    for (size_t i = 0; i < proc->next_fd; i++) {
+    hdr_com_spinlock_acquire(&proc->fd_lock);
+    for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
     }
-    hdr_com_spinlock_release(&proc->fd_lock);*/
+    hdr_com_spinlock_release(&proc->fd_lock);
 }

@@ -31,7 +31,7 @@ typedef struct com_thread {
     arch_context_t       ctx;
     arch_context_extra_t xctx;
     // TODO: fix int to spinlock here too
-    int              sched_lock; // must be here
+    int              sched_lock;
     struct com_proc *proc;
     struct arch_cpu *cpu;
     bool             runnable;

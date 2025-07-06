@@ -72,7 +72,7 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                    : -1,
                (NULL != curr_thread && NULL != curr_thread->cpu)
                    ? curr_thread->cpu->id
-                   : -1,
+                   : 777, // NOTE: this means that the CPU was not set
                curr_thread->lock_depth);
     }
     KASSERT(0 == hdr_arch_cpu_get_thread()->lock_depth);

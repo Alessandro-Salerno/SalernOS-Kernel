@@ -55,6 +55,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     x86_64_idt_init();
     x86_64_idt_reload();
     x86_64_idt_set_user_invocable(0x80);
+    ARCH_CPU_SET_KERNEL_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
 
     KLOG("initializing sse on cpu %u", cpu->id);
     hdr_x86_64_cr_write0((hdr_x86_64_cr_read0() & ~(1 << 2)) | (1 << 1));

@@ -61,7 +61,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
 
-    for (size_t i = 0; i < proc->next_fd; i++) {
+    for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
