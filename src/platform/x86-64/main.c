@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
@@ -45,6 +46,7 @@
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
 #include <lib/util.h>
@@ -198,6 +200,25 @@ void kernel_entry(void) {
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
+
+    KLOG("testing hashmap");
+    int       key_1 = 500, key_2 = 795000;
+    int       val_1 = 10, val_2 = 50, val_3 = 900;
+    hashmap_t map;
+    KASSERT(0 == hashmap_init(&map, HASHMAP_DEFAULT_SIZE));
+    KASSERT(0 == hashmap_put(&map, &key_1, sizeof(int), &val_1));
+    void *ret_1, *ret_2, *ret_3;
+    KASSERT(0 == hashmap_get(&ret_1, &map, &key_1, sizeof(int)));
+    KASSERT(val_1 == *(int *)ret_1);
+    KASSERT(ENOENT == hashmap_set(&map, &key_2, sizeof(int), &val_2));
+    KASSERT(0 == hashmap_put(&map, &key_2, sizeof(int), &val_2));
+    KASSERT(0 == hashmap_get(&ret_2, &map, &key_2, sizeof(int)));
+    KASSERT(val_2 == *(int *)ret_2);
+    KASSERT(0 == hashmap_set(&map, &key_2, sizeof(int), &val_3));
+    KASSERT(0 == hashmap_get(&ret_3, &map, &key_2, sizeof(int)));
+    KASSERT(val_3 == *(int *)ret_3);
+    KASSERT(0 == hashmap_remove(&map, &key_1, sizeof(int)));
+    KASSERT(ENOENT == hashmap_get(&ret_1, &map, &key_1, sizeof(int)));
 
     com_vfs_t *rootfs = NULL;
     com_fs_tmpfs_mount(&rootfs, NULL);
