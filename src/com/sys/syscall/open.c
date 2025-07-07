@@ -28,17 +28,17 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
-                                       uintmax_t       pathptr,
-                                       uintmax_t       pathlen,
-                                       uintmax_t       flags,
-                                       uintmax_t       unused) {
-    (void)ctx;
-    (void)unused;
-    char             *path    = (char *)pathptr;
-    com_syscall_ret_t ret     = {0};
-    com_proc_t       *curr    = hdr_arch_cpu_get_thread()->proc;
-    com_vnode_t      *file_vn = NULL;
+// SYSCALL: open(const char *path, size_t pathlen, int flags)
+COM_SYS_SYSCALL(com_sys_syscall_open) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
+
+    const char *path    = COM_SYS_SYSCALL_ARG(const char *, 1);
+    size_t      pathlen = COM_SYS_SYSCALL_ARG(size_t, 2);
+    int         flags   = COM_SYS_SYSCALL_ARG(int, 3);
+
+    com_proc_t  *curr    = hdr_arch_cpu_get_thread()->proc;
+    com_vnode_t *file_vn = NULL;
 
     // TODO: implement O_CREAT
     /*if (O_CREAT & flags) {
@@ -61,12 +61,11 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
             com_fs_vfs_lookup(&file_vn, path, pathlen, curr->root, cwd);
 
         if (0 != lk_ret) {
-            ret.err = lk_ret;
-            goto cleanup;
+            return COM_SYS_SYSCALL_ERR(lk_ret);
         }
     }
 
-    uintmax_t fd = com_sys_proc_next_fd(curr);
+    int fd = com_sys_proc_next_fd(curr);
     KASSERT(fd > 2);
     curr->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
     com_file_t *file  = curr->fd[fd].file;
@@ -74,8 +73,6 @@ com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
     file->flags       = flags;
     file->num_ref     = 1;
     file->off         = 0;
-    ret.value         = fd;
 
-cleanup:
-    return ret;
+    return COM_SYS_SYSCALL_OK(fd);
 }

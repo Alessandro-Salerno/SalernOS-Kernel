@@ -34,17 +34,13 @@ struct sysinfo {
     uintmax_t sys_mem;
 };
 
-com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
-                                          uintmax_t       bufptr,
-                                          uintmax_t       unused1,
-                                          uintmax_t       unused2,
-                                          uintmax_t       unused3) {
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
-    (void)ctx;
+// SYSCALL: sysinfo(struct sysinfo *buf)
+COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
 
-    struct sysinfo *sysinfo = (void *)bufptr;
+    struct sysinfo *sysinfo = COM_SYS_SYSCALL_ARG(struct sysinfo *, 1);
+
     // kstrcpy(sysinfo->cpu, "Not implemented");
     // kstrcpy(sysinfo->gpu, "Not implemented");
     kmemset(sysinfo->cpu, 64, 0);
@@ -54,5 +50,5 @@ com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
     com_mm_pmm_get_info(
         &sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);
 
-    return (com_syscall_ret_t){0, 0};
+    return COM_SYS_SYSCALL_OK(0);
 }

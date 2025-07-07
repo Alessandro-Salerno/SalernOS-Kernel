@@ -16,38 +16,8 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <kernel/com/fs/file.h>
-#include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
-#include <stdatomic.h>
+#pragma once
+
 #include <stdint.h>
-#include <stdio.h>
 
-// SYSCALL: truncate(int fd, off_t size)
-COM_SYS_SYSCALL(com_sys_syscall_truncate) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
-
-    int   fd   = COM_SYS_SYSCALL_ARG(int, 1);
-    off_t size = COM_SYS_SYSCALL_ARG(off_t, 2);
-
-    com_syscall_ret_t ret  = {0};
-    com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;
-    com_file_t       *file = com_sys_proc_get_file(curr, fd);
-
-    if (NULL == file) {
-        ret.err = EBADF;
-        goto cleanup;
-    }
-
-    ret.err = com_fs_vfs_truncate(file->vnode, size);
-
-cleanup:
-    COM_FS_FILE_RELEASE(file);
-    return ret;
-}
+typedef uint64_t arch_syscall_arg_t;

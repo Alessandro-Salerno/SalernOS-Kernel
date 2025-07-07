@@ -20,16 +20,8 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 
-com_syscall_ret_t com_sys_syscall_getpid(arch_context_t *ctx,
-                                         uintmax_t       unused,
-                                         uintmax_t       unused1,
-                                         uintmax_t       unused2,
-                                         uintmax_t       unused3) {
-    (void)ctx;
-    (void)unused;
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
-
-    return (com_syscall_ret_t){hdr_arch_cpu_get_thread()->proc->pid, 0};
+// SYSCALL: getpid()
+COM_SYS_SYSCALL(com_sys_syscall_getpid) {
+    COM_SYS_SYSCALL_UNUSED_START(0);
+    return COM_SYS_SYSCALL_OK(hdr_arch_cpu_get_thread()->proc->pid);
 }

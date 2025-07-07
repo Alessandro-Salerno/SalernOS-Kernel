@@ -19,101 +19,70 @@
 #pragma once
 
 #include <arch/context.h>
+#include <arch/syscall.h>
 #include <stdint.h>
+
+#define COM_SYS_SYSCALL(name)                                \
+    com_syscall_ret_t name(arch_context_t    *__syscall_ctx, \
+                           arch_syscall_arg_t __syscall_a1,  \
+                           arch_syscall_arg_t __syscall_a2,  \
+                           arch_syscall_arg_t __syscall_a3,  \
+                           arch_syscall_arg_t __syscall_a4)
+#define COM_SYS_SYSCALL_CONTEXT()        (__syscall_ctx)
+#define COM_SYS_SYSCALL_ARG(type, num)   ((type)(__syscall_a##num))
+#define COM_SYS_SYSCALL_UNUSED_CONTEXT() (void)(COM_SYS_SYSCALL_CONTEXT())
+#define COM_SYS_SYSCALL_UNUSED_START(first_unused) \
+    __COM_SYS_SYSCALL_UNUSED_##first_unused
+
+#define __COM_SYS_SYSCALL_UNUSED_4 (void)(__syscall_a4)
+#define __COM_SYS_SYSCALL_UNUSED_3 \
+    __COM_SYS_SYSCALL_UNUSED_4;    \
+    (void)(__syscall_a3)
+#define __COM_SYS_SYSCALL_UNUSED_2 \
+    __COM_SYS_SYSCALL_UNUSED_3;    \
+    (void)(__syscall_a2)
+#define __COM_SYS_SYSCALL_UNUSED_1 \
+    __COM_SYS_SYSCALL_UNUSED_2;    \
+    (void)(__syscall_a1)
+#define __COM_SYS_SYSCALL_UNUSED_0    \
+    COM_SYS_SYSCALL_UNUSED_CONTEXT(); \
+    __COM_SYS_SYSCALL_UNUSED_1
+
+#define COM_SYS_SYSCALL_OK(v) (com_syscall_ret_t){.value = (v), .err = 0}
+#define COM_SYS_SYSCALL_ERR(e)  \
+    (com_syscall_ret_t) {       \
+        .value = -1, .err = (e) \
+    }
 
 typedef struct {
     uintmax_t value;
     uintmax_t err;
 } com_syscall_ret_t;
 
-typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t *ctx,
-                                                uintmax_t       arg1,
-                                                uintmax_t       arg2,
-                                                uintmax_t       arg3,
-                                                uintmax_t       arg4);
+typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
+                                                arch_syscall_arg_t a1,
+                                                arch_syscall_arg_t a2,
+                                                arch_syscall_arg_t a3,
+                                                arch_syscall_arg_t a4);
 
 void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler);
 void com_sys_syscall_init(void);
 
 // SYSCALLS
 
-com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
-                                        uintmax_t       fd,
-                                        uintmax_t       bufptr,
-                                        uintmax_t       buflen,
-                                        uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_read(arch_context_t *ctx,
-                                       uintmax_t       fd,
-                                       uintmax_t       bufptr,
-                                       uintmax_t       buflen,
-                                       uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
-                                         uintmax_t       pathptr,
-                                         uintmax_t       argvptr,
-                                         uintmax_t       envptr,
-                                         uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3,
-                                       uintmax_t       unused4);
-com_syscall_ret_t com_sys_syscall_sysinfo(arch_context_t *ctx,
-                                          uintmax_t       bufptr,
-                                          uintmax_t       unused1,
-                                          uintmax_t       unused2,
-                                          uintmax_t       unused3);
-com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
-                                          uintmax_t       pid,
-                                          uintmax_t       statusptr,
-                                          uintmax_t       flags,
-                                          uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
-                                       uintmax_t       status,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3);
-com_syscall_ret_t com_sys_syscall_ioctl(arch_context_t *ctx,
-                                        uintmax_t       fd,
-                                        uintmax_t       op,
-                                        uintmax_t       bufptr,
-                                        uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_open(arch_context_t *ctx,
-                                       uintmax_t       pathptr,
-                                       uintmax_t       pathlen,
-                                       uintmax_t       flags,
-                                       uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
-                                       uintmax_t       hint,
-                                       uintmax_t       size,
-                                       uintmax_t       flags,
-                                       uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
-                                       uintmax_t       fd,
-                                       uintmax_t       uoffset,
-                                       uintmax_t       uwhence,
-                                       uintmax_t       unused);
-com_syscall_ret_t com_sys_syscall_isatty(arch_context_t *ctx,
-                                         uintmax_t       fd,
-                                         uintmax_t       unused,
-                                         uintmax_t       unused1,
-                                         uintmax_t       unused2);
-com_syscall_ret_t com_sys_syscall_truncate(arch_context_t *ctx,
-                                           uintmax_t       fd,
-                                           uintmax_t       size,
-                                           uintmax_t       unused,
-                                           uintmax_t       unused1);
-com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
-                                       uintmax_t       fildesptr,
-                                       uintmax_t       unused,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2);
-com_syscall_ret_t com_sys_syscall_getpid(arch_context_t *ctx,
-                                         uintmax_t       unused,
-                                         uintmax_t       unused1,
-                                         uintmax_t       unused2,
-                                         uintmax_t       unused3);
-com_syscall_ret_t com_sys_syscall_clone(arch_context_t *ctx,
-                                        uintmax_t       new_ip,
-                                        uintmax_t       new_sp,
-                                        uintmax_t       unused,
-                                        uintmax_t       unused1);
+COM_SYS_SYSCALL(com_sys_syscall_write);
+COM_SYS_SYSCALL(com_sys_syscall_read);
+COM_SYS_SYSCALL(com_sys_syscall_execve);
+COM_SYS_SYSCALL(com_sys_syscall_fork);
+COM_SYS_SYSCALL(com_sys_syscall_sysinfo);
+COM_SYS_SYSCALL(com_sys_syscall_waitpid);
+COM_SYS_SYSCALL(com_sys_syscall_exit);
+COM_SYS_SYSCALL(com_sys_syscall_ioctl);
+COM_SYS_SYSCALL(com_sys_syscall_open);
+COM_SYS_SYSCALL(com_sys_syscall_mmap);
+COM_SYS_SYSCALL(com_sys_syscall_seek);
+COM_SYS_SYSCALL(com_sys_syscall_isatty);
+COM_SYS_SYSCALL(com_sys_syscall_truncate);
+COM_SYS_SYSCALL(com_sys_syscall_pipe);
+COM_SYS_SYSCALL(com_sys_syscall_getpid);
+COM_SYS_SYSCALL(com_sys_syscall_clone);

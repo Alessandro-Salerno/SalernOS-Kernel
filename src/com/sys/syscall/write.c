@@ -24,14 +24,15 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 
-com_syscall_ret_t com_sys_syscall_write(arch_context_t *ctx,
-                                        uintmax_t       fd,
-                                        uintmax_t       bufptr,
-                                        uintmax_t       buflen,
-                                        uintmax_t       unused) {
-    (void)ctx;
-    (void)unused;
-    void             *buf = (void *)bufptr;
+// SYSCALL: write(int fd, void *buf, size_t buflen)
+COM_SYS_SYSCALL(com_sys_syscall_write) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
+
+    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
+    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
+    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+
     com_syscall_ret_t ret = {0};
 
     com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;

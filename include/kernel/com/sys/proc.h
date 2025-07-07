@@ -26,12 +26,13 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #define COM_SYS_PROC_MAX_FDS 16
 
 typedef struct com_proc {
-    int                   pid;
-    int                   parent_pid;
+    pid_t                 pid;
+    pid_t                 parent_pid;
     bool                  exited;
     int                   exit_status;
     arch_mmu_pagetable_t *page_table;
@@ -53,13 +54,13 @@ typedef struct com_proc {
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             int                   parent_pid,
+                             pid_t                 parent_pid,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd);
 void        com_sys_proc_destroy(com_proc_t *proc);
 int         com_sys_proc_next_fd(com_proc_t *proc);
 com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd);
-com_proc_t *com_sys_proc_get_by_pid(int pid);
+com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);
 void        com_sys_proc_wait(com_proc_t *proc);

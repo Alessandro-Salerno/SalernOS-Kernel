@@ -35,19 +35,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3,
-                                       uintmax_t       unused4) {
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
-    (void)unused4;
+COM_SYS_SYSCALL(com_sys_syscall_fork) {
+    COM_SYS_SYSCALL_UNUSED_START(1);
 
-    com_syscall_ret_t ret        = {-1, 0};
-    com_thread_t     *cur_thread = hdr_arch_cpu_get_thread();
-    com_proc_t       *proc       = cur_thread->proc;
+    arch_context_t *ctx = COM_SYS_SYSCALL_CONTEXT();
+
+    com_thread_t *cur_thread = hdr_arch_cpu_get_thread();
+    com_proc_t   *proc       = cur_thread->proc;
 
     com_spinlock_acquire(&proc->fd_lock);
     com_spinlock_acquire(&proc->pages_lock);
@@ -60,8 +54,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, cur_thread->xctx);
 
     if (NULL == new_pt || NULL == new_proc || NULL == new_thread) {
-        ret.err = ENOMEM;
-        goto end;
+        return COM_SYS_SYSCALL_ERR(ENOMEM);
     }
 
     for (int i = 0; i < proc->next_fd; i++) {
@@ -81,9 +74,7 @@ com_syscall_ret_t com_sys_syscall_fork(arch_context_t *ctx,
     com_spinlock_release(&proc->pages_lock);
     new_thread->runnable = false;
 
-    ret.value = new_proc->pid;
     com_sys_thread_ready(new_thread);
 
-end:
-    return ret;
+    return COM_SYS_SYSCALL_OK(new_proc->pid);
 }

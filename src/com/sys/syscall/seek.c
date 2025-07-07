@@ -28,16 +28,14 @@
 #include <stdint.h>
 #include <stdio.h>
 
-com_syscall_ret_t com_sys_syscall_seek(arch_context_t *ctx,
-                                       uintmax_t       fd,
-                                       uintmax_t       uoffset,
-                                       uintmax_t       uwhence,
-                                       uintmax_t       unused) {
-    (void)ctx;
-    (void)unused;
+// SYSCALL: seek(int fd, off_t offset, int whence)
+COM_SYS_SYSCALL(com_sys_syscall_seek) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    off_t offset = (off_t)uoffset;
-    int   whence = (int)uwhence;
+    int   fd     = COM_SYS_SYSCALL_ARG(int, 1);
+    off_t offset = COM_SYS_SYSCALL_ARG(off_t, 2);
+    int   whence = COM_SYS_SYSCALL_ARG(int, 3);
 
     com_syscall_ret_t ret  = {0};
     com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;

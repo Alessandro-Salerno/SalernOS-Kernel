@@ -27,6 +27,7 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <stdbool.h>
+#include <sys/types.h>
 
 typedef struct com_thread {
     arch_context_t       ctx;
@@ -39,7 +40,7 @@ typedef struct com_thread {
     TAILQ_ENTRY(com_thread) threads;
     struct com_thread_tailq *waiting_on;
     int                      lock_depth;
-    int                      tid;
+    pid_t                    tid;
 } com_thread_t;
 
 com_thread_t *com_sys_thread_new(struct com_proc *proc,

@@ -29,20 +29,20 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
-// TODO: change this, just like stack and other offsets
 #define ALLOC_BASE 0x100000000
 
-com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
-                                       uintmax_t       hint,
-                                       uintmax_t       size,
-                                       uintmax_t       flags,
-                                       uintmax_t       ufd) {
-    (void)ctx;
+// // TODO: probably have to separate prot and falsg for portability
+// SYSCALL: mmap(void *hint, size_t size, uintmax_t flags, int fd, ...)
+COM_SYS_SYSCALL(com_sys_syscall_mmap) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
 
-    int fd = (int)ufd;
+    uintptr_t hint  = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
+    size_t    size  = COM_SYS_SYSCALL_ARG(size_t, 2);
+    uintmax_t flags = COM_SYS_SYSCALL_ARG(uintmax_t, 3);
+    int       fd    = COM_SYS_SYSCALL_ARG(int, 4);
 
     if (-1 != fd) {
-        return (com_syscall_ret_t){.err = ENOSYS};
+        return COM_SYS_SYSCALL_ERR(ENOSYS);
     }
 
     com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
@@ -75,5 +75,5 @@ com_syscall_ret_t com_sys_syscall_mmap(arch_context_t *ctx,
         }
     }
 
-    return (com_syscall_ret_t){.value = virt, .err = 0};
+    return COM_SYS_SYSCALL_OK(virt);
 }

@@ -34,10 +34,10 @@
 static com_spinlock_t PidLock              = COM_SPINLOCK_NEW();
 static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
 static com_proc_t    *Processes[MAX_PROCS] = {0};
-static int            NextPid              = 1;
+static pid_t          NextPid              = 1;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             int                   parent_pid,
+                             pid_t                 parent_pid,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd) {
     com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
@@ -103,7 +103,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
     return file;
 }
 
-com_proc_t *com_sys_proc_get_by_pid(int pid) {
+com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     if (pid > MAX_PROCS || 0 == pid) {
         return NULL;
     }

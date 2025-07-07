@@ -26,18 +26,14 @@
 #include <kernel/com/sys/syscall.h>
 #include <stdint.h>
 
-com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
-                                       uintmax_t       fildesptr,
-                                       uintmax_t       unused,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2) {
-    (void)ctx;
-    (void)unused;
-    (void)unused1;
-    (void)unused2;
+// SYSCALL: pipe(int *fildes);
+COM_SYS_SYSCALL(com_sys_syscall_pipe) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
 
-    int        *fildes = (int *)fildesptr;
-    com_proc_t *curr   = hdr_arch_cpu_get_thread()->proc;
+    int *fildes = COM_SYS_SYSCALL_ARG(int *, 1);
+
+    com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
     // TODO: check if fds are available
     uintmax_t rfd = com_sys_proc_next_fd(curr);
     uintmax_t wfd = com_sys_proc_next_fd(curr);
@@ -64,5 +60,5 @@ com_syscall_ret_t com_sys_syscall_pipe(arch_context_t *ctx,
     fildes[0] = rfd;
     fildes[1] = wfd;
 
-    return (com_syscall_ret_t){0, 0};
+    return COM_SYS_SYSCALL_OK(0);
 }

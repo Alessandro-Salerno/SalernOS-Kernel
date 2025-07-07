@@ -28,15 +28,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
-com_syscall_ret_t com_sys_syscall_isatty(arch_context_t *ctx,
-                                         uintmax_t       fd,
-                                         uintmax_t       unused,
-                                         uintmax_t       unused1,
-                                         uintmax_t       unused2) {
-    (void)ctx;
-    (void)unused;
-    (void)unused1;
-    (void)unused2;
+// SYSCALL: isatty(int fd)
+COM_SYS_SYSCALL(com_sys_syscall_isatty) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
+
+    int fd = COM_SYS_SYSCALL_ARG(int, 1);
 
     com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;
     com_file_t       *file = com_sys_proc_get_file(curr, fd);

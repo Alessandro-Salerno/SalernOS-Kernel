@@ -29,14 +29,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
-com_syscall_ret_t com_sys_syscall_clone(arch_context_t *ctx,
-                                        uintmax_t       new_ip,
-                                        uintmax_t       new_sp,
-                                        uintmax_t       unused,
-                                        uintmax_t       unused1) {
-    (void)ctx;
-    (void)unused;
-    (void)unused1;
+// SYSCALL: clone(void *new_ip, void *new_sp)
+COM_SYS_SYSCALL(com_sys_syscall_clone) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(3);
+
+    void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
+    void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
 
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     com_proc_t   *curr_proc   = curr_thread->proc;
@@ -45,5 +44,5 @@ com_syscall_ret_t com_sys_syscall_clone(arch_context_t *ctx,
     ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
     ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
 
-    return (com_syscall_ret_t){new_thread->tid, 0};
+    return COM_SYS_SYSCALL_OK(new_thread->tid);
 }

@@ -27,20 +27,17 @@
 #include <stdint.h>
 
 // TODO: what happens if two threads of the same process call exit?
-com_syscall_ret_t com_sys_syscall_exit(arch_context_t *ctx,
-                                       uintmax_t       status,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3) {
-    (void)ctx;
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
+// SYSCALL: exit(int status)
+COM_SYS_SYSCALL(com_sys_syscall_exit) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
+
+    int exit_status = COM_SYS_SYSCALL_ARG(int, 1);
 
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_sys_proc_exit(curr_proc, (int)status);
+    com_sys_proc_exit(curr_proc, exit_status);
     com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
     curr_thread->runnable = false;
     com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);

@@ -25,17 +25,18 @@
 
 // TODO: handle case in which pid < 0 and proc groups
 // TODO: do stuff with signals and flags
-com_syscall_ret_t com_sys_syscall_waitpid(arch_context_t *ctx,
-                                          uintmax_t       pid,
-                                          uintmax_t       statusptr,
-                                          uintmax_t       flags,
-                                          uintmax_t       unused) {
-    (void)ctx;
-    (void)unused;
+// SYSCALL: waitpid(pid_t pid, int *status, int flags)
+COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
+
+    pid_t pid    = COM_SYS_SYSCALL_ARG(pid_t, 1);
+    int  *status = COM_SYS_SYSCALL_ARG(int *, 2);
+    int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
+
     com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
     com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
     com_syscall_ret_t ret    = {0, 0};
-    int              *status = (int *)statusptr;
 
     com_sys_proc_acquire_glock();
 

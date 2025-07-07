@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static int NextTid = 0;
+static pid_t NextTid = 0;
 
 com_thread_t *com_sys_thread_new(com_proc_t *proc,
                                  void       *stack,

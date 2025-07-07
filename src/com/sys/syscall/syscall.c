@@ -28,20 +28,18 @@
 
 volatile com_intf_syscall_t Com_Sys_Syscall_Table[MAX_SYSCALLS] = {0};
 
-static com_syscall_ret_t test_syscall(arch_context_t *ctx,
-                                      uintmax_t       arg1,
-                                      uintmax_t       arg2,
-                                      uintmax_t       arg3,
-                                      uintmax_t       arg4) {
-    (void)ctx;
-    (void)arg2;
-    (void)arg3;
-    (void)arg4;
+// test_syscall(const char *s)
+static COM_SYS_SYSCALL(test_syscall) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
+
+    const char *s = COM_SYS_SYSCALL_ARG(const char *, 1);
+
     com_io_log_acquire();
-    com_io_log_puts((const char *)arg1);
+    com_io_log_puts(s);
     com_io_log_release();
 
-    return (com_syscall_ret_t){0, 0};
+    return COM_SYS_SYSCALL_OK(0);
 }
 
 void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {

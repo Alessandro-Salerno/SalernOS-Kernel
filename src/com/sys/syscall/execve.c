@@ -35,18 +35,15 @@
 // TODO: when processes will have more than one thread, there could be a
 // race condition where two threads try to run exec() and all of this
 // explodes. There should be a sort of "exec" lock
-com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
-                                         uintmax_t       pathptr,
-                                         uintmax_t       argvptr,
-                                         uintmax_t       envptr,
-                                         uintmax_t       unused) {
-    (void)unused;
+// SYSCALL: execve(const char *path, char *const *argv, char *const *envp)
+COM_SYS_SYSCALL(com_sys_syscall_execve) {
+    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    const char  *path = (void *)pathptr;
-    char *const *argv = (void *)argvptr;
-    char *const *env  = (void *)envptr;
+    arch_context_t *ctx  = COM_SYS_SYSCALL_CONTEXT();
+    const char     *path = COM_SYS_SYSCALL_ARG(const char *, 1);
+    char *const    *argv = COM_SYS_SYSCALL_ARG(char *const *, 2);
+    char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
 
-    com_syscall_ret_t     ret    = {0};
     com_thread_t         *thread = hdr_arch_cpu_get_thread();
     com_proc_t           *proc   = thread->proc;
     arch_mmu_pagetable_t *new_pt = NULL;
@@ -54,7 +51,7 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
 
     if (0 != status) {
-        goto fail;
+        return COM_SYS_SYSCALL_ERR(status);
     }
 
     arch_mmu_switch(new_pt);
@@ -69,9 +66,5 @@ com_syscall_ret_t com_sys_syscall_execve(arch_context_t *ctx,
 
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
-    return ret;
-
-fail:
-    ret.err = status;
-    return ret;
+    return COM_SYS_SYSCALL_OK(0);
 }
