@@ -87,3 +87,4 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe);
 COM_SYS_SYSCALL(com_sys_syscall_getpid);
 COM_SYS_SYSCALL(com_sys_syscall_clone);
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread);
+COM_SYS_SYSCALL(com_sys_syscall_futex);

@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <arch/info.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -26,6 +27,18 @@ TAILQ_HEAD(hashmap_entry_tailq, hashmap_entry);
 
 #define HASHMAP_DEFAULT_SIZE \
     (ARCH_PAGE_SIZE / sizeof(struct hashmap_entry_tailq))
+
+#define HASHMAP_INIT(hm_ptr) hashmap_init((hm_ptr), HASHMAP_DEFAULT_SIZE)
+#define HASHMAP_SET(hm_ptr, key, value) \
+    hashmap_set((hm_ptr), key, sizeof(*(key)), value)
+#define HASHMAP_PUT(hm_ptr, key, value) \
+    hashmap_put((hm_ptr), key, sizeof(*(key)), value)
+#define HASHMAP_GET(out_ptr, hm_ptr, key) \
+    hashmap_get((void **)(out_ptr), (hm_ptr), key, sizeof(*(key)))
+#define HASHMAP_REMOVE(hm_ptr, key) \
+    hashmap_remove((hm_ptr), key, sizeof(*(key)))
+#define HASHMAP_DEFAULT(out_ptr, hm_ptr, key, d) \
+    hashmap_default((void **)(out_ptr), hm_ptr, key, sizeof(*(key)), d)
 
 typedef struct hashmap_entry {
     TAILQ_ENTRY(hashmap_entry) entries;
@@ -45,5 +58,10 @@ int hashmap_init(hashmap_t *hashmap, size_t size);
 int hashmap_set(hashmap_t *hashmap, void *key, size_t key_size, void *value);
 int hashmap_put(hashmap_t *hashmap, void *key, size_t key_size, void *value);
 int hashmap_get(void **out, hashmap_t *hashmap, void *key, size_t key_size);
+int hashmap_default(void     **out,
+                    hashmap_t *hashmap,
+                    void      *key,
+                    size_t     key_size,
+                    void      *default_val);
 int hashmap_remove(hashmap_t *hashmap, void *key, size_t key_size);
 int hashmap_destroy(hashmap_t *hashmap);

@@ -138,7 +138,30 @@ int hashmap_remove(hashmap_t *hashmap, void *key, size_t key_size) {
     }
 
     TAILQ_REMOVE(bucket_head, entry, entries);
+    hashmap->num_entries--;
     return 0;
+}
+
+int hashmap_default(void     **out,
+                    hashmap_t *hashmap,
+                    void      *key,
+                    size_t     key_size,
+                    void      *default_val) {
+    void *ret;
+    int   get_ret = hashmap_get(&ret, hashmap, key, key_size);
+    if (0 == get_ret) {
+        *out = ret;
+        return 0;
+    } else if (ENOENT != get_ret) {
+        return get_ret;
+    }
+
+    int put_ret = hashmap_put(hashmap, key, key_size, default_val);
+    if (0 != put_ret) {
+        return put_ret;
+    }
+
+    return hashmap_get(out, hashmap, key, key_size);
 }
 
 // TODO: implement hashmap destroy

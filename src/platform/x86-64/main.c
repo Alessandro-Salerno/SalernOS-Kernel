@@ -87,7 +87,7 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
     static uintmax_t mod       = 0;
     uint8_t          code      = hdr_x86_64_io_inb(0x60);
 
-    if (0xe0 == prev_code) {
+    if (0xdf == prev_code) {
         if (0x53 == code) {
             com_io_tty_kbd_in(127, 0);
             goto end;

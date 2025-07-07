@@ -59,6 +59,32 @@ static inline uint64_t *next(uint64_t entry) {
     return (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
 }
 
+static uint64_t *get_page(arch_mmu_pagetable_t *top, void *vaddr) {
+    uint64_t *pml4       = (uint64_t *)ARCH_PHYS_TO_HHDM(top);
+    uintptr_t addr       = (uintptr_t)vaddr;
+    uintptr_t ptoffset   = (addr & PTMASK) >> 12;
+    uintptr_t pdoffset   = (addr & PDMASK) >> 21;
+    uintptr_t pdptoffset = (addr & PDPTMASK) >> 30;
+    uintptr_t pml4offset = (addr & PML4MASK) >> 39;
+
+    uint64_t *pdpt = next(pml4[pml4offset]);
+    if (NULL == pdpt) {
+        return NULL;
+    }
+
+    uint64_t *pd = next(pdpt[pdptoffset]);
+    if (NULL == pd) {
+        return NULL;
+    }
+
+    uint64_t *pt = next(pd[pdoffset]);
+    if (NULL == pt) {
+        return NULL;
+    }
+
+    return pt + ptoffset;
+}
+
 static bool
 add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
     uint64_t *pml4       = (uint64_t *)ARCH_PHYS_TO_HHDM(top);
@@ -219,6 +245,16 @@ void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
 
 void arch_mmu_switch_default(void) {
     arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
+}
+
+// TODO: implement this
+void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
+    uint64_t *entry = get_page(pagetable, virt_addr);
+    if (NULL == entry) {
+        return NULL;
+    }
+    return (void *)((*entry & ADDRMASK) +
+                    ((uintptr_t)virt_addr & (ARCH_PAGE_SIZE - 1)));
 }
 
 void arch_mmu_init(void) {
