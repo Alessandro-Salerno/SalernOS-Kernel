@@ -41,7 +41,7 @@ struct futex {
 
 // TODO: use per-futex locks
 static com_spinlock_t FutexLock = COM_SPINLOCK_NEW();
-static hashmap_t      FutexMap;
+static khashmap_t     FutexMap;
 static bool           FutexInit = false;
 
 // SYSCALL: futex(uint32_t *word_ptr, int op, uint32_t val)
@@ -64,7 +64,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     com_spinlock_acquire(&FutexLock);
 
     if (!FutexInit) {
-        HASHMAP_INIT(&FutexMap);
+        KHASHMAP_INIT(&FutexMap);
         FutexInit = true;
     }
 
@@ -75,7 +75,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
         if (word != value) {
             struct futex *futex;
             int           def_ret =
-                HASHMAP_DEFAULT(&futex, &FutexMap, &phys, &default_futex);
+                KHASHMAP_DEFAULT(&futex, &FutexMap, &phys, &default_futex);
             if (0 != def_ret) {
                 ret.err = def_ret;
                 goto end;
@@ -86,7 +86,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     case FUTEX_WAKE: {
         struct futex *futex;
-        int           get_ret = HASHMAP_GET(&futex, &FutexMap, &phys);
+        int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
         if (ENOENT == get_ret) {
             goto end;
         } else if (0 != get_ret) {

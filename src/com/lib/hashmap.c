@@ -40,12 +40,12 @@ static inline uintmax_t get_hash(void *buffer, size_t size) {
     return h;
 }
 
-static hashmap_entry_t *
-get_entry(hashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
-    uintmax_t                   off         = hash % hashmap->capacity;
-    struct hashmap_entry_tailq *entry_queue = &hashmap->entries[off];
+static khashmap_entry_t *
+get_entry(khashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
+    uintmax_t                    off         = hash % hashmap->capacity;
+    struct khashmap_entry_tailq *entry_queue = &hashmap->entries[off];
 
-    hashmap_entry_t *entry, *_;
+    khashmap_entry_t *entry, *_;
     TAILQ_FOREACH_SAFE(entry, entry_queue, entries, _) {
         if (entry->key_size == key_size && entry->hash == hash &&
             0 == kmemcmp(entry->key, key, key_size)) {
@@ -57,8 +57,8 @@ get_entry(hashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
 }
 
 // TODO: make size actually do something
-int hashmap_init(hashmap_t *hashmap, size_t size) {
-    KASSERT(HASHMAP_DEFAULT_SIZE == size);
+int khashmap_init(khashmap_t *hashmap, size_t size) {
+    KASSERT(KHASHMAP_DEFAULT_SIZE == size);
     hashmap->capacity = size;
     hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
@@ -73,9 +73,9 @@ int hashmap_init(hashmap_t *hashmap, size_t size) {
     return 0;
 }
 
-int hashmap_set(hashmap_t *hashmap, void *key, size_t key_size, void *value) {
-    uintmax_t        hash  = get_hash(key, key_size);
-    hashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
+int khashmap_set(khashmap_t *hashmap, void *key, size_t key_size, void *value) {
+    uintmax_t         hash  = get_hash(key, key_size);
+    khashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
 
     if (NULL != entry) {
         entry->value = value;
@@ -85,14 +85,14 @@ int hashmap_set(hashmap_t *hashmap, void *key, size_t key_size, void *value) {
     return ENOENT;
 }
 
-int hashmap_put(hashmap_t *hashmap, void *key, size_t key_size, void *value) {
-    if (0 == hashmap_set(hashmap, key, key_size, value)) {
+int khashmap_put(khashmap_t *hashmap, void *key, size_t key_size, void *value) {
+    if (0 == khashmap_set(hashmap, key, key_size, value)) {
         return 0;
     }
 
-    uintmax_t        hash  = get_hash(key, key_size);
-    uintmax_t        off   = hash % hashmap->capacity;
-    hashmap_entry_t *entry = com_mm_slab_alloc(sizeof(hashmap_entry_t));
+    uintmax_t         hash  = get_hash(key, key_size);
+    uintmax_t         off   = hash % hashmap->capacity;
+    khashmap_entry_t *entry = com_mm_slab_alloc(sizeof(khashmap_entry_t));
 
     if (NULL == entry) {
         return ENOMEM;
@@ -100,24 +100,24 @@ int hashmap_put(hashmap_t *hashmap, void *key, size_t key_size, void *value) {
 
     entry->key = com_mm_slab_alloc(key_size);
     if (NULL == entry->key) {
-        com_mm_slab_free(entry, sizeof(hashmap_entry_t));
+        com_mm_slab_free(entry, sizeof(khashmap_entry_t));
         return ENOMEM;
     }
 
     kmemcpy(entry->key, key, key_size);
-    entry->key_size                         = key_size;
-    entry->value                            = value;
-    entry->hash                             = hash;
-    struct hashmap_entry_tailq *bucket_head = &hashmap->entries[off];
+    entry->key_size                          = key_size;
+    entry->value                             = value;
+    entry->hash                              = hash;
+    struct khashmap_entry_tailq *bucket_head = &hashmap->entries[off];
     TAILQ_INSERT_HEAD(bucket_head, entry, entries);
     hashmap->num_entries++;
 
     return 0;
 }
 
-int hashmap_get(void **out, hashmap_t *hashmap, void *key, size_t key_size) {
-    uintmax_t        hash  = get_hash(key, key_size);
-    hashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
+int khashmap_get(void **out, khashmap_t *hashmap, void *key, size_t key_size) {
+    uintmax_t         hash  = get_hash(key, key_size);
+    khashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
 
     if (NULL == entry) {
         return ENOENT;
@@ -127,11 +127,11 @@ int hashmap_get(void **out, hashmap_t *hashmap, void *key, size_t key_size) {
     return 0;
 }
 
-int hashmap_remove(hashmap_t *hashmap, void *key, size_t key_size) {
-    uintmax_t                   hash        = get_hash(key, key_size);
-    uintmax_t                   off         = hash % hashmap->capacity;
-    struct hashmap_entry_tailq *bucket_head = &hashmap->entries[off];
-    hashmap_entry_t            *entry = get_entry(hashmap, key, key_size, hash);
+int khashmap_remove(khashmap_t *hashmap, void *key, size_t key_size) {
+    uintmax_t                    hash        = get_hash(key, key_size);
+    uintmax_t                    off         = hash % hashmap->capacity;
+    struct khashmap_entry_tailq *bucket_head = &hashmap->entries[off];
+    khashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
 
     if (NULL == entry) {
         return ENOENT;
@@ -142,13 +142,13 @@ int hashmap_remove(hashmap_t *hashmap, void *key, size_t key_size) {
     return 0;
 }
 
-int hashmap_default(void     **out,
-                    hashmap_t *hashmap,
-                    void      *key,
-                    size_t     key_size,
-                    void      *default_val) {
+int khashmap_default(void      **out,
+                     khashmap_t *hashmap,
+                     void       *key,
+                     size_t      key_size,
+                     void       *default_val) {
     void *ret;
-    int   get_ret = hashmap_get(&ret, hashmap, key, key_size);
+    int   get_ret = khashmap_get(&ret, hashmap, key, key_size);
     if (0 == get_ret) {
         *out = ret;
         return 0;
@@ -156,15 +156,15 @@ int hashmap_default(void     **out,
         return get_ret;
     }
 
-    int put_ret = hashmap_put(hashmap, key, key_size, default_val);
+    int put_ret = khashmap_put(hashmap, key, key_size, default_val);
     if (0 != put_ret) {
         return put_ret;
     }
 
-    return hashmap_get(out, hashmap, key, key_size);
+    return khashmap_get(out, hashmap, key, key_size);
 }
 
 // TODO: implement hashmap destroy
-int hashmap_destroy(hashmap_t *hashmap) {
+int khashmap_destroy(khashmap_t *hashmap) {
     return 0;
 }

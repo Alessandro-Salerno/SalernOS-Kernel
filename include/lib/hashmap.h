@@ -23,45 +23,45 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-TAILQ_HEAD(hashmap_entry_tailq, hashmap_entry);
+TAILQ_HEAD(khashmap_entry_tailq, khashmap_entry);
 
-#define HASHMAP_DEFAULT_SIZE \
-    (ARCH_PAGE_SIZE / sizeof(struct hashmap_entry_tailq))
+#define KHASHMAP_DEFAULT_SIZE \
+    (ARCH_PAGE_SIZE / sizeof(struct khashmap_entry_tailq))
 
-#define HASHMAP_INIT(hm_ptr) hashmap_init((hm_ptr), HASHMAP_DEFAULT_SIZE)
-#define HASHMAP_SET(hm_ptr, key, value) \
-    hashmap_set((hm_ptr), key, sizeof(*(key)), value)
-#define HASHMAP_PUT(hm_ptr, key, value) \
-    hashmap_put((hm_ptr), key, sizeof(*(key)), value)
-#define HASHMAP_GET(out_ptr, hm_ptr, key) \
-    hashmap_get((void **)(out_ptr), (hm_ptr), key, sizeof(*(key)))
-#define HASHMAP_REMOVE(hm_ptr, key) \
-    hashmap_remove((hm_ptr), key, sizeof(*(key)))
-#define HASHMAP_DEFAULT(out_ptr, hm_ptr, key, d) \
-    hashmap_default((void **)(out_ptr), hm_ptr, key, sizeof(*(key)), d)
+#define KHASHMAP_INIT(hm_ptr) khashmap_init((hm_ptr), KHASHMAP_DEFAULT_SIZE)
+#define KHASHMAP_SET(hm_ptr, key, value) \
+    khashmap_set((hm_ptr), key, sizeof(*(key)), value)
+#define KHASHMAP_PUT(hm_ptr, key, value) \
+    khashmap_put((hm_ptr), key, sizeof(*(key)), value)
+#define KHASHMAP_GET(out_ptr, hm_ptr, key) \
+    khashmap_get((void **)(out_ptr), (hm_ptr), key, sizeof(*(key)))
+#define KHASHMAP_REMOVE(hm_ptr, key) \
+    khashmap_remove((hm_ptr), key, sizeof(*(key)))
+#define KHASHMAP_DEFAULT(out_ptr, hm_ptr, key, d) \
+    khashmap_default((void **)(out_ptr), hm_ptr, key, sizeof(*(key)), d)
 
-typedef struct hashmap_entry {
-    TAILQ_ENTRY(hashmap_entry) entries;
+typedef struct khashmap_entry {
+    TAILQ_ENTRY(khashmap_entry) entries;
     uintmax_t hash;
     size_t    key_size;
     void     *key;
     void     *value;
-} hashmap_entry_t;
+} khashmap_entry_t;
 
 typedef struct hashamp {
-    size_t                      capacity;
-    size_t                      num_entries;
-    struct hashmap_entry_tailq *entries;
-} hashmap_t;
+    size_t                       capacity;
+    size_t                       num_entries;
+    struct khashmap_entry_tailq *entries;
+} khashmap_t;
 
-int hashmap_init(hashmap_t *hashmap, size_t size);
-int hashmap_set(hashmap_t *hashmap, void *key, size_t key_size, void *value);
-int hashmap_put(hashmap_t *hashmap, void *key, size_t key_size, void *value);
-int hashmap_get(void **out, hashmap_t *hashmap, void *key, size_t key_size);
-int hashmap_default(void     **out,
-                    hashmap_t *hashmap,
-                    void      *key,
-                    size_t     key_size,
-                    void      *default_val);
-int hashmap_remove(hashmap_t *hashmap, void *key, size_t key_size);
-int hashmap_destroy(hashmap_t *hashmap);
+int khashmap_init(khashmap_t *hashmap, size_t size);
+int khashmap_set(khashmap_t *hashmap, void *key, size_t key_size, void *value);
+int khashmap_put(khashmap_t *hashmap, void *key, size_t key_size, void *value);
+int khashmap_get(void **out, khashmap_t *hashmap, void *key, size_t key_size);
+int khashmap_default(void      **out,
+                     khashmap_t *hashmap,
+                     void       *key,
+                     size_t      key_size,
+                     void       *default_val);
+int khashmap_remove(khashmap_t *hashmap, void *key, size_t key_size);
+int khashmap_destroy(khashmap_t *hashmap);
