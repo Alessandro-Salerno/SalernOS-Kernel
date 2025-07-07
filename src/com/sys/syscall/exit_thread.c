@@ -23,28 +23,17 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
-#include <kernel/platform/context.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include <stdio.h>
 
-// SYSCALL: clone(void *new_ip, void *new_sp)
-COM_SYS_SYSCALL(com_sys_syscall_clone) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
-
-    void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
-    void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
-
+// SYSCALL: exit_thread()
+COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
+    COM_SYS_SYSCALL_UNUSED_START(0);
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    curr_thread->runnable     = false;
+    com_sys_sched_yield();
 
-    com_thread_t *new_thread = com_sys_thread_new(curr_proc, NULL, 0, NULL);
-    ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
-    ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
-
-    com_sys_thread_ready(new_thread);
-
-    return COM_SYS_SYSCALL_OK(new_thread->tid);
+    __builtin_unreachable();
 }

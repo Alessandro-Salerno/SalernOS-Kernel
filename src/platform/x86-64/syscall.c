@@ -79,16 +79,14 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
 }
 
-com_syscall_ret_t arch_syscall_set_tls(arch_context_t *ctx,
-                                       uintmax_t       ptr,
-                                       uintmax_t       unused1,
-                                       uintmax_t       unused2,
-                                       uintmax_t       unused3) {
-    (void)ctx;
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
+COM_SYS_SYSCALL(arch_syscall_set_tls) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
+
+    uintptr_t ptr = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
+
     hdr_arch_cpu_get_thread()->xctx.fsbase = ptr;
     hdr_x86_64_msr_write(X86_64_MSR_FSBASE, ptr);
-    return (com_syscall_ret_t){.value = 0, .err = 0};
+
+    return COM_SYS_SYSCALL_OK(0);
 }

@@ -161,7 +161,7 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     if (NULL != next) {
         com_spinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
-        // KASSERT(next->waiting_on == waiters);
+        KASSERT(next->waiting_on == waiters);
         TAILQ_REMOVE_HEAD(waiters, threads);
         next->waiting_on = NULL;
         com_spinlock_acquire(&currcpu->runqueue_lock);
@@ -171,6 +171,29 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
         com_spinlock_release(&currcpu->runqueue_lock);
         com_spinlock_release(&next->sched_lock);
     }
+
+    com_spinlock_release(&curr_thread->sched_lock);
+}
+
+void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    arch_cpu_t   *currcpu     = hdr_arch_cpu_get();
+    com_spinlock_acquire(&curr_thread->sched_lock);
+
+    for (com_thread_t *next; NULL != (next = TAILQ_FIRST(waiters));) {
+        com_spinlock_acquire(&next->sched_lock);
+        KASSERT(NULL == next->cpu);
+        KASSERT(next->waiting_on == waiters);
+        TAILQ_REMOVE_HEAD(waiters, threads);
+        next->waiting_on = NULL;
+        com_spinlock_acquire(&currcpu->runqueue_lock);
+        next->cpu = currcpu;
+        TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
+        next->runnable = true;
+        com_spinlock_release(&currcpu->runqueue_lock);
+        com_spinlock_release(&next->sched_lock);
+    }
+
     com_spinlock_release(&curr_thread->sched_lock);
 }
 

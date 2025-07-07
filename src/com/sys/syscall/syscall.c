@@ -74,6 +74,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x10, com_sys_syscall_pipe);
     com_sys_syscall_register(0x11, com_sys_syscall_getpid);
     com_sys_syscall_register(0x12, com_sys_syscall_clone);
+    com_sys_syscall_register(0x13, com_sys_syscall_exit_thread);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }
