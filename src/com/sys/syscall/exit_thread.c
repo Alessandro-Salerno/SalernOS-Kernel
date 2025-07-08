@@ -35,6 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     com_spinlock_acquire(&curr_thread->sched_lock);
     KASSERT(curr_thread->runnable);
+    KASSERT(!curr_thread->proc->exited);
     curr_thread->runnable = false;
     com_spinlock_release(&curr_thread->sched_lock);
     com_sys_sched_yield();
