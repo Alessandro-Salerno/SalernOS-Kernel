@@ -50,6 +50,7 @@
     new_thread->ctx.rsp -= sizeof(arch_context_t);                  \
     {                                                               \
         arch_context_t *new_context = (void *)new_thread->ctx.rsp;  \
+        *new_context                = (arch_context_t){0};          \
         new_thread->ctx.rsp -= 8;                                   \
         *(uint64_t *)new_thread->ctx.rsp =                          \
             (uint64_t)arch_context_fork_trampoline;                 \
