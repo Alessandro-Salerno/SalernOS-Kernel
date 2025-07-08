@@ -59,8 +59,7 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {
-    thread->runnable   = false;
-    thread->waiting_on = NULL;
+    thread->runnable = false;
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
                     ARCH_PAGE_SIZE);
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));

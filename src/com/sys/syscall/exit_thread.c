@@ -33,10 +33,10 @@
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     COM_SYS_SYSCALL_UNUSED_START(0);
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    // com_spinlock_acquire(&curr_thread->sched_lock);
+    com_spinlock_acquire(&curr_thread->sched_lock);
+    KASSERT(curr_thread->runnable);
     curr_thread->runnable = false;
-    KASSERT(NULL == curr_thread->waiting_on);
-    // com_spinlock_release(&curr_thread->sched_lock);
+    com_spinlock_release(&curr_thread->sched_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();

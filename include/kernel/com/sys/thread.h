@@ -38,9 +38,8 @@ typedef struct com_thread {
     bool                 runnable;
     void                *kernel_stack;
     TAILQ_ENTRY(com_thread) threads;
-    struct com_thread_tailq *waiting_on;
-    int                      lock_depth;
-    pid_t                    tid;
+    int   lock_depth;
+    pid_t tid;
 } com_thread_t;
 
 com_thread_t *com_sys_thread_new(struct com_proc *proc,
