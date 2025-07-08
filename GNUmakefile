@@ -17,7 +17,7 @@ LD := ld
 
 # User controllable C flags.
 # // TODO: Change to -O2, using no optimizations for debugging
-CFLAGS := -g -O2 -pipe
+CFLAGS := -g -O0 -pipe
 
 # User controllable C preprocessor flags. We set none by default.
 CPPFLAGS :=

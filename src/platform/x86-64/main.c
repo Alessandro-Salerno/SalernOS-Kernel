@@ -169,6 +169,7 @@ USED void kbd_eoi(com_isr_t *isr) {
 void kernel_entry(void) {
     hdr_arch_cpu_set(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
+    TAILQ_INIT(&BaseCpu.zombie_queue);
     BaseCpu.runqueue_lock = COM_SPINLOCK_NEW();
 
     hdr_x86_64_io_outb(0x20, 0x11);

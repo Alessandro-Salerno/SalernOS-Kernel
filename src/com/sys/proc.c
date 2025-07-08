@@ -20,6 +20,7 @@
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
@@ -40,8 +41,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              pid_t                 parent_pid,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd) {
-    com_proc_t *proc = (com_proc_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-    kmemset(proc, ARCH_PAGE_SIZE, 0);
+    com_proc_t *proc   = com_mm_slab_alloc(sizeof(com_proc_t));
     proc->page_table   = page_table;
     proc->exited       = false;
     proc->exit_status  = 0;
@@ -54,6 +54,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->pages_lock   = COM_SPINLOCK_NEW();
     proc->threads_lock = COM_SPINLOCK_NEW();
     proc->used_pages   = 0;
+    proc->num_ref      = 1; // 1 because of the parent
     TAILQ_INIT(&proc->notifications);
     TAILQ_INIT(&proc->threads);
 
@@ -76,7 +77,8 @@ void com_sys_proc_destroy(com_proc_t *proc) {
         __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
     Processes[proc->pid - 1] = NULL;
-    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(proc));
+    arch_mmu_destroy_table(proc->page_table);
+    com_mm_slab_free(proc, sizeof(com_proc_t));
 }
 
 int com_sys_proc_next_fd(com_proc_t *proc) {
@@ -124,14 +126,33 @@ void com_sys_proc_wait(com_proc_t *proc) {
 }
 
 void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
-    return;
+    KASSERT(!proc->exited);
     com_spinlock_acquire(&proc->threads_lock);
-    TAILQ_INSERT_TAIL(&proc->threads, thread, threads);
+    TAILQ_INSERT_TAIL(&proc->threads, thread, proc_threads);
+    __atomic_add_fetch(&proc->num_ref, 1, __ATOMIC_SEQ_CST);
     com_spinlock_release(&proc->threads_lock);
+}
+void com_sys_proc_remove_thread(com_proc_t *proc, com_thread_t *thread) {
+    com_spinlock_acquire(&proc->threads_lock);
+    com_sys_proc_remove_thread_nolock(proc, thread);
+    com_spinlock_release(&proc->threads_lock);
+}
+
+void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
+                                       struct com_thread *thread) {
+    TAILQ_REMOVE(&proc->threads, thread, proc_threads);
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_sys_proc_acquire_glock();
+
+    com_spinlock_acquire(&proc->fd_lock);
+    for (int i = 0; i < proc->next_fd; i++) {
+        if (NULL != proc->fd[i].file) {
+            COM_FS_FILE_RELEASE(proc->fd[i].file);
+        }
+    }
+    com_spinlock_release(&proc->fd_lock);
 
     com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
     proc->exited       = true;
@@ -142,12 +163,4 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     }
 
     com_sys_proc_release_glock();
-
-    com_spinlock_acquire(&proc->fd_lock);
-    for (int i = 0; i < proc->next_fd; i++) {
-        if (NULL != proc->fd[i].file) {
-            COM_FS_FILE_RELEASE(proc->fd[i].file);
-        }
-    }
-    com_spinlock_release(&proc->fd_lock);
 }

@@ -28,15 +28,24 @@
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <vendor/tailq.h>
 
 // SYSCALL: exit_thread()
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
+    KDEBUG("JE GOT CALLED!!!");
     COM_SYS_SYSCALL_UNUSED_START(0);
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     com_spinlock_acquire(&curr_thread->sched_lock);
     KASSERT(curr_thread->runnable);
     KASSERT(!curr_thread->proc->exited);
     curr_thread->runnable = false;
+    curr_thread->exited   = true;
+    com_spinlock_acquire(&curr_thread->proc->threads_lock);
+    com_sys_proc_remove_thread_nolock(curr_thread->proc, curr_thread);
+    if (TAILQ_EMPTY(&curr_thread->proc->threads)) {
+        com_sys_proc_exit(curr_thread->proc, 0);
+    }
+    com_spinlock_release(&curr_thread->proc->threads_lock);
     com_spinlock_release(&curr_thread->sched_lock);
     com_sys_sched_yield();
 

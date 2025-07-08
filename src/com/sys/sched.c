@@ -30,6 +30,8 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
+static com_thread_t DummyThread = (com_thread_t){0};
+
 static void sched_idle(void) {
     hdr_arch_cpu_get_thread()->lock_depth = 0;
     for (;;) {
@@ -66,7 +68,24 @@ void com_sys_sched_yield_nolock(void) {
 
     if (curr->runnable && curr != cpu->idle_thread) {
         TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
+    } else if (curr->exited) {
+        TAILQ_INSERT_TAIL(&cpu->zombie_queue, curr, threads);
     }
+
+    for (com_thread_t *zombie;
+         NULL != (zombie = TAILQ_FIRST(&cpu->zombie_queue));) {
+        KDEBUG("killing tid=%u since exited=%u", zombie->tid, zombie->exited);
+        // com_spinlock_acquire(&zombie->sched_lock);
+        // curr->lock_depth--;
+        com_proc_t *proc = zombie->proc;
+        // com_sys_thread_destroy(zombie);
+        TAILQ_REMOVE_HEAD(&cpu->zombie_queue, threads);
+        if (0 == __atomic_add_fetch(&proc->num_ref, -1, __ATOMIC_SEQ_CST) &&
+            proc->exited) {
+            // com_sys_proc_destroy(proc);
+        }
+    }
+
     com_spinlock_release(&cpu->runqueue_lock);
 
     arch_mmu_pagetable_t *prev_pt = NULL;
@@ -82,18 +101,9 @@ void com_sys_sched_yield_nolock(void) {
 
     if (NULL != next_pt && next_pt != prev_pt) {
         arch_mmu_switch(next_pt);
-
-        if (NULL != curr && NULL != curr->proc && curr->proc->exited &&
-            !curr->runnable) {
-            /*com_spinlock_acquire(&curr->proc->pages_lock);
-            arch_mmu_destroy_table(curr->proc->page_table);
-            com_sys_thread_destroy(curr);
-            com_spinlock_release(&curr->proc->pages_lock);*/
-        } else if (NULL != curr) {
-            ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
-        }
     }
 
+    ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
 
     cpu->thread = next;

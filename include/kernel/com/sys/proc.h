@@ -51,6 +51,7 @@ typedef struct com_proc {
 
     com_spinlock_t          threads_lock;
     struct com_thread_tailq threads;
+    size_t                  num_ref;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
@@ -65,4 +66,7 @@ void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);
 void        com_sys_proc_wait(com_proc_t *proc);
 void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
+void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
+void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
+                                       struct com_thread *thread);
 void com_sys_proc_exit(com_proc_t *proc, int status);

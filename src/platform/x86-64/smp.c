@@ -63,6 +63,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     com_sys_sched_init();
     TAILQ_INIT(&cpu->sched_queue);
+    TAILQ_INIT(&cpu->zombie_queue);
 
     arch_mmu_switch_default();
 

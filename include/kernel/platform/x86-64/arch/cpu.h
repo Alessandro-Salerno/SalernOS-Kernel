@@ -45,6 +45,7 @@ typedef struct arch_cpu {
     com_spinlock_t          runqueue_lock;
     struct com_thread_tailq sched_queue;
     struct com_thread      *idle_thread;
+    struct com_thread_tailq zombie_queue;
 } arch_cpu_t;
 
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {

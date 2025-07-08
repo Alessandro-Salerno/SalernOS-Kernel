@@ -38,9 +38,8 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_sys_proc_exit(curr_proc, exit_status);
-    com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
     curr_thread->runnable = false;
-    com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
+    curr_thread->exited   = true;
     com_sys_sched_yield();
 
     __builtin_unreachable();

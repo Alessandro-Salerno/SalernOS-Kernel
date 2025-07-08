@@ -21,6 +21,7 @@
 #include <arch/info.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
@@ -39,13 +40,13 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     arch_context_t ctx = {0};
     ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
 
-    com_thread_t *thread =
-        (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-    thread->proc       = proc;
-    thread->runnable   = true;
-    thread->ctx        = ctx;
-    thread->lock_depth = 1;
-    thread->sched_lock = COM_SPINLOCK_NEW();
+    com_thread_t *thread = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    thread->proc         = proc;
+    thread->runnable     = true;
+    thread->exited       = false;
+    thread->ctx          = ctx;
+    thread->lock_depth   = 1;
+    thread->sched_lock   = COM_SPINLOCK_NEW();
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
@@ -60,6 +61,8 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
 
 void com_sys_thread_destroy(com_thread_t *thread) {
     thread->runnable = false;
+    if (NULL != thread->proc) {
+    }
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
                     ARCH_PAGE_SIZE);
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));

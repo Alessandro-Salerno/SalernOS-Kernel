@@ -20,6 +20,7 @@
 
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/spinlock.h>
 #include <stdint.h>
 
 #define COM_FS_FILE_HOLD(file) \
@@ -40,15 +41,9 @@
     })
 
 typedef struct com_file {
-    // TODO: this is
-    // a lock but I
-    // have circular
-    // dependencies
-    // if I include
-    // spinlock.h
-    int       off_lock;
-    uintmax_t off;
-    uintmax_t flags;
+    com_spinlock_t off_lock;
+    uintmax_t      off;
+    uintmax_t      flags;
     uintmax_t num_ref; // this is used because multiple file descripts may point
                        // to the same file (e.g., if stdout and stderr and the
                        // same) or if the process was forked

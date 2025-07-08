@@ -50,7 +50,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         if (towait->exited) {
             *status   = towait->exit_status;
             ret.value = pid;
-            com_sys_proc_destroy(towait);
+            __atomic_add_fetch(&towait->num_ref, -1, __ATOMIC_SEQ_CST);
             goto cleanup;
         }
 

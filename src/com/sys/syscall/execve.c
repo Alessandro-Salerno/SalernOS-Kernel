@@ -34,8 +34,9 @@
 
 // TODO: when processes will have more than one thread, there could be a
 // race condition where two threads try to run exec() and all of this
-// explodes. There should be a sort of "exec" lock
-// SYSCALL: execve(const char *path, char *const *argv, char *const *envp)
+// explodes. There should be a sort of "exec" lock. Also, if there are multiple
+// threads, what happens to the other threads? SYSCALL: execve(const char *path,
+// char *const *argv, char *const *envp)
 COM_SYS_SYSCALL(com_sys_syscall_execve) {
     COM_SYS_SYSCALL_UNUSED_START(4);
 
