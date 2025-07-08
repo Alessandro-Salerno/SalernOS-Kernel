@@ -64,6 +64,4 @@ void com_io_log_release(void) {
 
 void com_io_log_panic(void) {
     InPanic = true;
-    while (isPrinting)
-        ;
 }

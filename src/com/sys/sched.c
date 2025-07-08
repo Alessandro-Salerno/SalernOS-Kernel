@@ -25,10 +25,14 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <lib/hashmap.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
+
+static khashmap_t     ZombieProcMap;
+static com_spinlock_t ZombieProcLock = COM_SPINLOCK_NEW();
 
 static void sched_idle(void) {
     hdr_arch_cpu_get_thread()->lock_depth = 0;
@@ -63,28 +67,44 @@ void com_sys_sched_yield_nolock(void) {
     }
 
     KASSERT(curr != next);
+    KASSERT(!curr->exited || !curr->runnable);
 
     if (curr->runnable && curr != cpu->idle_thread) {
         TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
-    } else if (curr->exited) {
-        TAILQ_INSERT_TAIL(&cpu->zombie_queue, curr, threads);
-    }
-
-    for (com_thread_t *zombie;
-         NULL != (zombie = TAILQ_FIRST(&cpu->zombie_queue));) {
-        KDEBUG("killing tid=%u since exited=%u", zombie->tid, zombie->exited);
-        // com_spinlock_acquire(&zombie->sched_lock);
-        // curr->lock_depth--;
-        com_proc_t *proc = zombie->proc;
-        // com_sys_thread_destroy(zombie);
-        TAILQ_REMOVE_HEAD(&cpu->zombie_queue, threads);
-        if (0 == __atomic_add_fetch(&proc->num_ref, -1, __ATOMIC_SEQ_CST) &&
-            proc->exited) {
-            // com_sys_proc_destroy(proc);
-        }
     }
 
     com_spinlock_release(&cpu->runqueue_lock);
+
+    com_spinlock_acquire(&ZombieProcLock);
+    for (com_thread_t *zombie;
+         NULL != (zombie = TAILQ_FIRST(&cpu->zombie_queue));) {
+        KDEBUG(
+            "destroying tid=%u since exited=%u", zombie->tid, zombie->exited);
+        com_spinlock_acquire(&zombie->sched_lock);
+        curr->lock_depth--;
+        com_proc_t *proc = zombie->proc;
+        com_sys_thread_destroy(zombie);
+        TAILQ_REMOVE_HEAD(&cpu->zombie_queue, threads);
+        if (proc->exited) {
+            KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
+        }
+    }
+    KHASHMAP_FOREACH(&ZombieProcMap) {
+        com_proc_t *proc = entry->value;
+
+        if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
+            KDEBUG("destroying process pid=%u because exited=%u and num_ref=%u",
+                   proc->pid,
+                   proc->exited,
+                   proc->num_ref);
+            KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
+            // com_sys_proc_destroy(proc);
+        }
+    }
+    if (curr->exited) {
+        TAILQ_INSERT_TAIL(&cpu->zombie_queue, curr, threads);
+    }
+    com_spinlock_release(&ZombieProcLock);
 
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
@@ -207,4 +227,8 @@ void com_sys_sched_init(void) {
     curr_cpu->idle_thread->ctx.rsp =
         (uintmax_t)curr_cpu->idle_thread->kernel_stack - 8;
     *(uint64_t *)curr_cpu->idle_thread->ctx.rsp = (uint64_t)sched_idle;
+}
+
+void com_sys_sched_init_base(void) {
+    KHASHMAP_INIT(&ZombieProcMap);
 }

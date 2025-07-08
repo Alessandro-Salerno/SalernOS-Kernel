@@ -40,6 +40,12 @@ TAILQ_HEAD(khashmap_entry_tailq, khashmap_entry);
 #define KHASHMAP_DEFAULT(out_ptr, hm_ptr, key, d) \
     khashmap_default((void **)(out_ptr), hm_ptr, key, sizeof(*(key)), d)
 
+#define KHASHMAP_FOREACH(map)                                                 \
+    for (uintmax_t toffset = 0; toffset < (map)->capacity; ++toffset)         \
+        for (khashmap_entry_t *entry = TAILQ_FIRST(&(map)->entries[toffset]); \
+             NULL != entry;                                                   \
+             entry = TAILQ_NEXT(entry, entries))
+
 typedef struct khashmap_entry {
     TAILQ_ENTRY(khashmap_entry) entries;
     uintmax_t hash;

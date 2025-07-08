@@ -32,6 +32,7 @@
 #include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
 #include <lib/str.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,6 +43,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     com_thread_t *cur_thread = hdr_arch_cpu_get_thread();
     com_proc_t   *proc       = cur_thread->proc;
+    // KDEBUG("forking pid=%u with num_ref=%u", proc->pid, proc->num_ref);
 
     com_spinlock_acquire(&proc->fd_lock);
     com_spinlock_acquire(&proc->pages_lock);

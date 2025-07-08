@@ -32,3 +32,4 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters);
 void com_sys_sched_notify_all(struct com_thread_tailq *waiters);
 
 void com_sys_sched_init(void);
+void com_sys_sched_init_base(void);

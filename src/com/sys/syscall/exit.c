@@ -24,6 +24,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <lib/util.h>
 #include <stdint.h>
 
 // TODO: what happens if two threads of the same process call exit?
@@ -36,10 +37,14 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
 
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
     com_proc_t   *curr_proc   = curr_thread->proc;
+    // KDEBUG(
+    // "exiting pid=%u with num_ref=%u", curr_proc->pid, curr_proc->num_ref);
 
     com_sys_proc_exit(curr_proc, exit_status);
+    com_spinlock_acquire(&curr_thread->sched_lock);
     curr_thread->runnable = false;
     curr_thread->exited   = true;
+    com_spinlock_release(&curr_thread->sched_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();
