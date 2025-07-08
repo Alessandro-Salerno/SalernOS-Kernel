@@ -30,8 +30,6 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static com_thread_t DummyThread = (com_thread_t){0};
-
 static void sched_idle(void) {
     hdr_arch_cpu_get_thread()->lock_depth = 0;
     for (;;) {
