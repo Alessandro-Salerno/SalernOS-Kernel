@@ -46,16 +46,12 @@ void com_sys_sched_yield_nolock(void) {
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
-        KDEBUG("on cpu %u, curr is NULL", cpu->id);
         com_spinlock_release(&cpu->runqueue_lock);
         return;
     }
 
-    /*KASSERT(curr->cpu == cpu);
-    KASSERT(cpu->thread == curr);*/
-
     if (NULL == next) {
-        if (curr->runnable && !curr->exited) {
+        if (curr->runnable) {
             com_spinlock_release(&cpu->runqueue_lock);
             com_spinlock_release(&curr->sched_lock);
             return;
@@ -66,34 +62,12 @@ void com_sys_sched_yield_nolock(void) {
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
     }
 
-    KDEBUG(
-        "on cpu%u: curr_tid=%u, next_trid=%u", cpu->id, curr->tid, next->tid);
     KASSERT(curr != next);
 
-    com_spinlock_acquire(&next->sched_lock);
-    com_thread_t *orig_next = next;
-    if (next->exited) {
-        KDEBUG(
-            "cpu%u: trying to switch to next thread tid=%u which has exited, "
-            "switching to curr or idle instead",
-            cpu->id,
-            next->tid);
-        if (curr->runnable && !curr->exited) {
-            next = curr;
-        } else {
-            next = cpu->idle_thread;
-        }
-    }
-    com_spinlock_release(&orig_next->sched_lock);
-
-    if (curr->runnable && !curr->exited && curr != cpu->idle_thread) {
-        KDEBUG("adding tid=%u to queue of cpu=%u", curr->tid, cpu->id);
+    if (curr->runnable && curr != cpu->idle_thread) {
         TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
     }
-    // TODO: ke does this, but it doesn't work here
-    /*if (next != curr && next != cpu->idle_thread) {
-        com_spinlock_release(&next->sched_lock);
-    }*/
+    com_spinlock_release(&cpu->runqueue_lock);
 
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
@@ -125,7 +99,6 @@ void com_sys_sched_yield_nolock(void) {
     cpu->thread = next;
     curr->cpu   = NULL;
     next->cpu   = cpu;
-    com_spinlock_release(&cpu->runqueue_lock);
 
     // Restore kernel stack
     ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
@@ -184,20 +157,15 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     com_spinlock_acquire(&curr_thread->sched_lock);
 
     if (NULL != next) {
-        KDEBUG("applying notification on waitlist at %x to tid=%u",
-               waiters,
-               next->tid);
         com_spinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         KASSERT(next->waiting_on == waiters);
         TAILQ_REMOVE_HEAD(waiters, threads);
         next->waiting_on = NULL;
         com_spinlock_acquire(&currcpu->runqueue_lock);
-        if (!next->exited) {
-            TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-            next->runnable = true;
-            com_spinlock_release(&currcpu->runqueue_lock);
-        }
+        TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
+        next->runnable = true;
+        com_spinlock_release(&currcpu->runqueue_lock);
         com_spinlock_release(&next->sched_lock);
     }
 

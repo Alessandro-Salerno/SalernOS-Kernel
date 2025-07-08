@@ -70,14 +70,14 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     switch (op) {
     case FUTEX_WAIT:
-        while (__atomic_compare_exchange_n(
-            word_ptr,         // cast away const (we don't change value anyway)
-            &temp,            // expected value
-            value,            // new value (same as expected, so no change)
-            false,            // don't allow spurious failures
-            __ATOMIC_SEQ_CST, // memory order for success
-            __ATOMIC_SEQ_CST  // memory order for failure
-            )) {
+        if (__atomic_compare_exchange_n(
+                word_ptr, // cast away const (we don't change value anyway)
+                &temp,    // expected value
+                value,    // new value (same as expected, so no change)
+                false,    // don't allow spurious failures
+                __ATOMIC_SEQ_CST, // memory order for success
+                __ATOMIC_SEQ_CST  // memory order for failure
+                )) {
             struct futex *futex;
             int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
             if (ENOENT == get_ret) {
@@ -91,7 +91,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 ret.err = get_ret;
                 goto end;
             }
-            KDEBUG("futex word ptr %x has futex instance %x", word_ptr, futex);
             com_sys_sched_wait(&futex->waiters, &FutexLock);
         }
         break;
@@ -108,7 +107,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
         if (INT_MAX == value) {
             com_sys_sched_notify_all(&futex->waiters);
         } else if (1 == value) {
-            KDEBUG("notifying waiters at %x", &futex->waiters);
             com_sys_sched_notify(&futex->waiters);
         } else {
             ret.err = EINVAL;
