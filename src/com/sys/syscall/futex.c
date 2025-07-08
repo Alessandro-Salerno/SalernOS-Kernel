@@ -27,6 +27,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <lib/hashmap.h>
+#include <lib/util.h>
 #include <limits.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -57,9 +58,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     com_syscall_ret_t ret       = {0};
     uintptr_t         phys =
         (uintptr_t)arch_mmu_get_physical(curr_proc->page_table, word_ptr);
-    struct com_thread_tailq empty_queue;
-    TAILQ_INIT(&empty_queue);
-    struct futex default_futex = (struct futex){.waiters = empty_queue};
 
     com_spinlock_acquire(&FutexLock);
 
@@ -72,12 +70,22 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     switch (op) {
     case FUTEX_WAIT:
-        if (word != value) {
+        if (word == value) {
+            KDEBUG("word = %u, expected = %u, waiting on futex %x",
+                   word,
+                   value,
+                   phys);
             struct futex *futex;
-            int           def_ret =
-                KHASHMAP_DEFAULT(&futex, &FutexMap, &phys, &default_futex);
-            if (0 != def_ret) {
-                ret.err = def_ret;
+            int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+            if (ENOENT == get_ret) {
+                struct futex *default_futex =
+                    com_mm_slab_alloc(sizeof(struct futex));
+                TAILQ_INIT(&default_futex->waiters);
+
+                KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
+                futex = default_futex;
+            } else if (0 != get_ret) {
+                ret.err = get_ret;
                 goto end;
             }
             com_sys_sched_wait(&futex->waiters, &FutexLock);
@@ -85,14 +93,18 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
         break;
 
     case FUTEX_WAKE: {
+        KDEBUG("waking futex %x with word = %u", phys, word);
         struct futex *futex;
         int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
         if (ENOENT == get_ret) {
+            KDEBUG("failed wake: not such futex");
             goto end;
         } else if (0 != get_ret) {
+            KDEBUG("failed wake: other reason");
             ret.err = get_ret;
             goto end;
         }
+        KDEBUG("futex wake: first waiter is %x", TAILQ_FIRST(&futex->waiters));
         if (INT_MAX == value) {
             com_sys_sched_notify_all(&futex->waiters);
         } else if (1 == value) {
