@@ -25,6 +25,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
@@ -32,8 +33,21 @@
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     COM_SYS_SYSCALL_UNUSED_START(0);
     com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    curr_thread->runnable     = false;
+    com_spinlock_acquire(&curr_thread->sched_lock);
+    curr_thread->exited   = true;
+    curr_thread->runnable = false;
+    KASSERT(NULL == curr_thread->waiting_on);
+    com_spinlock_release(&curr_thread->sched_lock);
+    KDEBUG("exiting thread with tid=%u on cpu=%u",
+           curr_thread->tid,
+           curr_thread->cpu->id);
     com_sys_sched_yield();
 
-    __builtin_unreachable();
+    KDEBUG("somehow got back here, thread with tid=%u on cpu=%u (runnable=%u, "
+           "exited=%u)",
+           curr_thread->tid,
+           curr_thread->cpu->id,
+           curr_thread->runnable,
+           curr_thread->exited);
+    com_panic(NULL, NULL);
 }

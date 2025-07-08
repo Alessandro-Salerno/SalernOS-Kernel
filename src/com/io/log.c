@@ -19,8 +19,9 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/spinlock.h>
 
-static com_spinlock_t LogLock = COM_SPINLOCK_NEW();
-static bool           InPanic = false;
+static com_spinlock_t LogLock    = COM_SPINLOCK_NEW();
+static bool           InPanic    = false;
+static bool           isPrinting = false;
 
 static void dummy_hook(char c) {
     (void)c;
@@ -42,9 +43,11 @@ void com_io_log_putc(char c) {
 }
 
 void com_io_log_puts(const char *s) {
+    isPrinting = true;
     for (; 0 != *s; s++) {
         com_io_log_putc(*s);
     }
+    isPrinting = false;
 }
 
 void com_io_log_acquire(void) {
@@ -61,4 +64,6 @@ void com_io_log_release(void) {
 
 void com_io_log_panic(void) {
     InPanic = true;
+    while (isPrinting)
+        ;
 }

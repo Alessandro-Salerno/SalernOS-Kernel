@@ -124,6 +124,7 @@ void com_sys_proc_wait(com_proc_t *proc) {
 }
 
 void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
+    return;
     com_spinlock_acquire(&proc->threads_lock);
     TAILQ_INSERT_TAIL(&proc->threads, thread, threads);
     com_spinlock_release(&proc->threads_lock);

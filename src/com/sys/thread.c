@@ -43,6 +43,7 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
         (com_thread_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     thread->proc       = proc;
     thread->runnable   = true;
+    thread->exited     = false;
     thread->ctx        = ctx;
     thread->lock_depth = 1;
     thread->sched_lock = COM_SPINLOCK_NEW();
@@ -75,5 +76,7 @@ void com_sys_thread_ready(com_thread_t *thread) {
     thread->cpu      = curr_cpu;
     com_spinlock_release(&curr_cpu->runqueue_lock);
     com_spinlock_release(&thread->sched_lock);
-    KDEBUG("thread is now runnable on cpu %u", curr_cpu->id);
+    KDEBUG("thread with tid=%u is now runnable on cpu %u",
+           thread->tid,
+           curr_cpu->id);
 }

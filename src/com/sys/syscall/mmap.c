@@ -31,7 +31,7 @@
 
 #define ALLOC_BASE 0x100000000
 
-// // TODO: probably have to separate prot and falsg for portability
+// ODO: probably have to separate prot and falsg for portability
 // SYSCALL: mmap(void *hint, size_t size, uintmax_t flags, int fd, ...)
 COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
@@ -57,8 +57,11 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
         virt = hint;
     } else {
         com_spinlock_acquire(&curr->pages_lock);
-        virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
-        curr->used_pages += pages;
+        /*virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
+        curr->used_pages += pages;*/
+        virt = __atomic_fetch_add(&curr->used_pages, pages, __ATOMIC_SEQ_CST) *
+                   ARCH_PAGE_SIZE +
+               ALLOC_BASE;
         com_spinlock_release(&curr->pages_lock);
     }
 

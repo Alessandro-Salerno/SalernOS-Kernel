@@ -66,15 +66,18 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
         FutexInit = true;
     }
 
-    uint32_t word = __atomic_load_n(word_ptr, __ATOMIC_SEQ_CST);
+    uint32_t temp = value;
 
     switch (op) {
     case FUTEX_WAIT:
-        if (word == value) {
-            KDEBUG("word = %u, expected = %u, waiting on futex %x",
-                   word,
-                   value,
-                   phys);
+        while (__atomic_compare_exchange_n(
+            word_ptr,         // cast away const (we don't change value anyway)
+            &temp,            // expected value
+            value,            // new value (same as expected, so no change)
+            false,            // don't allow spurious failures
+            __ATOMIC_SEQ_CST, // memory order for success
+            __ATOMIC_SEQ_CST  // memory order for failure
+            )) {
             struct futex *futex;
             int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
             if (ENOENT == get_ret) {
@@ -88,26 +91,24 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 ret.err = get_ret;
                 goto end;
             }
+            KDEBUG("futex word ptr %x has futex instance %x", word_ptr, futex);
             com_sys_sched_wait(&futex->waiters, &FutexLock);
         }
         break;
 
     case FUTEX_WAKE: {
-        KDEBUG("waking futex %x with word = %u", phys, word);
         struct futex *futex;
         int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
         if (ENOENT == get_ret) {
-            KDEBUG("failed wake: not such futex");
             goto end;
         } else if (0 != get_ret) {
-            KDEBUG("failed wake: other reason");
             ret.err = get_ret;
             goto end;
         }
-        KDEBUG("futex wake: first waiter is %x", TAILQ_FIRST(&futex->waiters));
         if (INT_MAX == value) {
             com_sys_sched_notify_all(&futex->waiters);
         } else if (1 == value) {
+            KDEBUG("notifying waiters at %x", &futex->waiters);
             com_sys_sched_notify(&futex->waiters);
         } else {
             ret.err = EINVAL;

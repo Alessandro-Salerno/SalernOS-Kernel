@@ -36,6 +36,7 @@ typedef struct com_thread {
     struct com_proc     *proc;
     struct arch_cpu     *cpu;
     bool                 runnable;
+    bool                 exited;
     void                *kernel_stack;
     TAILQ_ENTRY(com_thread) threads;
     struct com_thread_tailq *waiting_on;
