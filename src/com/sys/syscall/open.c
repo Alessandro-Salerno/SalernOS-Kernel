@@ -51,8 +51,6 @@ COM_SYS_SYSCALL(com_sys_syscall_open) {
             ret.err = EEXIST;
             goto cleanup;
         }
-
-        // TODO: create file
     } else*/
     {
         com_vnode_t *cwd = atomic_load(&curr->cwd);

@@ -32,7 +32,6 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-// TODO: turn this into something userspace can control
 #define PIPE_BUF_SZ ARCH_PAGE_SIZE
 
 struct pipefs_node {

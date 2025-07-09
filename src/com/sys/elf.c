@@ -200,7 +200,7 @@ cleanup:
     return ret;
 }
 
-// TODO: credit this, taken from ke (probably taken from somwhere else)
+// CREDIT: vloxei64/ke
 uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
                                       size_t         stack_end_phys,
                                       size_t         stack_end_virt,

@@ -45,7 +45,7 @@ static com_vfs_t *Devfs = NULL;
 
 // VNODE OPS
 
-// TODO: implement this
+// TODO: implement close
 int com_fs_devfs_close(com_vnode_t *vnode) {
     (void)vnode;
     return 0;
@@ -57,7 +57,7 @@ int com_fs_devfs_create(com_vnode_t **out,
                         size_t        namelen,
                         uintmax_t     attr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_create(
+    int ret          = com_fs_tmpfs_create(
         &new, dir, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
@@ -78,7 +78,7 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
                        size_t        namelen,
                        uintmax_t     attr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_mkdir(
+    int ret          = com_fs_tmpfs_mkdir(
         &new, parent, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {

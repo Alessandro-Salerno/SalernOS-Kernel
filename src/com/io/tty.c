@@ -16,6 +16,8 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+// TODO: rewrite all of it using PTYs
+
 #define _GNU_SOURCE
 #define _DEFAULT_SOURCE
 
@@ -214,8 +216,6 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
     com_spinlock_acquire(&tty->lock);
 
     if (!is_arrow) {
-        // TODO: implement POSIX signals
-
         if (('\r' == c) && !(IGNCR & tty->termios.c_iflag) &&
             (ICRNL & tty->termios.c_iflag)) {
             c = '\n';
@@ -251,9 +251,6 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
 
             handled = true;
         }
-
-        // TODO: figure out what to do with VKILL (another thing I think I'll
-        // never get to use cause I'm not a TTY pro)
     }
 
 end:

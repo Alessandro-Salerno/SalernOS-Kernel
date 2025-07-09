@@ -16,8 +16,6 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-// TODO: Replace this syscall with procfs
-
 #include <arch/cpu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>

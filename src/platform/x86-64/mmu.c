@@ -149,8 +149,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
     return true;
 }
 
-// Taken from ke
-// TODO: credit and replace with something more readable ;-)
+// CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
     uint64_t new    = (uint64_t)com_mm_pmm_alloc();

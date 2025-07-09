@@ -24,5 +24,5 @@ if [ "$1" == "?" ]; then
   exit 0
 fi
 
-grep -r "TODO"
-
+TODOS=`rg -i "// TODO" --vimgrep`
+echo "$TODOS"
