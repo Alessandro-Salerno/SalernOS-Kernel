@@ -68,8 +68,6 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     arch_mmu_switch_default();
 
-    // com_io_fbterm_init_buffering();
-    // com_io_fbterm_set_buffering(true);
     x86_64_lapic_init();
 }
 
