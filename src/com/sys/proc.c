@@ -24,6 +24,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
+#include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/util.h>
 #include <stddef.h>
@@ -37,10 +38,15 @@ static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
 static com_proc_t    *Processes[MAX_PROCS] = {0};
 static pid_t          NextPid              = 1;
 
+static khashmap_t     ProcGroupMap;
+static com_spinlock_t ProcGroupLock = COM_SPINLOCK_NEW();
+static bool           ProcGroupInit = false;
+
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              pid_t                 parent_pid,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd) {
+
     com_proc_t *proc   = com_mm_slab_alloc(sizeof(com_proc_t));
     proc->page_table   = page_table;
     proc->exited       = false;
@@ -49,13 +55,14 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->parent_pid   = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
-    proc->root         = root;
-    proc->cwd          = cwd;
-    proc->pages_lock   = COM_SPINLOCK_NEW();
-    proc->threads_lock = COM_SPINLOCK_NEW();
-    proc->used_pages   = 0;
-    proc->num_ref      = 1; // 1 because of the parent
+    proc->root       = root;
+    proc->cwd        = cwd;
+    proc->pages_lock = COM_SPINLOCK_NEW();
+    proc->used_pages = 0;
+    proc->num_ref    = 1; // 1 because of the parent
     TAILQ_INIT(&proc->notifications);
+
+    proc->threads_lock = COM_SPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);
 
     // TODO: use atomic operations (faster)
@@ -67,6 +74,14 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
     proc->fd_lock = COM_SPINLOCK_NEW();
     proc->next_fd = 0;
+
+    proc->pg_lock    = COM_SPINLOCK_NEW();
+    proc->proc_group = NULL;
+
+    com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
+    if (NULL != parent && NULL != parent->proc_group) {
+        com_sys_proc_join_group(proc, parent->proc_group);
+    }
 
     return proc;
 }
@@ -106,7 +121,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
 }
 
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
-    if (pid > MAX_PROCS || 0 == pid) {
+    if (pid > MAX_PROCS || pid < 1) {
         return NULL;
     }
 
@@ -163,4 +178,53 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     }
 
     com_sys_proc_release_glock();
+}
+
+com_proc_group_t *com_sys_proc_new_group(com_proc_t *leader) {
+    // TODO: make some com_sys_proc_init_groups
+    if (!ProcGroupInit) {
+        KHASHMAP_INIT(&ProcGroupMap);
+        ProcGroupInit = true;
+    }
+
+    com_proc_group_t *group = com_mm_slab_alloc(sizeof(com_proc_group_t));
+    group->procs_lock       = COM_SPINLOCK_NEW();
+    group->pgid             = leader->pid;
+    TAILQ_INIT(&group->procs);
+
+    if (NULL != leader->proc_group) {
+        group->session = leader->proc_group->session;
+    }
+
+    com_sys_proc_join_group(leader, group);
+    KDEBUG("pid=%d is now leader of group pgid=%d", leader->pid, group->pgid);
+
+    com_spinlock_acquire(&ProcGroupLock);
+    KASSERT(0 == KHASHMAP_PUT(&ProcGroupMap, &group->pgid, group));
+    com_spinlock_release(&ProcGroupLock);
+    return group;
+}
+
+void com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group) {
+    com_spinlock_acquire(&proc->pg_lock);
+    if (NULL != proc->proc_group) {
+        com_spinlock_acquire(&proc->proc_group->procs_lock);
+        TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
+        com_spinlock_release(&proc->proc_group->procs_lock);
+    }
+    com_spinlock_acquire(&group->procs_lock);
+    TAILQ_INSERT_TAIL(&group->procs, proc, procs);
+    KDEBUG("pid=%d is now part of group pgid=%d", proc->pid, group->pgid);
+    com_spinlock_release(&group->procs_lock);
+    com_spinlock_release(&proc->pg_lock);
+}
+
+com_proc_group_t *com_sys_proc_get_group_by_pgid(pid_t pgid) {
+    com_spinlock_acquire(&ProcGroupLock);
+    com_proc_group_t *group;
+    if (0 != KHASHMAP_GET(&group, &ProcGroupMap, &pgid)) {
+        group = NULL;
+    }
+    com_spinlock_release(&ProcGroupLock);
+    return group;
 }

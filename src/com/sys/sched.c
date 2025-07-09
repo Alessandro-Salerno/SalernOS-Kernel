@@ -93,7 +93,8 @@ void com_sys_sched_yield_nolock(void) {
         com_proc_t *proc = entry->value;
 
         if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
-            KDEBUG("destroying process pid=%u because exited=%u and num_ref=%u",
+            KDEBUG("[TODO] destroying process pid=%u because exited=%u and "
+                   "num_ref=%u",
                    proc->pid,
                    proc->exited,
                    proc->num_ref);

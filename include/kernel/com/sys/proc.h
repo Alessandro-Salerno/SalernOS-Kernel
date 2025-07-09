@@ -19,6 +19,8 @@
 #pragma once
 
 #include <vendor/tailq.h>
+struct com_proc;
+struct com_proc_group;
 TAILQ_HEAD(com_proc_tailq, com_proc);
 TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 
@@ -46,7 +48,8 @@ typedef struct com_proc_group {
     com_proc_session_t   *session;
     struct com_proc_tailq procs;
     com_spinlock_t        procs_lock;
-    TAILQ_ENTRY(com_proc_group_tailq) proc_groups;
+    TAILQ_ENTRY(com_proc_group) proc_groups;
+    // Leader is TAILQ_FIRST(procs)
 } com_proc_group_t;
 
 typedef struct com_proc {
@@ -72,8 +75,9 @@ typedef struct com_proc {
     struct com_thread_tailq threads;
     size_t                  num_ref;
 
+    com_spinlock_t    pg_lock;
     com_proc_group_t *proc_group;
-    TAILQ_ENTRY(com_proc_group_tailq) procs;
+    TAILQ_ENTRY(com_proc) procs;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
@@ -92,3 +96,6 @@ void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);
 void com_sys_proc_exit(com_proc_t *proc, int status);
+com_proc_group_t *com_sys_proc_new_group(com_proc_t *leader);
+void com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group);
+com_proc_group_t *com_sys_proc_get_group_by_pgid(pid_t pgid);
