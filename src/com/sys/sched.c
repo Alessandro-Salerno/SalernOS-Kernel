@@ -219,14 +219,7 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
 
 void com_sys_sched_init(void) {
     arch_cpu_t *curr_cpu  = hdr_arch_cpu_get();
-    curr_cpu->idle_thread = com_sys_thread_new(
-        NULL,
-        NULL /*(void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc())*/,
-        ARCH_PAGE_SIZE,
-        sched_idle);
-    curr_cpu->idle_thread->ctx.rsp =
-        (uintmax_t)curr_cpu->idle_thread->kernel_stack - 8;
-    *(uint64_t *)curr_cpu->idle_thread->ctx.rsp = (uint64_t)sched_idle;
+    curr_cpu->idle_thread = com_sys_thread_new_kernel(NULL, sched_idle);
 }
 
 void com_sys_sched_init_base(void) {

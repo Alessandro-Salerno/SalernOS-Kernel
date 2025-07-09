@@ -26,6 +26,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/context.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -33,13 +34,7 @@
 
 static pid_t NextTid = 0;
 
-com_thread_t *com_sys_thread_new(com_proc_t *proc,
-                                 void       *stack,
-                                 uintmax_t   stack_size,
-                                 void       *entry) {
-    arch_context_t ctx = {0};
-    ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
-
+static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     com_thread_t *thread = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     thread->proc         = proc;
     thread->runnable     = true;
@@ -57,6 +52,22 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     }
 
     return thread;
+}
+
+com_thread_t *com_sys_thread_new(com_proc_t *proc,
+                                 void       *stack,
+                                 uintmax_t   stack_size,
+                                 void       *entry) {
+    arch_context_t ctx = {0};
+    ARCH_CONTEXT_THREAD_SET(ctx, stack, stack_size, entry);
+    return new_thread(proc, ctx);
+}
+
+com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
+    arch_context_t ctx = {0};
+    com_thread_t  *t   = new_thread(proc, ctx);
+    ARCH_CONTEXT_THREAD_SET_KERNEL(t->ctx, t->kernel_stack, entry);
+    return t;
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {

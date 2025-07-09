@@ -41,7 +41,7 @@ x86_64_ctx_switch:
 global arch_context_trampoline
 arch_context_trampoline:
 	; rdi is the pointer to the context struct
-  cli
+    cli
 	mov   rsp, rdi
 
 	add   rsp, 24 ; cr2 gs and fs are not popped.

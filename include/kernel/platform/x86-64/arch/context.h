@@ -32,6 +32,20 @@
     (src).rip    = (uint64_t)(entry);                          \
     (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
+#define ARCH_CONTEXT_THREAD_SET_KERNEL(src, stack_end, entry)            \
+    (src).cs     = 0x08;                                                 \
+    (src).ss     = 0x10;                                                 \
+    (src).rip    = (uint64_t)(entry);                                    \
+    (src).rsp    = (uint64_t)(stack_end) - 8;                            \
+    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);                \
+    (src).rsp -= sizeof(arch_context_t);                                 \
+    {                                                                    \
+        arch_context_t *new_context = (void *)(src).rsp;                 \
+        *new_context                = (src);                             \
+        (src).rsp -= 8;                                                  \
+        *(uint64_t *)(src).rsp = (uint64_t)arch_context_fork_trampoline; \
+    }
+
 #define ARCH_CONTEXT_FORK(new_thread, orig_ctx)                              \
     new_thread->ctx.rsp = (uint64_t)new_thread->kernel_stack;                \
     new_thread->ctx.rsp -= sizeof(arch_context_t);                           \

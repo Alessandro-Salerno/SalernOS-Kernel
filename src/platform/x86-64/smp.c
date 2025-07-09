@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/io/fbterm.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
@@ -67,6 +68,8 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     arch_mmu_switch_default();
 
+    // com_io_fbterm_init_buffering();
+    // com_io_fbterm_set_buffering(true);
     x86_64_lapic_init();
 }
 

@@ -188,7 +188,7 @@ void kernel_entry(void) {
     com_io_fbterm_init(fb);
 
 #ifndef X86_64_NO_E9_LOG
-    com_io_log_set_hook(x86_64_e9_putc);
+    com_io_log_set_hook(NULL);
 #else
     com_io_log_set_hook(com_io_fbterm_putc);
 #endif
@@ -241,6 +241,7 @@ void kernel_entry(void) {
     KASSERT(0 ==
             com_sys_elf64_prepare_proc(
                 &proc->page_table, "./fresh", argv, envp, proc, &thread->ctx));
+    KDEBUG("fresh thread has tid=%u", thread->tid);
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
     stdfile->vnode      = tty_dev;
@@ -258,7 +259,10 @@ void kernel_entry(void) {
 
     arch_mmu_switch(proc->page_table);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
-    asm volatile("sti");
+
+    TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
+    com_io_fbterm_init_buffering();
+    com_io_fbterm_set_buffering(true);
     arch_context_trampoline(&thread->ctx);
 
     for (;;) {

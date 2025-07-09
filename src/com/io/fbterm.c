@@ -16,26 +16,75 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/io/fbterm.h>
+#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/sched.h>
+#include <kernel/com/sys/thread.h>
+#include <kernel/platform/context.h>
+#include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/flanterm/backends/fb.h>
 #include <vendor/flanterm/flanterm.h>
 
+#define BUFFER_LEN 2048
+
 static struct flanterm_context *FlantermContext = NULL;
+static bool                     Buffered        = false;
+static com_spinlock_t           BufferLock      = COM_SPINLOCK_NEW();
+static char                     Buffer[BUFFER_LEN];
+static size_t                   BufferNext = 0;
+static struct com_thread_tailq  BufferWaiters;
+static com_thread_t            *PrintThread = NULL;
+static size_t                   Ticks       = 0;
+
+static void print_buffer(void) {
+    while (true) {
+        if (10 != Ticks) {
+            Ticks++;
+            goto next_time;
+        }
+        com_spinlock_acquire(&BufferLock);
+        if (0 == BufferNext) {
+            goto skip;
+        }
+        flanterm_write(FlantermContext, Buffer, BufferNext);
+        BufferNext = 0;
+        com_sys_sched_notify_all(&BufferWaiters);
+    skip:
+        com_spinlock_release(&BufferLock);
+        Ticks = 0;
+        // TODO: why does this not preempt?
+    next_time:
+        com_sys_sched_yield();
+    }
+}
 
 void com_io_fbterm_putc(char c) {
     flanterm_write(FlantermContext, &c, 1);
 }
 
 void com_io_fbterm_puts(const char *s) {
-    flanterm_write(FlantermContext, s, kstrlen(s));
+    com_io_fbterm_putsn(s, kstrlen(s));
 }
 
 void com_io_fbterm_putsn(const char *s, size_t n) {
-    flanterm_write(FlantermContext, s, n);
+    if (!Buffered) {
+        flanterm_write(FlantermContext, s, n);
+        return;
+    }
+
+    com_spinlock_acquire(&BufferLock);
+    while (BufferNext + n >= BUFFER_LEN) {
+        com_sys_sched_wait(&BufferWaiters, &BufferLock);
+    }
+    kmemcpy(&Buffer[BufferNext], s, n);
+    BufferNext += n;
+    com_spinlock_release(&BufferLock);
 }
 
 void com_io_fbterm_get_size(size_t *rows, size_t *cols) {
@@ -46,6 +95,22 @@ void com_io_fbterm_get_size(size_t *rows, size_t *cols) {
     if (NULL != cols) {
         *cols = FlantermContext->cols;
     }
+}
+
+void com_io_fbterm_init_buffering(void) {
+    KLOG("initializing fbterm buffering");
+    TAILQ_INIT(&BufferWaiters);
+    PrintThread = com_sys_thread_new_kernel(NULL, print_buffer);
+    // com_sys_thread_ready(PrintThread);
+    // com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
+    PrintThread->runnable = true;
+    TAILQ_INSERT_TAIL(&hdr_arch_cpu_get()->sched_queue, PrintThread, threads);
+    // com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
+}
+
+void com_io_fbterm_set_buffering(bool buffering) {
+    KDEBUG("setting fbterm buffering to %u", buffering);
+    Buffered = buffering;
 }
 
 void com_io_fbterm_init(arch_framebuffer_t *fb) {

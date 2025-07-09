@@ -51,6 +51,7 @@ typedef struct arch_cpu {
 static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
     cpu->self = cpu;
     hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
+    hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)cpu);
 }
 
 static inline arch_cpu_t *hdr_arch_cpu_get(void) {

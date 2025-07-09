@@ -139,9 +139,9 @@ static int tty_write(size_t   *bytes_written,
     (void)devdata;
     (void)off;
     (void)flags;
-    com_spinlock_acquire(&Tty.write_lock);
+    // com_spinlock_acquire(&Tty.write_lock);
     com_io_fbterm_putsn(buf, buflen);
-    com_spinlock_release(&Tty.write_lock);
+    // com_spinlock_release(&Tty.write_lock);
     *bytes_written = buflen;
     return 0;
 }

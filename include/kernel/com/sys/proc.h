@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include <vendor/tailq.h>
+TAILQ_HEAD(com_proc_tailq, com_proc);
+TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
+
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -29,6 +33,21 @@
 #include <sys/types.h>
 
 #define COM_SYS_PROC_MAX_FDS 16
+
+typedef struct com_proc_session {
+    pid_t                       sid;
+    com_vnode_t                *tty;
+    struct com_proc_group_tailq proc_groups;
+    com_spinlock_t              pg_lock;
+} com_proc_session_t;
+
+typedef struct com_proc_group {
+    pid_t                 pgid;
+    com_proc_session_t   *session;
+    struct com_proc_tailq procs;
+    com_spinlock_t        procs_lock;
+    TAILQ_ENTRY(com_proc_group_tailq) proc_groups;
+} com_proc_group_t;
 
 typedef struct com_proc {
     pid_t                 pid;
@@ -52,6 +71,9 @@ typedef struct com_proc {
     com_spinlock_t          threads_lock;
     struct com_thread_tailq threads;
     size_t                  num_ref;
+
+    com_proc_group_t *proc_group;
+    TAILQ_ENTRY(com_proc_group_tailq) procs;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
