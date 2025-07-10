@@ -29,6 +29,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -78,6 +79,10 @@ typedef struct com_proc {
     com_spinlock_t    pg_lock;
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
+
+    struct sigaction *sigaction[NSIG];
+    sigset_t          pending_signals;
+    sigset_t          masked_signals;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,

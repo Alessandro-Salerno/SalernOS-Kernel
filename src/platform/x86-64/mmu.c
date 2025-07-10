@@ -175,7 +175,7 @@ void destroy_recursive(uint64_t entry, size_t level) {
     uint64_t *directory = (void *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
     void     *phys      = (void *)(entry & ADDRMASK);
 
-    if (0 != -level) {
+    if (0 != level) {
         for (size_t i = 0; i < 512; i++) {
             if (ARCH_MMU_FLAGS_PRESENT & directory[i]) {
                 destroy_recursive(directory[i], level - 1);
@@ -238,7 +238,7 @@ bool arch_mmu_map(arch_mmu_pagetable_t *pt,
 }
 
 void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
-    KDEBUG("switching to page table at address %x", pt);
+    // KDEBUG("switching to page table at address %x", pt);
     asm volatile("mov %%rax, %%cr3" : : "a"(pt));
 }
 

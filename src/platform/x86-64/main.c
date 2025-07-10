@@ -198,7 +198,6 @@ void kernel_entry(void) {
     x86_64_idt_stub();
     com_sys_syscall_init();
 
-    com_sys_sched_init_base();
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
@@ -263,6 +262,7 @@ void kernel_entry(void) {
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
+    com_sys_sched_init_base();
     com_io_fbterm_init_buffering();
     com_io_fbterm_set_buffering(true);
     arch_context_trampoline(&thread->ctx);

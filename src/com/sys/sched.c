@@ -23,6 +23,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
 #include <lib/hashmap.h>
@@ -31,14 +32,42 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static khashmap_t     ZombieProcMap;
-static com_spinlock_t ZombieProcLock = COM_SPINLOCK_NEW();
+static khashmap_t              ZombieProcMap;
+static com_spinlock_t          ZombieProcLock = COM_SPINLOCK_NEW();
+static struct com_thread_tailq ZombieThreadQueue;
 
 static void sched_idle(void) {
     hdr_arch_cpu_get_thread()->lock_depth = 0;
     for (;;) {
         hdr_arch_cpu_interrupt_enable();
         ARCH_CPU_HALT();
+    }
+}
+
+static void sched_reaper_thread(void) {
+    while (true) {
+        com_spinlock_acquire(&ZombieProcLock);
+        for (com_thread_t *zombie;
+             NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue));) {
+            com_spinlock_acquire(&zombie->sched_lock);
+            hdr_arch_cpu_get_thread()->lock_depth--;
+            com_proc_t *proc = zombie->proc;
+            com_sys_thread_destroy(zombie);
+            TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
+            if (proc->exited) {
+                KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
+            }
+        }
+        KHASHMAP_FOREACH(&ZombieProcMap) {
+            com_proc_t *proc = entry->value;
+
+            if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
+                KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
+                com_sys_proc_destroy(proc);
+            }
+        }
+        com_spinlock_release(&ZombieProcLock);
+        com_sys_sched_yield();
     }
 }
 
@@ -53,6 +82,12 @@ void com_sys_sched_yield_nolock(void) {
         com_spinlock_release(&cpu->runqueue_lock);
         return;
     }
+
+    com_spinlock_acquire(&ZombieProcLock);
+    if (curr->exited) {
+        TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
+    }
+    com_spinlock_release(&ZombieProcLock);
 
     if (NULL == next) {
         if (curr->runnable) {
@@ -75,51 +110,21 @@ void com_sys_sched_yield_nolock(void) {
 
     com_spinlock_release(&cpu->runqueue_lock);
 
-    com_spinlock_acquire(&ZombieProcLock);
-    for (com_thread_t *zombie;
-         NULL != (zombie = TAILQ_FIRST(&cpu->zombie_queue));) {
-        KDEBUG(
-            "destroying tid=%u since exited=%u", zombie->tid, zombie->exited);
-        com_spinlock_acquire(&zombie->sched_lock);
-        curr->lock_depth--;
-        com_proc_t *proc = zombie->proc;
-        com_sys_thread_destroy(zombie);
-        TAILQ_REMOVE_HEAD(&cpu->zombie_queue, threads);
-        if (proc->exited) {
-            KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
-        }
-    }
-    KHASHMAP_FOREACH(&ZombieProcMap) {
-        com_proc_t *proc = entry->value;
-
-        if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
-            KDEBUG("[TODO] destroying process pid=%u because exited=%u and "
-                   "num_ref=%u",
-                   proc->pid,
-                   proc->exited,
-                   proc->num_ref);
-            KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-            // com_sys_proc_destroy(proc);
-        }
-    }
-    if (curr->exited) {
-        TAILQ_INSERT_TAIL(&cpu->zombie_queue, curr, threads);
-    }
-    com_spinlock_release(&ZombieProcLock);
-
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
 
-    if (NULL != curr->proc) {
+    if (NULL != curr->proc && !curr->proc->exited) {
         prev_pt = curr->proc->page_table;
     }
 
-    if (NULL != next->proc) {
+    if (NULL != next->proc && !next->proc->exited) {
         next_pt = next->proc->page_table;
     }
 
     if (NULL != next_pt && next_pt != prev_pt) {
         arch_mmu_switch(next_pt);
+    } else if (NULL == prev_pt || NULL == next_pt) {
+        arch_mmu_switch_default();
     }
 
     ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
@@ -224,5 +229,11 @@ void com_sys_sched_init(void) {
 }
 
 void com_sys_sched_init_base(void) {
+    KLOG("initializing scheduler (first)");
     KHASHMAP_INIT(&ZombieProcMap);
+    TAILQ_INIT(&ZombieThreadQueue);
+    com_thread_t *reaper_thread =
+        com_sys_thread_new_kernel(NULL, sched_reaper_thread);
+    reaper_thread->runnable = true;
+    TAILQ_INSERT_TAIL(&hdr_arch_cpu_get()->sched_queue, reaper_thread, threads);
 }
