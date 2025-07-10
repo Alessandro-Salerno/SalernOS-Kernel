@@ -83,6 +83,9 @@ void com_sys_sched_yield_nolock(void) {
         return;
     }
 
+    // NOTE: this seems like it would create a race condition, but it does not
+    // because the reaper thread first acquires the sched_lock, which we are
+    // holding here
     com_spinlock_acquire(&ZombieProcLock);
     if (curr->exited) {
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
@@ -128,7 +131,9 @@ void com_sys_sched_yield_nolock(void) {
     }
 
     ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
-    ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
+    if (ARCH_CONTEXT_ISUSER(&next->ctx)) {
+        ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
+    }
 
     cpu->thread = next;
     curr->cpu   = NULL;
