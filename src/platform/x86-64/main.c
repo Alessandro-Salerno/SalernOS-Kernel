@@ -254,8 +254,7 @@ void kernel_entry(void) {
     proc->fd[1]   = stddesc;
     proc->fd[2]   = stddesc;
 
-    com_proc_group_t *group = com_sys_proc_new_group(proc, NULL);
-    com_sys_proc_new_session(group, tty_dev);
+    com_sys_proc_new_session_nolock(proc, tty_dev);
 
     hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
     hdr_arch_cpu_get()->thread   = thread;

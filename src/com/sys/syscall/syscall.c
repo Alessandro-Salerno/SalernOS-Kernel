@@ -77,6 +77,10 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x13, com_sys_syscall_exit_thread);
     com_sys_syscall_register(0x14, com_sys_syscall_futex);
     com_sys_syscall_register(0x15, com_sys_syscall_getppid);
+    com_sys_syscall_register(0x16, com_sys_syscall_getpgid);
+    com_sys_syscall_register(0x17, com_sys_syscall_getsid);
+    com_sys_syscall_register(0x18, com_sys_syscall_setpgid);
+    com_sys_syscall_register(0x19, com_sys_syscall_setsid);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

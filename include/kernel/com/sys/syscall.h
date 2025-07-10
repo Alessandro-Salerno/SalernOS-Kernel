@@ -89,3 +89,7 @@ COM_SYS_SYSCALL(com_sys_syscall_clone);
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread);
 COM_SYS_SYSCALL(com_sys_syscall_futex);
 COM_SYS_SYSCALL(com_sys_syscall_getppid);
+COM_SYS_SYSCALL(com_sys_syscall_getpgid);
+COM_SYS_SYSCALL(com_sys_syscall_getsid);
+COM_SYS_SYSCALL(com_sys_syscall_setpgid);
+COM_SYS_SYSCALL(com_sys_syscall_setsid);

@@ -52,6 +52,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     com_proc_t *new_proc =
         com_sys_proc_new(new_pt, proc->pid, proc->root, proc->cwd);
+    // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, cur_thread->xctx);
 

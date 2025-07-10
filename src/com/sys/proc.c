@@ -18,6 +18,7 @@
 
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -190,35 +191,52 @@ com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
 
     com_proc_group_t *group = com_mm_slab_alloc(sizeof(com_proc_group_t));
     group->procs_lock       = COM_SPINLOCK_NEW();
-    group->session_lock     = COM_SPINLOCK_NEW();
     group->pgid             = leader->pid;
     group->session          = session;
     TAILQ_INIT(&group->procs);
 
-    if (NULL != leader->proc_group) {
+    if (NULL == session && NULL != leader->proc_group) {
         group->session = leader->proc_group->session;
     }
 
-    com_sys_proc_join_group(leader, group);
-    KDEBUG("pid=%d is now leader of group pgid=%d", leader->pid, group->pgid);
-
     KASSERT(0 == KHASHMAP_PUT(&ProcGroupMap, &group->pgid, group));
+    KDEBUG("created pgid=%d", group->pgid);
     com_spinlock_release(&ProcGroupLock);
     return group;
 }
 
-void com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group) {
+int com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group) {
     com_spinlock_acquire(&proc->pg_lock);
+    int ret = com_sys_proc_join_group_nolock(proc, group);
+    com_spinlock_release(&proc->pg_lock);
+    return ret;
+}
+
+int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group) {
     if (NULL != proc->proc_group) {
+        KASSERT(NULL != proc->proc_group->session);
+        KASSERT(NULL != group->session);
+
+        // If sid is equal to the pid, then this process is the session leader
+        // (useful, for example, in setsid). Whereas, if the two are different,
+        // then it means that the process is trying to migrate sessions (which
+        // POSIX does not allow)
+        /*if (proc->proc_group->session->sid != proc->pid &&
+            proc->proc_group->session->sid != group->session->sid) {
+            return EPERM;
+        }*/
+
         com_spinlock_acquire(&proc->proc_group->procs_lock);
         TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
         com_spinlock_release(&proc->proc_group->procs_lock);
     }
+
     com_spinlock_acquire(&group->procs_lock);
     TAILQ_INSERT_TAIL(&group->procs, proc, procs);
+    proc->proc_group = group;
     KDEBUG("pid=%d is now part of group pgid=%d", proc->pid, group->pgid);
     com_spinlock_release(&group->procs_lock);
-    com_spinlock_release(&proc->pg_lock);
+    return 0;
 }
 
 com_proc_group_t *com_sys_proc_get_group_by_pgid(pid_t pgid) {
@@ -231,34 +249,26 @@ com_proc_group_t *com_sys_proc_get_group_by_pgid(pid_t pgid) {
     return group;
 }
 
-com_proc_session_t *com_sys_proc_new_session(com_proc_group_t *leader,
-                                             com_vnode_t      *tty) {
+com_proc_session_t *com_sys_proc_new_session_nolock(com_proc_t  *leader,
+                                                    com_vnode_t *tty) {
     com_proc_session_t *session = com_mm_slab_alloc(sizeof(com_proc_session_t));
     if (NULL != tty) {
         COM_FS_VFS_VNODE_HOLD(tty);
     }
     session->tty     = tty;
     session->pg_lock = COM_SPINLOCK_NEW();
-    session->sid     = leader->pgid;
+    session->sid     = leader->pid;
     TAILQ_INIT(&session->proc_groups);
 
-    com_sys_proc_join_session(session, leader);
-    KDEBUG(
-        "pgid=%d is now leader of session sid=%d", leader->pgid, session->sid);
-    return session;
-}
-
-void com_sys_proc_join_session(com_proc_session_t *session,
-                               com_proc_group_t   *group) {
-    com_spinlock_acquire(&group->session_lock);
-    if (NULL != group->session) {
-        com_spinlock_acquire(&group->session->pg_lock);
-        TAILQ_REMOVE(&group->session->proc_groups, group, proc_groups);
-        com_spinlock_release(&group->session->pg_lock);
+    if (NULL != leader->proc_group) {
+        com_spinlock_acquire(&leader->proc_group->procs_lock);
+        TAILQ_REMOVE(&leader->proc_group->procs, leader, procs);
+        com_spinlock_release(&leader->proc_group->procs_lock);
     }
-    com_spinlock_acquire(&session->pg_lock);
-    TAILQ_INSERT_TAIL(&session->proc_groups, group, proc_groups);
-    KDEBUG("pgid=%d is now part of session sid=%d", group->pgid, session->sid);
-    com_spinlock_release(&session->pg_lock);
-    com_spinlock_release(&group->session_lock);
+
+    com_proc_group_t *new_group = com_sys_proc_new_group(leader, session);
+    com_sys_proc_join_group_nolock(leader, new_group);
+
+    KDEBUG("pid=%d is now leader of session sid=%d", leader->pid, session->sid);
+    return session;
 }
