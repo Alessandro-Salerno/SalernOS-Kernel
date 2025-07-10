@@ -21,6 +21,8 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/util.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 // TODO: handle case in which pid < 0 and proc groups
@@ -33,6 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     pid_t pid    = COM_SYS_SYSCALL_ARG(pid_t, 1);
     int  *status = COM_SYS_SYSCALL_ARG(int *, 2);
     int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
+    KASSERT(pid > 0);
 
     com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
     com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
@@ -46,7 +49,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         goto cleanup;
     }
 
-    while (1) {
+    while (true) {
         if (towait->exited) {
             *status   = towait->exit_status;
             ret.value = pid;
