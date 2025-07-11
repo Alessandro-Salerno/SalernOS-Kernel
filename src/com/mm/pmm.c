@@ -27,6 +27,8 @@
 #include <lib/util.h>
 #include <stdint.h>
 
+#define PMM_ZERO_PAGES
+
 typedef struct Bitmap {
     size_t    size;
     uint8_t  *buffer;
@@ -113,6 +115,9 @@ void *com_mm_pmm_alloc(void) {
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
+#ifdef PMM_ZERO_PAGES
+    kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE, 0);
+#endif
     return ret;
 }
 
@@ -144,6 +149,9 @@ void *com_mm_pmm_alloc_many(size_t pages) {
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
+#ifdef PMM_ZERO_PAGES
+    kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE * pages, 0);
+#endif
     return ret;
 }
 

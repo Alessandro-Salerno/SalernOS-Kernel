@@ -79,9 +79,10 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->pg_lock    = COM_SPINLOCK_NEW();
     proc->proc_group = NULL;
 
+    // TODO: re-enable process groups (add removal in destroy)
     com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
     if (NULL != parent && NULL != parent->proc_group) {
-        com_sys_proc_join_group(proc, parent->proc_group);
+        // com_sys_proc_join_group(proc, parent->proc_group);
     }
 
     return proc;

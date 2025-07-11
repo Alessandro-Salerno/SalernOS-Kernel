@@ -20,6 +20,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
@@ -44,6 +45,12 @@ static void sched_idle(void) {
     }
 }
 
+static inline void *read_cr3(void) {
+    void *value;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(value));
+    return value;
+}
+
 static void sched_reaper_thread(void) {
     while (true) {
         com_spinlock_acquire(&ZombieProcLock);
@@ -52,8 +59,8 @@ static void sched_reaper_thread(void) {
             com_spinlock_acquire(&zombie->sched_lock);
             hdr_arch_cpu_get_thread()->lock_depth--;
             com_proc_t *proc = zombie->proc;
-            com_sys_thread_destroy(zombie);
             TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
+            com_sys_thread_destroy(zombie);
             if (proc->exited) {
                 KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
             }
@@ -63,9 +70,10 @@ static void sched_reaper_thread(void) {
 
             if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
                 KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-                // TODO: find a way to fix this, I have no idea why freeing the
-                // pt crashes other threads/processes
-                // com_sys_proc_destroy(proc);
+                com_proc_t *t = NULL;
+                KASSERT(ENOENT == KHASHMAP_GET(&t, &ZombieProcMap, &proc->pid));
+                KASSERT(read_cr3() != proc->page_table);
+                com_sys_proc_destroy(proc);
             }
         }
         com_spinlock_release(&ZombieProcLock);
@@ -92,7 +100,26 @@ void com_sys_sched_yield_nolock(void) {
     if (curr->exited) {
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
     }
+    while (NULL != next &&
+           (next->exited || (NULL != next->proc && next->proc->exited))) {
+        TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
+        next = TAILQ_FIRST(&cpu->sched_queue);
+    }
     com_spinlock_release(&ZombieProcLock);
+    if (NULL != curr->proc) {
+        if (read_cr3() != curr->proc->page_table) {
+            KURGENT(
+                "thread tid=%d in pid=%d (exited=%d, num_ref=%u) entered sched "
+                "with wrong page table, cr3=%x, curr->proc->page_table=%x",
+                curr->tid,
+                curr->proc->pid,
+                curr->proc->exited,
+                curr->proc->num_ref,
+                read_cr3(),
+                curr->proc->page_table);
+            // KASSERT(read_cr3() == curr->proc->page_table);
+        }
+    }
 
     if (NULL == next) {
         if (curr->runnable) {
@@ -118,23 +145,27 @@ void com_sys_sched_yield_nolock(void) {
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
 
-    if (NULL != curr->proc && !curr->proc->exited) {
+    if (NULL != curr->proc) {
         prev_pt = curr->proc->page_table;
     }
 
-    if (NULL != next->proc && !next->proc->exited) {
+    if (NULL != next->proc) {
         next_pt = next->proc->page_table;
     }
 
-    if (NULL != next_pt && next_pt != prev_pt) {
-        arch_mmu_switch(next_pt);
-    } else if (NULL == prev_pt || NULL == next_pt) {
+    if (!ARCH_CONTEXT_ISUSER(&next->ctx)) {
         arch_mmu_switch_default();
+    } else if (NULL != next_pt && next_pt != prev_pt) {
+        arch_mmu_switch(next_pt);
     }
 
     ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
     if (ARCH_CONTEXT_ISUSER(&next->ctx)) {
         ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
+    }
+
+    if (NULL != next->proc) {
+        KASSERT(read_cr3() == next->proc->page_table);
     }
 
     cpu->thread = next;

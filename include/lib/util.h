@@ -71,3 +71,13 @@
         com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
         com_panic(NULL, NULL);                                           \
     }
+
+#define KURGENT(...)                          \
+    com_io_log_acquire();                     \
+    com_io_log_puts("KERNEL URGENT:  ");      \
+    com_io_log_puts(__FILE__ ":");            \
+    com_io_log_puts(__func__);                \
+    com_io_log_puts(":" KSTR(__LINE__) ": "); \
+    kprintf(__VA_ARGS__);                     \
+    com_io_log_putc('\n');                    \
+    com_io_log_release();

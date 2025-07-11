@@ -45,13 +45,15 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     char *const    *argv = COM_SYS_SYSCALL_ARG(char *const *, 2);
     char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
 
-    com_thread_t         *thread = hdr_arch_cpu_get_thread();
+    com_thread_t *thread = hdr_arch_cpu_get_thread();
+    com_spinlock_acquire(&thread->sched_lock);
     com_proc_t           *proc   = thread->proc;
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status =
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
 
     if (0 != status) {
+        com_spinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
 
@@ -67,5 +69,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
+    com_spinlock_release(&thread->sched_lock);
     return COM_SYS_SYSCALL_OK(0);
 }
