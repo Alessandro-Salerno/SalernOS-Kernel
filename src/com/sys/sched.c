@@ -20,7 +20,6 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
-#include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
@@ -101,6 +100,7 @@ void com_sys_sched_yield_nolock(void) {
     while (NULL != next &&
            (next->exited || (NULL != next->proc && next->proc->exited))) {
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
+        TAILQ_INSERT_TAIL(&ZombieThreadQueue, next, threads);
         next = TAILQ_FIRST(&cpu->sched_queue);
     }
     com_spinlock_release(&ZombieProcLock);

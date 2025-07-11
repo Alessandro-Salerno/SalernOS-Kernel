@@ -32,11 +32,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// TODO: when processes will have more than one thread, there could be a
-// race condition where two threads try to run exec() and all of this
-// explodes. There should be a sort of "exec" lock. Also, if there are multiple
-// threads, what happens to the other threads? SYSCALL: execve(const char *path,
-// char *const *argv, char *const *envp)
+// SYSCALL: execve(const char *path, char *const *argv, char *const *envp)
 COM_SYS_SYSCALL(com_sys_syscall_execve) {
     COM_SYS_SYSCALL_UNUSED_START(4);
 
@@ -47,7 +43,8 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     com_thread_t *thread = hdr_arch_cpu_get_thread();
     com_spinlock_acquire(&thread->sched_lock);
-    com_proc_t           *proc   = thread->proc;
+    com_proc_t *proc = thread->proc;
+
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status =
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
@@ -56,6 +53,20 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
         com_spinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
+
+    // TODO: this is wrong for multithreaded applications but it's agood start
+    com_spinlock_acquire(&proc->threads_lock);
+    com_thread_t *t, *_;
+    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
+        if (t != thread) {
+            com_spinlock_acquire(&t->sched_lock);
+            t->exited   = true;
+            t->runnable = false;
+            com_sys_proc_remove_thread_nolock(proc, t);
+            com_spinlock_release(&t->sched_lock);
+        }
+    }
+    com_spinlock_release(&proc->threads_lock);
 
     arch_mmu_switch(new_pt);
     arch_mmu_destroy_table(proc->page_table);
