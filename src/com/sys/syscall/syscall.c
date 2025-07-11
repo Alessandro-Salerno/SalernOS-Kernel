@@ -33,11 +33,13 @@ static COM_SYS_SYSCALL(test_syscall) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(2);
 
+#ifndef DISABLE_LOGGING
     const char *s = COM_SYS_SYSCALL_ARG(const char *, 1);
 
     com_io_log_acquire();
     com_io_log_puts(s);
     com_io_log_release();
+#endif
 
     return COM_SYS_SYSCALL_OK(0);
 }

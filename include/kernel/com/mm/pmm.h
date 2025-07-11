@@ -18,13 +18,15 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
-void *com_mm_pmm_alloc();
+void *com_mm_pmm_alloc(void);
+void *com_mm_pmm_alloc_many(size_t pages);
 void  com_mm_pmm_free(void *page);
 void  com_mm_pmm_get_info(uintmax_t *used_mem,
                           uintmax_t *free_mem,
                           uintmax_t *reserved_mem,
                           uintmax_t *sys_mem,
                           uintmax_t *mem_size);
-void  com_mm_pmm_init();
+void  com_mm_pmm_init(void);

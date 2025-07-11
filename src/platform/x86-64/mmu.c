@@ -246,7 +246,6 @@ void arch_mmu_switch_default(void) {
     arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
 }
 
-// TODO: implement this
 void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     uint64_t *entry = get_page(pagetable, virt_addr);
     if (NULL == entry) {

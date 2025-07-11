@@ -25,8 +25,7 @@
 
 TAILQ_HEAD(khashmap_entry_tailq, khashmap_entry);
 
-#define KHASHMAP_DEFAULT_SIZE \
-    (ARCH_PAGE_SIZE / sizeof(struct khashmap_entry_tailq))
+#define KHASHMAP_DEFAULT_SIZE (20000)
 
 #define KHASHMAP_INIT(hm_ptr) khashmap_init((hm_ptr), KHASHMAP_DEFAULT_SIZE)
 #define KHASHMAP_SET(hm_ptr, key, value) \

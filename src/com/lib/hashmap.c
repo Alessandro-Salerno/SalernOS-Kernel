@@ -56,11 +56,10 @@ get_entry(khashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
     return entry;
 }
 
-// TODO: make size actually do something
 int khashmap_init(khashmap_t *hashmap, size_t size) {
-    KASSERT(KHASHMAP_DEFAULT_SIZE == size);
     hashmap->capacity = size;
-    hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(
+        com_mm_pmm_alloc_many(sizeof(khashmap_entry_t) * size / 4096 + 1));
 
     if (NULL == hashmap->entries) {
         return ENOMEM;

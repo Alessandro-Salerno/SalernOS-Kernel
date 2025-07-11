@@ -92,9 +92,10 @@ void com_sys_proc_destroy(com_proc_t *proc) {
     if (NULL != parent) {
         __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
-    Processes[proc->pid - 1] = NULL;
-    arch_mmu_destroy_table(proc->page_table);
+    Processes[proc->pid - 1]      = NULL;
+    arch_mmu_pagetable_t *proc_pt = proc->page_table;
     com_mm_slab_free(proc, sizeof(com_proc_t));
+    arch_mmu_destroy_table(proc_pt);
 }
 
 int com_sys_proc_next_fd(com_proc_t *proc) {

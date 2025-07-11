@@ -99,7 +99,7 @@ void unreserve_pages(void *address, uint64_t pagecount) {
     }
 }
 
-void *com_mm_pmm_alloc() {
+void *com_mm_pmm_alloc(void) {
     com_spinlock_acquire(&Lock);
     void *ret = NULL;
 
@@ -109,6 +109,37 @@ void *com_mm_pmm_alloc() {
             alloc_pages(ret, 1);
             break;
         }
+    }
+
+    com_spinlock_release(&Lock);
+    KASSERT(NULL != ret);
+    return ret;
+}
+
+void *com_mm_pmm_alloc_many(size_t pages) {
+    com_spinlock_acquire(&Lock);
+    KDEBUG("allocating %u contiguous pages", pages);
+    void  *ret       = NULL;
+    size_t num_found = 0;
+    bool   was_free  = false;
+
+    for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
+        bool is_free = 0 == bmp_get(&PageBitmap, PageBitmap.index);
+
+        if (is_free && num_found == pages) {
+            alloc_pages(ret, pages);
+            break;
+        } else if (is_free && was_free) {
+            num_found++;
+        } else if (is_free) {
+            ret       = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
+            num_found = 1;
+        } else {
+            ret       = NULL;
+            num_found = 0;
+        }
+
+        was_free = is_free;
     }
 
     com_spinlock_release(&Lock);
@@ -148,7 +179,7 @@ void com_mm_pmm_get_info(uintmax_t *used_mem,
     }
 }
 
-void com_mm_pmm_init() {
+void com_mm_pmm_init(void) {
     arch_memmap_t *memmap       = arch_info_get_memmap();
     uintptr_t      highest_addr = 0;
 

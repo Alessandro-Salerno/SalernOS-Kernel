@@ -63,7 +63,9 @@ static void sched_reaper_thread(void) {
 
             if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
                 KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-                com_sys_proc_destroy(proc);
+                // TODO: find a way to fix this, I have no idea why freeing the
+                // pt crashes other threads/processes
+                // com_sys_proc_destroy(proc);
             }
         }
         com_spinlock_release(&ZombieProcLock);

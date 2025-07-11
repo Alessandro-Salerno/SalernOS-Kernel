@@ -86,7 +86,6 @@ void com_sys_thread_ready(com_thread_t *thread) {
     com_spinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
     thread->runnable = true;
-    thread->cpu      = curr_cpu;
     com_spinlock_release(&curr_cpu->runqueue_lock);
     com_spinlock_release(&thread->sched_lock);
     KDEBUG("thread with tid=%u is now runnable on cpu %u",
