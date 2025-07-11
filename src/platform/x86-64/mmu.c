@@ -106,8 +106,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
             return false;
         }
         pml4[pml4offset] = (uint64_t)pdpt | ARCH_MMU_FLAGS_READ |
-                           ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER |
-                           ARCH_MMU_FLAGS_PRESENT;
+                           ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pdpt = (uint64_t *)ARCH_PHYS_TO_HHDM(pdpt);
         kmemset(pdpt, ARCH_PAGE_SIZE, 0);
     }
@@ -124,8 +123,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
             return false;
         }
         pdpt[pdptoffset] = (uint64_t)pd | ARCH_MMU_FLAGS_READ |
-                           ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER |
-                           ARCH_MMU_FLAGS_PRESENT;
+                           ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pd = (uint64_t *)ARCH_PHYS_TO_HHDM(pd);
         kmemset(pd, ARCH_PAGE_SIZE, 0);
     }
@@ -142,8 +140,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
             return false;
         }
         pd[pdoffset] = (uint64_t)pt | ARCH_MMU_FLAGS_READ |
-                       ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER |
-                       ARCH_MMU_FLAGS_PRESENT;
+                       ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pt = (uint64_t *)ARCH_PHYS_TO_HHDM(pt);
         kmemset(pt, ARCH_PAGE_SIZE, 0);
     }
@@ -174,20 +171,19 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     return new | (entry & ~ADDRMASK);
 }
 
-// CREDIT: Mathwnd/Astral
-static void destroy_recursive(uint64_t *table, size_t depth) {
-    for (int i = 0; i < (depth == 3 ? 256 : 512); ++i) {
-        void *addr = (void *)((table[i] & ADDRMASK));
-        if (NULL == addr) {
-            continue;
-        }
+void destroy_recursive(uint64_t entry, size_t level) {
+    uint64_t *directory = (void *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
+    void     *phys      = (void *)(entry & ADDRMASK);
 
-        if (depth > 0) {
-            destroy_recursive((void *)ARCH_PHYS_TO_HHDM(addr), depth - 1);
+    if (0 != level) {
+        for (size_t i = 0; i < 512; i++) {
+            if (ARCH_MMU_FLAGS_PRESENT & directory[i]) {
+                destroy_recursive(directory[i], level - 1);
+            }
         }
-
-        com_mm_pmm_free(addr);
     }
+
+    com_mm_pmm_free(phys);
 }
 
 arch_mmu_pagetable_t *arch_mmu_new_table(void) {
@@ -203,7 +199,14 @@ arch_mmu_pagetable_t *arch_mmu_new_table(void) {
 
 void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
     arch_mmu_pagetable_t *pt_virt = (void *)ARCH_PHYS_TO_HHDM(pt);
-    destroy_recursive(pt_virt, 3);
+
+    for (size_t i = 0; i < 256; i++) {
+        if (ARCH_MMU_FLAGS_PRESENT & pt_virt[i]) {
+            destroy_recursive(pt_virt[i], 3);
+        }
+    }
+
+    com_mm_pmm_free(pt);
 }
 
 arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
@@ -243,6 +246,7 @@ void arch_mmu_switch_default(void) {
     arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
 }
 
+// TODO: implement this
 void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     uint64_t *entry = get_page(pagetable, virt_addr);
     if (NULL == entry) {
