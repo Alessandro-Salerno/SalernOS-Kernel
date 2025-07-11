@@ -16,14 +16,20 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/libhelp.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
 
 void kmemset(void *buff, size_t buffsize, uint8_t val) {
+#ifdef ARCH_LIBHELP_FAST_MEMSET
+    ARCH_LIBHELP_FAST_MEMSET(buff, val, buffsize);
+#else
     // Use compiler optiimzations for better performance
-    for (uint64_t i = 0; i < buffsize; i++)
+    for (uint64_t i = 0; i < buffsize; i++) {
         *(uint8_t *)((uint64_t)(buff) + i) = val;
+    }
+#endif
 }
 
 int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
@@ -40,6 +46,9 @@ int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
 }
 
 void kmemcpy(void *dst, const void *src, size_t buffsize) {
+#ifdef ARCH_LIBHELP_FAST_MEMCPY
+    ARCH_LIBHELP_FAST_MEMCPY(dst, src, buffsize);
+#else
     uint64_t src_off = (uint64_t)src;
     uint64_t dst_off = (uint64_t)dst;
 
@@ -47,6 +56,7 @@ void kmemcpy(void *dst, const void *src, size_t buffsize) {
         uint8_t val               = *(uint8_t *)(src_off + i);
         *(uint8_t *)(dst_off + i) = val;
     }
+#endif
 }
 
 void *kmemchr(const void *str, int c, size_t n) {

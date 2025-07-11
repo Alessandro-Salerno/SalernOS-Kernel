@@ -16,34 +16,16 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <fcntl.h>
-#include <kernel/com/fs/file.h>
-#include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
-#include <kernel/platform/context.h>
-#include <stdatomic.h>
-#include <stdint.h>
-#include <stdio.h>
+#pragma once
 
-// SYSCALL: clone(void *new_ip, void *new_sp)
-COM_SYS_SYSCALL(com_sys_syscall_clone) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
+#define ARCH_LIBHELP_FAST_MEMSET(dst, c, n)   \
+    asm volatile("cld; rep stosb"             \
+                 : "=c"((int){0})             \
+                 : "rdi"(dst), "a"(c), "c"(n) \
+                 : "flags", "memory", "rdi");
 
-    void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
-    void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
-
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    com_thread_t *new_thread = com_sys_thread_new(curr_proc, NULL, 0, NULL);
-    ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
-    ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
-
-    com_sys_thread_ready(new_thread);
-
-    return COM_SYS_SYSCALL_OK(new_thread->tid);
-}
+#define ARCH_LIBHELP_FAST_MEMCPY(dst, src, n) \
+    asm volatile("cld; rep movsb"             \
+                 : "=c"((int){0})             \
+                 : "D"(dst), "S"(src), "c"(n) \
+                 : "flags", "memory");

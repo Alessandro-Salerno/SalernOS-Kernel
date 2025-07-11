@@ -56,13 +56,9 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     if (MAP_FIXED & flags) {
         virt = hint;
     } else {
-        com_spinlock_acquire(&curr->pages_lock);
-        /*virt = (uintptr_t)curr->used_pages * ARCH_PAGE_SIZE + ALLOC_BASE;
-        curr->used_pages += pages;*/
         virt = __atomic_fetch_add(&curr->used_pages, pages, __ATOMIC_SEQ_CST) *
                    ARCH_PAGE_SIZE +
                ALLOC_BASE;
-        com_spinlock_release(&curr->pages_lock);
     }
 
     for (size_t i = 0; i < pages; i++) {
@@ -73,9 +69,10 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
                      phys,
                      ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                          ARCH_MMU_FLAGS_USER);
-        if (MAP_ANONYMOUS & flags) {
-            kmemset(kvirt, ARCH_PAGE_SIZE, 0);
-        }
+    }
+
+    if (MAP_ANONYMOUS & flags) {
+        kmemset((void *)virt, ARCH_PAGE_SIZE * pages, 0);
     }
 
     return COM_SYS_SYSCALL_OK(virt);
