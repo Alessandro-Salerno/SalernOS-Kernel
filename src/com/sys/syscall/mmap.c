@@ -62,8 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     }
 
     for (size_t i = 0; i < pages; i++) {
-        void *phys  = com_mm_pmm_alloc();
-        void *kvirt = (void *)ARCH_PHYS_TO_HHDM(phys);
+        void *phys = com_mm_pmm_alloc();
         arch_mmu_map(curr->page_table,
                      (void *)(virt + i * ARCH_PAGE_SIZE),
                      phys,

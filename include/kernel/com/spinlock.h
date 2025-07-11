@@ -26,3 +26,4 @@ typedef int com_spinlock_t;
 
 void com_spinlock_acquire(com_spinlock_t *lock);
 void com_spinlock_release(com_spinlock_t *lock);
+void com_spinlock_fake_release();

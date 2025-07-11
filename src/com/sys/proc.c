@@ -18,7 +18,6 @@
 
 #include <arch/info.h>
 #include <arch/mmu.h>
-#include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -79,10 +78,9 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->pg_lock    = COM_SPINLOCK_NEW();
     proc->proc_group = NULL;
 
-    // TODO: re-enable process groups (add removal in destroy)
     com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
     if (NULL != parent && NULL != parent->proc_group) {
-        // com_sys_proc_join_group(proc, parent->proc_group);
+        com_sys_proc_join_group(proc, parent->proc_group);
     }
 
     return proc;
@@ -93,7 +91,12 @@ void com_sys_proc_destroy(com_proc_t *proc) {
     if (NULL != parent) {
         __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
-    Processes[proc->pid - 1]      = NULL;
+    Processes[proc->pid - 1] = NULL;
+    com_spinlock_acquire(&proc->pg_lock);
+    if (NULL != proc->proc_group) {
+        TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
+    }
+    com_spinlock_fake_release();
     arch_mmu_pagetable_t *proc_pt = proc->page_table;
     com_mm_slab_free(proc, sizeof(com_proc_t));
     arch_mmu_destroy_table(proc_pt);

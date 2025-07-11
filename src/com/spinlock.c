@@ -60,3 +60,14 @@ void com_spinlock_release(com_spinlock_t *lock) {
         }
     }
 }
+
+void com_spinlock_fake_release() {
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    if (NULL != curr_thread) {
+        int oldval = curr_thread->lock_depth--;
+        KASSERT(oldval != 0);
+        if (oldval == 1) {
+            hdr_arch_cpu_interrupt_enable();
+        }
+    }
+}
