@@ -70,8 +70,6 @@ static void sched_reaper_thread(void) {
 
             if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
                 KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-                com_proc_t *t = NULL;
-                KASSERT(ENOENT == KHASHMAP_GET(&t, &ZombieProcMap, &proc->pid));
                 KASSERT(read_cr3() != proc->page_table);
                 com_sys_proc_destroy(proc);
             }
@@ -106,19 +104,9 @@ void com_sys_sched_yield_nolock(void) {
         next = TAILQ_FIRST(&cpu->sched_queue);
     }
     com_spinlock_release(&ZombieProcLock);
+
     if (NULL != curr->proc) {
-        if (read_cr3() != curr->proc->page_table) {
-            KURGENT(
-                "thread tid=%d in pid=%d (exited=%d, num_ref=%u) entered sched "
-                "with wrong page table, cr3=%x, curr->proc->page_table=%x",
-                curr->tid,
-                curr->proc->pid,
-                curr->proc->exited,
-                curr->proc->num_ref,
-                read_cr3(),
-                curr->proc->page_table);
-            // KASSERT(read_cr3() == curr->proc->page_table);
-        }
+        KASSERT(read_cr3() == curr->proc->page_table);
     }
 
     if (NULL == next) {

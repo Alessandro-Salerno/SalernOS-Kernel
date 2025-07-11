@@ -27,8 +27,6 @@
 #include <lib/util.h>
 #include <stdint.h>
 
-#define PMM_ZERO_PAGES
-
 typedef struct Bitmap {
     size_t    size;
     uint8_t  *buffer;
