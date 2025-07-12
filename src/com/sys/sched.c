@@ -64,6 +64,7 @@ static void sched_reaper_thread(void) {
                 KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
             }
         }
+        com_spinlock_release(&ZombieProcLock);
         KHASHMAP_FOREACH(&ZombieProcMap) {
             com_proc_t *proc = entry->value;
 
@@ -73,7 +74,6 @@ static void sched_reaper_thread(void) {
                 com_sys_proc_destroy(proc);
             }
         }
-        com_spinlock_release(&ZombieProcLock);
         com_sys_sched_yield();
     }
 }
