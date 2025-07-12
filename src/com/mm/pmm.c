@@ -47,45 +47,46 @@ static com_spinlock_t Lock = COM_SPINLOCK_NEW();
 static bool bmp_get(bmp_t *bmp, uintmax_t idx) {
     uintmax_t byte_idx    = idx / 8;
     uint8_t   bit_idx     = idx % 8;
-    uint8_t   bit_indexer = 0b10000000 >> bit_idx;
+    uint8_t   bit_indexer = 1 << bit_idx;
 
     return (bmp->buffer[byte_idx] & bit_indexer) > 0;
 }
 
-static void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
-    uintmax_t byte_idx    = idx / 8;
-    uint8_t   bit_idx     = idx % 8;
-    uint8_t   bit_indexer = 0b10000000 >> bit_idx;
+static inline void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
+    uintmax_t byte_idx    = idx >> 3;
+    uint8_t   bit_idx     = idx & 0b111;
+    uint8_t   bit_indexer = 1 << bit_idx;
 
     bmp->buffer[byte_idx] &= ~bit_indexer;
     bmp->buffer[byte_idx] |= bit_indexer * val;
 }
 
-static void reserve_page(void *address, uintmax_t *rsvmemcount) {
+static inline void reserve_page(void *address, uintmax_t *rsvmemcount) {
     uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
-    KASSERT(!bmp_get(&PageBitmap, idx));
+    // KASSERT(!bmp_get(&PageBitmap, idx));
 
     bmp_set(&PageBitmap, idx, 1);
     FreeMem -= ARCH_PAGE_SIZE;
     *rsvmemcount += ARCH_PAGE_SIZE;
 }
 
-static void unreserve_page(void *address, uintmax_t *rsvmemcount) {
+static inline void unreserve_page(void *address, uintmax_t *rsvmemcount) {
     uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
 
-    KASSERT(bmp_get(&PageBitmap, idx));
+    // KASSERT(bmp_get(&PageBitmap, idx));
 
     bmp_set(&PageBitmap, idx, 0);
     FreeMem += ARCH_PAGE_SIZE;
     *rsvmemcount -= ARCH_PAGE_SIZE;
 
+    // This is a bit index
     if (PageBitmap.index > idx) {
         PageBitmap.index = idx;
     }
 }
 
-static void alloc_pages(void *address, uint64_t pagecount) {
+static inline void alloc_pages(void *address, uint64_t pagecount) {
     for (uintmax_t i = 0; i < pagecount; i++) {
         reserve_page((void *)((uintptr_t)address + (i * ARCH_PAGE_SIZE)),
                      &UsedMem);
@@ -103,17 +104,24 @@ void *com_mm_pmm_alloc(void) {
     com_spinlock_acquire(&Lock);
     void *ret = NULL;
 
-    for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
-        if (0 == bmp_get(&PageBitmap, PageBitmap.index)) {
-            ret = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
-            alloc_pages(ret, 1);
+    for (uintmax_t i = PageBitmap.index / 8; i < PageBitmap.size; i++) {
+        // Allocatrion fast path
+        if (0xff != PageBitmap.buffer[i]) {
+            uintmax_t bit_index   = __builtin_ctzl(~PageBitmap.buffer[i]);
+            uint8_t   bit_indexer = 1 << bit_index;
+            PageBitmap.buffer[i] |= bit_indexer;
+            PageBitmap.index = i * 8 + bit_index;
+            ret              = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
+            FreeMem -= ARCH_PAGE_SIZE;
+            UsedMem += ARCH_PAGE_SIZE;
             break;
         }
     }
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
-#ifdef PMM_ZERO_PAGES
+#if defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_ALLOC & COM_MM_PMM_ZERO_POLICY
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE, 0);
 #endif
     return ret;
@@ -147,13 +155,18 @@ void *com_mm_pmm_alloc_many(size_t pages) {
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
-#ifdef PMM_ZERO_PAGES
+#if defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_ALLOC & COM_MM_PMM_ZERO_POLICY
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE * pages, 0);
 #endif
     return ret;
 }
 
 void com_mm_pmm_free(void *page) {
+#if defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+    kmemset((void *)ARCH_PHYS_TO_HHDM(page), ARCH_PAGE_SIZE, 0);
+#endif
     com_spinlock_acquire(&Lock);
     unreserve_page(page, &UsedMem);
     com_spinlock_release(&Lock);
@@ -205,6 +218,11 @@ void com_mm_pmm_init(void) {
             ReservedMem += entry->length;
             continue;
         }
+
+#if defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+        kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
+#endif
 
         UsableMem += entry->length;
         if (seg_top > highest_addr) {
@@ -258,6 +276,8 @@ void com_mm_pmm_init(void) {
 
         if (ARCH_MEMMAP_IS_USABLE(entry)) {
             unreserve_pages(base, len / ARCH_PAGE_SIZE);
+
+            kmemset((void *)base, len, 0);
 
             if (len > max_len) {
                 max_len          = len;

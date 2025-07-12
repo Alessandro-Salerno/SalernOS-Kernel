@@ -70,9 +70,11 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
                          ARCH_MMU_FLAGS_USER);
     }
 
+#ifndef COM_MM_PMM_ZERO_POLICY
     if (MAP_ANONYMOUS & flags) {
         kmemset((void *)virt, ARCH_PAGE_SIZE * pages, 0);
     }
+#endif
 
     return COM_SYS_SYSCALL_OK(virt);
 }

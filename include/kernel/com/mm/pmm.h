@@ -21,6 +21,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define COM_MM_PMM_ZERO_ON_ALLOC 0b01
+#define COM_MM_PMM_ZERO_ON_FREE  0b10
+#define COM_MM_PMM_ZERO_POLICY   COM_MM_PMM_ZERO_ON_FREE
+
 void *com_mm_pmm_alloc(void);
 void *com_mm_pmm_alloc_many(size_t pages);
 void  com_mm_pmm_free(void *page);

@@ -38,10 +38,11 @@ static com_spinlock_t Lock             = COM_SPINLOCK_NEW();
 static void init(slab_t *s, size_t entry_size) {
     entry_size     = (entry_size + 15) & ~15UL;
     void *new_page = com_mm_pmm_alloc();
-    KASSERT(NULL != new_page);
-    s->next    = ARCH_PHYS_TO_HHDM(new_page);
-    size_t max = ARCH_PAGE_SIZE / entry_size - 1;
+    s->next        = ARCH_PHYS_TO_HHDM(new_page);
+    size_t max     = ARCH_PAGE_SIZE / entry_size - 1;
+#ifndef COM_MM_PMM_ZERO_POLICY
     kmemset((void *)s->next, ARCH_PAGE_SIZE, 0);
+#endif
     uintptr_t *list_arr = (uintptr_t *)s->next;
     size_t     off      = entry_size / sizeof(uintptr_t);
 
@@ -65,7 +66,13 @@ void *com_mm_slab_alloc(size_t size) {
     s->next             = *old_next;
     com_spinlock_release(&Lock);
 
+#if !defined(COM_MM_PMM_ZERO_POLICY) || \
+    COM_MM_PMM_ZERO_ON_ALLOC & COM_MM_PMM_ZERO_POLICY
     kmemset(old_next, size, 0);
+#elif defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+    *old_next = 0;
+#endif
     return old_next;
 }
 
@@ -80,8 +87,12 @@ void com_mm_slab_free(void *ptr, size_t size) {
 
     com_spinlock_acquire(&Lock);
     uintptr_t *new_head = ptr;
-    *new_head           = s->next;
-    s->next             = (uintptr_t)new_head;
+#if defined(COM_MM_PMM_ZERO_POLICY) && \
+    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+    kmemset(new_head, size, 0);
+#endif
+    *new_head = s->next;
+    s->next   = (uintptr_t)new_head;
     com_spinlock_release(&Lock);
 
     // TODO: free slab page if needed
