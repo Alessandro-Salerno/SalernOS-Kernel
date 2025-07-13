@@ -93,17 +93,25 @@ void com_sys_sched_yield_nolock(void) {
     // NOTE: this seems like it would create a race condition, but it does not
     // because the reaper thread first acquires the sched_lock, which we are
     // holding here
-    com_spinlock_acquire(&ZombieProcLock);
+    bool zombie_acquired = false;
     if (curr->exited) {
+        com_spinlock_acquire(&ZombieProcLock);
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
+        zombie_acquired = true;
     }
     while (NULL != next &&
            (next->exited || (NULL != next->proc && next->proc->exited))) {
+        if (!zombie_acquired) {
+            com_spinlock_acquire(&ZombieProcLock);
+            zombie_acquired = true;
+        }
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, next, threads);
         next = TAILQ_FIRST(&cpu->sched_queue);
     }
-    com_spinlock_release(&ZombieProcLock);
+    if (zombie_acquired) {
+        com_spinlock_release(&ZombieProcLock);
+    }
 
     if (NULL != curr->proc) {
         KASSERT(read_cr3() == curr->proc->page_table);
