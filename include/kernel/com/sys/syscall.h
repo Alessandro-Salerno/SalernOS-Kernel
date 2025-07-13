@@ -93,3 +93,7 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid);
 COM_SYS_SYSCALL(com_sys_syscall_getsid);
 COM_SYS_SYSCALL(com_sys_syscall_setpgid);
 COM_SYS_SYSCALL(com_sys_syscall_setsid);
+COM_SYS_SYSCALL(com_sys_syscall_sigprocmask);
+COM_SYS_SYSCALL(com_sys_syscall_sigpending);
+COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask);
+COM_SYS_SYSCALL(com_sys_syscall_sigaction);

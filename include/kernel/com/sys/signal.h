@@ -18,41 +18,22 @@
 
 #pragma once
 
-#include <vendor/tailq.h>
-struct com_thread;
-TAILQ_HEAD(com_thread_tailq, com_thread);
+#include <stdint.h>
 
-#include <arch/context.h>
-#include <arch/cpu.h>
-#include <kernel/com/spinlock.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
-#include <signal.h>
-#include <stdbool.h>
-#include <sys/types.h>
+#define COM_SYS_SIGNAL_SIGMASK_INIT(maskptr)       *(maskptr) = 0UL;
+#define COM_SYS_SIGNAL_SIGMASK_SET(maskptr, sig)   *(maskptr) |= (1 << (sig))
+#define COM_SYS_SIGNAL_SIGMASK_UNSET(maskptr, sig) *(maskptr) &= ~(1 << (sig))
+#define COM_SYS_SIGNAL_SIGMASK_ISSET(mask, sig)    (mask) & (1 << (sig))
 
-typedef struct com_thread {
-    arch_context_t       ctx;
-    arch_context_extra_t xctx;
-    com_spinlock_t       sched_lock;
-    struct com_proc     *proc;
-    struct arch_cpu     *cpu;
-    bool                 runnable;
-    bool                 exited;
-    void                *kernel_stack;
-    TAILQ_ENTRY(com_thread) threads;
-    TAILQ_ENTRY(com_thread) proc_threads;
-    int   lock_depth;
-    pid_t tid;
+typedef struct {
+    unsigned long sig[1024 / (8 * sizeof(long))];
+} com_sigset_t;
 
-    com_sigmask_t pending_signals;
-    com_sigmask_t masked_signals;
-} com_thread_t;
+// Sigmask is essentially an entry into the sig array above
+// The struct above is kept for compatibility with Linux (and mlibc currently),
+// but there's no need for all those signals.
+// So, to save some space in proc and thread structs, we use sigmask and only
+// ever access sigset_t.sig[0]
+typedef unsigned long com_sigmask_t;
 
-com_thread_t *com_sys_thread_new(struct com_proc *proc,
-                                 void            *stack,
-                                 uintmax_t        stack_size,
-                                 void            *entry);
-com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
-void          com_sys_thread_destroy(com_thread_t *thread);
-void          com_sys_thread_ready(com_thread_t *thread);
+void com_sys_signal_sigset_emptY(com_sigset_t *set);

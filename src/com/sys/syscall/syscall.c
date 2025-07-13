@@ -30,15 +30,17 @@ volatile com_intf_syscall_t Com_Sys_Syscall_Table[MAX_SYSCALLS] = {0};
 
 // test_syscall(const char *s)
 static COM_SYS_SYSCALL(test_syscall) {
+#ifndef DISABLE_LOGGING
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(2);
 
-#ifndef DISABLE_LOGGING
     const char *s = COM_SYS_SYSCALL_ARG(const char *, 1);
 
     com_io_log_acquire();
     com_io_log_puts(s);
     com_io_log_release();
+#else
+    COM_SYS_SYSCALL_UNUSED_START(0);
 #endif
 
     return COM_SYS_SYSCALL_OK(0);
@@ -83,6 +85,10 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x17, com_sys_syscall_getsid);
     com_sys_syscall_register(0x18, com_sys_syscall_setpgid);
     com_sys_syscall_register(0x19, com_sys_syscall_setsid);
+    com_sys_syscall_register(0x1A, com_sys_syscall_sigprocmask);
+    com_sys_syscall_register(0x1B, com_sys_syscall_sigpending);
+    com_sys_syscall_register(0x1C, com_sys_syscall_ssigthreadmask);
+    com_sys_syscall_register(0x1D, com_sys_syscall_sigaction);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

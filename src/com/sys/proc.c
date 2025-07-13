@@ -78,6 +78,9 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->pg_lock    = COM_SPINLOCK_NEW();
     proc->proc_group = NULL;
 
+    COM_SYS_SIGNAL_SIGMASK_INIT(&proc->pending_signals);
+    COM_SYS_SIGNAL_SIGMASK_INIT(&proc->masked_signals);
+
     com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
     if (NULL != parent && NULL != parent->proc_group) {
         com_sys_proc_join_group(proc, parent->proc_group);

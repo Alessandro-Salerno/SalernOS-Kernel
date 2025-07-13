@@ -47,6 +47,9 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     thread->tid = __atomic_add_fetch(&NextTid, 1, __ATOMIC_SEQ_CST);
 
+    COM_SYS_SIGNAL_SIGMASK_INIT(&thread->pending_signals);
+    COM_SYS_SIGNAL_SIGMASK_INIT(&thread->masked_signals);
+
     if (NULL != proc) {
         com_sys_proc_add_thread(proc, thread);
     }

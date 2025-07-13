@@ -16,43 +16,52 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
-#include <vendor/tailq.h>
-struct com_thread;
-TAILQ_HEAD(com_thread_tailq, com_thread);
-
-#include <arch/context.h>
 #include <arch/cpu.h>
-#include <kernel/com/spinlock.h>
+#include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/signal.h>
+#include <kernel/com/sys/syscall.h>
 #include <signal.h>
-#include <stdbool.h>
-#include <sys/types.h>
 
-typedef struct com_thread {
-    arch_context_t       ctx;
-    arch_context_extra_t xctx;
-    com_spinlock_t       sched_lock;
-    struct com_proc     *proc;
-    struct arch_cpu     *cpu;
-    bool                 runnable;
-    bool                 exited;
-    void                *kernel_stack;
-    TAILQ_ENTRY(com_thread) threads;
-    TAILQ_ENTRY(com_thread) proc_threads;
-    int   lock_depth;
-    pid_t tid;
+// SYSCALL: sigthreadmask(int how, sigset_t *set, sigset_t *oldset)
+COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    com_sigmask_t pending_signals;
-    com_sigmask_t masked_signals;
-} com_thread_t;
+    int           how  = COM_SYS_SYSCALL_ARG(int, 1);
+    com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
+    com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
 
-com_thread_t *com_sys_thread_new(struct com_proc *proc,
-                                 void            *stack,
-                                 uintmax_t        stack_size,
-                                 void            *entry);
-com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
-void          com_sys_thread_destroy(com_thread_t *thread);
-void          com_sys_thread_ready(com_thread_t *thread);
+    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+
+    // Unlike with sigprocmask, a thread cannot have race conditiosn on
+    // curr_thread->masked_signals, so there's no need to use atomic operations
+    // If you pass in pointers to memory that is shared among mutiple theards,
+    // that's your fault!
+
+    if (NULL != oset) {
+        com_sys_signal_sigset_emptY(oset);
+        oset->sig[0] = curr_thread->masked_signals;
+    }
+
+    if (NULL == set) {
+        goto noset;
+    }
+
+    switch (how) {
+    case SIG_BLOCK:
+        curr_thread->masked_signals |= set->sig[0];
+        break;
+    case SIG_SETMASK:
+        curr_thread->masked_signals = set->sig[0];
+        break;
+    case SIG_UNBLOCK:
+        curr_thread->masked_signals &= set->sig[0];
+        break;
+    default:
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
+noset:
+    return COM_SYS_SYSCALL_OK(0);
+}
