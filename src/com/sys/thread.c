@@ -47,6 +47,9 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     thread->tid = __atomic_add_fetch(&NextTid, 1, __ATOMIC_SEQ_CST);
 
+    thread->waiting_on   = NULL;
+    thread->waiting_cond = NULL;
+
     COM_SYS_SIGNAL_SIGMASK_INIT(&thread->pending_signals);
     COM_SYS_SIGNAL_SIGMASK_INIT(&thread->masked_signals);
 
@@ -88,7 +91,9 @@ void com_sys_thread_ready(com_thread_t *thread) {
     arch_cpu_t *curr_cpu = x86_64_smp_get_random();
     com_spinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-    thread->runnable = true;
+    thread->runnable     = true;
+    thread->waiting_on   = NULL;
+    thread->waiting_cond = NULL;
     com_spinlock_release(&curr_cpu->runqueue_lock);
     com_spinlock_release(&thread->sched_lock);
     KDEBUG("thread with tid=%u is now runnable on cpu %u",

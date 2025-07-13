@@ -206,7 +206,9 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
     if (NULL != curr->cpu) {
         curr->cpu = NULL;
     }
-    curr->runnable = false;
+    curr->waiting_on   = waiting_on;
+    curr->waiting_cond = cond;
+    curr->runnable     = false;
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
     com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 
@@ -229,7 +231,9 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
         TAILQ_REMOVE_HEAD(waiters, threads);
         com_spinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-        next->runnable = true;
+        next->runnable     = true;
+        next->waiting_on   = NULL;
+        next->waiting_cond = NULL;
         com_spinlock_release(&currcpu->runqueue_lock);
         com_spinlock_release(&next->sched_lock);
     }
@@ -249,7 +253,9 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
         com_spinlock_acquire(&currcpu->runqueue_lock);
         next->cpu = currcpu;
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-        next->runnable = true;
+        next->runnable     = true;
+        next->waiting_on   = NULL;
+        next->waiting_cond = NULL;
         com_spinlock_release(&currcpu->runqueue_lock);
         com_spinlock_release(&next->sched_lock);
     }

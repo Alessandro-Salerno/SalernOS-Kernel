@@ -45,6 +45,9 @@ typedef struct com_thread {
     int   lock_depth;
     pid_t tid;
 
+    struct com_thread_tailq *waiting_on;
+    com_spinlock_t          *waiting_cond;
+
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;
 } com_thread_t;

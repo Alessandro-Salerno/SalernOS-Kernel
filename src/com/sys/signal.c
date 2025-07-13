@@ -28,6 +28,8 @@ static int send_to_thread(com_thread_t *thread, int sig) {
     }
 
     // TODO: finish this in next commit (notify waiting threads + stop/cont)
+    // Also, remember not to send self-IPI because that could probably create
+    // issues with like SIGSTOP
 
     return 0;
 }
@@ -82,6 +84,12 @@ int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
     }
     com_spinlock_release(&group->procs_lock);
     return 0;
+}
+
+int com_sys_signal_send_to_thread(struct com_thread *thread,
+                                  int                sig,
+                                  com_proc_t        *sender) {
+    return send_to_thread(thread, sig);
 }
 
 void com_sys_signal_dispatch(arch_context_t *ctx) {

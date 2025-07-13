@@ -23,6 +23,7 @@
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
 
+void com_sys_sched_yield_nolock(void);
 void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 

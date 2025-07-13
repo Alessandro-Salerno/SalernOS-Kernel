@@ -44,10 +44,14 @@ typedef struct {
 typedef unsigned long com_sigmask_t;
 
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/thread.h>
 
 void com_sys_signal_sigset_emptY(com_sigset_t *set);
 int  com_sys_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
 int  com_sys_signal_send_to_proc_group(pid_t            pgid,
                                        int              sig,
                                        struct com_proc *sender);
+int  com_sys_signal_send_to_thread(struct com_thread *thread,
+                                   int                sig,
+                                   struct com_proc   *sender);
 void com_sys_signal_dispatch(arch_context_t *ctx);

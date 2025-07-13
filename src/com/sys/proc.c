@@ -27,6 +27,7 @@
 #include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/util.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -50,6 +51,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     com_proc_t *proc   = com_mm_slab_alloc(sizeof(com_proc_t));
     proc->page_table   = page_table;
     proc->exited       = false;
+    proc->stopped      = false;
     proc->exit_status  = 0;
     proc->num_children = 0;
     proc->parent_pid   = parent_pid;
@@ -176,7 +178,6 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
     }
-    com_spinlock_release(&proc->fd_lock);
 
     com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
     proc->exited       = true;
@@ -184,8 +185,33 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
     if (NULL != parent) {
         com_sys_sched_notify(&parent->notifications);
+        com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
+    com_sys_proc_release_glock();
+    com_spinlock_release(&proc->fd_lock);
+}
+
+void com_sys_proc_stop(com_proc_t *proc) {
+    com_sys_proc_acquire_glock();
+    if (proc->stopped) {
+        goto end;
+    }
+
+    com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
+    proc->stopped      = true;
+
+    if (NULL != parent) {
+        com_sys_sched_notify(&parent->notifications);
+        com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
+    }
+
+    com_thread_t *t, *_;
+    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
+        com_sys_signal_send_to_thread(t, SIGSTOP, proc);
+    }
+
+end:
     com_sys_proc_release_glock();
 }
 

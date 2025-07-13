@@ -58,6 +58,7 @@ typedef struct com_proc {
     pid_t                 pid;
     pid_t                 parent_pid;
     bool                  exited;
+    bool                  stopped;
     int                   exit_status;
     arch_mmu_pagetable_t *page_table;
     size_t                num_children;
@@ -102,6 +103,7 @@ void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);
 void com_sys_proc_exit(com_proc_t *proc, int status);
+void com_sys_proc_stop(com_proc_t *proc);
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
                                          com_proc_session_t *session);
 int com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group);
