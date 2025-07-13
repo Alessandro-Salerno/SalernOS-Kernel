@@ -30,7 +30,7 @@
 #define X86_64_MSR_KERNELGSBASE 0xC0000102
 
 #define X86_64_MSR_WRITE(reg, val) __hdr_x86_64_msr_write(reg, val)
-#define X86_64_MSR_READ(reg) __hdr_x86_64_msr_read(reg)
+#define X86_64_MSR_READ(reg)       __hdr_x86_64_msr_read(reg)
 
 static inline uint32_t __hdr_x86_64_msr_read(uint32_t reg) {
     uint64_t low, high;

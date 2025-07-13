@@ -23,7 +23,7 @@
 #define X86_64_IO_PORT_E9 0xE9
 
 #define X86_64_IO_OUTB(port, data) __hdr_x86_64_io_outb(port, data)
-#define X86_64_IO_INB(port) __hdr_x86_64_io_inb(port)
+#define X86_64_IO_INB(port)        __hdr_x86_64_io_inb(port)
 
 static inline void __hdr_x86_64_io_outb(uint16_t port, uint8_t data) {
     asm volatile("outb %0, %1" : : "a"(data), "Nd"(port));

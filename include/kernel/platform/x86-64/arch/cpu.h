@@ -29,19 +29,16 @@
 #include <vendor/tailq.h>
 
 #define ARCH_CPU_SET_INTERRUPT_STACK(cpu, kstack) \
-(cpu)->ist.rsp0 = (uint64_t)kstack
+    (cpu)->ist.rsp0 = (uint64_t)kstack
 
-#define ARCH_CPU_GET() __hdr_arch_cpu_get()
+#define ARCH_CPU_GET()        __hdr_arch_cpu_get()
 #define ARCH_CPU_GET_THREAD() __hdr_arch_cpu_get_thread()
-#define ARCH_CPU_GET_ID() __hdr_arch_cpu_get_id()
+#define ARCH_CPU_GET_ID()     __hdr_arch_cpu_get_id()
 
-#define ARCH_CPU_PAUSE() \
-    asm volatile("pause")
+#define ARCH_CPU_PAUSE() asm volatile("pause")
 
-#define ARCH_CPU_DISABLE_INTERRUPTS() \
-    asm volatile("cli")
-#define ARCH_CPU_ENABLE_INTERRUPTS() \
-    asm volatile("sti")
+#define ARCH_CPU_DISABLE_INTERRUPTS() asm volatile("cli")
+#define ARCH_CPU_ENABLE_INTERRUPTS()  asm volatile("sti")
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
 
@@ -60,8 +57,8 @@ typedef struct arch_cpu {
     struct com_thread_tailq zombie_queue;
 } arch_cpu_t;
 
-#define ARCH_CPU_SET(cpuptr) \
-    (cpuptr)->self = (cpuptr); \
+#define ARCH_CPU_SET(cpuptr)                                 \
+    (cpuptr)->self = (cpuptr);                               \
     X86_64_MSR_WRITE(X86_64_MSR_GSBASE, (uint64_t)(cpuptr)); \
     X86_64_MSR_WRITE(X86_64_MSR_KERNELGSBASE, (uint64_t)(cpuptr))
 
@@ -71,7 +68,7 @@ static inline arch_cpu_t *__hdr_arch_cpu_get(void) {
     return cpu;
 }
 
-static inline struct com_thread *__hrd_arch_cpu_get_thread(void) {
+static inline struct com_thread *__hdr_arch_cpu_get_thread(void) {
     struct com_thread *thread;
     asm volatile("mov %%gs:0, %%rax" : "=a"(thread) : : "memory");
     return thread;

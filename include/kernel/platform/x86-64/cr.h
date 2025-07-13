@@ -20,11 +20,11 @@
 
 #include <stdint.h>
 
-#define X86_64_CR_R0() __hdr_x86_64_cr_r0()
-#define X86_64_CR_R2() __hdr_x86_64_cr_r2()
-#define X86_64_CR_R4() __hdr_x86_64_cr_r4()
-#define X86_64_CR_W0() __hdr_x86_64_cr_w0()
-#define X86_64_CR_W4() __hdr_x86_64_cr_w4()
+#define X86_64_CR_R0()    __hdr_x86_64_cr_r0()
+#define X86_64_CR_R2()    __hdr_x86_64_cr_r2()
+#define X86_64_CR_R4()    __hdr_x86_64_cr_r4()
+#define X86_64_CR_W0(val) __hdr_x86_64_cr_w0(val)
+#define X86_64_CR_W4(val) __hdr_x86_64_cr_w4(val)
 
 static inline uint64_t __hdr_x86_64_cr_r0(void) {
     uint64_t val;
