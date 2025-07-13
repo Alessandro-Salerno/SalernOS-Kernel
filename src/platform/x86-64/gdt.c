@@ -41,7 +41,7 @@ typedef struct {
 
 void x86_64_gdt_init(void) {
     KLOG("copying gdt template to cpu struct");
-    arch_cpu_t *cur_cpu = hdr_arch_cpu_get();
+    arch_cpu_t *cur_cpu = ARCH_CPU_GET();
 
     cur_cpu->gdt[0] = GdtTemplate[0];
     cur_cpu->gdt[1] = GdtTemplate[1];
@@ -52,7 +52,7 @@ void x86_64_gdt_init(void) {
     cur_cpu->gdt[6] = GdtTemplate[6];
 
     KLOG("applying changes to gdt template");
-    uintptr_t ist_addr = (uintptr_t)&hdr_arch_cpu_get()->ist;
+    uintptr_t ist_addr = (uintptr_t)&ARCH_CPU_GET()->ist;
 
     // Add IST to GDT
     cur_cpu->gdt[5] |= ((ist_addr & 0xff000000) << 32) |
@@ -61,7 +61,7 @@ void x86_64_gdt_init(void) {
     cur_cpu->gdt[6] = (ist_addr >> 32) & 0xffffffff;
 
     gdtr_t gdtr = {.size    = sizeof(GdtTemplate) - 1,
-                   .address = (uintptr_t)&hdr_arch_cpu_get()->gdt};
+                   .address = (uintptr_t)&ARCH_CPU_GET()->gdt};
 
     KLOG("loading gdt");
     asm volatile("lgdt (%%rax)" : : "a"(&gdtr) : "memory");

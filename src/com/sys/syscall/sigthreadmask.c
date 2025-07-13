@@ -32,7 +32,7 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
     com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
     // Unlike with sigprocmask, a thread cannot have race conditiosn on
     // curr_thread->masked_signals, so there's no need to use atomic operations

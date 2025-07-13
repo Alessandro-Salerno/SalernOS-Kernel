@@ -37,7 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_truncate) {
     off_t size = COM_SYS_SYSCALL_ARG(off_t, 2);
 
     com_syscall_ret_t ret  = {0};
-    com_proc_t       *curr = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t       *curr = ARCH_CPU_GET_THREAD()->proc;
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
 
     if (NULL == file) {

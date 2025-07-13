@@ -34,7 +34,7 @@
 COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     KDEBUG("JE GOT CALLED!!!");
     COM_SYS_SYSCALL_UNUSED_START(0);
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_spinlock_acquire(&curr_thread->sched_lock);
     KASSERT(curr_thread->runnable);
     KASSERT(!curr_thread->proc->exited);

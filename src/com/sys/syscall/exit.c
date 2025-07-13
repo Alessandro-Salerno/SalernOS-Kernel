@@ -35,7 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
 
     int exit_status = COM_SYS_SYSCALL_ARG(int, 1);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
     // KDEBUG(
     // "exiting pid=%u with num_ref=%u", curr_proc->pid, curr_proc->num_ref);

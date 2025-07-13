@@ -41,7 +41,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     char *const    *argv = COM_SYS_SYSCALL_ARG(char *const *, 2);
     char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
 
-    com_thread_t *thread = hdr_arch_cpu_get_thread();
+    com_thread_t *thread = ARCH_CPU_GET_THREAD();
     com_spinlock_acquire(&thread->sched_lock);
     com_proc_t *proc = thread->proc;
 

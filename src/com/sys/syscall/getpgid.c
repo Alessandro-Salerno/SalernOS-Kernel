@@ -29,7 +29,7 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
 
     pid_t pid = COM_SYS_SYSCALL_ARG(pid_t, 1);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     if (0 == pid) {

@@ -57,9 +57,9 @@ static uint32_t lapic_read(uint32_t offset) {
 }
 
 static uint16_t pit_read(void) {
-    hdr_x86_64_io_outb(0x43, 0);
-    uint8_t low  = hdr_x86_64_io_inb(0x40);
-    uint8_t high = hdr_x86_64_io_inb(0x40);
+    X86_64_IO_OUTB(0x43, 0);
+    uint8_t low  = X86_64_IO_INB(0x40);
+    uint8_t high = X86_64_IO_INB(0x40);
     return (uint16_t)low | ((uint16_t)high << 8);
 }
 
@@ -72,9 +72,9 @@ static void calibrate(void) {
     lapic_write(LAPIC_LVT_TIMER, 1 << 16);
     lapic_write(LAPIC_DIV_CONF, 0);
 
-    hdr_x86_64_io_outb(0x43, 0x34);
-    hdr_x86_64_io_outb(0x40, 0xff);
-    hdr_x86_64_io_outb(0x40, 0xff);
+    X86_64_IO_OUTB(0x43, 0x34);
+    X86_64_IO_OUTB(0x40, 0xff);
+    X86_64_IO_OUTB(0x40, 0xff);
 
     uint64_t delta    = 32768;
     uint16_t start    = pit_read();
@@ -95,7 +95,7 @@ static void calibrate(void) {
 }
 
 void x86_64_lapic_bsp_init(void) {
-    arch_mmu_map(hdr_arch_cpu_get()->root_page_table,
+    arch_mmu_map(ARCH_CPU_GET()->root_page_table,
                  (void *)ARCH_PHYS_TO_HHDM(BSP_APIC_ADDR),
                  BSP_APIC_ADDR,
                  ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |

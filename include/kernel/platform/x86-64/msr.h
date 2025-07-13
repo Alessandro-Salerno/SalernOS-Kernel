@@ -29,13 +29,16 @@
 #define X86_64_MSR_GSBASE       0xC0000101
 #define X86_64_MSR_KERNELGSBASE 0xC0000102
 
-static inline uint32_t hdr_x86_64_msr_read(uint32_t reg) {
+#define X86_64_MSR_WRITE(reg, val) __hdr_x86_64_msr_write(reg, val)
+#define X86_64_MSR_READ(reg) __hdr_x86_64_msr_read(reg)
+
+static inline uint32_t __hdr_x86_64_msr_read(uint32_t reg) {
     uint64_t low, high;
     asm volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(reg));
     return (high << 32) | low;
 }
 
-static inline void hdr_x86_64_msr_write(uint32_t reg, uint64_t val) {
+static inline void __hdr_x86_64_msr_write(uint32_t reg, uint64_t val) {
     uint32_t low  = val & 0xFFFFFFFF;
     uint32_t high = (val >> 32) & 0xFFFFFFFF;
     asm volatile("wrmsr" : : "a"(low), "d"(high), "c"(reg));

@@ -28,9 +28,9 @@
 
 __attribute__((noreturn)) void
 com_panic(arch_context_t *ctx, const char *fmt, ...) {
-    hdr_arch_cpu_interrupt_disable();
+    ARCH_CPU_DISABLE_INTERRUPTS();
     com_io_log_panic();
-    kprintf("kernel panic on cpu %u\n", hdr_arch_cpu_get_id());
+    kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());
 
     if (NULL != fmt) {
         va_list args;
@@ -45,7 +45,7 @@ com_panic(arch_context_t *ctx, const char *fmt, ...) {
     }
 
     while (1) {
-        hdr_arch_cpu_interrupt_disable();
+        ARCH_CPU_DISABLE_INTERRUPTS();
         ARCH_CPU_HALT();
     }
 }

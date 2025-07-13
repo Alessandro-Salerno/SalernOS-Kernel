@@ -35,7 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
-    com_proc_t       *curr_proc = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     struct sigaction *tmp       = NULL;
 
     if (NULL != act) {

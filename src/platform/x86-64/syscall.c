@@ -28,7 +28,7 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 #ifdef X86_64_SYSCALL_LOG
     KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
            "cpu=%d)",
@@ -45,16 +45,16 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                ? curr_thread->cpu->id
                : -1);
 #endif
-    hdr_arch_cpu_get_thread()->lock_depth = 0;
-    hdr_arch_cpu_interrupt_enable();
+    ARCH_CPU_GET_THREAD()->lock_depth = 0;
+    ARCH_CPU_ENABLE_INTERRUPTS();
     com_intf_syscall_t handler = Com_Sys_Syscall_Table[ctx->rax];
     KASSERT(NULL != handler);
     com_syscall_ret_t ret =
         handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
     ctx->rax = ret.value;
     ctx->rdx = ret.err;
-    // KDEBUG("lock depth = %d", hdr_arch_cpu_get()->lock_depth);
-    // KDEBUG("sched lock = %d", hdr_arch_cpu_get()->sched_lock);
+    // KDEBUG("lock depth = %d", ARCH_CPU_GET()->lock_depth);
+    // KDEBUG("sched lock = %d", ARCH_CPU_GET()->sched_lock);
     if (0 != curr_thread->lock_depth) {
         KDEBUG("in syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
                "cpu=%d) lock depth check failed with value %d",
@@ -72,9 +72,9 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                    : 777, // NOTE: this means that the CPU was not set
                curr_thread->lock_depth);
     }
-    KASSERT(0 == hdr_arch_cpu_get_thread()->lock_depth);
-    hdr_arch_cpu_interrupt_disable();
-    hdr_arch_cpu_get_thread()->lock_depth = 1;
+    KASSERT(0 == ARCH_CPU_GET_THREAD()->lock_depth);
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    ARCH_CPU_GET_THREAD()->lock_depth = 1;
     // KDEBUG("syscall ret (%u, %u)", ret.value, ret.err);
 }
 
@@ -84,8 +84,8 @@ COM_SYS_SYSCALL(arch_syscall_set_tls) {
 
     uintptr_t ptr = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
 
-    hdr_arch_cpu_get_thread()->xctx.fsbase = ptr;
-    hdr_x86_64_msr_write(X86_64_MSR_FSBASE, ptr);
+    ARCH_CPU_GET_THREAD()->xctx.fsbase = ptr;
+    X86_64_MSR_WRITE(X86_64_MSR_FSBASE, ptr);
 
     return COM_SYS_SYSCALL_OK(0);
 }

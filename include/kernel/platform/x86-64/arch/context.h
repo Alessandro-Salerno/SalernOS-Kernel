@@ -75,14 +75,14 @@
     x86_64_ctx_switch((to), (from), (from_sched_lock))
 
 #define ARCH_CONTEXT_RESTORE_TLC(ctx) \
-    hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
+    X86_64_MSR_WRITE(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
 
 #define ARCH_CONTEXT_SAVE_EXTRA(xctx) \
     asm volatile("fxsave (%0)" : : "r"(&((xctx).fpu)) : "memory")
 
 #define ARCH_CONTEXT_RESTORE_EXTRA(xctx)                            \
     asm volatile("fxrstor (%0)" : : "r"(&((xctx).fpu)) : "memory"); \
-    hdr_x86_64_msr_write(X86_64_MSR_FSBASE, (xctx).fsbase);
+    X86_64_MSR_WRITE(X86_64_MSR_FSBASE, (xctx).fsbase);
 
 #define ARCH_CONTEXT_INIT_EXTRA(xctx)                      \
     {                                                      \

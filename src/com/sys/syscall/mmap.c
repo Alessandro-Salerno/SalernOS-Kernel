@@ -45,7 +45,7 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
         return COM_SYS_SYSCALL_ERR(ENOSYS);
     }
 
-    com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
 
     flags &= 0xffffffff;
     // KASSERT(MAP_ANONYMOUS & flags);

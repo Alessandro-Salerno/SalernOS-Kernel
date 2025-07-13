@@ -35,7 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     }
 
     com_syscall_ret_t ret       = {-1, 0};
-    com_proc_t       *curr_proc = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
     com_proc_t *proc = curr_proc;
     KASSERT(NULL != proc);

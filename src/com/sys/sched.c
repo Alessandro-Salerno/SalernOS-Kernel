@@ -37,9 +37,9 @@ static com_spinlock_t          ZombieProcLock = COM_SPINLOCK_NEW();
 static struct com_thread_tailq ZombieThreadQueue;
 
 static void sched_idle(void) {
-    hdr_arch_cpu_get_thread()->lock_depth = 0;
+    ARCH_CPU_GET_THREAD()->lock_depth = 0;
     for (;;) {
-        hdr_arch_cpu_interrupt_enable();
+        ARCH_CPU_ENABLE_INTERRUPTS();
         ARCH_CPU_HALT();
     }
 }
@@ -56,7 +56,7 @@ static void sched_reaper_thread(void) {
         for (com_thread_t *zombie;
              NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue));) {
             com_spinlock_acquire(&zombie->sched_lock);
-            hdr_arch_cpu_get_thread()->lock_depth--;
+            ARCH_CPU_GET_THREAD()->lock_depth--;
             com_proc_t *proc = zombie->proc;
             TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
             com_sys_thread_destroy(zombie);
@@ -79,7 +79,7 @@ static void sched_reaper_thread(void) {
 }
 
 void com_sys_sched_yield_nolock(void) {
-    arch_cpu_t *cpu = hdr_arch_cpu_get();
+    arch_cpu_t *cpu = ARCH_CPU_GET();
     com_spinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
     KASSERT(curr->sched_lock);
@@ -169,7 +169,7 @@ void com_sys_sched_yield_nolock(void) {
     next->cpu   = cpu;
 
     // Restore kernel stack
-    ARCH_CPU_SET_KERNEL_STACK(cpu, next->kernel_stack);
+    ARCH_CPU_SET_INTERRUPT_STACK(cpu, next->kernel_stack);
 
     // Switch threads
     // NOTE: this doesn't jump to userspace directly! Instead, this switches the
@@ -187,7 +187,7 @@ void com_sys_sched_yield_nolock(void) {
 }
 
 void com_sys_sched_yield(void) {
-    com_spinlock_acquire(&hdr_arch_cpu_get_thread()->sched_lock);
+    com_spinlock_acquire(&ARCH_CPU_GET_THREAD()->sched_lock);
     com_sys_sched_yield_nolock();
     // lock released elsewhere
 }
@@ -200,15 +200,15 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
-    com_thread_t *curr = hdr_arch_cpu_get_thread();
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
     com_spinlock_acquire(&curr->sched_lock);
-    com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
+    com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
     if (NULL != curr->cpu) {
         curr->cpu = NULL;
     }
     curr->runnable = false;
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
-    com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
+    com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 
     com_spinlock_release(cond);
     com_sys_sched_yield_nolock();
@@ -218,8 +218,8 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
 }
 
 void com_sys_sched_notify(struct com_thread_tailq *waiters) {
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    arch_cpu_t   *currcpu     = hdr_arch_cpu_get();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    arch_cpu_t   *currcpu     = ARCH_CPU_GET();
     com_thread_t *next        = TAILQ_FIRST(waiters);
     com_spinlock_acquire(&curr_thread->sched_lock);
 
@@ -238,8 +238,8 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
 }
 
 void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
-    arch_cpu_t   *currcpu     = hdr_arch_cpu_get();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    arch_cpu_t   *currcpu     = ARCH_CPU_GET();
     com_spinlock_acquire(&curr_thread->sched_lock);
 
     for (com_thread_t *next; NULL != (next = TAILQ_FIRST(waiters));) {
@@ -258,7 +258,7 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
 }
 
 void com_sys_sched_init(void) {
-    arch_cpu_t *curr_cpu  = hdr_arch_cpu_get();
+    arch_cpu_t *curr_cpu  = ARCH_CPU_GET();
     curr_cpu->idle_thread = com_sys_thread_new_kernel(NULL, sched_idle);
 }
 
@@ -269,5 +269,5 @@ void com_sys_sched_init_base(void) {
     com_thread_t *reaper_thread =
         com_sys_thread_new_kernel(NULL, sched_reaper_thread);
     reaper_thread->runnable = true;
-    TAILQ_INSERT_TAIL(&hdr_arch_cpu_get()->sched_queue, reaper_thread, threads);
+    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, reaper_thread, threads);
 }

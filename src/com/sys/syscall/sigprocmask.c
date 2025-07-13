@@ -32,7 +32,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
     com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
     com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_sigmask_t old_mask =

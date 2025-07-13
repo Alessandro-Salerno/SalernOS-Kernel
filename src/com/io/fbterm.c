@@ -102,10 +102,10 @@ void com_io_fbterm_init_buffering(void) {
     TAILQ_INIT(&BufferWaiters);
     PrintThread = com_sys_thread_new_kernel(NULL, print_buffer);
     // com_sys_thread_ready(PrintThread);
-    // com_spinlock_acquire(&hdr_arch_cpu_get()->runqueue_lock);
+    // com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
     PrintThread->runnable = true;
-    TAILQ_INSERT_TAIL(&hdr_arch_cpu_get()->sched_queue, PrintThread, threads);
-    // com_spinlock_release(&hdr_arch_cpu_get()->runqueue_lock);
+    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, PrintThread, threads);
+    // com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 }
 
 void com_io_fbterm_set_buffering(bool buffering) {

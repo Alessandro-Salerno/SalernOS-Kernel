@@ -41,7 +41,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     arch_context_t *ctx = COM_SYS_SYSCALL_CONTEXT();
 
-    com_thread_t *cur_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *cur_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc       = cur_thread->proc;
     // KDEBUG("forking pid=%u with num_ref=%u", proc->pid, proc->num_ref);
 

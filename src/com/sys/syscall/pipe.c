@@ -33,7 +33,7 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe) {
 
     int *fildes = COM_SYS_SYSCALL_ARG(int *, 1);
 
-    com_proc_t *curr = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     // TODO: check if fds are available
     uintmax_t rfd = com_sys_proc_next_fd(curr);
     uintmax_t wfd = com_sys_proc_next_fd(curr);

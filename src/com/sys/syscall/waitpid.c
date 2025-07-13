@@ -37,7 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
     KASSERT(pid > 0);
 
-    com_proc_t       *curr   = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t       *curr   = ARCH_CPU_GET_THREAD()->proc;
     com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
     com_syscall_ret_t ret    = {0, 0};
 

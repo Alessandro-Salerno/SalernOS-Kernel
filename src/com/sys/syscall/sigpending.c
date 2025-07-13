@@ -28,7 +28,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
 
     com_sigset_t *sigset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 1);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
     com_sys_signal_sigset_emptY(sigset);
     sigset->sig[0] =

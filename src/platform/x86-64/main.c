@@ -85,7 +85,7 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
     (void)ctx;
     static uint8_t   prev_code = 0;
     static uintmax_t mod       = 0;
-    uint8_t          code      = hdr_x86_64_io_inb(0x60);
+    uint8_t          code      = X86_64_IO_INB(0x60);
 
     if (0xe0 == prev_code) {
         if (0x53 == code) {
@@ -163,25 +163,24 @@ end:
 
 USED void kbd_eoi(com_isr_t *isr) {
     (void)isr;
-    hdr_x86_64_io_outb(0x20, 0x20);
+    X86_64_IO_OUTB(0x20, 0x20);
 }
 
 void kernel_entry(void) {
-    hdr_arch_cpu_set(&BaseCpu);
+    ARCH_CPU_SET(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
-    TAILQ_INIT(&BaseCpu.zombie_queue);
     BaseCpu.runqueue_lock = COM_SPINLOCK_NEW();
 
-    hdr_x86_64_io_outb(0x20, 0x11);
-    hdr_x86_64_io_outb(0xa0, 0x11);
-    hdr_x86_64_io_outb(0x21, 0x20);
-    hdr_x86_64_io_outb(0xa1, 0x28);
-    hdr_x86_64_io_outb(0x21, 4);
-    hdr_x86_64_io_outb(0xa1, 2);
-    hdr_x86_64_io_outb(0x21, 0x01);
-    hdr_x86_64_io_outb(0xa1, 0x01);
-    hdr_x86_64_io_outb(0x21, 0b11111101);
-    hdr_x86_64_io_outb(0xA1, 0b11111111);
+    X86_64_IO_OUTB(0x20, 0x11);
+    X86_64_IO_OUTB(0xa0, 0x11);
+    X86_64_IO_OUTB(0x21, 0x20);
+    X86_64_IO_OUTB(0xa1, 0x28);
+    X86_64_IO_OUTB(0x21, 4);
+    X86_64_IO_OUTB(0xa1, 2);
+    X86_64_IO_OUTB(0x21, 0x01);
+    X86_64_IO_OUTB(0xa1, 0x01);
+    X86_64_IO_OUTB(0x21, 0b11111101);
+    X86_64_IO_OUTB(0xA1, 0b11111111);
     com_sys_interrupt_register(0x21, kbd, kbd_eoi);
 
     arch_framebuffer_t *fb = arch_info_get_fb();
@@ -255,8 +254,8 @@ void kernel_entry(void) {
 
     com_sys_proc_new_session_nolock(proc, tty_dev);
 
-    hdr_arch_cpu_get()->ist.rsp0 = (uint64_t)thread->kernel_stack;
-    hdr_arch_cpu_get()->thread   = thread;
+    ARCH_CPU_GET()->ist.rsp0 = (uint64_t)thread->kernel_stack;
+    ARCH_CPU_GET()->thread   = thread;
 
     arch_mmu_switch(proc->page_table);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);

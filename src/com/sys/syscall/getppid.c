@@ -23,5 +23,5 @@
 // SYSCALL: getpid()
 COM_SYS_SYSCALL(com_sys_syscall_getppid) {
     COM_SYS_SYSCALL_UNUSED_START(0);
-    return COM_SYS_SYSCALL_OK(hdr_arch_cpu_get_thread()->proc->parent_pid);
+    return COM_SYS_SYSCALL_OK(ARCH_CPU_GET_THREAD()->proc->parent_pid);
 }

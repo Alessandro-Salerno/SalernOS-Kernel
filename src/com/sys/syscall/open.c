@@ -37,7 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_open) {
     size_t      pathlen = COM_SYS_SYSCALL_ARG(size_t, 2);
     int         flags   = COM_SYS_SYSCALL_ARG(int, 3);
 
-    com_proc_t  *curr    = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t  *curr    = ARCH_CPU_GET_THREAD()->proc;
     com_vnode_t *file_vn = NULL;
 
     // TODO: implement O_CREAT

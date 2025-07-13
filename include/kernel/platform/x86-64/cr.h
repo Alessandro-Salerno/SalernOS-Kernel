@@ -20,28 +20,34 @@
 
 #include <stdint.h>
 
-static inline uint64_t hdr_x86_64_cr_read0() {
+#define X86_64_CR_R0() __hdr_x86_64_cr_r0()
+#define X86_64_CR_R2() __hdr_x86_64_cr_r2()
+#define X86_64_CR_R4() __hdr_x86_64_cr_r4()
+#define X86_64_CR_W0() __hdr_x86_64_cr_w0()
+#define X86_64_CR_W4() __hdr_x86_64_cr_w4()
+
+static inline uint64_t __hdr_x86_64_cr_r0(void) {
     uint64_t val;
     asm volatile("mov %%cr0, %0" : "=r"(val));
     return val;
 }
 
-static inline uint64_t hdr_x86_64_cr_read2(void) {
+static inline uint64_t __hdr_x86_64_cr_r2(void) {
     uint64_t val;
     asm volatile("mov %%cr2, %0" : "=r"(val));
     return val;
 }
 
-static inline uint64_t hdr_x86_64_cr_read4(void) {
+static inline uint64_t __hdr_x86_64_cr_r4(void) {
     uint64_t val;
     asm volatile("mov %%cr4, %0" : "=r"(val));
     return val;
 }
 
-static inline void hdr_x86_64_cr_write0(uint64_t val) {
+static inline void __hdr_x86_64_cr_w0(uint64_t val) {
     asm volatile("mov %0, %%cr0" : : "r"(val));
 }
 
-static inline void hdr_x86_64_cr_write4(uint64_t val) {
+static inline void __hdr_x86_64_cr_w4(uint64_t val) {
     asm volatile("mov %0, %%cr4" : : "r"(val));
 }

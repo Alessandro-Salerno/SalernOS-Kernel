@@ -26,7 +26,7 @@
 COM_SYS_SYSCALL(com_sys_syscall_setsid) {
     COM_SYS_SYSCALL_UNUSED_START(0);
 
-    com_proc_t *curr_proc = hdr_arch_cpu_get_thread()->proc;
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     com_spinlock_acquire(&curr_proc->pg_lock);
     KASSERT(NULL != curr_proc->proc_group);
 

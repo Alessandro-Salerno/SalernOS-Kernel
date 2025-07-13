@@ -46,25 +46,24 @@ static int     Sentinel;
 static uint8_t TemporaryStack[512 * MAX_CPUS];
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
-    hdr_arch_cpu_interrupt_disable();
+    ARCH_CPU_DISABLE_INTERRUPTS();
     arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
     cpu->runqueue_lock = COM_SPINLOCK_NEW();
-    hdr_arch_cpu_set(cpu);
+    ARCH_CPU_SET(cpu);
     KDEBUG("initializing cpu %u", cpu->id);
 
     x86_64_gdt_init();
     x86_64_idt_init();
     x86_64_idt_reload();
     x86_64_idt_set_user_invocable(0x80);
-    ARCH_CPU_SET_KERNEL_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
+    ARCH_CPU_SET_INTERRUPT_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
 
     KLOG("initializing sse on cpu %u", cpu->id);
-    hdr_x86_64_cr_write0((hdr_x86_64_cr_read0() & ~(1 << 2)) | (1 << 1));
-    hdr_x86_64_cr_write4(hdr_x86_64_cr_read4() | (3 << 9));
+    X86_64_CR_W0((X86_64_CR_R0() & ~(1 << 2)) | (1 << 1));
+    X86_64_CR_W4(X86_64_CR_R4() | (3 << 9));
 
     com_sys_sched_init();
     TAILQ_INIT(&cpu->sched_queue);
-    TAILQ_INIT(&cpu->zombie_queue);
 
     arch_mmu_switch_default();
 
@@ -78,7 +77,7 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
     cpu->idle_thread->lock_depth = 0;
     cpu->thread                  = cpu->idle_thread;
-    ARCH_CPU_SET_KERNEL_STACK(cpu, cpu->idle_thread->kernel_stack);
+    ARCH_CPU_SET_INTERRUPT_STACK(cpu, cpu->idle_thread->kernel_stack);
 
     asm("sti");
     while (1) {

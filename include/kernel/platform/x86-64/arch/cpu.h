@@ -28,8 +28,20 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-#define ARCH_CPU_SET_KERNEL_STACK(cpu, kstack) \
-    (cpu)->ist.rsp0 = (uint64_t)kstack
+#define ARCH_CPU_SET_INTERRUPT_STACK(cpu, kstack) \
+(cpu)->ist.rsp0 = (uint64_t)kstack
+
+#define ARCH_CPU_GET() __hdr_arch_cpu_get()
+#define ARCH_CPU_GET_THREAD() __hdr_arch_cpu_get_thread()
+#define ARCH_CPU_GET_ID() __hdr_arch_cpu_get_id()
+
+#define ARCH_CPU_PAUSE() \
+    asm volatile("pause")
+
+#define ARCH_CPU_DISABLE_INTERRUPTS() \
+    asm volatile("cli")
+#define ARCH_CPU_ENABLE_INTERRUPTS() \
+    asm volatile("sti")
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
 
@@ -48,38 +60,25 @@ typedef struct arch_cpu {
     struct com_thread_tailq zombie_queue;
 } arch_cpu_t;
 
-static inline void hdr_arch_cpu_set(arch_cpu_t *cpu) {
-    cpu->self = cpu;
-    hdr_x86_64_msr_write(X86_64_MSR_GSBASE, (uint64_t)cpu);
-    hdr_x86_64_msr_write(X86_64_MSR_KERNELGSBASE, (uint64_t)cpu);
-}
+#define ARCH_CPU_SET(cpuptr) \
+    (cpuptr)->self = (cpuptr); \
+    X86_64_MSR_WRITE(X86_64_MSR_GSBASE, (uint64_t)(cpuptr)); \
+    X86_64_MSR_WRITE(X86_64_MSR_KERNELGSBASE, (uint64_t)(cpuptr))
 
-static inline arch_cpu_t *hdr_arch_cpu_get(void) {
+static inline arch_cpu_t *__hdr_arch_cpu_get(void) {
     arch_cpu_t *cpu;
     asm volatile("mov %%gs:8, %%rax" : "=a"(cpu) : : "memory");
     return cpu;
 }
 
-static inline struct com_thread *hdr_arch_cpu_get_thread(void) {
+static inline struct com_thread *__hrd_arch_cpu_get_thread(void) {
     struct com_thread *thread;
     asm volatile("mov %%gs:0, %%rax" : "=a"(thread) : : "memory");
     return thread;
 }
 
-static inline long hdr_arch_cpu_get_id(void) {
+static inline long __hdr_arch_cpu_get_id(void) {
     long id;
     asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
     return id;
-}
-
-static inline void hdr_arch_cpu_pause(void) {
-    asm volatile("pause");
-}
-
-static inline void hdr_arch_cpu_interrupt_disable(void) {
-    asm volatile("cli");
-}
-
-static inline void hdr_arch_cpu_interrupt_enable(void) {
-    asm volatile("sti");
 }

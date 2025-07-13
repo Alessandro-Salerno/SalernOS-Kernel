@@ -36,7 +36,7 @@ COM_SYS_SYSCALL(com_sys_syscall_clone) {
     void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
     void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
 
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_thread_t *new_thread = com_sys_thread_new(curr_proc, NULL, 0, NULL);

@@ -23,8 +23,8 @@
 #include <kernel/com/sys/thread.h>
 
 void com_spinlock_acquire(com_spinlock_t *lock) {
-    hdr_arch_cpu_interrupt_disable();
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
         curr_thread->lock_depth++;
     }
@@ -35,7 +35,7 @@ void com_spinlock_acquire(com_spinlock_t *lock) {
         }
         // spin with no ordering constraints
         while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
-            hdr_arch_cpu_pause();
+            ARCH_CPU_PAUSE();
         }
     }
 }
@@ -47,7 +47,7 @@ void com_spinlock_release(com_spinlock_t *lock) {
     }
     KASSERT(1 == *lock);
     __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
         int oldval = curr_thread->lock_depth--;
         if (oldval == 0) {
@@ -56,18 +56,18 @@ void com_spinlock_release(com_spinlock_t *lock) {
         }
         KASSERT(oldval != 0);
         if (oldval == 1) {
-            hdr_arch_cpu_interrupt_enable();
+            ARCH_CPU_ENABLE_INTERRUPTS();
         }
     }
 }
 
 void com_spinlock_fake_release() {
-    com_thread_t *curr_thread = hdr_arch_cpu_get_thread();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
         int oldval = curr_thread->lock_depth--;
         KASSERT(oldval != 0);
         if (oldval == 1) {
-            hdr_arch_cpu_interrupt_enable();
+            ARCH_CPU_ENABLE_INTERRUPTS();
         }
     }
 }
