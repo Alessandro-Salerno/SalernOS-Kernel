@@ -34,15 +34,8 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
-    // Unlike with sigprocmask, a thread cannot have race conditiosn on
-    // curr_thread->masked_signals, so there's no need to use atomic operations
-    // If you pass in pointers to memory that is shared among mutiple theards,
-    // that's your fault!
-
-    if (NULL != oset) {
-        com_sys_signal_sigset_emptY(oset);
-        oset->sig[0] = curr_thread->masked_signals;
-    }
+    com_sigmask_t old_mask =
+        __atomic_load_n(&curr_thread->masked_signals, __ATOMIC_SEQ_CST);
 
     if (NULL == set) {
         goto noset;
@@ -50,18 +43,26 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
 
     switch (how) {
     case SIG_BLOCK:
-        curr_thread->masked_signals |= set->sig[0];
+        __atomic_fetch_or(
+            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
         break;
     case SIG_SETMASK:
-        curr_thread->masked_signals = set->sig[0];
+        __atomic_store_n(
+            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
         break;
     case SIG_UNBLOCK:
-        curr_thread->masked_signals &= set->sig[0];
+        __atomic_fetch_and(
+            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
         break;
     default:
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
 noset:
+    if (NULL != oset) {
+        com_sys_signal_sigset_emptY(oset);
+        oset->sig[0] = old_mask;
+    }
+
     return COM_SYS_SYSCALL_OK(0);
 }

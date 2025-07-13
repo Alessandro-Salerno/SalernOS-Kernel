@@ -22,6 +22,7 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/signal.h>
 #include <lib/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -40,6 +41,9 @@ void com_sys_interrupt_register(uintmax_t      vec,
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    curr_thread->lock_depth   = 1;
+
     com_isr_t *isr = &InterruptTable[vec];
 
     if (NULL == isr) {
@@ -53,4 +57,11 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     if (NULL != isr->eoi) {
         isr->eoi(isr);
     }
+
+    if (ARCH_CONTEXT_ISUSER(ctx)) {
+        com_sys_signal_dispatch(ctx);
+    }
+
+    KASSERT(1 == curr_thread->lock_depth);
+    curr_thread->lock_depth = 0;
 }

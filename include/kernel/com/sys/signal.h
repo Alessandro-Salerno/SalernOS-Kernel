@@ -18,12 +18,19 @@
 
 #pragma once
 
+#include <arch/context.h>
 #include <stdint.h>
+#include <sys/types.h>
 
-#define COM_SYS_SIGNAL_SIGMASK_INIT(maskptr)       *(maskptr) = 0UL;
-#define COM_SYS_SIGNAL_SIGMASK_SET(maskptr, sig)   *(maskptr) |= (1 << (sig))
-#define COM_SYS_SIGNAL_SIGMASK_UNSET(maskptr, sig) *(maskptr) &= ~(1 << (sig))
-#define COM_SYS_SIGNAL_SIGMASK_ISSET(mask, sig)    (mask) & (1 << (sig))
+#define COM_SYS_SIGNAL_SIGMASK_INIT(maskptr) *(maskptr) = 0UL;
+#define COM_SYS_SIGNAL_SIGMASK_SET(maskptr, sig) \
+    __atomic_fetch_or(maskptr, 1UL << ((sig) - 1), __ATOMIC_SEQ_CST)
+#define COM_SYS_SIGNAL_SIGMASK_UNSET(maskptr, sig) \
+    __atomic_fetch_and(maskptr, ~(1UL << ((sig) - 1)), __ATOMIC_SEQ_CST)
+#define COM_SYS_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
+    __atomic_fetch_and(maskptr, 1UL << ((sig) - 1), __ATOMIC_SEQ_CST)
+#define COM_SYS_SIGNAL_SIGMASK_GET(maskptr) \
+    __atomic_load_n(maskptr, __ATOMIC_SEQ_CST)
 
 typedef struct {
     unsigned long sig[1024 / (8 * sizeof(long))];
@@ -36,4 +43,11 @@ typedef struct {
 // ever access sigset_t.sig[0]
 typedef unsigned long com_sigmask_t;
 
+#include <kernel/com/sys/proc.h>
+
 void com_sys_signal_sigset_emptY(com_sigset_t *set);
+int  com_sys_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
+int  com_sys_signal_send_to_proc_group(pid_t            pgid,
+                                       int              sig,
+                                       struct com_proc *sender);
+void com_sys_signal_dispatch(arch_context_t *ctx);
