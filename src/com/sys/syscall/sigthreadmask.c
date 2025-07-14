@@ -33,36 +33,16 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_sigmask_t old_mask =
-        __atomic_load_n(&curr_thread->masked_signals, __ATOMIC_SEQ_CST);
+    com_syscall_ret_t ret     = {0, 0};
+    int               sig_ret = com_sys_signal_set_mask(
+        &curr_thread->masked_signals, how, set, oset, &curr_proc->signal_lock);
 
-    if (NULL == set) {
-        goto noset;
+    if (0 != sig_ret) {
+        ret.value = -1;
+        ret.err   = sig_ret;
     }
 
-    switch (how) {
-    case SIG_BLOCK:
-        __atomic_fetch_or(
-            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
-        break;
-    case SIG_SETMASK:
-        __atomic_store_n(
-            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
-        break;
-    case SIG_UNBLOCK:
-        __atomic_fetch_and(
-            &curr_thread->masked_signals, set->sig[0], __ATOMIC_SEQ_CST);
-        break;
-    default:
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
-
-noset:
-    if (NULL != oset) {
-        com_sys_signal_sigset_emptY(oset);
-        oset->sig[0] = old_mask;
-    }
-
-    return COM_SYS_SYSCALL_OK(0);
+    return ret;
 }

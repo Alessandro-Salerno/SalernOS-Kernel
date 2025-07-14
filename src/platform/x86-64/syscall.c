@@ -28,6 +28,9 @@ extern com_intf_syscall_t Com_Sys_Syscall_Table[];
 
 void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
+#ifndef DISABLE_LOGGING
+    arch_context_t orig_ctx = *ctx;
+#endif
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 #ifdef X86_64_SYSCALL_LOG
     KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "

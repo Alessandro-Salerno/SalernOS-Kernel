@@ -45,13 +45,13 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
         return ESRCH;
     }
 
-    com_sys_proc_acquire_glock();
+    com_spinlock_acquire(&proc->threads_lock);
     if (proc->exited) {
         com_sys_proc_release_glock();
         return EPERM;
     }
 
-    com_spinlock_acquire(&proc->threads_lock);
+    com_spinlock_acquire(&proc->signal_lock);
     com_thread_t *t, *_;
     bool          found = false;
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
@@ -60,13 +60,14 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
             break;
         }
     }
-    com_spinlock_release(&proc->threads_lock);
 
     if (!found) {
         COM_SYS_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
     }
 
-    com_sys_proc_release_glock();
+    com_spinlock_release(&proc->signal_lock);
+    com_spinlock_release(&proc->threads_lock);
+
     return 0;
 }
 
@@ -83,14 +84,56 @@ int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
         com_sys_signal_send_to_proc(p->pid, sig, sender);
     }
     com_spinlock_release(&group->procs_lock);
+
     return 0;
 }
 
 int com_sys_signal_send_to_thread(struct com_thread *thread,
                                   int                sig,
                                   com_proc_t        *sender) {
-    return send_to_thread(thread, sig);
+    // TODO: actually check that this can be done (sender check)
+    com_spinlock_acquire(&thread->proc->signal_lock);
+    int ret = send_to_thread(thread, sig);
+    com_spinlock_release(&thread->proc->signal_lock);
+    return ret;
 }
 
 void com_sys_signal_dispatch(arch_context_t *ctx) {
+}
+
+int com_sys_signal_set_mask(com_sigmask_t  *mask,
+                            int             how,
+                            com_sigset_t   *set,
+                            com_sigset_t   *oset,
+                            com_spinlock_t *signal_lock) {
+    com_spinlock_acquire(signal_lock);
+    com_sigmask_t old_mask = *mask;
+
+    if (NULL == set) {
+        goto noset;
+    }
+
+    switch (how) {
+    case SIG_BLOCK:
+        *mask |= set->sig[0];
+        break;
+    case SIG_SETMASK:
+        *mask = set->sig[0];
+        break;
+    case SIG_UNBLOCK:
+        *mask &= set->sig[0];
+        break;
+    default:
+        com_spinlock_release(signal_lock);
+        return EINVAL;
+    }
+
+noset:
+    if (NULL != oset) {
+        com_sys_signal_sigset_emptY(oset);
+        oset->sig[0] = old_mask;
+    }
+
+    com_spinlock_release(signal_lock);
+    return 0;
 }

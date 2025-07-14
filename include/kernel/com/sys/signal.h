@@ -22,15 +22,15 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+// NOTE: These must be used in a thread-safe manner, i.e. while holding the
+// process'es signal_lock, since they're no longer atomic
 #define COM_SYS_SIGNAL_SIGMASK_INIT(maskptr) *(maskptr) = 0UL;
 #define COM_SYS_SIGNAL_SIGMASK_SET(maskptr, sig) \
-    __atomic_fetch_or(maskptr, 1UL << ((sig) - 1), __ATOMIC_SEQ_CST)
+    (*(maskptr) |= 1UL << ((sig) - 1))
 #define COM_SYS_SIGNAL_SIGMASK_UNSET(maskptr, sig) \
-    __atomic_fetch_and(maskptr, ~(1UL << ((sig) - 1)), __ATOMIC_SEQ_CST)
+    (*(maskptr) &= ~(1UL << ((sig) - 1)))
 #define COM_SYS_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
-    __atomic_fetch_and(maskptr, 1UL << ((sig) - 1), __ATOMIC_SEQ_CST)
-#define COM_SYS_SIGNAL_SIGMASK_GET(maskptr) \
-    __atomic_load_n(maskptr, __ATOMIC_SEQ_CST)
+    (*(maskptr) & (1UL << ((sig) - 1)))
 
 typedef struct {
     unsigned long sig[1024 / (8 * sizeof(long))];
@@ -55,3 +55,8 @@ int  com_sys_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);
 void com_sys_signal_dispatch(arch_context_t *ctx);
+int  com_sys_signal_set_mask(com_sigmask_t  *mask,
+                             int             how,
+                             com_sigset_t   *set,
+                             com_sigset_t   *oset,
+                             com_spinlock_t *signal_lock);

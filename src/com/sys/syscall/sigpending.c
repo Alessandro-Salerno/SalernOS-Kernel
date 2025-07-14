@@ -29,10 +29,12 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     com_sigset_t *sigset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 1);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_sys_signal_sigset_emptY(sigset);
-    sigset->sig[0] =
-        __atomic_load_n(&curr_thread->pending_signals, __ATOMIC_SEQ_CST);
+    com_spinlock_acquire(&curr_proc->signal_lock);
+    sigset->sig[0] = curr_thread->pending_signals;
+    com_spinlock_release(&curr_proc->signal_lock);
 
     return COM_SYS_SYSCALL_OK(0);
 }

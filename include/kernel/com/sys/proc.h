@@ -82,6 +82,7 @@ typedef struct com_proc {
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
 
+    com_spinlock_t    signal_lock;
     struct sigaction *sigaction[NSIG];
     com_sigmask_t     pending_signals;
     com_sigmask_t     masked_signals;

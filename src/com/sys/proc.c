@@ -80,6 +80,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->pg_lock    = COM_SPINLOCK_NEW();
     proc->proc_group = NULL;
 
+    proc->signal_lock = COM_SPINLOCK_NEW();
     COM_SYS_SIGNAL_SIGMASK_INIT(&proc->pending_signals);
     COM_SYS_SIGNAL_SIGMASK_INIT(&proc->masked_signals);
 
@@ -170,6 +171,7 @@ void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {
+    com_spinlock_acquire(&proc->signal_lock);
     com_sys_proc_acquire_glock();
 
     com_spinlock_acquire(&proc->fd_lock);
@@ -188,12 +190,14 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
         com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
-    com_sys_proc_release_glock();
     com_spinlock_release(&proc->fd_lock);
+    com_sys_proc_release_glock();
+    com_spinlock_release(&proc->signal_lock);
 }
 
 void com_sys_proc_stop(com_proc_t *proc) {
     com_sys_proc_acquire_glock();
+
     if (proc->stopped) {
         goto end;
     }
