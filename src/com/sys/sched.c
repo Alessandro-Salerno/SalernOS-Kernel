@@ -263,6 +263,26 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
     com_spinlock_release(&curr_thread->sched_lock);
 }
 
+void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
+    arch_cpu_t *currcpu = ARCH_CPU_GET();
+    if (NULL != thread->waiting_on) {
+        KASSERT(NULL == thread->cpu);
+        TAILQ_REMOVE(thread->waiting_on, thread, threads);
+        com_spinlock_acquire(&currcpu->runqueue_lock);
+        TAILQ_INSERT_HEAD(&currcpu->sched_queue, thread, threads);
+        thread->runnable     = true;
+        thread->waiting_on   = NULL;
+        thread->waiting_cond = NULL;
+        com_spinlock_release(&currcpu->runqueue_lock);
+    }
+}
+
+void com_sys_sched_notify_thread(com_thread_t *thread) {
+    com_spinlock_acquire(&thread->sched_lock);
+    com_sys_sched_notify_thread_nolock(thread);
+    com_spinlock_release(&thread->sched_lock);
+}
+
 void com_sys_sched_init(void) {
     arch_cpu_t *curr_cpu  = ARCH_CPU_GET();
     curr_cpu->idle_thread = com_sys_thread_new_kernel(NULL, sched_idle);

@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <kernel/platform/x86-64/context.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/mem.h>
 #include <stdint.h>
@@ -103,6 +104,53 @@
             (child_xctx).fpu, (parent_xctx).fpu, sizeof((parent_xctx).fpu)); \
         (child_xctx).fsbase = (parent_xctx).fsbase;                          \
     }
+
+#define ARCH_CONTEXT_ALLOC_SIGFRAME(sframeptrptr, stackptr, ctxptr) \
+    {                                                               \
+        uint64_t _alloc_stack = (uint64_t)(ctxptr)->rsp;            \
+        _alloc_stack -= 128;                                        \
+        _alloc_stack &= 0xFUL;                                      \
+        _alloc_stack -= sizeof(com_sigframe_t);                     \
+        _alloc_stack &= 0xFUL;                                      \
+        *(sframeptrptr) = (void *)_alloc_stack;                     \
+        *(stackptr)     = _alloc_stack;                             \
+    }
+
+#define ARCH_CONTEXT_SETUP_SIGFRAME(sframeptr, ctxptr)                         \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8]  = (ctxptr)->r8;  \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9]  = (ctxptr)->r9;  \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10] = (ctxptr)->r10; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R11] = (ctxptr)->r11; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R12] = (ctxptr)->r12; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R13] = (ctxptr)->r13; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R14] = (ctxptr)->r14; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R15] = (ctxptr)->r15; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RDI] = (ctxptr)->rdi; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSI] = (ctxptr)->rsi; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RBP] = (ctxptr)->rbp; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RBX] = (ctxptr)->rbx; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RDX] = (ctxptr)->rdx; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RAX] = (ctxptr)->rax; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RCX] = (ctxptr)->rcx; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSP] = (ctxptr)->rsp; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP] = (ctxptr)->rip; \
+    (sframeptr)->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL] =                \
+        (ctxptr)->rflags;
+
+#define ARCH_CONTEXT_SETUP_SIGRESTORE(sframeptr, stackptr, restorer) \
+    {                                                                \
+        uint64_t _restore_stack = *(stackptr);                       \
+        _restore_stack -= 8;                                         \
+        *(uint64_t *)_restore_stack = (uint64_t)(restorer);          \
+        *(stackptr)                 = _restore_stack;                \
+    }
+
+#define ARCH_CONTEXT_SIGNAL_TRAMPOLINE(sframeptr, ctxptr, stack, handler, sig) \
+    (ctxptr)->rip = (uint64_t)(handler);                                       \
+    (ctxptr)->rsp = (uint64_t)(stack);                                         \
+    (ctxptr)->rdi = (sig);                                                     \
+    (ctxptr)->rsi = (uint64_t)(&(sframeptr)->info);                            \
+    (ctxptr)->rdx = (uint64_t)(&(sframeptr)->uc);
 
 typedef struct {
     uint64_t cr2;

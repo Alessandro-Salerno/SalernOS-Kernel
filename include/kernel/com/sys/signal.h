@@ -19,6 +19,7 @@
 #pragma once
 
 #include <arch/context.h>
+#include <signal.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -43,6 +44,19 @@ typedef struct {
 // ever access sigset_t.sig[0]
 typedef unsigned long com_sigmask_t;
 
+typedef struct com_sigaction {
+    void (*sa_action)(int);
+    // void (*sa_action)(int, siginfo_t *, void *);
+    unsigned long sa_flags;
+    void (*sa_restorer)(void);
+    com_sigset_t sa_mask;
+} com_sigaction_t;
+
+typedef struct com_sigframe {
+    siginfo_t  info;
+    ucontext_t uc;
+} com_sigframe_t;
+
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 
@@ -55,8 +69,11 @@ int  com_sys_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);
 void com_sys_signal_dispatch(arch_context_t *ctx);
+void com_sys_signal_return(arch_context_t *ctx);
 int  com_sys_signal_set_mask(com_sigmask_t  *mask,
                              int             how,
                              com_sigset_t   *set,
                              com_sigset_t   *oset,
                              com_spinlock_t *signal_lock);
+int  com_sys_signal_check_nolock(void);
+int  com_sys_signal_check(void);

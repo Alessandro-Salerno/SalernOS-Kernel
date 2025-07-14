@@ -45,7 +45,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
-    thread->tid = __atomic_add_fetch(&NextTid, 1, __ATOMIC_SEQ_CST);
+    thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_SEQ_CST);
 
     thread->waiting_on   = NULL;
     thread->waiting_cond = NULL;
@@ -86,8 +86,7 @@ void com_sys_thread_destroy(com_thread_t *thread) {
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
 }
 
-void com_sys_thread_ready(com_thread_t *thread) {
-    com_spinlock_acquire(&thread->sched_lock);
+void com_sys_thread_ready_nolock(com_thread_t *thread) {
     arch_cpu_t *curr_cpu = x86_64_smp_get_random();
     com_spinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
@@ -95,8 +94,13 @@ void com_sys_thread_ready(com_thread_t *thread) {
     thread->waiting_on   = NULL;
     thread->waiting_cond = NULL;
     com_spinlock_release(&curr_cpu->runqueue_lock);
-    com_spinlock_release(&thread->sched_lock);
     KDEBUG("thread with tid=%u is now runnable on cpu %u",
            thread->tid,
            curr_cpu->id);
+}
+
+void com_sys_thread_ready(com_thread_t *thread) {
+    com_spinlock_acquire(&thread->sched_lock);
+    com_sys_thread_ready_nolock(thread);
+    com_spinlock_release(&thread->sched_lock);
 }

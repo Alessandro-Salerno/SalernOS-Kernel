@@ -19,33 +19,44 @@
 #include <arch/cpu.h>
 #include <errno.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
-#include <signal.h>
 
-// SYSCALL: sigaction(int sig, struct sigaction *act, struct sigaction *oact)
-COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
+// SYSCALL: kill(pid_t pid, int sig)
+COM_SYS_SYSCALL(com_sys_syscall_kill) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+    COM_SYS_SYSCALL_UNUSED_START(3);
 
-    int              sig  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigaction_t *act  = COM_SYS_SYSCALL_ARG(void *, 2);
-    com_sigaction_t *oact = COM_SYS_SYSCALL_ARG(void *, 3);
+    pid_t pid = COM_SYS_SYSCALL_ARG(pid_t, 1);
+    int   sig = COM_SYS_SYSCALL_ARG(int, 2);
 
-    if (sig < 1 || sig > NSIG) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
+    com_syscall_ret_t ret         = {0, 0};
+    com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t       *curr_proc   = curr_thread->proc;
+
+    if (0 == pid) {
+        pid = curr_proc->proc_group->pgid;
     }
 
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_spinlock_acquire(&curr_proc->signal_lock);
-
-    if (NULL != oact) {
-        *oact = *curr_proc->sigaction[sig];
+    if (-1 == pid) {
+        // TODO: implement signal to all
+        return COM_SYS_SYSCALL_ERR(ENOSYS);
     }
 
-    if (NULL != act) {
-        curr_proc->sigaction[sig] = act;
+    if (0 == sig) {
+        goto skip_send;
     }
 
-    com_spinlock_release(&curr_proc->signal_lock);
-    return COM_SYS_SYSCALL_OK(0);
+    if (pid > 0) {
+        ret.err = com_sys_signal_send_to_proc(pid, sig, curr_proc);
+    } else {
+        ret.err = com_sys_signal_send_to_proc_group(pid * -1, sig, curr_proc);
+    }
+
+skip_send:
+    if (0 != ret.err) {
+        ret.value = -1;
+    }
+
+    return ret;
 }

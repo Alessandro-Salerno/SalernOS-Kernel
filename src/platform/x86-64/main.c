@@ -33,6 +33,7 @@
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/context.h>
@@ -50,6 +51,7 @@
 #include <lib/mem.h>
 #include <lib/printf.h>
 #include <lib/util.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <vendor/limine.h>
@@ -166,6 +168,24 @@ USED void kbd_eoi(com_isr_t *isr) {
     X86_64_IO_OUTB(0x20, 0x20);
 }
 
+USED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
+    (void)isr;
+    KDEBUG("in page fault handler");
+
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        com_panic(ctx, "cpu exception (page fault)");
+    }
+    com_proc_t *curr_proc = curr_thread->proc;
+
+    if (ARCH_CONTEXT_ISUSER(ctx) && NULL != curr_proc) {
+        KDEBUG("sending SIGSEGV to pid=%d", curr_proc->pid);
+        com_sys_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
+    } else {
+        com_panic(ctx, "cpu exception (page fault)");
+    }
+}
+
 void kernel_entry(void) {
     ARCH_CPU_SET(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
@@ -198,6 +218,7 @@ void kernel_entry(void) {
     com_sys_syscall_init();
 
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
+    com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
 

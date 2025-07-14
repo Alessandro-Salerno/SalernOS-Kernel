@@ -82,10 +82,10 @@ typedef struct com_proc {
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
 
-    com_spinlock_t    signal_lock;
-    struct sigaction *sigaction[NSIG];
-    com_sigmask_t     pending_signals;
-    com_sigmask_t     masked_signals;
+    com_spinlock_t        signal_lock;
+    struct com_sigaction *sigaction[NSIG];
+    com_sigmask_t         pending_signals;
+    com_sigmask_t         masked_signals;
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,

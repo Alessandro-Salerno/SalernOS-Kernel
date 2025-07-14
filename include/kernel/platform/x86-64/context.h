@@ -16,36 +16,29 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <errno.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
-#include <signal.h>
+#pragma once
 
-// SYSCALL: sigaction(int sig, struct sigaction *act, struct sigaction *oact)
-COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
-
-    int              sig  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigaction_t *act  = COM_SYS_SYSCALL_ARG(void *, 2);
-    com_sigaction_t *oact = COM_SYS_SYSCALL_ARG(void *, 3);
-
-    if (sig < 1 || sig > NSIG) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
-
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_spinlock_acquire(&curr_proc->signal_lock);
-
-    if (NULL != oact) {
-        *oact = *curr_proc->sigaction[sig];
-    }
-
-    if (NULL != act) {
-        curr_proc->sigaction[sig] = act;
-    }
-
-    com_spinlock_release(&curr_proc->signal_lock);
-    return COM_SYS_SYSCALL_OK(0);
-}
+#define X86_64_CONTEXT_REG_R8      0
+#define X86_64_CONTEXT_REG_R9      1
+#define X86_64_CONTEXT_REG_R10     2
+#define X86_64_CONTEXT_REG_R11     3
+#define X86_64_CONTEXT_REG_R12     4
+#define X86_64_CONTEXT_REG_R13     5
+#define X86_64_CONTEXT_REG_R14     6
+#define X86_64_CONTEXT_REG_R15     7
+#define X86_64_CONTEXT_REG_RDI     8
+#define X86_64_CONTEXT_REG_RSI     9
+#define X86_64_CONTEXT_REG_RBP     10
+#define X86_64_CONTEXT_REG_RBX     11
+#define X86_64_CONTEXT_REG_RDX     12
+#define X86_64_CONTEXT_REG_RAX     13
+#define X86_64_CONTEXT_REG_RCX     14
+#define X86_64_CONTEXT_REG_RSP     15
+#define X86_64_CONTEXT_REG_RIP     16
+#define X86_64_CONTEXT_REG_EFL     17
+#define X86_64_CONTEXT_REG_CSGSFS  18
+#define X86_64_CONTEXT_REG_ERR     19
+#define X86_64_CONTEXT_REG_TRAPNO  20
+#define X86_64_CONTEXT_REG_OLDMASK 21
+#define X86_64_CONTEXT_REG_CR2     22
+#define X86_64_CONTEXT_NGREG       23
