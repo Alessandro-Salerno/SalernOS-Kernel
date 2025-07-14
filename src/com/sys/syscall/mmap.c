@@ -31,7 +31,7 @@
 
 #define ALLOC_BASE 0x100000000
 
-// ODO: probably have to separate prot and falsg for portability
+// TODO: probably have to separate prot and falsg for portability
 // SYSCALL: mmap(void *hint, size_t size, uintmax_t flags, int fd, ...)
 COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();

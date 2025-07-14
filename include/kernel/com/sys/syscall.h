@@ -99,3 +99,4 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask);
 COM_SYS_SYSCALL(com_sys_syscall_sigaction);
 COM_SYS_SYSCALL(com_sys_syscall_kill);
 COM_SYS_SYSCALL(com_sys_syscall_kill_thread);
+COM_SYS_SYSCALL(com_sys_syscall_sigreturn);

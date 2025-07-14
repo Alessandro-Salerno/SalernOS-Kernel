@@ -91,6 +91,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x1D, com_sys_syscall_sigaction);
     com_sys_syscall_register(0x1E, com_sys_syscall_kill);
     com_sys_syscall_register(0x1F, com_sys_syscall_kill_thread);
+    com_sys_syscall_register(0x20, com_sys_syscall_sigreturn);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

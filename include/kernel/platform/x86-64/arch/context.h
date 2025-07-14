@@ -152,6 +152,31 @@
     (ctxptr)->rsi = (uint64_t)(&(sframeptr)->info);                            \
     (ctxptr)->rdx = (uint64_t)(&(sframeptr)->uc);
 
+#define ARCH_CONTEXT_RESTORE_SIGFRAME(sframeptr, ctx)                         \
+    {                                                                         \
+        com_sigframe_t *_sigframe = (void *)(ctx)->rsp;                       \
+        (ctx)->r8  = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8];  \
+        (ctx)->r9  = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9];  \
+        (ctx)->r10 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10]; \
+        (ctx)->r11 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R11]; \
+        (ctx)->r12 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R12]; \
+        (ctx)->r13 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R13]; \
+        (ctx)->r14 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R14]; \
+        (ctx)->r15 = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R15]; \
+        (ctx)->rdi = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RDI]; \
+        (ctx)->rsi = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSI]; \
+        (ctx)->rbp = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RBP]; \
+        (ctx)->rbx = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RBX]; \
+        (ctx)->rdx = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RDX]; \
+        (ctx)->rax = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RAX]; \
+        (ctx)->rcx = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RCX]; \
+        (ctx)->rsp = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSP]; \
+        (ctx)->rip = _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP]; \
+        (ctx)->rflags =                                                       \
+            _sigframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL];          \
+        *(sframeptr) = _sigframe;                                             \
+    }
+
 typedef struct {
     uint64_t cr2;
     uint64_t gs;

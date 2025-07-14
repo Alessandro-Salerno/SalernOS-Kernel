@@ -235,9 +235,6 @@ end:
     com_spinlock_release(&curr_proc->signal_lock);
 }
 
-void com_sys_signal_return(arch_context_t *ctx) {
-}
-
 int com_sys_signal_set_mask(com_sigmask_t  *mask,
                             int             how,
                             com_sigset_t   *set,

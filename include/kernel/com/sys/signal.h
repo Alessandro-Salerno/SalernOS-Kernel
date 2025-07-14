@@ -52,9 +52,17 @@ typedef struct com_sigaction {
     com_sigset_t sa_mask;
 } com_sigaction_t;
 
+typedef struct com_ucontext {
+    unsigned long        uc_flags;
+    struct com_ucontext *uc_link;
+    stack_t              uc_stack;
+    mcontext_t           uc_mcontext;
+    com_sigset_t         uc_sigmask;
+} com_ucontext_t;
+
 typedef struct com_sigframe {
-    siginfo_t  info;
-    ucontext_t uc;
+    siginfo_t      info;
+    com_ucontext_t uc;
 } com_sigframe_t;
 
 #include <kernel/com/sys/proc.h>
@@ -69,7 +77,6 @@ int  com_sys_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);
 void com_sys_signal_dispatch(arch_context_t *ctx);
-void com_sys_signal_return(arch_context_t *ctx);
 int  com_sys_signal_set_mask(com_sigmask_t  *mask,
                              int             how,
                              com_sigset_t   *set,
