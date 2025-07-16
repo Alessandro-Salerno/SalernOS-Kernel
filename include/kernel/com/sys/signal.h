@@ -76,7 +76,7 @@ int  com_sys_signal_send_to_proc_group(pid_t            pgid,
 int  com_sys_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);
-void com_sys_signal_dispatch(arch_context_t *ctx);
+void com_sys_signal_dispatch(arch_context_t *ctx, struct com_thread *thread);
 int  com_sys_signal_set_mask(com_sigmask_t  *mask,
                              int             how,
                              com_sigset_t   *set,

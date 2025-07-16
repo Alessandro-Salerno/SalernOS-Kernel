@@ -21,15 +21,24 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/platform/context.h>
 
 // SYSCALL: sigreturn()
 COM_SYS_SYSCALL(com_sys_syscall_sigreturn) {
     COM_SYS_SYSCALL_UNUSED_START(1);
 
     arch_context_t *ctx = COM_SYS_SYSCALL_CONTEXT();
-    com_sigframe_t *sframe;
-    ARCH_CONTEXT_RESTORE_SIGFRAME(&sframe, ctx);
-    ARCH_CPU_GET_THREAD()->masked_signals = sframe->uc.uc_sigmask.sig[0];
 
-    return COM_SYS_SYSCALL_OK(0);
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    // com_proc_t   *curr_proc   = curr_thread->proc;
+
+    // com_spinlock_acquire(&curr_proc->signal_lock);
+
+    com_sigframe_t *sframe;
+    arch_context_restore_sigframe(&sframe, ctx);
+    curr_thread->masked_signals = sframe->uc.uc_sigmask.sig[0];
+
+    // com_spinlock_release(&curr_proc->signal_lock);
+
+    return COM_SYS_SYSCALL_DISCARD();
 }

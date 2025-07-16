@@ -30,7 +30,7 @@ COM_SYS_SYSCALL(com_sys_syscall_kill) {
     pid_t pid = COM_SYS_SYSCALL_ARG(pid_t, 1);
     int   sig = COM_SYS_SYSCALL_ARG(int, 2);
 
-    com_syscall_ret_t ret         = {0, 0};
+    com_syscall_ret_t ret         = COM_SYS_SYSCALL_BASE_OK();
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t       *curr_proc   = curr_thread->proc;
 
@@ -50,7 +50,7 @@ COM_SYS_SYSCALL(com_sys_syscall_kill) {
     if (pid > 0) {
         ret.err = com_sys_signal_send_to_proc(pid, sig, curr_proc);
     } else {
-        ret.err = com_sys_signal_send_to_proc_group(pid * -1, sig, curr_proc);
+        ret.err = com_sys_signal_send_to_proc_group(-pid, sig, curr_proc);
     }
 
 skip_send:

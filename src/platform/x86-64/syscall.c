@@ -54,8 +54,12 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     KASSERT(NULL != handler);
     com_syscall_ret_t ret =
         handler(ctx, ctx->rdi, ctx->rsi, ctx->rdx, ctx->rcx);
-    ctx->rax = ret.value;
-    ctx->rdx = ret.err;
+
+    if (!ret.discarded) {
+        ctx->rax = ret.value;
+        ctx->rdx = ret.err;
+    }
+
     // KDEBUG("lock depth = %d", ARCH_CPU_GET()->lock_depth);
     // KDEBUG("sched lock = %d", ARCH_CPU_GET()->sched_lock);
     if (0 != curr_thread->lock_depth) {

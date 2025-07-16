@@ -20,6 +20,7 @@
 
 #include <arch/context.h>
 #include <arch/syscall.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #define COM_SYS_SYSCALL(name)                                \
@@ -48,15 +49,28 @@
     COM_SYS_SYSCALL_UNUSED_CONTEXT(); \
     __COM_SYS_SYSCALL_UNUSED_1
 
-#define COM_SYS_SYSCALL_OK(v) (com_syscall_ret_t){.value = (v), .err = 0}
-#define COM_SYS_SYSCALL_ERR(e)  \
-    (com_syscall_ret_t) {       \
-        .value = -1, .err = (e) \
+#define COM_SYS_SYSCALL_OK(v)                      \
+    (com_syscall_ret_t) {                          \
+        .value = (v), .err = 0, .discarded = false \
     }
+#define COM_SYS_SYSCALL_ERR(e)                      \
+    (com_syscall_ret_t) {                           \
+        .value = -1, .err = (e), .discarded = false \
+    }
+#define COM_SYS_SYSCALL_DISCARD() \
+    (com_syscall_ret_t) {         \
+        .discarded = true         \
+    }
+
+#define COM_SYS_SYSCALL_BASE_OK()  {0, 0, false};
+#define COM_SYS_SYSCALL_BASE_ERR() {-1, 0, false}
 
 typedef struct {
     uintmax_t value;
     uintmax_t err;
+    bool discarded; // If true, ret.value and ret.err shall not be stored in
+                    // return value registers by the arch-specific system call
+                    // dispatcher
 } com_syscall_ret_t;
 
 typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,

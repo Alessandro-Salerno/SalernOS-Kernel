@@ -34,7 +34,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
-    com_syscall_ret_t ret       = {-1, 0};
+    com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_ERR();
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
     com_proc_t *proc = curr_proc;

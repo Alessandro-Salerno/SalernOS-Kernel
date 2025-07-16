@@ -43,7 +43,14 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
     }
 
     if (NULL != act) {
-        curr_proc->sigaction[sig] = act;
+        if (NULL != curr_proc->sigaction[sig]) {
+            com_mm_slab_free(curr_proc->sigaction[sig],
+                             sizeof(com_sigaction_t));
+        }
+
+        com_sigaction_t *new_act = com_mm_slab_alloc(sizeof(com_sigaction_t));
+        kmemcpy(new_act, act, sizeof(com_sigaction_t));
+        curr_proc->sigaction[sig] = new_act;
     }
 
     com_spinlock_release(&curr_proc->signal_lock);

@@ -37,7 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_isatty) {
 
     com_proc_t       *curr = ARCH_CPU_GET_THREAD()->proc;
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
-    com_syscall_ret_t ret  = {0};
+    com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
 
     if (NULL == file) {
         ret.err = EBADF;

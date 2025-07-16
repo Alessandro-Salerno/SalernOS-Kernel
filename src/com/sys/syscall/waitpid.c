@@ -39,7 +39,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
 
     com_proc_t       *curr   = ARCH_CPU_GET_THREAD()->proc;
     com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
-    com_syscall_ret_t ret    = {0, 0};
+    com_syscall_ret_t ret    = COM_SYS_SYSCALL_BASE_OK();
 
     com_sys_proc_acquire_glock();
 

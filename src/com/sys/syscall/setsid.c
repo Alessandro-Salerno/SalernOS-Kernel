@@ -30,7 +30,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setsid) {
     com_spinlock_acquire(&curr_proc->pg_lock);
     KASSERT(NULL != curr_proc->proc_group);
 
-    com_syscall_ret_t ret = {-1, 0};
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
     if (curr_proc->proc_group->pgid == curr_proc->pid) {
         ret.err = EPERM;

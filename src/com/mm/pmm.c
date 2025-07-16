@@ -163,6 +163,7 @@ void *com_mm_pmm_alloc_many(size_t pages) {
 }
 
 void com_mm_pmm_free(void *page) {
+    return;
 #if defined(COM_MM_PMM_ZERO_POLICY) && \
     COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
     kmemset((void *)ARCH_PHYS_TO_HHDM(page), ARCH_PAGE_SIZE, 0);

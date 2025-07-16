@@ -50,7 +50,7 @@ COM_SYS_SYSCALL(com_sys_syscall_getsid) {
         return COM_SYS_SYSCALL_ERR(ESRCH);
     }
 
-    com_syscall_ret_t ret = {-1, 0};
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
     KASSERT(NULL != curr_proc->proc_group);
     KASSERT(NULL != proc->proc_group);

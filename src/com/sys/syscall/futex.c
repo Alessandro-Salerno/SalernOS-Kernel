@@ -55,7 +55,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     uint32_t  value    = COM_SYS_SYSCALL_ARG(uint32_t, 3);
 
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_syscall_ret_t ret       = {0};
+    com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
     uintptr_t         phys =
         (uintptr_t)arch_mmu_get_physical(curr_proc->page_table, word_ptr);
 

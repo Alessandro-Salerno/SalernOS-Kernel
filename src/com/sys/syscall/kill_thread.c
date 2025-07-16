@@ -30,7 +30,7 @@ COM_SYS_SYSCALL(com_sys_syscall_kill_thread) {
     pid_t tid = COM_SYS_SYSCALL_ARG(pid_t, 1);
     int   sig = COM_SYS_SYSCALL_ARG(int, 2);
 
-    com_syscall_ret_t ret         = {0, 0};
+    com_syscall_ret_t ret         = COM_SYS_SYSCALL_BASE_OK();
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t       *curr_proc   = curr_thread->proc;
 

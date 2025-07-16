@@ -218,7 +218,7 @@ void kernel_entry(void) {
     com_sys_syscall_init();
 
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
-    com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
+    // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
 

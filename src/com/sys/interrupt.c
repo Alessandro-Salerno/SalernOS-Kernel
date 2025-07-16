@@ -59,7 +59,7 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     }
 
     if (ARCH_CONTEXT_ISUSER(ctx)) {
-        com_sys_signal_dispatch(ctx);
+        com_sys_signal_dispatch(ctx, curr_thread);
     }
 
     KASSERT(1 == curr_thread->lock_depth);

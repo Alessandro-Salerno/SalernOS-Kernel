@@ -16,9 +16,11 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/context.h>
 #include <errno.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/signal.h>
+#include <kernel/platform/context.h>
 #include <lib/mem.h>
 #include <lib/util.h>
 #include <stdbool.h>
@@ -113,8 +115,11 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
 
     com_spinlock_acquire(&proc->signal_lock);
     if (proc->exited) {
+        com_spinlock_release(&proc->signal_lock);
         return ESRCH;
     }
+
+    KDEBUG("pid=%d is sending signal %d to pid=%d", sender->pid, sig, pid);
 
     com_spinlock_acquire(&proc->threads_lock);
     com_thread_t *t, *_;
@@ -167,43 +172,43 @@ int com_sys_signal_send_to_thread(struct com_thread *thread,
     return ret;
 }
 
-void com_sys_signal_dispatch(arch_context_t *ctx) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
+    com_proc_t *proc = thread->proc;
 
-    com_spinlock_acquire(&curr_proc->signal_lock);
+    com_spinlock_acquire(&proc->signal_lock);
     int sig = com_sys_signal_check_nolock();
 
     if (-1 == sig) {
         goto end;
     }
 
-    COM_SYS_SIGNAL_SIGMASK_UNSET(&curr_thread->pending_signals, sig);
-    COM_SYS_SIGNAL_SIGMASK_UNSET(&curr_proc->pending_signals, sig);
+    COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+    COM_SYS_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
 
-    com_sigaction_t *sigaction = curr_proc->sigaction[sig];
+    com_sigaction_t *sigaction = proc->sigaction[sig];
 
     if (NULL == sigaction || SIG_DFL == sigaction->sa_action) {
         if (SA_KILL & SignalProperties[sig]) {
-            KDEBUG("killing pid=%d because it received a deadly signal",
-                   curr_proc->pid);
-            com_spinlock_release(&curr_proc->signal_lock);
-            curr_thread->lock_depth = 0;
-            com_sys_proc_exit(curr_proc, sig);
+            KDEBUG("killing pid=%d because it received a deadly signal %d",
+                   proc->pid,
+                   sig);
+            com_spinlock_release(&proc->signal_lock);
+            thread->lock_depth = 0;
+            com_sys_proc_exit(proc, sig);
             com_sys_sched_yield();
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
-            com_sys_proc_stop(curr_proc);
+            com_sys_proc_stop(proc);
             com_sys_sched_yield();
 
             // After execution resumes
             // Execution gets beck here after the process receives a SIGCONT, as
             // can be seen in send_to_thread
-            COM_SYS_SIGNAL_SIGMASK_UNSET(&curr_thread->pending_signals,
-                                         SIGCONT);
+            COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
             com_sys_proc_acquire_glock();
-            curr_proc->stopped = false;
+            proc->stopped = false;
             com_sys_proc_release_glock();
+            // TODO: I should kill all threads right?
             return;
         }
     }
@@ -214,25 +219,32 @@ void com_sys_signal_dispatch(arch_context_t *ctx) {
 
     com_sigframe_t *sframe;
     uintptr_t       stack;
-    ARCH_CONTEXT_ALLOC_SIGFRAME(&sframe, &stack, ctx);
-    ARCH_CONTEXT_SETUP_SIGFRAME(sframe, ctx);
+    arch_context_alloc_sigframe(&sframe, &stack, ctx);
+    kmemset(sframe, sizeof(com_sigframe_t), 0);
+    sframe->info.si_signo        = sig;
+    sframe->uc.uc_sigmask.sig[0] = thread->masked_signals;
+    arch_context_setup_sigframe(sframe, ctx);
 
-    curr_thread->masked_signals |= sigaction->sa_mask.sig[0];
+    thread->masked_signals |= sigaction->sa_mask.sig[0];
 
     if (!(SA_NODEFER & sigaction->sa_flags)) {
-        COM_SYS_SIGNAL_SIGMASK_SET(&curr_thread->masked_signals, sig);
+        COM_SYS_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
     }
 
     if (SA_RESETHAND & sigaction->sa_flags) {
         sigaction->sa_action = SIG_DFL;
     }
 
-    ARCH_CONTEXT_SETUP_SIGRESTORE(sframe, &stack, sigaction->sa_restorer);
-    ARCH_CONTEXT_SIGNAL_TRAMPOLINE(
+    KDEBUG("pid=%d has restorer at %x for signal %d",
+           proc->pid,
+           sigaction->sa_restorer,
+           sig);
+    arch_context_setup_sigrestore(sframe, &stack, sigaction->sa_restorer);
+    arch_context_signal_trampoline(
         sframe, ctx, stack, sigaction->sa_action, sig);
 
 end:
-    com_spinlock_release(&curr_proc->signal_lock);
+    com_spinlock_release(&proc->signal_lock);
 }
 
 int com_sys_signal_set_mask(com_sigmask_t  *mask,

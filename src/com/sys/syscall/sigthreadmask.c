@@ -35,7 +35,7 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret     = {0, 0};
+    com_syscall_ret_t ret     = COM_SYS_SYSCALL_BASE_OK();
     int               sig_ret = com_sys_signal_set_mask(
         &curr_thread->masked_signals, how, set, oset, &curr_proc->signal_lock);
 
