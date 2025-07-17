@@ -192,7 +192,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     KDEBUG("tid=%d received signal %d", thread->tid, sig);
 
     COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
-    COM_SYS_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
+    // COM_SYS_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
 
     com_sigaction_t *sigaction = proc->sigaction[sig];
 
@@ -265,12 +265,10 @@ end:
     com_spinlock_release(&proc->signal_lock);
 }
 
-int com_sys_signal_set_mask(com_sigmask_t  *mask,
-                            int             how,
-                            com_sigset_t   *set,
-                            com_sigset_t   *oset,
-                            com_spinlock_t *signal_lock) {
-    com_spinlock_acquire(signal_lock);
+int com_sys_signal_set_mask_nolock(com_sigmask_t *mask,
+                                   int            how,
+                                   com_sigset_t  *set,
+                                   com_sigset_t  *oset) {
     com_sigmask_t old_mask = *mask;
 
     if (NULL == set) {
@@ -288,7 +286,6 @@ int com_sys_signal_set_mask(com_sigmask_t  *mask,
         *mask &= ~set->sig[0];
         break;
     default:
-        com_spinlock_release(signal_lock);
         return EINVAL;
     }
 
@@ -298,16 +295,28 @@ noset:
         oset->sig[0] = old_mask;
     }
 
-    com_spinlock_release(signal_lock);
     return 0;
+}
+
+int com_sys_signal_set_mask(com_sigmask_t  *mask,
+                            int             how,
+                            com_sigset_t   *set,
+                            com_sigset_t   *oset,
+                            com_spinlock_t *signal_lock) {
+    com_spinlock_acquire(signal_lock);
+    int ret = com_sys_signal_set_mask_nolock(mask, how, set, oset);
+    com_spinlock_release(signal_lock);
+    return ret;
 }
 
 int com_sys_signal_check_nolock(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
-    int           sig = -1;
-    com_sigmask_t to_service =
-        curr_thread->pending_signals & (~curr_thread->masked_signals);
+    int           sig        = -1;
+    com_sigmask_t to_service = curr_thread->pending_signals &
+                               (~curr_thread->masked_signals) &
+                               (~curr_proc->masked_signals);
 
     if (to_service) {
         sig = __builtin_ffsl(to_service);

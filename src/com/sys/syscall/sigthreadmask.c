@@ -34,14 +34,33 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret     = COM_SYS_SYSCALL_BASE_OK();
-    int               sig_ret = com_sys_signal_set_mask(
-        &curr_thread->masked_signals, how, set, oset, &curr_proc->signal_lock);
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    com_spinlock_acquire(&curr_proc->signal_lock);
+    int sig_ret = com_sys_signal_set_mask_nolock(
+        &curr_thread->masked_signals, how, set, oset);
 
     if (0 != sig_ret) {
         ret.value = -1;
         ret.err   = sig_ret;
     }
 
+    // NOTE: the current threads's pending signals need to be updated due to how
+    // I handle the undefined behaaviour in sigprocmask Essentially, POSIX says
+    // sigprocmask is unspecified for multi-threaded processes. This means that
+    // I could just keep thread-local signals and remove stuff from proc struct.
+    // HOWEVER, I'm taking this opportunity to add a feature: sigprocmask sets a
+    // GLOBAL mask for all threads in the process. However, in signal_dispatch,
+    // I check only the thread's pending signals (since the proces's are set
+    // only if no thread can handle the signal due to its mask), so if something
+    // was previously masked for this thread and is now unmasked and pending on
+    // the process, it should become pending on the thread too
+    com_sigmask_t new_pending = curr_proc->pending_signals &
+                                ~(curr_thread->masked_signals) &
+                                ~(curr_proc->masked_signals);
+    curr_thread->pending_signals |= new_pending;
+    curr_proc->pending_signals &=
+        ~new_pending; // ensures that this is only done once
+
+    com_spinlock_release(&curr_proc->signal_lock);
     return ret;
 }
