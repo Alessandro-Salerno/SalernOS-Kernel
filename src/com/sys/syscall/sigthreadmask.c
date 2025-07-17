@@ -17,11 +17,10 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
-#include <signal.h>
+#include <lib/util.h>
 
 // SYSCALL: sigthreadmask(int how, sigset_t *set, sigset_t *oldset)
 COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {

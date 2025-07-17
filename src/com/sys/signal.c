@@ -37,6 +37,9 @@
 #define SA_CONT     0x20 /* continue if suspended */
 #define SA_CANTMASK 0x40 /* non-maskable, catchable */
 
+#define TKILL_STATUS_MASKED -1
+#define TKILL_STATUS_BAD    -2
+
 // CREDIT: vloxei64/ke
 static const int SignalProperties[] = {
     [SIGHUP]    = SA_KILL,
@@ -71,14 +74,15 @@ static const int SignalProperties[] = {
 };
 
 static int send_to_thread(com_thread_t *thread, int sig) {
+    COM_SYS_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
+    KDEBUG("sending signal %d to tid=%d", sig, thread->tid);
+
     if (COM_SYS_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
-        return -1;
+        return TKILL_STATUS_MASKED;
     }
 
-    COM_SYS_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
-
     if (thread->proc->stopped && SIGCONT != sig) {
-        return -2;
+        return TKILL_STATUS_BAD;
     }
 
     com_spinlock_acquire(&thread->sched_lock);
@@ -169,6 +173,9 @@ int com_sys_signal_send_to_thread(struct com_thread *thread,
     com_spinlock_acquire(&thread->proc->signal_lock);
     int ret = send_to_thread(thread, sig);
     com_spinlock_release(&thread->proc->signal_lock);
+    if (TKILL_STATUS_MASKED == ret) {
+        return 0;
+    }
     return ret;
 }
 
@@ -181,6 +188,8 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     if (-1 == sig) {
         goto end;
     }
+
+    KDEBUG("tid=%d received signal %d", thread->tid, sig);
 
     COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
     COM_SYS_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
@@ -195,7 +204,16 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             com_spinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
             com_sys_proc_exit(proc, sig);
+            com_spinlock_acquire(&thread->sched_lock);
+            // TODO: hacky behaviour, does not kill all threads
+            thread->runnable = false;
+            thread->exited   = true;
+            com_spinlock_release(&thread->sched_lock);
             com_sys_sched_yield();
+            KDEBUG("tid=%d in pid=%d is somehow still alive",
+                   thread->tid,
+                   proc->pid);
+            KASSERT(false);
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
             com_sys_proc_stop(proc);
@@ -267,7 +285,7 @@ int com_sys_signal_set_mask(com_sigmask_t  *mask,
         *mask = set->sig[0];
         break;
     case SIG_UNBLOCK:
-        *mask &= set->sig[0];
+        *mask &= ~set->sig[0];
         break;
     default:
         com_spinlock_release(signal_lock);
@@ -285,11 +303,11 @@ noset:
 }
 
 int com_sys_signal_check_nolock(void) {
-    com_thread_t *curthread = ARCH_CPU_GET_THREAD();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
     int           sig = -1;
     com_sigmask_t to_service =
-        curthread->pending_signals & (~curthread->masked_signals);
+        curr_thread->pending_signals & (~curr_thread->masked_signals);
 
     if (to_service) {
         sig = __builtin_ffsl(to_service);

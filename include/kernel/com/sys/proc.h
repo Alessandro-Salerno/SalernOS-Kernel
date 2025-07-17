@@ -100,6 +100,7 @@ void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);
 void        com_sys_proc_wait(com_proc_t *proc);
 void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
+
 void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);

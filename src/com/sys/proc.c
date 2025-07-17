@@ -37,7 +37,7 @@
 static com_spinlock_t PidLock              = COM_SPINLOCK_NEW();
 static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
 static com_proc_t    *Processes[MAX_PROCS] = {0};
-static pid_t          NextPid              = 1;
+static pid_t          NextPid              = 2;
 
 static khashmap_t     ProcGroupMap;
 static com_spinlock_t ProcGroupLock = COM_SPINLOCK_NEW();

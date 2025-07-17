@@ -50,13 +50,16 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
         com_panic(ctx, "isr not set for interrupt vector %u", vec);
     }
 
+    if (NULL != isr->eoi) {
+        isr->eoi(isr);
+    }
+
     if (NULL != isr->func) {
         isr->func(isr, ctx);
     }
 
-    if (NULL != isr->eoi) {
-        isr->eoi(isr);
-    }
+    KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
+    KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
 
     if (ARCH_CONTEXT_ISUSER(ctx)) {
         com_sys_signal_dispatch(ctx, curr_thread);
