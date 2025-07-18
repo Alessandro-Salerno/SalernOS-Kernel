@@ -2,6 +2,10 @@
 MAKEFLAGS += -rR
 .SUFFIXES:
 
+define add_option
+$(eval -include src/opt/$1/useopt.mk)
+endef
+
 PLATFORM ?= x86-64
 rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard ,$d, $2) $(filter $(subst *, %, $2),$d))
 
@@ -68,12 +72,12 @@ override LDFLAGS += \
     -z max-page-size=0x1000 \
     -T src/platform/$(PLATFORM)/linker.ld
 
-# Use "find" to glob all *.c, *.S, and *.asm files in the tree and obtain the
-# object and header dependency file names.
-
 override CFILES = $(call rwildcard, src/com, *c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
 override ASFILES = $(call rwildcard, src/platform/$(PLATFORM), *.S)
 override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
+
+-include src/platform/$(PLATFORM)/options.mk
+
 override OBJ = $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
 override HEADER_DEPS = $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 

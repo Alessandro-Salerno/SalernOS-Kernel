@@ -18,7 +18,6 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/io/fbterm.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>

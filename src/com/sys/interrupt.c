@@ -42,7 +42,9 @@ void com_sys_interrupt_register(uintmax_t      vec,
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    curr_thread->lock_depth   = 1;
+    if (NULL != curr_thread) {
+        curr_thread->lock_depth = 1;
+    }
 
     com_isr_t *isr = &InterruptTable[vec];
 
@@ -65,6 +67,8 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
         com_sys_signal_dispatch(ctx, curr_thread);
     }
 
-    KASSERT(1 == curr_thread->lock_depth);
-    curr_thread->lock_depth = 0;
+    if (NULL != curr_thread) {
+        KASSERT(1 == curr_thread->lock_depth);
+        curr_thread->lock_depth = 0;
+    }
 }

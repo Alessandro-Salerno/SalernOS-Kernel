@@ -25,8 +25,8 @@
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/io/fbterm.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -36,6 +36,7 @@
 #include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/opt/flanterm.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
@@ -203,9 +204,6 @@ void kernel_entry(void) {
     X86_64_IO_OUTB(0xA1, 0b11111111);
     com_sys_interrupt_register(0x21, kbd, kbd_eoi);
 
-    arch_framebuffer_t *fb = arch_info_get_fb();
-    com_io_fbterm_init(fb);
-
 #ifndef X86_64_NO_E9_LOG
     com_io_log_set_hook(x86_64_e9_putc);
 #else
@@ -217,10 +215,19 @@ void kernel_entry(void) {
     x86_64_idt_stub();
     com_sys_syscall_init();
 
+    com_term_backend_t tb   = opt_flanterm_new_context();
+    com_term_t        *term = com_io_term_new(tb);
+    KDEBUG("base terminal has data=%x", term->backend.data);
+    term->backend = tb;
+    com_io_term_set_fallback(term);
+    KDEBUG("here data=%x", term->backend.data);
+
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
+
+    KDEBUG("here data=%x", term->backend.data);
 
     KLOG("testing hashmap");
     int        key_1 = 500, key_2 = 795000;
@@ -247,8 +254,12 @@ void kernel_entry(void) {
     arch_file_t *initrd = arch_info_get_initrd();
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
+    KDEBUG("here data=%x", term->backend.data);
+
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
+
+    KDEBUG("here data=%x", term->backend.data);
 
     com_vnode_t *tty_dev = NULL;
     com_io_tty_init(&tty_dev);
@@ -283,8 +294,8 @@ void kernel_entry(void) {
 
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
-    com_io_fbterm_init_buffering();
-    com_io_fbterm_set_buffering(true);
+    com_io_term_init();
+    com_io_term_set_buffering(term, true);
     arch_context_trampoline(&thread->ctx);
 
     for (;;) {

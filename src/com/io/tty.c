@@ -25,8 +25,8 @@
 #include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/io/fbterm.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
@@ -142,7 +142,7 @@ static int tty_write(size_t   *bytes_written,
     (void)off;
     (void)flags;
     // com_spinlock_acquire(&Tty.write_lock);
-    com_io_fbterm_putsn(buf, buflen);
+    com_io_term_putsn(NULL, buf, buflen);
     // com_spinlock_release(&Tty.write_lock);
     *bytes_written = buflen;
     return 0;
@@ -241,7 +241,7 @@ void com_io_tty_kbd_in(char c, uintmax_t mod) {
         if (tty->termios.c_cc[VERASE] == c) {
             if (tty->write > 0) {
                 if (ECHOE & tty->termios.c_lflag) {
-                    com_io_fbterm_puts("\b \b");
+                    com_io_term_puts(NULL, "\b \b");
                 }
 
                 if (tty->write > 0) {
@@ -271,7 +271,7 @@ end:
         tty->write += len;
 
         if (ECHO & tty->termios.c_lflag) {
-            com_io_fbterm_putsn(escape, len);
+            com_io_term_putsn(NULL, escape, len);
             handled = true;
         }
 
@@ -285,7 +285,7 @@ end:
     }
 
     if ((ECHO & tty->termios.c_lflag) && !handled) {
-        com_io_fbterm_putc(c);
+        com_io_term_putc(NULL, c);
     }
 
     if (notify && !TAILQ_EMPTY(&tty->waitlist)) {
@@ -310,7 +310,7 @@ int com_io_tty_init(com_vnode_t **out) {
         return ret;
     }
 
-    com_io_fbterm_get_size(&Tty.rows, &Tty.cols);
+    com_io_term_get_size(NULL, &Tty.rows, &Tty.cols);
     Tty.termios.c_cc[VINTR]    = CINTR;
     Tty.termios.c_cc[VQUIT]    = CQUIT;
     Tty.termios.c_cc[VERASE]   = CERASE;

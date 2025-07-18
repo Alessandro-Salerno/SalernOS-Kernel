@@ -19,14 +19,12 @@
 #pragma once
 
 #include <arch/info.h>
-#include <stdbool.h>
-#include <stddef.h>
+#include <kernel/com/io/term.h>
 #include <stdint.h>
 
-void com_io_fbterm_putc(char c);
-void com_io_fbterm_puts(const char *s);
-void com_io_fbterm_putsn(const char *s, size_t n);
-void com_io_fbterm_get_size(size_t *rows, size_t *cols);
-void com_io_fbterm_init_buffering(void);
-void com_io_fbterm_set_buffering(bool buffering);
-void com_io_fbterm_init(arch_framebuffer_t *fb);
+void              *opt_flanterm_init(arch_framebuffer_t *fb,
+                                     uint32_t            fg_color,
+                                     uint32_t            bg_color,
+                                     size_t              scale_x,
+                                     size_t              scale_y);
+com_term_backend_t opt_flanterm_new_context();
