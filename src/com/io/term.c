@@ -21,7 +21,6 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <lib/str.h>
-#include <lib/util.h>
 #include <stdatomic.h>
 #include <vendor/tailq.h>
 
@@ -77,7 +76,6 @@ com_term_t *com_io_term_new(com_term_backend_t backend) {
     TAILQ_INIT(&ret->buffering.waiters);
 
     ret->backend.data = ret->backend.ops->init();
-    KDEBUG("set backend data to %x", ret->backend.data);
 
     return ret;
 }
@@ -143,8 +141,6 @@ void com_io_term_get_size(com_term_t *term, size_t *rows, size_t *cols) {
         return;
     }
 
-    KDEBUG(
-        "calling get_size on term=%x, with data=%x", term, term->backend.data);
     term->backend.ops->get_size(term->backend.data, rows, cols);
 }
 
@@ -222,7 +218,6 @@ void com_io_term_disable(com_term_t *term) {
 }
 
 void com_io_term_set_fallback(com_term_t *fallback_term) {
-    KASSERT(NULL != fallback_term->backend.data);
     atomic_store(&FallbackTerm, fallback_term);
 }
 
@@ -230,8 +225,8 @@ void com_io_term_init(void) {
     TAILQ_INIT(&BufferQueue);
     com_thread_t *print_thread = com_sys_thread_new_kernel(NULL, flush_thread);
     // com_sys_thread_ready(PrintThread);
-    // com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
+    com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
     print_thread->runnable = true;
     TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, print_thread, threads);
-    // com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
+    com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 }

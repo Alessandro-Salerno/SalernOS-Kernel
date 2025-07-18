@@ -217,36 +217,12 @@ void kernel_entry(void) {
 
     com_term_backend_t tb   = opt_flanterm_new_context();
     com_term_t        *term = com_io_term_new(tb);
-    KDEBUG("base terminal has data=%x", term->backend.data);
-    term->backend = tb;
     com_io_term_set_fallback(term);
-    KDEBUG("here data=%x", term->backend.data);
 
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
-
-    KDEBUG("here data=%x", term->backend.data);
-
-    KLOG("testing hashmap");
-    int        key_1 = 500, key_2 = 795000;
-    int        val_1 = 10, val_2 = 50, val_3 = 900;
-    khashmap_t map;
-    KASSERT(0 == khashmap_init(&map, KHASHMAP_DEFAULT_SIZE));
-    KASSERT(0 == khashmap_put(&map, &key_1, sizeof(int), &val_1));
-    void *ret_1, *ret_2, *ret_3;
-    KASSERT(0 == khashmap_get(&ret_1, &map, &key_1, sizeof(int)));
-    KASSERT(val_1 == *(int *)ret_1);
-    KASSERT(ENOENT == khashmap_set(&map, &key_2, sizeof(int), &val_2));
-    KASSERT(0 == khashmap_put(&map, &key_2, sizeof(int), &val_2));
-    KASSERT(0 == khashmap_get(&ret_2, &map, &key_2, sizeof(int)));
-    KASSERT(val_2 == *(int *)ret_2);
-    KASSERT(0 == khashmap_set(&map, &key_2, sizeof(int), &val_3));
-    KASSERT(0 == khashmap_get(&ret_3, &map, &key_2, sizeof(int)));
-    KASSERT(val_3 == *(int *)ret_3);
-    KASSERT(0 == khashmap_remove(&map, &key_1, sizeof(int)));
-    KASSERT(ENOENT == khashmap_get(&ret_1, &map, &key_1, sizeof(int)));
 
     com_vfs_t *rootfs = NULL;
     com_fs_tmpfs_mount(&rootfs, NULL);
@@ -254,12 +230,8 @@ void kernel_entry(void) {
     arch_file_t *initrd = arch_info_get_initrd();
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
-    KDEBUG("here data=%x", term->backend.data);
-
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
-
-    KDEBUG("here data=%x", term->backend.data);
 
     com_vnode_t *tty_dev = NULL;
     com_io_tty_init(&tty_dev);
@@ -294,6 +266,7 @@ void kernel_entry(void) {
 
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
+    com_io_term_enable(term);
     com_io_term_init();
     com_io_term_set_buffering(term, true);
     arch_context_trampoline(&thread->ctx);
