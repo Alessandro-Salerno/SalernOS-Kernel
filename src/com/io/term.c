@@ -186,18 +186,25 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
 
     com_spinlock_acquire(&term->lock);
 
-    if (state != term->buffering.enabled) {
-        if (term->buffering.enabled) {
-            flush_buffer_nolock(term);
-        }
-        term->backend.ops->flush(term->backend.data);
-        term->buffering.enabled = state;
+    if (state == term->buffering.enabled) {
+        com_spinlock_release(&term->lock);
+        return;
     }
+
+    if (term->buffering.enabled) {
+        flush_buffer_nolock(term);
+    }
+    term->backend.ops->flush(term->backend.data);
+    term->buffering.enabled = state;
 
     com_spinlock_release(&term->lock);
 
     com_spinlock_acquire(&BufferedQueueLock);
-    TAILQ_INSERT_TAIL(&BufferQueue, term, buffering.internal.queue);
+    if (state) {
+        TAILQ_INSERT_TAIL(&BufferQueue, term, buffering.internal.queue);
+    } else {
+        TAILQ_REMOVE(&BufferQueue, term, buffering.internal.queue);
+    }
     com_spinlock_release(&BufferedQueueLock);
 }
 
