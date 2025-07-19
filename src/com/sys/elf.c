@@ -279,6 +279,7 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
         &prog_data, path, kstrlen(path), proc->root, proc->cwd, 0, new_pt);
 
     if (0 != status) {
+        KDEBUG("elf load failed here");
         goto fail;
     }
 
@@ -291,10 +292,11 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
                                     kstrlen(prog_data.interpreter_path),
                                     proc->root,
                                     proc->cwd,
-                                    0x40000000, // TODO: why?
+                                    0x40000000,
                                     new_pt);
 
         if (0 != status) {
+            KDEBUG("elf load failed here");
             goto fail;
         }
 

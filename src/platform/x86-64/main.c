@@ -236,14 +236,14 @@ void kernel_entry(void) {
     com_vnode_t *tty_dev = NULL;
     com_io_tty_init(&tty_dev);
 
-    char *const   argv[] = {"./fresh", NULL};
-    char *const   envp[] = {"TERM=linux", NULL};
+    char *const   argv[] = {"./boot/init", NULL};
+    char *const   envp[] = {NULL};
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, rootfs->root, rootfs->root);
     com_thread_t *thread = com_sys_thread_new(proc, NULL, 0, NULL);
-    KASSERT(0 ==
-            com_sys_elf64_prepare_proc(
-                &proc->page_table, "./fresh", argv, envp, proc, &thread->ctx));
-    KDEBUG("fresh thread has tid=%u", thread->tid);
+    KASSERT(
+        0 ==
+        com_sys_elf64_prepare_proc(
+            &proc->page_table, "./boot/init", argv, envp, proc, &thread->ctx));
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
     stdfile->vnode      = tty_dev;
