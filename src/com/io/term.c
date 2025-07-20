@@ -46,6 +46,13 @@ skip:
     ThreadTicks = 0;
 }
 
+static void refresh_term_nolock(com_term_t *term) {
+    if (term->buffering.enabled) {
+        flush_buffer_nolock(term);
+    }
+    term->backend.ops->refresh(term->backend.data);
+}
+
 static void flush_thread(void) {
     while (true) {
         if (THREAD_INTERVAL != ThreadTicks) {
@@ -213,7 +220,10 @@ void com_io_term_enable(com_term_t *term) {
         return;
     }
 
+    com_spinlock_acquire(&term->lock);
     term->backend.ops->enable(term->backend.data);
+    refresh_term_nolock(term);
+    com_spinlock_release(&term->lock);
 }
 
 void com_io_term_disable(com_term_t *term) {
@@ -221,7 +231,23 @@ void com_io_term_disable(com_term_t *term) {
         return;
     }
 
+    com_spinlock_acquire(&term->lock);
     term->backend.ops->disable(term->backend.data);
+    com_spinlock_release(&term->lock);
+}
+
+void com_io_term_refresh(com_term_t *term) {
+    if (NULL == term) {
+        term = atomic_load(&FallbackTerm);
+    }
+
+    if (NULL == term) {
+        return;
+    }
+
+    com_spinlock_acquire(&term->lock);
+    refresh_term_nolock(term);
+    com_spinlock_release(&term->lock);
 }
 
 void com_io_term_set_fallback(com_term_t *fallback_term) {

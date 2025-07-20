@@ -63,7 +63,12 @@ static void flanterm_enable(void *termdata) {
 
 static void flanterm_disable(void *termdata) {
     struct flanterm_context *context = termdata;
-    context->autoflush               = true;
+    context->autoflush               = false;
+}
+
+static void flanterm_refresh(void *termdata) {
+    struct flanterm_context *context = termdata;
+    context->full_refresh(context);
 }
 
 static void *flanterm_malloc(size_t bytes) {
@@ -84,8 +89,8 @@ void *opt_flanterm_init(arch_framebuffer_t *fb,
                         uint32_t            bg_color,
                         size_t              scale_x,
                         size_t              scale_y) {
-    struct flanterm_context *ret = flanterm_fb_init(NULL,
-                                                    NULL,
+    struct flanterm_context *ret = flanterm_fb_init(flanterm_malloc,
+                                                    flanterm_free,
                                                     fb->address,
                                                     fb->width,
                                                     fb->height,
@@ -121,6 +126,7 @@ com_term_backend_t opt_flanterm_new_context() {
                                          .set_size = flanterm_set_size,
                                          .flush    = flanterm_flush,
                                          .enable   = flanterm_enable,
-                                         .disable  = flanterm_disable};
+                                         .disable  = flanterm_disable,
+                                         .refresh  = flanterm_refresh};
     return (com_term_backend_t){.ops = &ops, .data = NULL};
 }

@@ -68,10 +68,11 @@ int com_fs_devfs_isatty(com_vnode_t *node);
 
 // OTHER FUNCTIONS
 
-int com_fs_devfs_register(com_vnode_t  **out,
-                          com_vnode_t   *dir,
-                          const char    *name,
-                          size_t         namelen,
-                          com_dev_ops_t *devops,
-                          void          *devdata);
-int com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs);
+void *com_fs_devfs_get_data(com_vnode_t *node);
+int   com_fs_devfs_register(com_vnode_t  **out,
+                            com_vnode_t   *dir,
+                            const char    *name,
+                            size_t         namelen,
+                            com_dev_ops_t *devops,
+                            void          *devdata);
+int   com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs);

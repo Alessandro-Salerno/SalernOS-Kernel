@@ -38,6 +38,7 @@ typedef struct com_term_backend_ops {
     void (*flush)(void *termdata);
     void (*enable)(void *termdata);
     void (*disable)(void *termdata);
+    void (*refresh)(void *termdata);
 } com_term_backend_ops_t;
 
 typedef struct com_term_backend {
@@ -70,5 +71,6 @@ void        com_io_term_flush(com_term_t *term);
 void        com_io_term_set_buffering(com_term_t *term, bool state);
 void        com_io_term_enable(com_term_t *term);
 void        com_io_term_disable(com_term_t *term);
+void        com_io_term_refresh(com_term_t *term);
 void        com_io_term_set_fallback(com_term_t *fallback_term);
 void        com_io_term_init(void);

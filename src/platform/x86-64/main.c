@@ -19,12 +19,12 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/io/console.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
@@ -92,25 +92,25 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
 
     if (0xe0 == prev_code) {
         if (0x53 == code) {
-            com_io_tty_kbd_in(127, 0);
+            com_io_console_kbd_in(127, 0);
             goto end;
         }
 
         switch (code) {
         case 0x4b:
-            com_io_tty_kbd_in('D', COM_IO_TTY_MOD_ARROW);
+            com_io_console_kbd_in('D', COM_IO_TTY_MOD_ARROW);
             break;
 
         case 0x4d:
-            com_io_tty_kbd_in('C', COM_IO_TTY_MOD_ARROW);
+            com_io_console_kbd_in('C', COM_IO_TTY_MOD_ARROW);
             break;
 
         case 0x48:
-            com_io_tty_kbd_in('A', COM_IO_TTY_MOD_ARROW);
+            com_io_console_kbd_in('A', COM_IO_TTY_MOD_ARROW);
             break;
 
         case 0x50:
-            com_io_tty_kbd_in('B', COM_IO_TTY_MOD_ARROW);
+            com_io_console_kbd_in('B', COM_IO_TTY_MOD_ARROW);
             break;
         }
     } else {
@@ -148,12 +148,18 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
             break;
 
         default:
-            if (code < 0x80) {
+            if (code >= 0x3b && code <= 0x44) {
+                int  fkey = code - 0x3b;
+                char key_c =
+                    'A' + fkey; // TODO: this is not standard, has to be
+                                // translated in tty to be sent to userspace
+                com_io_console_kbd_in(key_c, mod | COM_IO_TTY_MOD_FKEY);
+            } else if (code < 0x80) {
                 if (COM_IO_TTY_MOD_LSHIFT & mod ||
                     COM_IO_TTY_MOD_RSHIFT & mod) {
-                    com_io_tty_kbd_in(asciitableShifted[code], mod);
+                    com_io_console_kbd_in(asciitableShifted[code], mod);
                 } else {
-                    com_io_tty_kbd_in(asciitable[code], mod);
+                    com_io_console_kbd_in(asciitable[code], mod);
                 }
             }
             break;
@@ -215,9 +221,9 @@ void kernel_entry(void) {
     x86_64_idt_stub();
     com_sys_syscall_init();
 
-    com_term_backend_t tb   = opt_flanterm_new_context();
-    com_term_t        *term = com_io_term_new(tb);
-    com_io_term_set_fallback(term);
+    com_term_backend_t main_tb   = opt_flanterm_new_context();
+    com_term_t        *main_term = com_io_term_new(main_tb);
+    com_io_term_set_fallback(main_term);
 
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
     // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
@@ -233,20 +239,32 @@ void kernel_entry(void) {
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
 
-    com_vnode_t *tty_dev = NULL;
-    com_io_tty_init(&tty_dev);
+    com_vnode_t *main_tty_dev  = NULL;
+    com_tty_t   *main_tty_data = NULL;
+    com_io_tty_init_text(&main_tty_dev, &main_tty_data, main_term);
+    com_io_console_add_tty(main_tty_data);
 
-    char *const   argv[] = {"./boot/init", NULL};
+    for (size_t i = 0; i < COM_IO_CONSOLE_MAX_TTYS - 1; i++) {
+        com_term_backend_t tb   = opt_flanterm_new_context();
+        com_term_t        *term = com_io_term_new(tb);
+
+        com_vnode_t *tty_dev  = NULL;
+        com_tty_t   *tty_data = NULL;
+        com_io_tty_init_text(&tty_dev, &tty_data, term);
+        com_io_console_add_tty(tty_data);
+    }
+
+    char *const   argv[] = {"/boot/init", NULL};
     char *const   envp[] = {NULL};
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, rootfs->root, rootfs->root);
     com_thread_t *thread = com_sys_thread_new(proc, NULL, 0, NULL);
     KASSERT(
         0 ==
         com_sys_elf64_prepare_proc(
-            &proc->page_table, "./boot/init", argv, envp, proc, &thread->ctx));
+            &proc->page_table, "/boot/init", argv, envp, proc, &thread->ctx));
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
-    stdfile->vnode      = tty_dev;
+    stdfile->vnode      = main_tty_dev;
     stdfile->num_ref    = 3;
     proc->next_fd       = 3;
     com_filedesc_t stddesc;
@@ -256,7 +274,7 @@ void kernel_entry(void) {
     proc->fd[1]   = stddesc;
     proc->fd[2]   = stddesc;
 
-    com_sys_proc_new_session_nolock(proc, tty_dev);
+    com_sys_proc_new_session_nolock(proc, main_tty_dev);
 
     ARCH_CPU_GET()->ist.rsp0 = (uint64_t)thread->kernel_stack;
     ARCH_CPU_GET()->thread   = thread;
@@ -266,9 +284,9 @@ void kernel_entry(void) {
 
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
-    com_io_term_enable(term);
+    com_io_term_enable(main_term);
     com_io_term_init();
-    com_io_term_set_buffering(term, true);
+    com_io_term_set_buffering(main_term, true);
     arch_context_trampoline(&thread->ctx);
 
     for (;;) {

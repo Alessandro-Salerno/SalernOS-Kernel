@@ -18,13 +18,11 @@
 
 #pragma once
 
-#include <stddef.h>
+#include <kernel/com/io/tty.h>
 #include <stdint.h>
 
-int    kstrcmp(const char *s1, const char *s2);
-size_t kstrlen(const char *s);
-void   kstrcpy(char *dst, const char *src);
+#define COM_IO_CONSOLE_MAX_TTYS 7
 
-const char *kuitoa(uint64_t val, char *s);
-const char *kitoa(int64_t val, char *s);
-const char *kxuitoa(uint64_t val, char *s);
+void com_io_console_kbd_in(char c, uintmax_t mod);
+void com_io_console_add_tty(com_tty_t *tty);
+void com_io_console_init(void);

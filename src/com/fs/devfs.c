@@ -57,7 +57,7 @@ int com_fs_devfs_create(com_vnode_t **out,
                         size_t        namelen,
                         uintmax_t     attr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_create(
+    int ret          = com_fs_tmpfs_create(
         &new, dir, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
@@ -78,7 +78,7 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
                        size_t        namelen,
                        uintmax_t     attr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_mkdir(
+    int ret          = com_fs_tmpfs_mkdir(
         &new, parent, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
@@ -120,6 +120,11 @@ int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
 int com_fs_devfs_isatty(com_vnode_t *node) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
     return dev->devops->isatty(dev->devdata);
+}
+
+void *com_fs_devfs_get_data(com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+    return dev->devdata;
 }
 
 // OTHER FUNCTIONS
