@@ -24,7 +24,7 @@
 #include <stdatomic.h>
 #include <vendor/tailq.h>
 
-#define THREAD_INTERVAL 10
+#define THREAD_INTERVAL 2
 
 static _Atomic(com_term_t *) FallbackTerm = NULL;
 static size_t                ThreadTicks  = 0;
@@ -50,6 +50,7 @@ static void refresh_term_nolock(com_term_t *term) {
     if (term->buffering.enabled) {
         flush_buffer_nolock(term);
     }
+    term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
 }
 
@@ -177,8 +178,8 @@ void com_io_term_flush(com_term_t *term) {
     if (term->buffering.enabled) {
         flush_buffer_nolock(term);
     }
-    term->backend.ops->flush(term->backend.data);
 
+    term->backend.ops->flush(term->backend.data);
     com_spinlock_release(&term->lock);
 }
 
@@ -201,9 +202,9 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
     if (term->buffering.enabled) {
         flush_buffer_nolock(term);
     }
+
     term->backend.ops->flush(term->backend.data);
     term->buffering.enabled = state;
-
     com_spinlock_release(&term->lock);
 
     com_spinlock_acquire(&BufferedQueueLock);
@@ -222,6 +223,7 @@ void com_io_term_enable(com_term_t *term) {
 
     com_spinlock_acquire(&term->lock);
     term->backend.ops->enable(term->backend.data);
+
     refresh_term_nolock(term);
     com_spinlock_release(&term->lock);
 }

@@ -66,10 +66,9 @@ COM_SYS_SYSCALL(com_sys_syscall_dup3) {
     curr_proc->fd[new_fd]       = curr_proc->fd[old_fd];
     curr_proc->fd[new_fd].flags = 0;
 
-    com_spinlock_release(&curr_proc->fd_lock);
-
     ret.value = new_fd;
 
 end:
+    com_spinlock_release(&curr_proc->fd_lock);
     return ret;
 }

@@ -242,6 +242,7 @@ void kernel_entry(void) {
     com_vnode_t *main_tty_dev  = NULL;
     com_tty_t   *main_tty_data = NULL;
     com_io_tty_init_text(&main_tty_dev, &main_tty_data, main_term);
+    com_io_term_init();
     com_io_console_add_tty(main_tty_data);
 
     for (size_t i = 0; i < COM_IO_CONSOLE_MAX_TTYS - 1; i++) {
@@ -251,6 +252,7 @@ void kernel_entry(void) {
         com_vnode_t *tty_dev  = NULL;
         com_tty_t   *tty_data = NULL;
         com_io_tty_init_text(&tty_dev, &tty_data, term);
+        com_io_term_set_buffering(term, true);
         com_io_console_add_tty(tty_data);
     }
 
@@ -285,7 +287,6 @@ void kernel_entry(void) {
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
     com_io_term_enable(main_term);
-    com_io_term_init();
     com_io_term_set_buffering(main_term, true);
     arch_context_trampoline(&thread->ctx);
 
