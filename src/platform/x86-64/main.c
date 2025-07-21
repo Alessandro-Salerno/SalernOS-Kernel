@@ -51,6 +51,7 @@
 #include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/str.h>
 #include <lib/util.h>
 #include <signal.h>
 #include <stdint.h>
@@ -187,6 +188,16 @@ USED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
 
     if (ARCH_CONTEXT_ISUSER(ctx) && NULL != curr_proc) {
         KDEBUG("sending SIGSEGV to pid=%d", curr_proc->pid);
+        if (NULL != curr_proc->fd[2].file &&
+            NULL != curr_proc->fd[2].file->vnode) {
+            char *message = "SEGMENTATION FAULT\n";
+            com_fs_vfs_write(NULL,
+                             curr_proc->fd[2].file->vnode,
+                             message,
+                             kstrlen(message),
+                             curr_proc->fd[2].file->off,
+                             0);
+        }
         com_sys_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
     } else {
         com_panic(ctx, "cpu exception (page fault)");
@@ -226,7 +237,7 @@ void kernel_entry(void) {
     com_io_term_set_fallback(main_term);
 
     com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
-    // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
+    com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
 

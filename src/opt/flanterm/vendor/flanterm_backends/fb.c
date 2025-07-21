@@ -1,4 +1,4 @@
-/* Copyright (C) 2022-2024 mintsuki and contributors.
+/* Copyright (C) 2022-2025 mintsuki and contributors.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -23,17 +23,33 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <lib/crt.h>
+#ifdef __cplusplus
+#error \
+    "Please do not compile Flanterm as C++ code! Flanterm should be compiled as C99 or newer."
+#endif
+
+#ifndef __STDC_VERSION__
+#error "Flanterm must be compiled as C99 or newer."
+#endif
+
+#if defined(_MSC_VER)
+#define ALWAYS_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define ALWAYS_INLINE inline
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <vendor/flanterm/backends/fb.h>
-#include <vendor/flanterm/flanterm.h>
 
-#ifndef FLANTERM_CUSTOM_CRT
-void *memset(void *, int, size_t);
-void *memcpy(void *, const void *, size_t);
+#ifndef FLANTERM_IN_FLANTERM
+#define FLANTERM_IN_FLANTERM
 #endif
+
+#include "../flanterm.h"
+#include "fb.h"
 
 #ifndef FLANTERM_FB_DISABLE_BUMP_ALLOC
 
@@ -48,6 +64,19 @@ static uint8_t bump_alloc_pool[FLANTERM_FB_BUMP_ALLOC_POOL_SIZE];
 static size_t  bump_alloc_ptr = 0;
 
 static void *bump_alloc(size_t s) {
+    static bool base_offset_added = false;
+    if (!base_offset_added) {
+        if ((uintptr_t)bump_alloc_pool & 0xf) {
+            bump_alloc_ptr += 0x10 - ((uintptr_t)bump_alloc_pool & 0xf);
+        }
+        base_offset_added = true;
+    }
+
+    if ((s & 0xf) != 0) {
+        s += 0x10;
+        s &= ~(size_t)0xf;
+    }
+
     size_t next_ptr = bump_alloc_ptr + s;
     if (next_ptr > FLANTERM_FB_BUMP_ALLOC_POOL_SIZE) {
         return NULL;
@@ -407,8 +436,8 @@ static const uint8_t builtin_font[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00};
 
-static inline __attribute__((always_inline)) uint32_t
-convert_colour(struct flanterm_context *_ctx, uint32_t colour) {
+static ALWAYS_INLINE uint32_t convert_colour(struct flanterm_context *_ctx,
+                                             uint32_t                 colour) {
     struct flanterm_fb_context *ctx = (void *)_ctx;
     uint32_t                    r   = (colour >> 16) & 0xff;
     uint32_t                    g   = (colour >> 8) & 0xff;

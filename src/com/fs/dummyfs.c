@@ -46,7 +46,7 @@ static com_vnode_ops_t DummyfsNodeOps =
                       .read   = com_fs_dummyfs_read,
                       .lookup = com_fs_dummyfs_lookup};
 
-static int kstrcmp(const char *str1, const char *str2, size_t max) {
+static int kstrncmp(const char *str1, const char *str2, size_t max) {
     for (size_t i = 0; 0 != *str1 && 0 != *str2 && i < max; i++) {
         if (*str1 != *str2) {
             return 1;
@@ -196,7 +196,7 @@ int com_fs_dummyfs_lookup(com_vnode_t **out,
     for (size_t i = 0; i < ARCH_PAGE_SIZE / sizeof(struct dummyfs_node) - 1;
          i++) {
         KDEBUG("dummyfs lookup: attempting index %u", i);
-        if (dirbuf[i].present && 0 == kstrcmp(dirbuf[i].name, name, max)) {
+        if (dirbuf[i].present && 0 == kstrncmp(dirbuf[i].name, name, max)) {
             KDEBUG("found: name=%s", dirbuf[i].name);
             found          = &dirbuf[i];
             found->present = true;

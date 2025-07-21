@@ -20,63 +20,60 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/opt/flanterm.h>
 #include <kernel/platform/info.h>
-#include <vendor/flanterm/backends/fb.h>
-#include <vendor/flanterm/flanterm.h>
 
-static void *flanterm_init(void) {
+#include "vendor/flanterm_backends/fb.h"
+
+#include "vendor/flanterm.h"
+
+static void *flanterm_backend_init(void) {
     return opt_flanterm_init(arch_info_get_fb(), 0xffffffff, 0, 0, 0);
 }
 
-static void flanterm_putsn(void *termdata, const char *s, size_t n) {
+static void flanterm_backend_putsn(void *termdata, const char *s, size_t n) {
     struct flanterm_context *context = termdata;
     flanterm_write(context, s, n);
 }
 
-static void flanterm_get_size(void *termdata, size_t *rows, size_t *cols) {
+static void
+flanterm_backend_get_size(void *termdata, size_t *rows, size_t *cols) {
     struct flanterm_context *context = termdata;
-
-    if (NULL != rows) {
-        *rows = context->rows;
-    }
-
-    if (NULL != cols) {
-        *cols = context->cols;
-    }
+    flanterm_get_dimensions(context, cols, rows);
 }
 
-static void flanterm_set_size(void *termdata, size_t rows, size_t cols) {
+static void
+flanterm_backend_set_size(void *termdata, size_t rows, size_t cols) {
     (void)termdata;
     (void)rows;
     (void)cols;
     // TODO: maybe do something with scaling?
 }
 
-static void flanterm_flush(void *termdata) {
+static void flanterm_backend_flush(void *termdata) {
     struct flanterm_context *context = termdata;
-    context->double_buffer_flush(context);
+    flanterm_flush(context);
 }
 
-static void flanterm_enable(void *termdata) {
+static void flanterm_backend_enable(void *termdata) {
     struct flanterm_context *context = termdata;
-    context->autoflush               = true;
+    flanterm_set_autoflush(context, true);
 }
 
-static void flanterm_disable(void *termdata) {
+static void flanterm_backend_disable(void *termdata) {
     struct flanterm_context *context = termdata;
-    context->autoflush               = false;
+    flanterm_set_autoflush(context, false);
 }
 
-static void flanterm_refresh(void *termdata) {
+static void flanterm_backend_refresh(void *termdata) {
     struct flanterm_context *context = termdata;
-    context->full_refresh(context);
+    flanterm_full_refresh(context);
 }
 
-static void *flanterm_malloc(size_t bytes) {
+static void *flanterm_backend_malloc(size_t bytes) {
     return (void *)ARCH_PHYS_TO_HHDM(
         com_mm_pmm_alloc_many(bytes / ARCH_PAGE_SIZE + 1));
 }
 
-static void flanterm_free(void *buf, size_t bytes) {
+static void flanterm_backend_free(void *buf, size_t bytes) {
     for (uintptr_t page = (uintptr_t)buf;
          page < (uintptr_t)buf + bytes * ARCH_PAGE_SIZE;
          page += ARCH_PAGE_SIZE) {
@@ -89,8 +86,8 @@ void *opt_flanterm_init(arch_framebuffer_t *fb,
                         uint32_t            bg_color,
                         size_t              scale_x,
                         size_t              scale_y) {
-    struct flanterm_context *ret = flanterm_fb_init(flanterm_malloc,
-                                                    flanterm_free,
+    struct flanterm_context *ret = flanterm_fb_init(flanterm_backend_malloc,
+                                                    flanterm_backend_free,
                                                     fb->address,
                                                     fb->width,
                                                     fb->height,
@@ -115,18 +112,18 @@ void *opt_flanterm_init(arch_framebuffer_t *fb,
                                                     scale_x,
                                                     scale_y,
                                                     0);
-    ret->autoflush               = false;
+    flanterm_backend_disable(ret);
     return ret;
 }
 
 com_term_backend_t opt_flanterm_new_context() {
-    static com_term_backend_ops_t ops = {.init     = flanterm_init,
-                                         .putsn    = flanterm_putsn,
-                                         .get_size = flanterm_get_size,
-                                         .set_size = flanterm_set_size,
-                                         .flush    = flanterm_flush,
-                                         .enable   = flanterm_enable,
-                                         .disable  = flanterm_disable,
-                                         .refresh  = flanterm_refresh};
+    static com_term_backend_ops_t ops = {.init     = flanterm_backend_init,
+                                         .putsn    = flanterm_backend_putsn,
+                                         .get_size = flanterm_backend_get_size,
+                                         .set_size = flanterm_backend_set_size,
+                                         .flush    = flanterm_backend_flush,
+                                         .enable   = flanterm_backend_enable,
+                                         .disable  = flanterm_backend_disable,
+                                         .refresh  = flanterm_backend_refresh};
     return (com_term_backend_t){.ops = &ops, .data = NULL};
 }

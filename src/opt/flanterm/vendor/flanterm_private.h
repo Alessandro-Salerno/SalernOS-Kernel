@@ -1,4 +1,4 @@
-/* Copyright (C) 2022-2024 mintsuki and contributors.
+/* Copyright (C) 2022-2025 mintsuki and contributors.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -23,76 +23,62 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FLANTERM_H
-#define FLANTERM_H 1
+#ifndef FLANTERM_PRIVATE_H
+#define FLANTERM_PRIVATE_H 1
+
+#ifndef FLANTERM_IN_FLANTERM
+#error "Do not use flanterm_private.h. Use interfaces defined in flanterm.h only."
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
 #define FLANTERM_MAX_ESC_VALUES 16
-
-#define FLANTERM_CB_DEC           10
-#define FLANTERM_CB_BELL          20
-#define FLANTERM_CB_PRIVATE_ID    30
-#define FLANTERM_CB_STATUS_REPORT 40
-#define FLANTERM_CB_POS_REPORT    50
-#define FLANTERM_CB_KBD_LEDS      60
-#define FLANTERM_CB_MODE          70
-#define FLANTERM_CB_LINUX         80
-
-#define FLANTERM_OOB_OUTPUT_OCRNL  (1 << 0)
-#define FLANTERM_OOB_OUTPUT_OFDEL  (1 << 1)
-#define FLANTERM_OOB_OUTPUT_OFILL  (1 << 2)
-#define FLANTERM_OOB_OUTPUT_OLCUC  (1 << 3)
-#define FLANTERM_OOB_OUTPUT_ONLCR  (1 << 4)
-#define FLANTERM_OOB_OUTPUT_ONLRET (1 << 5)
-#define FLANTERM_OOB_OUTPUT_ONOCR  (1 << 6)
-#define FLANTERM_OOB_OUTPUT_OPOST  (1 << 7)
 
 struct flanterm_context {
     /* internal use */
 
-    size_t   tab_size;
-    bool     autoflush;
-    bool     cursor_enabled;
-    bool     scroll_enabled;
-    bool     control_sequence;
-    bool     escape;
-    bool     osc;
-    bool     osc_escape;
-    bool     rrr;
-    bool     discard_next;
-    bool     bold;
-    bool     bg_bold;
-    bool     reverse_video;
-    bool     dec_private;
-    bool     insert_mode;
+    size_t tab_size;
+    bool autoflush;
+    bool cursor_enabled;
+    bool scroll_enabled;
+    bool control_sequence;
+    bool escape;
+    bool osc;
+    bool osc_escape;
+    bool rrr;
+    bool discard_next;
+    bool bold;
+    bool bg_bold;
+    bool reverse_video;
+    bool dec_private;
+    bool insert_mode;
     uint64_t code_point;
-    size_t   unicode_remaining;
-    uint8_t  g_select;
-    uint8_t  charsets[2];
-    size_t   current_charset;
-    size_t   escape_offset;
-    size_t   esc_values_i;
-    size_t   saved_cursor_x;
-    size_t   saved_cursor_y;
-    size_t   current_primary;
-    size_t   current_bg;
-    size_t   scroll_top_margin;
-    size_t   scroll_bottom_margin;
+    size_t unicode_remaining;
+    uint8_t g_select;
+    uint8_t charsets[2];
+    size_t current_charset;
+    size_t escape_offset;
+    size_t esc_values_i;
+    size_t saved_cursor_x;
+    size_t saved_cursor_y;
+    size_t current_primary;
+    size_t current_bg;
+    size_t scroll_top_margin;
+    size_t scroll_bottom_margin;
     uint32_t esc_values[FLANTERM_MAX_ESC_VALUES];
     uint64_t oob_output;
-    bool     saved_state_bold;
-    bool     saved_state_bg_bold;
-    bool     saved_state_reverse_video;
-    size_t   saved_state_current_charset;
-    size_t   saved_state_current_primary;
-    size_t   saved_state_current_bg;
+    bool saved_state_bold;
+    bool saved_state_bg_bold;
+    bool saved_state_reverse_video;
+    size_t saved_state_current_charset;
+    size_t saved_state_current_primary;
+    size_t saved_state_current_bg;
 
     /* to be set by backend */
 
@@ -112,11 +98,7 @@ struct flanterm_context {
     void (*set_text_bg_default)(struct flanterm_context *);
     void (*set_text_fg_default_bright)(struct flanterm_context *);
     void (*set_text_bg_default_bright)(struct flanterm_context *);
-    void (*move_character)(struct flanterm_context *,
-                           size_t new_x,
-                           size_t new_y,
-                           size_t old_x,
-                           size_t old_y);
+    void (*move_character)(struct flanterm_context *, size_t new_x, size_t new_y, size_t old_x, size_t old_y);
     void (*scroll)(struct flanterm_context *);
     void (*revscroll)(struct flanterm_context *);
     void (*swap_palette)(struct flanterm_context *);
@@ -128,17 +110,10 @@ struct flanterm_context {
 
     /* to be set by client */
 
-    void (*callback)(struct flanterm_context *,
-                     uint64_t,
-                     uint64_t,
-                     uint64_t,
-                     uint64_t);
+    void (*callback)(struct flanterm_context *, uint64_t, uint64_t, uint64_t, uint64_t);
 };
 
 void flanterm_context_reinit(struct flanterm_context *ctx);
-void flanterm_write(struct flanterm_context *ctx,
-                    const char              *buf,
-                    size_t                   count);
 
 #ifdef __cplusplus
 }
