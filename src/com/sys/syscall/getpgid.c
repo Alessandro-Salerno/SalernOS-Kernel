@@ -57,7 +57,9 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
     KASSERT(NULL != proc->proc_group);
 
     com_spinlock_acquire(&curr_proc->pg_lock);
-    com_spinlock_acquire(&proc->pg_lock);
+    if (proc != curr_proc) {
+        com_spinlock_acquire(&proc->pg_lock);
+    }
 
     if (proc->proc_group->session->sid != curr_proc->proc_group->session->sid) {
         ret.err = EPERM;
@@ -67,7 +69,9 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
     ret.value = proc->proc_group->pgid;
 
 end:
-    com_spinlock_release(&proc->pg_lock);
+    if (proc != curr_proc) {
+        com_spinlock_release(&proc->pg_lock);
+    }
     com_spinlock_release(&curr_proc->pg_lock);
     return ret;
 }

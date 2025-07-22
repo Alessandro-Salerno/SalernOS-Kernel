@@ -111,6 +111,12 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
         return 0;
     }
 
+    if (TIOCSPGRP == op) {
+        tty->backend.fg_pgid = *(pid_t *)buf;
+        KDEBUG("changed tty fg pgid to %d", tty->backend.fg_pgid);
+        return 0;
+    }
+
     return ENOSYS;
 }
 

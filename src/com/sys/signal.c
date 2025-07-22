@@ -111,6 +111,7 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
         return EINVAL;
     }
 
+    KDEBUG("sending signal %d to pid=%d", sig, pid);
     com_proc_t *proc = com_sys_proc_get_by_pid(pid);
 
     if (NULL == proc) {
@@ -122,8 +123,6 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
         com_spinlock_release(&proc->signal_lock);
         return ESRCH;
     }
-
-    KDEBUG("pid=%d is sending signal %d to pid=%d", sender->pid, sig, pid);
 
     com_spinlock_acquire(&proc->threads_lock);
     com_thread_t *t, *_;
@@ -149,6 +148,8 @@ int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
     if (!IS_VALID_SIGNAL(sig)) {
         return EINVAL;
     }
+
+    KDEBUG("seding signal %d to pgid=%d", sig, pgid);
 
     com_proc_group_t *group = com_sys_proc_get_group_by_pgid(pgid);
 
