@@ -22,8 +22,11 @@
 #include <kernel/com/io/term.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/ringbuffer.h>
 #include <stdint.h>
 #include <termios.h>
+
+#define COM_IO_TTY_BUF_SZ (ARCH_PAGE_SIZE / 4)
 
 #define COM_IO_TTY_MOD_LCTRL  1UL
 #define COM_IO_TTY_MOD_RCTRL  2UL
@@ -36,16 +39,28 @@
 
 typedef enum com_tty_type { COM_TTY_TEXT, COM_TTY_FRAMEBUFFER } com_tty_type_t;
 
+// This is shared by both PTY and TTY
+typedef struct com_text_tty_backend {
+    size_t         rows;
+    size_t         cols;
+    struct termios termios;
+    pid_t          fg_pgid;
+    kringbuffer_t  slave_rb; // this is called slave for familiarity with PTYs
+                             // (even if it used by TTYs as well)
+    struct {
+        char   buffer[COM_IO_TTY_BUF_SZ];
+        size_t index;
+    } canon;
+
+    size_t (*echo)(const char *buf,
+                   size_t      buflen,
+                   bool        blocking,
+                   void       *passthrough);
+} com_text_tty_backend_t;
+
 typedef struct com_text_tty {
-    com_term_t             *term;
-    size_t                  rows;
-    size_t                  cols;
-    struct termios          termios;
-    com_spinlock_t          lock;
-    com_spinlock_t          write_lock;
-    struct com_thread_tailq waitlist;
-    uint8_t                 buf[2048];
-    size_t                  write;
+    com_term_t            *term;
+    com_text_tty_backend_t backend;
 } com_text_tty_t;
 
 typedef struct com_fb_tty {
@@ -62,7 +77,23 @@ typedef struct com_tty {
     size_t num;
 } com_tty_t;
 
+void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
+                             char                    c,
+                             bool                    blocking,
+                             void                   *passthrough);
+void com_io_tty_process_chars(com_text_tty_backend_t *tty_backend,
+                              const char             *buf,
+                              size_t                  buflen,
+                              bool                    blocking,
+                              void                   *passthrough);
 void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod);
+void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
+                                  size_t                  rows,
+                                  size_t                  cols,
+                                  size_t (*echo)(const char *buf,
+                                                 size_t      buflen,
+                                                 bool        blocking,
+                                                 void       *passthrough));
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);

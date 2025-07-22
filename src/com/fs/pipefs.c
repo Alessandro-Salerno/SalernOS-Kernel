@@ -85,7 +85,7 @@ int com_fs_pipefs_read(void        *buf,
         left -= readsz;
         read_count += readsz;
 
-        // If the write end clsoed while we were reading
+        // If the write end closed while we were reading
         if (NULL == pipe->write_end) {
             break;
         }

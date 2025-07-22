@@ -16,8 +16,6 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/term.h>
 #include <lib/util.h>

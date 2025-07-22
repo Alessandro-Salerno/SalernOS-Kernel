@@ -16,13 +16,12 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-// TODO: rewrite all of it using PTYs
-
 #define _GNU_SOURCE
 #define _DEFAULT_SOURCE
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
@@ -56,73 +55,18 @@ static int tty_read(void     *buf,
                     uintmax_t off,
                     uintmax_t flags) {
     (void)off;
-    (void)flags;
 
     com_tty_t *tty_data = devdata;
     KASSERT(COM_TTY_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    size_t read_count = 0;
-    com_spinlock_acquire(&tty->lock);
-
-    while (true) {
-        bool can_read  = false;
-        char eol       = tty->termios.c_cc[VEOL];
-        char eof       = tty->termios.c_cc[VEOF];
-        bool eof_found = false;
-
-        if (0 == eol) {
-            eol = '\n';
-        }
-
-        size_t i = 0;
-        for (; i < tty->write; i++) {
-            const char c = tty->buf[i];
-
-            // When using canonical mode, input is line-buffered. Thus, we only
-            // allow reading when EOL or EOF are reached
-            if ((ICANON & tty->termios.c_lflag) && (c == eol || c == eof)) {
-                if (c == eol) {
-                    i++;
-                }
-
-                eof_found = c == eof;
-                can_read  = true;
-                break;
-            }
-
-            // When operating in raw mode, input is not line-buffered. Thus we
-            // stop reading when we reach the amount of characters requested by
-            // the callee
-            else if (!(ICANON & tty->termios.c_lflag) && i + 1 == buflen) {
-                i++;
-                can_read = true;
-                break;
-            }
-        }
-
-        if (!can_read) {
-            com_sys_sched_wait(&tty->waitlist, &tty->lock);
-            continue;
-        }
-
-        kmemcpy((uint8_t *)buf + read_count, tty->buf, KMIN(buflen, i));
-        kmemmove(tty->buf,
-                 (uint8_t *)tty->buf + KMIN(buflen, i),
-                 tty->write - KMIN(buflen, i));
-        tty->write -= KMIN(buflen, i);
-
-        if (eof_found) {
-            tty->write--;
-        }
-
-        read_count += KMIN(buflen, i);
-        break;
-    }
-
-    com_spinlock_release(&tty->lock);
-    *bytes_read = read_count;
-    return 0;
+    return kringbuffer_read(buf,
+                            bytes_read,
+                            &tty->backend.slave_rb,
+                            buflen,
+                            !(O_NONBLOCK & flags),
+                            NULL,
+                            NULL);
 }
 
 static int tty_write(size_t   *bytes_written,
@@ -138,9 +82,7 @@ static int tty_write(size_t   *bytes_written,
     KASSERT(COM_TTY_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    // com_spinlock_acquire(&Tty.write_lock);
     com_io_term_putsn(tty->term, buf, buflen);
-    // com_spinlock_release(&Tty.write_lock);
     *bytes_written = buflen;
     return 0;
 }
@@ -152,20 +94,20 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
 
     if (TIOCGWINSZ == op) {
         struct winsize *ws = buf;
-        ws->ws_row         = tty->rows;
-        ws->ws_col         = tty->cols;
+        ws->ws_row         = tty->backend.rows;
+        ws->ws_col         = tty->backend.cols;
         return 0;
     }
 
     if (TCGETS == op) {
         struct termios *termios = buf;
-        *termios                = tty->termios;
+        *termios                = tty->backend.termios;
         return 0;
     }
 
     if (TCSETS == op || TCSETSF == op || TCSETSW == op) {
         struct termios *termios = buf;
-        tty->termios            = *termios;
+        tty->backend.termios    = *termios;
         return 0;
     }
 
@@ -173,7 +115,7 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
 }
 
 // NOTE: returns 0 because it returns the value of errno
-int tty_isatty(void *devdata) {
+static int tty_isatty(void *devdata) {
     (void)devdata;
     return 0;
 }
@@ -185,75 +127,20 @@ static com_dev_ops_t TextTtyDevOps = {.read   = tty_read,
 
 static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
-    bool is_del       = false;
     bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
-    bool handled      = false;
-    bool notify       = false;
+    bool is_del       = false;
+
     KASSERT(COM_TTY_TEXT == self->type);
     com_text_tty_t *tty = &self->tty.text;
-    char            eol = tty->termios.c_cc[VEOL];
-
-    if (0 == eol) {
-        eol = '\n';
-    }
 
     if (CONTROL_DEL == c) {
         is_del = true;
-        goto end;
     }
 
     if ('\b' == c) {
         c = CONTROL_DEL;
     }
 
-    if (is_ctrl_held) {
-        if (KISLOWER(c)) {
-            c -= 32;
-        }
-        c -= 64;
-    }
-
-    com_spinlock_acquire(&tty->lock);
-
-    if (!is_arrow) {
-        if (('\r' == c) && !(IGNCR & tty->termios.c_iflag) &&
-            (ICRNL & tty->termios.c_iflag)) {
-            c = '\n';
-        } else if (('\n' == c) && (INLCR & tty->termios.c_iflag)) {
-            c = '\r';
-        }
-
-        if (!(ICANON & tty->termios.c_lflag)) {
-            notify = true;
-            goto end;
-        }
-
-        if (eol == c) {
-            notify = true;
-        }
-
-        if (tty->termios.c_cc[VEOF] == c) {
-            tty->buf[tty->write] = c;
-            tty->write++;
-            handled = true;
-        }
-
-        if (tty->termios.c_cc[VERASE] == c) {
-            if (tty->write > 0) {
-                if (ECHOE & tty->termios.c_lflag) {
-                    com_io_term_puts(tty->term, "\b \b");
-                }
-
-                if (tty->write > 0) {
-                    tty->write--;
-                }
-            }
-
-            handled = true;
-        }
-    }
-
-end:
     if (is_arrow || is_del) {
         char   escape[4] = "\e[";
         size_t len       = 2;
@@ -267,39 +154,197 @@ end:
             len += 2;
         }
 
-        kmemcpy((uint8_t *)tty->buf + tty->write, escape, len);
-        tty->write += len;
-
-        if (ECHO & tty->termios.c_lflag) {
-            com_io_term_putsn(tty->term, escape, len);
-            handled = true;
-        }
-
-        // temporary fix until I implement proper pty/tty
-        if (!(ICANON & tty->termios.c_lflag)) {
-            notify = true;
-        }
-    } else if (!handled) {
-        tty->buf[tty->write] = c;
-        tty->write++;
-    }
-
-    if ((ECHO & tty->termios.c_lflag) && !handled) {
-        com_io_term_putc(tty->term, c);
-    }
-
-    if (notify && !TAILQ_EMPTY(&tty->waitlist)) {
-        com_sys_sched_notify(&tty->waitlist);
-        com_spinlock_release(&tty->lock);
-        com_sys_sched_yield();
+        com_io_tty_process_chars(&tty->backend, escape, len, false, tty);
         return;
     }
 
-    com_spinlock_release(&tty->lock);
+    if (is_ctrl_held) {
+        if (KISLOWER(c)) {
+            c -= 32;
+        }
+        c -= 64;
+    }
+
+    com_io_tty_process_char(&tty->backend, c, false, tty);
+}
+
+static size_t text_tty_echo(const char *buf,
+                            size_t      buflen,
+                            bool        blocking,
+                            void       *passthrough) {
+    (void)blocking;
+
+    com_text_tty_t *tty = passthrough;
+    com_io_term_putsn(tty->term, buf, buflen);
+    return buflen;
+}
+
+// CREDIT: vloxei64/ke
+// (reworked somewhat now, will probably be reworked more soon)
+void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
+                             char                    c,
+                             bool                    blocking,
+                             void                   *passthrough) {
+    bool handled   = false;
+    bool line_done = false;
+    int  sig       = COM_SYS_SIGNAL_NONE;
+
+    if (ISIG & tty_backend->termios.c_lflag) {
+        // TODO: print ^C
+        if (tty_backend->termios.c_cc[VINTR] == c) {
+            sig     = SIGINT;
+            handled = true;
+        }
+        if (tty_backend->termios.c_cc[VQUIT] == c) {
+            sig     = SIGQUIT;
+            handled = true;
+        }
+        if (tty_backend->termios.c_cc[VSUSP] == c) {
+            sig     = SIGTSTP;
+            handled = true;
+        }
+    }
+
+    if ('\r' == c && IGNCR & tty_backend->termios.c_iflag) {
+        return;
+    }
+
+    if ('\r' == c && ICRNL & tty_backend->termios.c_iflag) {
+        c = '\n';
+    }
+
+    if ('\n' == c && INLCR & tty_backend->termios.c_iflag) {
+        c = '\r';
+    }
+
+    // handle raw mode
+    if (!(ICANON & tty_backend->termios.c_lflag)) {
+        kringbuffer_write(
+            NULL, &tty_backend->slave_rb, &c, 1, false, NULL, NULL);
+        handled = true;
+        goto end;
+    }
+
+    // handle canon mode
+
+    if (tty_backend->termios.c_cc[VEOF] == c) {
+        handled   = true;
+        line_done = true;
+
+        if (0 == tty_backend->canon.index) {
+            tty_backend->slave_rb.is_eof = true;
+        }
+    }
+
+    if ('\n' == c || '\r' == c) {
+        line_done = true;
+    }
+
+    if (tty_backend->termios.c_cc[VERASE] == c) {
+        if (tty_backend->canon.index > 0) {
+            if (ECHOE & tty_backend->termios.c_lflag) {
+                tty_backend->echo("\b \b", 3, blocking, passthrough);
+            }
+            tty_backend->canon.index--;
+        }
+
+        handled = true;
+    }
+
+    // kill line
+    if (tty_backend->termios.c_cc[VKILL] == c) {
+        while (tty_backend->canon.index > 0) {
+            if (tty_backend->canon.buffer[tty_backend->canon.index] == '\n' ||
+                tty_backend->canon.buffer[tty_backend->canon.index] ==
+                    tty_backend->termios.c_cc[VEOF] ||
+                tty_backend->canon.buffer[tty_backend->canon.index] ==
+                    tty_backend->termios.c_cc[VEOL]) {
+                break;
+            }
+
+            tty_backend->canon.index--;
+            if (ECHOKE & tty_backend->termios.c_lflag) {
+                tty_backend->echo("\b \b", 3, blocking, passthrough);
+            }
+        }
+
+        handled = true;
+    }
+
+end:
+    if (!handled) {
+        tty_backend->canon.buffer[tty_backend->canon.index++] = c;
+        if (ECHO & tty_backend->termios.c_lflag) {
+            tty_backend->echo(&c, 1, blocking, passthrough);
+        }
+    }
+
+    if (line_done) {
+        size_t nbytes = tty_backend->canon.index;
+        kringbuffer_write(NULL,
+                          &tty_backend->slave_rb,
+                          tty_backend->canon.buffer,
+                          nbytes,
+                          blocking,
+                          NULL,
+                          NULL);
+        tty_backend->canon.index = 0;
+    }
+
+    if (COM_SYS_SIGNAL_NONE != sig) {
+        com_sys_signal_send_to_proc_group(tty_backend->fg_pgid, sig, NULL);
+    }
+}
+
+void com_io_tty_process_chars(com_text_tty_backend_t *tty_backend,
+                              const char             *buf,
+                              size_t                  buflen,
+                              bool                    blocking,
+                              void                   *passthrough) {
+    for (size_t i = 0; i < buflen; i++) {
+        com_io_tty_process_char(tty_backend, buf[i], blocking, passthrough);
+    }
 }
 
 void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod) {
     tty->kbd_in(tty, c, mod);
+}
+
+void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
+                                  size_t                  rows,
+                                  size_t                  cols,
+                                  size_t (*echo)(const char *buf,
+                                                 size_t      buflen,
+                                                 bool        blocking,
+                                                 void       *passthrough)) {
+    kmemset(backend, sizeof(com_text_tty_backend_t), 0);
+    KRINGBUFFER_INIT(&backend->slave_rb);
+    backend->echo = echo;
+
+    backend->rows = rows;
+    backend->cols = cols;
+
+    backend->termios.c_cc[VINTR]    = CINTR;
+    backend->termios.c_cc[VQUIT]    = CQUIT;
+    backend->termios.c_cc[VERASE]   = CERASE;
+    backend->termios.c_cc[VKILL]    = CKILL;
+    backend->termios.c_cc[VEOF]     = CEOF;
+    backend->termios.c_cc[VTIME]    = CTIME;
+    backend->termios.c_cc[VMIN]     = CMIN;
+    backend->termios.c_cc[VSWTC]    = 0;
+    backend->termios.c_cc[VSTART]   = CSTART;
+    backend->termios.c_cc[VSTOP]    = CSTOP;
+    backend->termios.c_cc[VSUSP]    = CSUSP;
+    backend->termios.c_cc[VEOL]     = CEOL;
+    backend->termios.c_cc[VREPRINT] = CREPRINT;
+    backend->termios.c_cc[VDISCARD] = 0;
+    backend->termios.c_cc[VWERASE]  = CWERASE;
+    backend->termios.c_cc[VLNEXT]   = 0;
+    backend->termios.c_cflag        = TTYDEF_CFLAG;
+    backend->termios.c_iflag        = TTYDEF_IFLAG;
+    backend->termios.c_lflag        = TTYDEF_LFLAG;
+    backend->termios.c_oflag        = TTYDEF_OFLAG;
+    backend->termios.c_ispeed = backend->termios.c_ospeed = TTYDEF_SPEED;
 }
 
 int com_io_tty_init_text(com_vnode_t **out,
@@ -314,9 +359,6 @@ int com_io_tty_init_text(com_vnode_t **out,
     tty_data->num       = tty_num;
     com_text_tty_t *tty = &tty_data->tty.text;
     tty->term           = term;
-    tty->lock           = COM_SPINLOCK_NEW();
-
-    TAILQ_INIT(&tty->waitlist);
 
     // Poor man's sprintf
     char tty_num_str[24];
@@ -334,28 +376,9 @@ int com_io_tty_init_text(com_vnode_t **out,
         goto end;
     }
 
-    com_io_term_get_size(term, &tty->rows, &tty->cols);
-    tty->termios.c_cc[VINTR]    = CINTR;
-    tty->termios.c_cc[VQUIT]    = CQUIT;
-    tty->termios.c_cc[VERASE]   = CERASE;
-    tty->termios.c_cc[VKILL]    = CKILL;
-    tty->termios.c_cc[VEOF]     = CEOF;
-    tty->termios.c_cc[VTIME]    = CTIME;
-    tty->termios.c_cc[VMIN]     = CMIN;
-    tty->termios.c_cc[VSWTC]    = 0;
-    tty->termios.c_cc[VSTART]   = CSTART;
-    tty->termios.c_cc[VSTOP]    = CSTOP;
-    tty->termios.c_cc[VSUSP]    = CSUSP;
-    tty->termios.c_cc[VEOL]     = CEOL;
-    tty->termios.c_cc[VREPRINT] = CREPRINT;
-    tty->termios.c_cc[VDISCARD] = 0;
-    tty->termios.c_cc[VWERASE]  = CWERASE;
-    tty->termios.c_cc[VLNEXT]   = 0;
-    tty->termios.c_cflag        = TTYDEF_CFLAG;
-    tty->termios.c_iflag        = TTYDEF_IFLAG;
-    tty->termios.c_lflag        = TTYDEF_LFLAG;
-    tty->termios.c_oflag        = TTYDEF_OFLAG;
-    tty->termios.c_ispeed = tty->termios.c_ospeed = TTYDEF_SPEED;
+    size_t rows, cols;
+    com_io_term_get_size(term, &rows, &cols);
+    com_io_tty_init_text_backend(&tty->backend, rows, cols, text_tty_echo);
 
 end:
     if (NULL != out) {

@@ -33,6 +33,8 @@
 #define COM_SYS_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
     (*(maskptr) & (1UL << ((sig) - 1)))
 
+#define COM_SYS_SIGNAL_NONE (-1)
+
 typedef struct {
     unsigned long sig[1024 / (8 * sizeof(long))];
 } com_sigset_t;

@@ -202,15 +202,15 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     com_spinlock_acquire(&curr->sched_lock);
-    com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
-    if (NULL != curr->cpu) {
-        curr->cpu = NULL;
-    }
+
+    // curr->cpu is nulled and curr is removed from runqueue in sched, no need
+    // to do it here. In fact, this has caused issues, specifically with
+    // testjoin 1000
+
     curr->waiting_on   = waiting_on;
     curr->waiting_cond = cond;
     curr->runnable     = false;
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
-    com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 
     com_spinlock_release(cond);
     com_sys_sched_yield_nolock();
