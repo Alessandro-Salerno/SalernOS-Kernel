@@ -88,13 +88,15 @@ typedef struct com_proc {
     com_sigmask_t         masked_signals;
 } com_proc_t;
 
-com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             pid_t                 parent_pid,
-                             com_vnode_t          *root,
-                             com_vnode_t          *cwd);
-void        com_sys_proc_destroy(com_proc_t *proc);
-int         com_sys_proc_next_fd(com_proc_t *proc);
-com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd);
+com_proc_t     *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
+                                 pid_t                 parent_pid,
+                                 com_vnode_t          *root,
+                                 com_vnode_t          *cwd);
+void            com_sys_proc_destroy(com_proc_t *proc);
+int             com_sys_proc_next_fd(com_proc_t *proc);
+com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd);
+com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
+int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);

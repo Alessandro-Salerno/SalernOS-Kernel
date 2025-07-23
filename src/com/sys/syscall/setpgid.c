@@ -59,7 +59,8 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
 
     if (0 != pid) {
         proc = com_sys_proc_get_by_pid(pid);
-        if (NULL == proc || proc->parent_pid != curr_proc->pid) {
+        if (NULL == proc || (proc->pid != curr_proc->pid &&
+                             proc->parent_pid != curr_proc->pid)) {
             ret.err = ESRCH;
             goto end;
         }

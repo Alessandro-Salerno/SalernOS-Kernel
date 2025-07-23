@@ -41,8 +41,7 @@ void kvprintf(const char *fmt, va_list args) {
 
             case 'd':
             case 'i':
-                com_io_log_puts(
-                    (const char *)(kitoa(va_arg(args, int64_t), buf)));
+                com_io_log_puts((const char *)(kitoa(va_arg(args, int), buf)));
                 break;
 
             case 'c':

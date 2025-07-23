@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#define _GNU_SOURCE
 #include <arch/cpu.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -24,33 +25,71 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/str.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 
-// SYSCALL: dup3(int old_fd, int new_fd, int fd_flags)
-COM_SYS_SYSCALL(com_sys_syscall_dup3) {
+// SYSCALL: fstatat(int dir_fd, const char *path, struct stat *buf, int flags)
+COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    int old_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    int new_fd = COM_SYS_SYSCALL_ARG(int, 2);
-    int flags  = COM_SYS_SYSCALL_ARG(int, 3);
-
-    if (new_fd < 0 || old_fd < 0 || new_fd > COM_SYS_PROC_MAX_FDS ||
-        old_fd > COM_SYS_PROC_MAX_FDS) {
-        return COM_SYS_SYSCALL_ERR(EBADF);
-    }
+    int          dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
+    const char  *path   = COM_SYS_SYSCALL_ARG(void *, 2);
+    struct stat *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
+    int          flags  = COM_SYS_SYSCALL_ARG(int, 4);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    int dup_ret = com_sys_proc_duplicate_file(curr_proc, new_fd, old_fd);
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
-    if (dup_ret < 0) {
-        return COM_SYS_SYSCALL_ERR(-dup_ret);
+    com_vnode_t *dir      = NULL;
+    com_file_t  *dir_file = NULL;
+
+    if (AT_FDCWD == dir_fd) {
+        dir = atomic_load(&curr_proc->cwd);
+    } else {
+        dir_file = com_sys_proc_get_file(curr_proc, dir_fd);
+        if (NULL != dir_file) {
+            dir = dir_file->vnode;
+        } else {
+            ret.err = EBADF;
+            goto end;
+        }
     }
 
-    return COM_SYS_SYSCALL_OK(dup_ret);
+    KASSERT(NULL != dir);
+
+    bool         do_lookup = (AT_EMPTY_PATH & flags) && 0 == kstrlen(path);
+    int          vfs_err   = 0;
+    com_vnode_t *target    = dir;
+
+    if (!do_lookup) {
+        vfs_err = com_fs_vfs_lookup(
+            &target, path, kstrlen(path), curr_proc->root, dir);
+    }
+
+    if (0 != vfs_err) {
+        do_lookup = false; // avoid releasing vnode
+        ret.err   = vfs_err;
+        goto end;
+    }
+
+    vfs_err = com_fs_vfs_stat(buf, target);
+
+    if (vfs_err) {
+        ret.err = vfs_err;
+        goto end;
+    }
+
+    ret.value = 0;
+
+end:
+    COM_FS_FILE_RELEASE(dir_file);
+    if (do_lookup) {
+        COM_FS_VFS_VNODE_RELEASE(target);
+    }
+    return ret;
 }

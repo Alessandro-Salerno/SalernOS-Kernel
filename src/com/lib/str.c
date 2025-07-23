@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <lib/mem.h>
 #include <lib/str.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -146,4 +147,39 @@ const char *kxuitoa(uint64_t val, char *s) {
     s[16] = 0;
 
     return s;
+}
+
+// TODO: adopt this everywhere I calculate the seocnd-last index or similar
+void kstrpathpenult(const char *s,
+                    size_t      len,
+                    size_t     *penult_len,
+                    size_t     *end_idx,
+                    size_t     *end_len) {
+    while (len > 0 && '/' == s[len - 1]) {
+        len--;
+    }
+
+    char *end = kmemrchr(s, '/', len);
+
+    size_t plen = 0;
+    size_t eidx = 0;
+    size_t elen = len;
+
+    if (NULL != end) {
+        plen = end - s;
+        eidx = plen + 1;
+        elen = len - eidx;
+    }
+
+    if (NULL != penult_len) {
+        *penult_len = plen;
+    }
+
+    if (NULL != end_idx) {
+        *end_idx = eidx;
+    }
+
+    if (NULL != end_len) {
+        *end_len = elen;
+    }
 }

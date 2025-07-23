@@ -92,32 +92,8 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     KASSERT(COM_TTY_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    if (TIOCGWINSZ == op) {
-        struct winsize *ws = buf;
-        ws->ws_row         = tty->backend.rows;
-        ws->ws_col         = tty->backend.cols;
-        return 0;
-    }
-
-    if (TCGETS == op) {
-        struct termios *termios = buf;
-        *termios                = tty->backend.termios;
-        return 0;
-    }
-
-    if (TCSETS == op || TCSETSF == op || TCSETSW == op) {
-        struct termios *termios = buf;
-        tty->backend.termios    = *termios;
-        return 0;
-    }
-
-    if (TIOCSPGRP == op) {
-        tty->backend.fg_pgid = *(pid_t *)buf;
-        KDEBUG("changed tty fg pgid to %d", tty->backend.fg_pgid);
-        return 0;
-    }
-
-    return ENOSYS;
+    return com_io_tty_text_backend_ioctl(
+        &tty->backend, tty_data->vnode, op, buf);
 }
 
 // NOTE: returns 0 because it returns the value of errno
@@ -183,6 +159,75 @@ static size_t text_tty_echo(const char *buf,
     com_text_tty_t *tty = passthrough;
     com_io_term_putsn(tty->term, buf, buflen);
     return buflen;
+}
+
+int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
+                                  com_vnode_t            *tty_vn,
+                                  uintmax_t               op,
+                                  void                   *buf) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
+
+    if (TIOCGWINSZ == op) {
+        struct winsize *ws = buf;
+        ws->ws_row         = tty_backend->rows;
+        ws->ws_col         = tty_backend->cols;
+        return 0;
+    }
+
+    if (TCGETS == op) {
+        struct termios *termios = buf;
+        *termios                = tty_backend->termios;
+        return 0;
+    }
+
+    if (TCSETS == op || TCSETSF == op || TCSETSW == op) {
+        struct termios *termios = buf;
+        tty_backend->termios    = *termios;
+        return 0;
+    }
+
+    if (TIOCGPGRP == op) {
+        if (NULL == curr_proc->proc_group ||
+            NULL == curr_proc->proc_group->session ||
+            tty_vn != curr_proc->proc_group->session->tty) {
+            return ENOTTY;
+        }
+
+        if (0 != tty_backend->fg_pgid) {
+            *(pid_t *)buf = tty_backend->fg_pgid;
+        } else {
+            *(pid_t *)buf = 1000000; // POSIX says this must be an arbitrarly
+                                     // high number which is not assigned to
+                                     // anyu process or process group
+        }
+
+        return 0;
+    }
+
+    if (TIOCSCTTY == op) {
+        if (NULL == curr_proc->proc_group ||
+            NULL == curr_proc->proc_group->session) {
+            return ENOTTY; // TODO: probably wrog errno
+        }
+
+        curr_proc->proc_group->session->tty = tty_vn;
+        tty_backend->fg_pgid                = curr_proc->proc_group->pgid;
+        return 0;
+    }
+
+    if (TIOCSPGRP == op) {
+        if (NULL == curr_proc->proc_group ||
+            NULL == curr_proc->proc_group->session ||
+            tty_vn != curr_proc->proc_group->session->tty) {
+            return ENOTTY;
+        }
+
+        tty_backend->fg_pgid = *(pid_t *)buf;
+        return 0;
+    }
+
+    return ENOSYS;
 }
 
 // CREDIT: vloxei64/ke
@@ -381,6 +426,8 @@ int com_io_tty_init_text(com_vnode_t **out,
         tty_dev = NULL;
         goto end;
     }
+
+    tty_data->vnode = tty_dev;
 
     size_t rows, cols;
     com_io_term_get_size(term, &rows, &cols);

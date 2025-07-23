@@ -69,6 +69,7 @@ typedef struct com_fb_tty {
 
 typedef struct com_tty {
     com_tty_type_t type;
+    com_vnode_t   *vnode;
     union {
         com_text_tty_t text;
         com_fb_tty_t   fb;
@@ -77,6 +78,10 @@ typedef struct com_tty {
     size_t num;
 } com_tty_t;
 
+int  com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
+                                   com_vnode_t            *tty_vn,
+                                   uintmax_t               op,
+                                   void                   *buf);
 void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                              char                    c,
                              bool                    blocking,

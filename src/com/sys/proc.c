@@ -18,6 +18,7 @@
 
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -116,12 +117,28 @@ int com_sys_proc_next_fd(com_proc_t *proc) {
     return ret;
 }
 
+com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd) {
+    if (NULL == proc) {
+        return NULL;
+    }
+
+    if (fd > COM_SYS_PROC_MAX_FDS || fd < 0) {
+        return NULL;
+    }
+
+    com_spinlock_acquire(&proc->fd_lock);
+    com_filedesc_t *fildesc = &proc->fd[fd];
+    com_spinlock_release(&proc->fd_lock);
+    COM_FS_FILE_HOLD(fildesc->file);
+    return fildesc;
+}
+
 com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
     if (NULL == proc) {
         return NULL;
     }
 
-    if (fd > COM_SYS_PROC_MAX_FDS) {
+    if (fd > COM_SYS_PROC_MAX_FDS || fd < 0) {
         return NULL;
     }
 
@@ -130,6 +147,27 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
     com_spinlock_release(&proc->fd_lock);
     COM_FS_FILE_HOLD(file);
     return file;
+}
+
+int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
+    int ret = 0;
+    com_spinlock_acquire(&proc->fd_lock);
+
+    if (NULL == proc->fd[old_fd].file) {
+        ret = -EBADF;
+        goto end;
+    }
+
+    COM_FS_FILE_RELEASE(proc->fd[new_fd].file);
+
+    proc->fd[new_fd]       = proc->fd[old_fd];
+    proc->fd[new_fd].flags = 0;
+
+    ret = new_fd;
+
+end:
+    com_spinlock_release(&proc->fd_lock);
+    return ret;
 }
 
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
@@ -184,6 +222,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
     proc->exited       = true;
     proc->exit_status  = status;
+    KDEBUG("pid=%d exited with code %d", proc->pid, status);
 
     if (NULL != parent) {
         com_sys_sched_notify(&parent->notifications);

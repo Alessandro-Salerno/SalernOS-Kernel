@@ -68,12 +68,12 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x06, com_sys_syscall_waitpid);
     com_sys_syscall_register(0x07, com_sys_syscall_exit);
     com_sys_syscall_register(0x08, com_sys_syscall_ioctl);
-    com_sys_syscall_register(0x09, com_sys_syscall_open);
+    com_sys_syscall_register(0x09, com_sys_syscall_openat);
     com_sys_syscall_register(0x0A, com_sys_syscall_mmap);
     com_sys_syscall_register(0x0B, arch_syscall_set_tls);
     com_sys_syscall_register(0x0C, com_sys_syscall_seek);
     com_sys_syscall_register(0x0D, com_sys_syscall_isatty);
-    // TODO: add stat syscall with code 0x0E
+    com_sys_syscall_register(0x0E, com_sys_syscall_fstatat);
     com_sys_syscall_register(0x0F, com_sys_syscall_truncate);
     com_sys_syscall_register(0x10, com_sys_syscall_pipe);
     com_sys_syscall_register(0x11, com_sys_syscall_getpid);
@@ -93,6 +93,8 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x1F, com_sys_syscall_kill_thread);
     com_sys_syscall_register(0x20, com_sys_syscall_sigreturn);
     com_sys_syscall_register(0x21, com_sys_syscall_dup3);
+    com_sys_syscall_register(0x22, com_sys_syscall_getcwd);
+    com_sys_syscall_register(0x23, com_sys_syscall_fcntl);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

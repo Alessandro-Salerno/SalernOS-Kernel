@@ -28,3 +28,8 @@ void   kstrcpy(char *dst, const char *src);
 const char *kuitoa(uint64_t val, char *s);
 const char *kitoa(int64_t val, char *s);
 const char *kxuitoa(uint64_t val, char *s);
+void        kstrpathpenult(const char *s,
+                           size_t      len,
+                           size_t     *penult_len,
+                           size_t     *end_idx,
+                           size_t     *end_len);

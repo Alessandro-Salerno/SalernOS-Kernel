@@ -23,6 +23,7 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/util.h>
 
 // SYSCALL: ioctl(int fd, int op, void *buf)
 COM_SYS_SYSCALL(com_sys_syscall_ioctl) {

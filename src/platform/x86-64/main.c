@@ -298,7 +298,7 @@ void kernel_entry(void) {
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
     com_io_term_enable(main_term);
-    com_io_term_set_buffering(main_term, true);
+    // com_io_term_set_buffering(main_term, true);
     arch_context_trampoline(&thread->ctx);
 
     for (;;) {

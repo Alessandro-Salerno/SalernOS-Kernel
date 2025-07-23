@@ -24,53 +24,21 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 
-// SYSCALL: open(const char *path, size_t pathlen, int flags)
-COM_SYS_SYSCALL(com_sys_syscall_open) {
+// SYSCALL: getcwd(char *buf, size_t size)
+COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+    COM_SYS_SYSCALL_UNUSED_START(3);
 
-    const char *path    = COM_SYS_SYSCALL_ARG(const char *, 1);
-    size_t      pathlen = COM_SYS_SYSCALL_ARG(size_t, 2);
-    int         flags   = COM_SYS_SYSCALL_ARG(int, 3);
+    char  *buf  = COM_SYS_SYSCALL_ARG(char *, 1);
+    size_t size = COM_SYS_SYSCALL_ARG(size_t, 2);
 
-    com_proc_t  *curr    = ARCH_CPU_GET_THREAD()->proc;
-    com_vnode_t *file_vn = NULL;
+    (void)size;
+    buf[0] = '/';
+    buf[1] = 0;
 
-    // TODO: implement O_CREAT
-    /*if (O_CREAT & flags) {
-        com_vnode_t *exist = NULL;
-        com_vnode_t *cwd   = atomic_load(&curr->cwd);
-        int lk_ret = com_fs_vfs_lookup(&exist, path, pathlen, curr->root, cwd);
-
-        if ((O_EXCL & flags) && 0 == lk_ret) {
-            COM_FS_VFS_VNODE_RELEASE(exist);
-            ret.err = EEXIST;
-            goto cleanup;
-        }
-    } else*/
-    {
-        com_vnode_t *cwd = atomic_load(&curr->cwd);
-        KDEBUG("opening file %s with root=%x cwd=%x", path, curr->root, cwd);
-        int lk_ret =
-            com_fs_vfs_lookup(&file_vn, path, pathlen, curr->root, cwd);
-
-        if (0 != lk_ret) {
-            return COM_SYS_SYSCALL_ERR(lk_ret);
-        }
-    }
-
-    int fd = com_sys_proc_next_fd(curr);
-    KASSERT(fd > 2);
-    curr->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *file  = curr->fd[fd].file;
-    file->vnode       = file_vn;
-    file->flags       = flags;
-    file->num_ref     = 1;
-    file->off         = 0;
-
-    return COM_SYS_SYSCALL_OK(fd);
+    return COM_SYS_SYSCALL_OK((uintptr_t)buf);
 }

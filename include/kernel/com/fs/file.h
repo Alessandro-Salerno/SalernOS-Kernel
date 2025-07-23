@@ -37,7 +37,6 @@
                 file = NULL;                                              \
             }                                                             \
         }                                                                 \
-        file = NULL;                                                      \
     })
 
 typedef struct com_file {
