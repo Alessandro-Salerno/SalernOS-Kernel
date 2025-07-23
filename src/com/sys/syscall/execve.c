@@ -78,6 +78,16 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
         }
     }
 
+    com_spinlock_acquire(&proc->signal_lock);
+    for (size_t i = 0; i < NSIG; i++) {
+        if (NULL != proc->sigaction[i] &&
+            (SIGCHLD != i || SIG_IGN != proc->sigaction[i]->sa_action)) {
+            com_mm_slab_free(proc->sigaction[i], sizeof(com_sigaction_t));
+            proc->sigaction[i] = NULL;
+        }
+    }
+    com_spinlock_release(&proc->signal_lock);
+
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
     com_spinlock_release(&thread->sched_lock);

@@ -114,6 +114,9 @@ int com_sys_proc_next_fd(com_proc_t *proc) {
     int ret = proc->next_fd;
     proc->next_fd++;
     com_spinlock_release(&proc->fd_lock);
+    if (ret >= COM_SYS_PROC_MAX_FDS) {
+        return -1;
+    }
     return ret;
 }
 
@@ -178,6 +181,18 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     return Processes[pid - 1];
 }
 
+com_proc_t *com_sys_proc_get_arbitray_child(com_proc_t *proc) {
+    for (size_t i = 0; i < MAX_PROCS; i++) {
+        com_proc_t *candidate = Processes[i];
+
+        if (candidate->parent_pid == proc->pid && !candidate->exited) {
+            return candidate;
+        }
+    }
+
+    return NULL;
+}
+
 void com_sys_proc_acquire_glock(void) {
     com_spinlock_acquire(&GlobalProcLock);
 }
@@ -209,8 +224,8 @@ void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {
-    com_spinlock_acquire(&proc->signal_lock);
     com_sys_proc_acquire_glock();
+    com_spinlock_acquire(&proc->signal_lock);
 
     com_spinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < proc->next_fd; i++) {
@@ -230,8 +245,8 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     }
 
     com_spinlock_release(&proc->fd_lock);
-    com_sys_proc_release_glock();
     com_spinlock_release(&proc->signal_lock);
+    com_sys_proc_release_glock();
 }
 
 void com_sys_proc_stop(com_proc_t *proc) {

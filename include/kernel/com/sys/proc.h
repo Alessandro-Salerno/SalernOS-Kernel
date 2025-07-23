@@ -36,7 +36,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <stdint.h>
 #include <sys/types.h>
 
-#define COM_SYS_PROC_MAX_FDS 16
+#define COM_SYS_PROC_MAX_FDS 32
 
 typedef struct com_proc_session {
     pid_t                       sid;
@@ -51,7 +51,6 @@ typedef struct com_proc_group {
     struct com_proc_tailq procs;
     com_spinlock_t        procs_lock;
     TAILQ_ENTRY(com_proc_group) proc_groups;
-    // Leader is TAILQ_FIRST(procs)
 } com_proc_group_t;
 
 typedef struct com_proc {
@@ -98,6 +97,7 @@ com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
 int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
+com_proc_t *com_sys_proc_get_arbitray_child(com_proc_t *proc);
 void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);
 void        com_sys_proc_wait(com_proc_t *proc);

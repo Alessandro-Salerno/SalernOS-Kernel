@@ -228,6 +228,7 @@ void kernel_entry(void) {
 #endif
     com_mm_pmm_init();
     arch_mmu_init();
+    KDEBUG("sizeof(com_proc_t) = %d", sizeof(com_proc_t));
 
     x86_64_idt_stub();
     com_sys_syscall_init();
@@ -298,7 +299,7 @@ void kernel_entry(void) {
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
     com_io_term_enable(main_term);
-    // com_io_term_set_buffering(main_term, true);
+    com_io_term_set_buffering(main_term, true);
     arch_context_trampoline(&thread->ctx);
 
     for (;;) {

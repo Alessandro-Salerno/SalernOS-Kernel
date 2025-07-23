@@ -85,6 +85,8 @@ static int send_to_thread(com_thread_t *thread, int sig) {
         return TKILL_STATUS_BAD;
     }
 
+    // TODO: this has weird race condition, either lock ordering or memory
+    // corruption
     com_spinlock_acquire(&thread->sched_lock);
     if (NULL != thread->waiting_on) {
         com_spinlock_t *wait_cond = thread->waiting_cond;

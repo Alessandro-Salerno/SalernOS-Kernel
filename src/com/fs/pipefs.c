@@ -25,6 +25,7 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/mem.h>
 #include <lib/util.h>
@@ -63,10 +64,18 @@ int com_fs_pipefs_read(void        *buf,
     com_spinlock_acquire(&pipe->lock);
 
     size_t read_count = 0;
+    int    ret        = 0;
 
     for (size_t left = buflen; left > 0;) {
         while (pipe->write == pipe->read && NULL != pipe->write_end) {
             com_sys_sched_wait(&pipe->readers, &pipe->lock);
+
+            if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+                if (0 == read_count) {
+                    ret = EINTR;
+                }
+                goto end;
+            }
         }
 
         size_t diff   = pipe->write - pipe->read;
@@ -93,9 +102,10 @@ int com_fs_pipefs_read(void        *buf,
         com_sys_sched_notify(&pipe->writers);
     }
 
+end:
     com_spinlock_release(&pipe->lock);
     *bytes_read = read_count;
-    return 0;
+    return ret;
 }
 
 int com_fs_pipefs_write(size_t      *bytes_written,
@@ -118,11 +128,19 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         req_space = 1;
     }
 
+    int ret = 0;
+
     for (size_t left = buflen; left > 0;) {
         size_t av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
 
         while (av_space < req_space) {
             com_sys_sched_wait(&pipe->writers, &pipe->lock);
+            if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+                if (0 == write_count) {
+                    ret = EINTR;
+                }
+                goto end;
+            }
             av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
         }
 
@@ -143,9 +161,10 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         com_sys_sched_notify(&pipe->readers);
     }
 
+end:
     com_spinlock_release(&pipe->lock);
     *bytes_written = write_count;
-    return 0;
+    return ret;
 }
 
 int com_fs_pipefs_close(com_vnode_t *vnode) {

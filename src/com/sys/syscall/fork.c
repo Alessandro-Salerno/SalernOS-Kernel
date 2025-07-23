@@ -43,7 +43,6 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     com_thread_t *cur_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc       = cur_thread->proc;
-    // KDEBUG("forking pid=%u with num_ref=%u", proc->pid, proc->num_ref);
 
     com_spinlock_acquire(&proc->fd_lock);
     com_spinlock_acquire(&proc->pages_lock);
@@ -71,6 +70,12 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     new_proc->next_fd    = proc->next_fd;
     new_proc->used_pages = proc->used_pages;
 
+    ARCH_CONTEXT_FORK(new_thread, *ctx);
+
+    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
+    com_spinlock_release(&proc->fd_lock);
+    com_spinlock_release(&proc->pages_lock);
+
     com_spinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i]) {
@@ -81,13 +86,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     }
     com_spinlock_release(&proc->signal_lock);
 
-    ARCH_CONTEXT_FORK(new_thread, *ctx);
-
-    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
-    com_spinlock_release(&proc->fd_lock);
-    com_spinlock_release(&proc->pages_lock);
     new_thread->runnable = false;
-
     com_sys_thread_ready(new_thread);
 
     return COM_SYS_SYSCALL_OK(new_proc->pid);

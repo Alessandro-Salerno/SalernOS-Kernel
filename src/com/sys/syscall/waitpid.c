@@ -20,13 +20,53 @@
 #include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
-// TODO: handle case in which pid < 0 and proc groups
-// TODO: do stuff with signals and flags
+static int waitpid_proc(com_proc_t *curr_proc,
+                        com_proc_t *towait,
+                        int        *status,
+                        int         flags) {
+    if (NULL == towait ||
+        0 == __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) ||
+        NULL == towait || towait->parent_pid != curr_proc->pid) {
+        return -ECHILD;
+    }
+
+    while (true) {
+        if (towait->exited) {
+            *status = towait->exit_status;
+            int ret = towait->pid;
+            // TODO: i think this creates issues with multithreading (race where
+            // one of two wating threads may read from deallocated memory)
+            __atomic_add_fetch(&towait->num_ref, -1, __ATOMIC_SEQ_CST);
+            return ret;
+        }
+
+        if (towait->stopped) {
+            *status = 0x7F | (SIGSTOP << 8);
+            return towait->pid;
+        }
+
+        (void)flags;
+        // TODO: handle flags
+
+        com_sys_proc_wait(curr_proc);
+
+        if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+            return -EINTR;
+        }
+    }
+}
+
+static int waitpid_group(com_proc_t *curr_proc, int pgid, int flasg) {
+    // TODO: implement this
+    return -ENOSYS;
+}
+
 // SYSCALL: waitpid(pid_t pid, int *status, int flags)
 COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
@@ -35,35 +75,31 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     pid_t pid    = COM_SYS_SYSCALL_ARG(pid_t, 1);
     int  *status = COM_SYS_SYSCALL_ARG(int *, 2);
     int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
-    KASSERT(pid > 0);
 
-    com_proc_t       *curr   = ARCH_CPU_GET_THREAD()->proc;
-    com_proc_t       *towait = com_sys_proc_get_by_pid(pid);
-    com_syscall_ret_t ret    = COM_SYS_SYSCALL_BASE_OK();
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    int         ret       = 0; // 0 is NOT valid
+
+    if (pid < -1) {
+        ret = waitpid_group(curr_proc, -pid, flags);
+        goto end;
+    }
 
     com_sys_proc_acquire_glock();
+    com_proc_t *towait = NULL;
 
-    if (0 == __atomic_load_n(&curr->num_children, __ATOMIC_RELAXED) ||
-        NULL == towait || towait->parent_pid != curr->pid) {
-        ret.err = ECHILD;
-        goto cleanup;
+    if (-1 == pid) {
+        towait = com_sys_proc_get_arbitray_child(curr_proc);
+    } else {
+        towait = com_sys_proc_get_by_pid(pid);
     }
 
-    while (true) {
-        if (towait->exited) {
-            *status   = towait->exit_status;
-            ret.value = pid;
-            __atomic_add_fetch(&towait->num_ref, -1, __ATOMIC_SEQ_CST);
-            goto cleanup;
-        }
-
-        (void)flags;
-        // TODO: handle flags
-
-        com_sys_proc_wait(curr);
-    }
-
-cleanup:
+    ret = waitpid_proc(curr_proc, towait, status, flags);
     com_sys_proc_release_glock();
-    return ret;
+
+end:
+    if (ret < 0) {
+        return COM_SYS_SYSCALL_ERR(-ret);
+    }
+
+    return COM_SYS_SYSCALL_OK(ret);
 }

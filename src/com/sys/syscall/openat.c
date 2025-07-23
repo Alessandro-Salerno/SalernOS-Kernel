@@ -118,6 +118,12 @@ setup_fd:
     KASSERT(NULL != file_vn);
     int fd = com_sys_proc_next_fd(curr_proc);
     KASSERT(fd > 2);
+
+    if (-1 == fd) {
+        ret.err = EMFILE;
+        goto end;
+    }
+
     curr_proc->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
     com_file_t *file       = curr_proc->fd[fd].file;
     file->vnode            = file_vn;
@@ -125,6 +131,7 @@ setup_fd:
     file->num_ref          = 1;
     file->off              = 0;
     ret.value              = fd;
+    KDEBUG("returnig fd=%d", fd);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);
