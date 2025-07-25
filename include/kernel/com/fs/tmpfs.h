@@ -56,6 +56,12 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 int com_fs_tmpfs_isatty(com_vnode_t *node);
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size);
+int com_fs_tmpfs_readdir(void        *buf,
+                         size_t       buflen,
+                         size_t      *bytes_read,
+                         com_vnode_t *dir,
+                         uintmax_t    off);
+int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
 
 // OTHER FUNCTIONS
 

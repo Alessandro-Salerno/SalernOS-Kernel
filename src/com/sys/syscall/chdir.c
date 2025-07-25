@@ -18,41 +18,40 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/util.h>
+#include <lib/str.h>
 #include <stdatomic.h>
-#include <stdint.h>
-#include <vendor/tailq.h>
 
-// SYSCALL: exit_thread()
-COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
-    COM_SYS_SYSCALL_UNUSED_START(0);
+// SYSCALL: chdir(const char *path)
+COM_SYS_SYSCALL(com_sys_syscall_chdir) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
+
+    const char *path = COM_SYS_SYSCALL_ARG(const char *, 1);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_spinlock_acquire(&curr_thread->sched_lock);
+    com_vnode_t *old_cwd = atomic_load(&curr_proc->cwd);
+    com_vnode_t *new_cwd = NULL;
+    int          lk_ret  = com_fs_vfs_lookup(
+        &new_cwd, path, kstrlen(path), curr_proc->root, old_cwd);
 
-    KASSERT(curr_thread->runnable);
-
-    curr_thread->runnable = false;
-    curr_thread->exited   = true;
-    KASSERT(0 == curr_thread->pending_signals);
-
-    com_spinlock_acquire(&curr_thread->proc->threads_lock);
-    com_sys_proc_remove_thread_nolock(curr_thread->proc, curr_thread);
-    if (TAILQ_EMPTY(&curr_thread->proc->threads)) {
-        com_sys_proc_exit(curr_thread->proc, 0);
+    if (0 != lk_ret || NULL == new_cwd) {
+        return COM_SYS_SYSCALL_ERR(lk_ret);
     }
 
-    com_spinlock_release(&curr_thread->proc->threads_lock);
-    com_spinlock_release(&curr_thread->sched_lock);
-    com_sys_sched_yield();
+    if (COM_VNODE_TYPE_DIR != new_cwd->type) {
+        COM_FS_VFS_VNODE_RELEASE(new_cwd);
+        return COM_SYS_SYSCALL_ERR(ENOTDIR);
+    }
 
-    __builtin_unreachable();
+    atomic_store(&curr_proc->cwd, new_cwd);
+    COM_FS_VFS_VNODE_RELEASE(old_cwd);
+
+    return COM_SYS_SYSCALL_OK(0);
 }

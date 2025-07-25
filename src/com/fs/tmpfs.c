@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <dirent.h>
 #include <errno.h>
 #include <kernel/com/fs/pagecache.h>
 #include <kernel/com/fs/tmpfs.h>
@@ -40,8 +41,9 @@ struct tmpfs_dir_entry {
 TAILQ_HEAD(tmpfs_dir_entries, tmpfs_dir_entry);
 
 struct tmpfs_node {
-    com_vnode_t *vnode;
-    size_t       num_links;
+    com_vnode_t            *vnode;
+    size_t                  num_links;
+    struct tmpfs_dir_entry *dirent;
 
     // TODO: turn this into a mutex
     com_spinlock_t lock;
@@ -73,7 +75,9 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .write    = com_fs_tmpfs_write,
                                        .isatty   = com_fs_tmpfs_isatty,
                                        .stat     = com_fs_tmpfs_stat,
-                                       .truncate = com_fs_tmpfs_truncate};
+                                       .truncate = com_fs_tmpfs_truncate,
+                                       .readdir  = com_fs_tmpfs_readdir,
+                                       .vnctl    = com_fs_tmpfs_vnctl};
 
 // SUPPORT FUNCTIONS
 static int createat(struct tmpfs_dir_entry **outent,
@@ -97,7 +101,8 @@ static int createat(struct tmpfs_dir_entry **outent,
 
     com_fs_tmpfs_vget(out, dir->vfs, tn_new);
 
-    *outent = dirent;
+    tn_new->dirent = dirent;
+    *outent        = dirent;
     return 0;
 }
 
@@ -132,8 +137,10 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
     tn_root->lock = COM_SPINLOCK_NEW();
     TAILQ_INIT(&tn_root->dir.entries);
     com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
-    vn_root->isroot = true;
-    vn_root->type   = COM_VNODE_TYPE_DIR;
+    tn_root->dirent     = NULL;
+    tn_root->dir.parent = NULL;
+    vn_root->isroot     = true;
+    vn_root->type       = COM_VNODE_TYPE_DIR;
 
     tmpfs->root       = vn_root;
     tmpfs->mountpoint = mountpoint;
@@ -395,6 +402,122 @@ int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
     // TODO: evict from page cache
     com_spinlock_release(&file->lock);
     return 0;
+}
+
+int com_fs_tmpfs_readdir(void        *buf,
+                         size_t       buflen,
+                         size_t      *bytes_read,
+                         com_vnode_t *dir,
+                         uintmax_t    off) {
+    if (COM_VNODE_TYPE_DIR != dir->type) {
+        return EBADF; // or ENODIR?
+    }
+
+    if (0 == buflen) {
+        return 0;
+    }
+
+    struct tmpfs_node *node   = dir->extra;
+    com_dirent_t      *dirent = buf;
+
+    // return "." entry
+    if (0 == off) {
+        if (buflen < sizeof(com_dirent_t) + sizeof(".")) {
+            return EOVERFLOW; // is this right?
+        }
+
+        dirent->reclen = sizeof(com_dirent_t) + sizeof(".");
+        dirent->ino    = (ino_t)node;
+        dirent->off    = 0;
+        dirent->type   = DT_DIR;
+        kmemcpy(dirent->name, ".", sizeof("."));
+        *bytes_read = dirent->reclen;
+        return 0;
+    }
+
+    // return ".." entry
+    if (1 == off) {
+        if (buflen < sizeof(com_dirent_t) + sizeof("..")) {
+            return EOVERFLOW;
+        }
+
+        dirent->reclen = sizeof(com_dirent_t) + sizeof("..");
+        dirent->ino    = (ino_t)node->dir.parent;
+        dirent->off    = 1;
+        dirent->type   = DT_DIR;
+        kmemcpy(dirent->name, "..", sizeof(".."));
+        *bytes_read = dirent->reclen;
+        return 0;
+    }
+
+    int ret = 0;
+
+    com_spinlock_acquire(&node->lock);
+
+    struct tmpfs_dir_entry *cur = TAILQ_FIRST(&node->dir.entries);
+    for (uintmax_t i = 0; i < off - 2 && NULL != cur; i++) {
+        cur = TAILQ_NEXT(cur, entries);
+    }
+
+    // it could be done inside the loop, but there may be issues with the first
+    // one being null
+    if (NULL == cur) {
+        *bytes_read = 0;
+        ret         = 0;
+        goto end;
+    }
+
+    size_t req_size = sizeof(com_dirent_t) + cur->namelen + 1;
+    if (buflen < req_size) {
+        ret = EOVERFLOW;
+        goto end;
+    }
+
+    dirent->reclen = req_size;
+    dirent->ino    = (ino_t)cur->tnode;
+    kmemcpy(dirent->name, cur->name, cur->namelen);
+    dirent->name[cur->namelen] = 0;
+    dirent->off                = off;
+    *bytes_read                = req_size;
+
+    if (NULL == cur->tnode->vnode) {
+        dirent->type = DT_UNKNOWN;
+    } else if (COM_VNODE_TYPE_DIR == cur->tnode->vnode->type) {
+        dirent->type = DT_DIR;
+    } else if (COM_VNODE_TYPE_FILE == cur->tnode->vnode->type) {
+        dirent->type = DT_REG;
+    } else if (COM_VNODE_TYPE_LINK == cur->tnode->vnode->type) {
+        dirent->type = DT_LNK;
+    } else {
+        dirent->type = DT_UNKNOWN;
+    }
+
+end:
+    com_spinlock_release(&node->lock);
+    return ret;
+}
+
+int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf) {
+    int ret = ENOTSUP;
+
+    struct tmpfs_node *tnode = node->extra;
+    com_spinlock_acquire(&tnode->lock);
+
+    if (COM_FS_VFS_VNCTL_GETNAME == op) {
+        struct tmpfs_dir_entry *dirent  = tnode->dirent;
+        com_vnctl_name_t       *namebuf = buf;
+        if (NULL != dirent) {
+            namebuf->name    = dirent->name;
+            namebuf->namelen = dirent->namelen;
+        } else {
+            namebuf->name    = "";
+            namebuf->namelen = 0;
+        }
+        ret = 0;
+    }
+
+    com_spinlock_release(&tnode->lock);
+    return ret;
 }
 
 // OTHER FUNCTIONS

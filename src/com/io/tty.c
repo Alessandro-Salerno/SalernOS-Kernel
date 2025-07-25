@@ -107,11 +107,20 @@ static int tty_close(void *devdata) {
     KASSERT(false);
 }
 
+static int tty_stat(struct stat *out, void *devdata) {
+    out->st_blksize = 0;
+    out->st_ino     = (ino_t)devdata;
+    out->st_mode    = 0622; // apparently makes xterm happy
+    out->st_mode |= S_IFCHR;
+    return 0;
+}
+
 static com_dev_ops_t TextTtyDevOps = {.read   = tty_read,
                                       .write  = tty_write,
                                       .ioctl  = tty_ioctl,
                                       .isatty = tty_isatty,
-                                      .close  = tty_close};
+                                      .close  = tty_close,
+                                      .stat   = tty_stat};
 
 static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
@@ -253,6 +262,8 @@ void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
+            tty_backend->echo("^\\\\", 3, blocking, passthrough);
+            sig     = SIGINT;
             sig     = SIGQUIT;
             handled = true;
         }

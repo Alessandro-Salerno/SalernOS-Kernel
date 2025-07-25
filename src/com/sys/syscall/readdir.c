@@ -18,41 +18,48 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/util.h>
-#include <stdatomic.h>
-#include <stdint.h>
-#include <vendor/tailq.h>
 
-// SYSCALL: exit_thread()
-COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
-    COM_SYS_SYSCALL_UNUSED_START(0);
+// SYSCALL: readdir(int fd, void *buffer, size_t buflen)
+COM_SYS_SYSCALL(com_sys_syscall_readdir) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
+    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
+    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
 
-    com_spinlock_acquire(&curr_thread->sched_lock);
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
-    KASSERT(curr_thread->runnable);
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    com_file_t *file      = com_sys_proc_get_file(curr_proc, fd);
 
-    curr_thread->runnable = false;
-    curr_thread->exited   = true;
-    KASSERT(0 == curr_thread->pending_signals);
-
-    com_spinlock_acquire(&curr_thread->proc->threads_lock);
-    com_sys_proc_remove_thread_nolock(curr_thread->proc, curr_thread);
-    if (TAILQ_EMPTY(&curr_thread->proc->threads)) {
-        com_sys_proc_exit(curr_thread->proc, 0);
+    if (NULL == file) {
+        ret.err = EBADF;
+        return ret;
     }
 
-    com_spinlock_release(&curr_thread->proc->threads_lock);
-    com_spinlock_release(&curr_thread->sched_lock);
-    com_sys_sched_yield();
+    size_t bytes_read = 0;
+    int    vfs_op =
+        com_fs_vfs_readdir(buf, buflen, &bytes_read, file->vnode, file->off);
 
-    __builtin_unreachable();
+    if (0 != vfs_op) {
+        ret.err = vfs_op;
+        goto cleanup;
+    }
+
+    com_spinlock_acquire(&file->off_lock);
+    if (0 != bytes_read) {
+        file->off++;
+    }
+    com_spinlock_release(&file->off_lock);
+
+    ret.value = bytes_read;
+cleanup:
+    COM_FS_FILE_RELEASE(file);
+    return ret;
 }

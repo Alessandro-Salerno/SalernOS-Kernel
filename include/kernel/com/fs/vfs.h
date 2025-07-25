@@ -28,10 +28,13 @@
 
 #define COM_VFS_CREAT_ATTR_GHOST 1
 
+#define COM_FS_VFS_VNCTL_GETNAME 1
+
 #define COM_FS_VFS_VNODE_HOLD(node) \
     __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_SEQ_CST)
 #define COM_FS_VFS_VNODE_RELEASE(node)                                   \
-    if (0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)) { \
+    if (NULL != (node) &&                                                \
+        0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)) { \
         KDEBUG("freeing vnode %x", (node));                              \
         com_fs_vfs_close(node);                                          \
     }
@@ -97,12 +100,16 @@ typedef struct com_fs_vfs_vnode_ops {
                  uintmax_t    off,
                  uintmax_t    flags);
     int (*resolve)(const char **path, size_t *pathlen, com_vnode_t *link);
-    int (*readdir)(void *buf, size_t *buflen, com_vnode_t *dir, uintmax_t off);
-    // TODO: add stat, mmap, munmap, getattr, setattr, poll, etc
+    int (*readdir)(void        *buf,
+                   size_t       buflen,
+                   size_t      *bytes_read,
+                   com_vnode_t *dir,
+                   uintmax_t    off);
     int (*ioctl)(com_vnode_t *node, uintmax_t op, void *buf);
     int (*isatty)(com_vnode_t *node);
     int (*stat)(struct stat *out, com_vnode_t *node);
     int (*truncate)(com_vnode_t *node, size_t size);
+    int (*vnctl)(com_vnode_t *node, uintmax_t op, void *buf);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -110,6 +117,19 @@ typedef struct com_vfs_ops {
     int (*unmount)(com_vfs_t *vfs);
     int (*vget)(com_vnode_t **out, com_vfs_t *vfs, void *inode);
 } com_vfs_ops_t;
+
+typedef struct com_dirent {
+    ino_t          ino;
+    off_t          off;
+    unsigned short reclen;
+    unsigned char  type;
+    char           name[];
+} com_dirent_t;
+
+typedef struct com_vnctl_name {
+    const char *name;
+    size_t      namelen;
+} com_vnctl_name_t;
 
 void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink);
 
@@ -148,10 +168,12 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      uintmax_t    flags);
 int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link);
 int com_fs_vfs_readdir(void        *buf,
-                       size_t      *buflen,
+                       size_t       buflen,
+                       size_t      *bytes_read,
                        com_vnode_t *dir,
                        uintmax_t    off);
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_vfs_isatty(com_vnode_t *node);
 int com_fs_vfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_vfs_truncate(com_vnode_t *node, size_t size);
+int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);

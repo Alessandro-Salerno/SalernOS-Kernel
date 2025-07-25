@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
@@ -39,7 +40,8 @@ static com_vnode_ops_t DevfsNodeOps =
                       .create = com_fs_devfs_create,
                       .mkdir  = com_fs_devfs_mkdir,
                       .lookup = com_fs_tmpfs_lookup,
-                      .isatty = com_fs_devfs_isatty};
+                      .isatty = com_fs_devfs_isatty,
+                      .stat   = com_fs_devfs_stat};
 
 static com_vfs_t *Devfs = NULL;
 
@@ -47,6 +49,11 @@ static com_vfs_t *Devfs = NULL;
 
 int com_fs_devfs_close(com_vnode_t *node) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->close) {
+        return ENOSYS;
+    }
+
     return dev->devops->close(dev->devdata);
 }
 
@@ -97,6 +104,11 @@ int com_fs_devfs_read(void        *buf,
                       uintmax_t    off,
                       uintmax_t    flags) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->stat) {
+        return ENOSYS;
+    }
+
     return dev->devops->read(buf, buflen, bytes_read, dev->devdata, off, flags);
 }
 
@@ -107,27 +119,51 @@ int com_fs_devfs_write(size_t      *bytes_written,
                        uintmax_t    off,
                        uintmax_t    flags) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->write) {
+        return ENOSYS;
+    }
+
     return dev->devops->write(
         bytes_written, dev->devdata, buf, buflen, off, flags);
 }
 
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->ioctl) {
+        return ENOSYS;
+    }
+
     return dev->devops->ioctl(dev->devdata, op, buf);
 }
 
 int com_fs_devfs_isatty(com_vnode_t *node) {
-    KDEBUG("devfs isatty called");
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->isatty) {
+        return ENOSYS;
+    }
+
     return dev->devops->isatty(dev->devdata);
 }
+
+int com_fs_devfs_stat(struct stat *out, com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->stat) {
+        return ENOSYS;
+    }
+
+    return dev->devops->stat(out, dev->devdata);
+}
+
+// OTHER FUNCTIONS
 
 void *com_fs_devfs_get_data(com_vnode_t *node) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
     return dev->devdata;
 }
-
-// OTHER FUNCTIONS
 
 int com_fs_devfs_register(com_vnode_t  **out,
                           com_vnode_t   *dir,
