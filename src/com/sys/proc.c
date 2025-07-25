@@ -275,6 +275,7 @@ void com_sys_proc_stop(com_proc_t *proc) {
         com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
+    // TODO: lock here?
     com_thread_t *t, *_;
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
         com_sys_signal_send_to_thread(t, SIGSTOP, proc);

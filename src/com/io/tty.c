@@ -247,8 +247,8 @@ void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     int  sig       = COM_SYS_SIGNAL_NONE;
 
     if (ISIG & tty_backend->termios.c_lflag) {
-        // TODO: print ^C
         if (tty_backend->termios.c_cc[VINTR] == c) {
+            tty_backend->echo("^C", 2, blocking, passthrough);
             sig     = SIGINT;
             handled = true;
         }
@@ -311,11 +311,7 @@ void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     // kill line
     if (tty_backend->termios.c_cc[VKILL] == c) {
         while (tty_backend->canon.index > 0) {
-            if (tty_backend->canon.buffer[tty_backend->canon.index] == '\n' ||
-                tty_backend->canon.buffer[tty_backend->canon.index] ==
-                    tty_backend->termios.c_cc[VEOF] ||
-                tty_backend->canon.buffer[tty_backend->canon.index] ==
-                    tty_backend->termios.c_cc[VEOL]) {
+            if ('\n' == tty_backend->canon.buffer[tty_backend->canon.index]) {
                 break;
             }
 

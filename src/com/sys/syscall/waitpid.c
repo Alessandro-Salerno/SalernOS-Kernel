@@ -47,7 +47,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
         }
 
         if (towait->stopped) {
-            *status = 0x7F | (SIGSTOP << 8);
+            *status = 0x7F | (SIGTSTP << 8);
             return towait->pid;
         }
 

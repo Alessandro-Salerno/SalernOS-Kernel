@@ -222,8 +222,11 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KASSERT(false);
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
+            com_spinlock_release(&proc->signal_lock);
             com_sys_proc_stop(proc);
-            com_sys_sched_yield();
+            com_spinlock_acquire(&thread->sched_lock);
+            thread->runnable = false;
+            com_sys_sched_yield_nolock();
 
             // After execution resumes
             // Execution gets beck here after the process receives a SIGCONT, as
