@@ -21,10 +21,13 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
+#include <lib/util.h>
 #include <stdint.h>
 
-#define COM_FS_FILE_HOLD(file) \
-    __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST)
+#define COM_FS_FILE_HOLD(file)                                   \
+    if (NULL != (file)) {                                        \
+        __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST); \
+    }
 
 #define COM_FS_FILE_RELEASE(file)                                         \
     ({                                                                    \
@@ -32,6 +35,7 @@
             uintmax_t n =                                                 \
                 __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
             if (0 == n) {                                                 \
+                KDEBUG("freeing file %x", (file));                        \
                 COM_FS_VFS_VNODE_RELEASE(file->vnode);                    \
                 com_mm_slab_free(file, sizeof(com_file_t));               \
                 file = NULL;                                              \

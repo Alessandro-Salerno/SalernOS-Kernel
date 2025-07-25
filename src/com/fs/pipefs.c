@@ -46,10 +46,15 @@ struct pipefs_node {
     com_vnode_t            *write_end;
 };
 
+static int pipe_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
+    KASSERT(false);
+}
+
 static com_vnode_ops_t PipefsNodeOps = {.read   = com_fs_pipefs_read,
                                         .write  = com_fs_pipefs_write,
                                         .close  = com_fs_pipefs_close,
-                                        .isatty = com_fs_pipefs_isatty};
+                                        .isatty = com_fs_pipefs_isatty,
+                                        .ioctl  = pipe_ioctl};
 
 int com_fs_pipefs_read(void        *buf,
                        size_t       buflen,
@@ -101,6 +106,8 @@ int com_fs_pipefs_read(void        *buf,
 
         com_sys_sched_notify(&pipe->writers);
     }
+
+    KDEBUG("got to the end of read");
 
 end:
     com_spinlock_release(&pipe->lock);
@@ -157,6 +164,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         pipe->write += writesz;
         buf = (uint8_t *)buf + writesz;
         left -= writesz;
+        write_count += writesz;
 
         com_sys_sched_notify(&pipe->readers);
     }
@@ -172,14 +180,14 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
     com_spinlock_acquire(&pipe->lock);
 
     if (vnode == pipe->read_end) {
-        pipe->write_end = NULL;
+        pipe->read_end = NULL;
+        com_sys_sched_notify(&pipe->writers);
     } else if (vnode == pipe->write_end) {
         pipe->write_end = NULL;
         com_sys_sched_notify(&pipe->readers);
     }
 
     com_spinlock_release(&pipe->lock);
-    // TODO: free pipe?
     return 0;
 }
 

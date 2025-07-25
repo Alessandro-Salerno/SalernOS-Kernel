@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <lib/util.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -29,8 +30,11 @@
 
 #define COM_FS_VFS_VNODE_HOLD(node) \
     __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_SEQ_CST)
-#define COM_FS_VFS_VNODE_RELEASE(node) \
-    __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)
+#define COM_FS_VFS_VNODE_RELEASE(node)                                   \
+    if (0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)) { \
+        KDEBUG("freeing vnode %x", (node));                              \
+        com_fs_vfs_close(node);                                          \
+    }
 
 typedef enum com_vnode_type {
     COM_VNODE_TYPE_FILE,

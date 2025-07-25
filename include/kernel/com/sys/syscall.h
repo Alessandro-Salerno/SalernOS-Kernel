@@ -118,3 +118,4 @@ COM_SYS_SYSCALL(com_sys_syscall_sigreturn);
 COM_SYS_SYSCALL(com_sys_syscall_dup3);
 COM_SYS_SYSCALL(com_sys_syscall_getcwd);
 COM_SYS_SYSCALL(com_sys_syscall_fcntl);
+COM_SYS_SYSCALL(com_sys_syscall_close);

@@ -32,6 +32,7 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     arch_context_t orig_ctx = *ctx;
 #endif
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+#define X86_64_SYSCALL_LOG
 #ifdef X86_64_SYSCALL_LOG
     KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
            "cpu=%d)",

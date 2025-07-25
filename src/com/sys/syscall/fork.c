@@ -64,6 +64,11 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
             new_proc->fd[i].flags = proc->fd[i].flags;
             COM_FS_FILE_HOLD(proc->fd[i].file);
             new_proc->fd[i].file = proc->fd[i].file;
+            KDEBUG("(ppid=%d, pid=%d) copied fd %d with ref=%u",
+                   proc->pid,
+                   new_proc->pid,
+                   i,
+                   new_proc->fd[i].file->num_ref);
         }
     }
 

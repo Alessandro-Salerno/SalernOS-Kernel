@@ -178,7 +178,6 @@ USED void kbd_eoi(com_isr_t *isr) {
 
 USED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
-    KDEBUG("in page fault handler");
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL == curr_thread) {

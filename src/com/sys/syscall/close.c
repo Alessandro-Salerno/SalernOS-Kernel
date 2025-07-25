@@ -29,71 +29,36 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static com_syscall_ret_t
-fcntl_dup(com_proc_t *curr_proc, int fd, int op, int arg1) {
-    int dup_ret = com_sys_proc_duplicate_file(curr_proc, arg1, fd);
-
-    if (dup_ret < 0) {
-        KASSERT(false);
-        return COM_SYS_SYSCALL_ERR(-dup_ret);
-    }
-
-    if (F_DUPFD_CLOEXEC == op) {
-        com_filedesc_t *fildesc = com_sys_proc_get_fildesc(curr_proc, dup_ret);
-        fildesc->flags |= FD_CLOEXEC;
-        COM_FS_FILE_RELEASE(fildesc->file);
-    }
-
-    return COM_SYS_SYSCALL_OK(dup_ret);
-}
-
-// SYSCALL: fcntl(fd, op, arg1)
-COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
+// SYSCALL: close(int fd)
+COM_SYS_SYSCALL(com_sys_syscall_close) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+    COM_SYS_SYSCALL_UNUSED_START(2);
 
-    int fd   = COM_SYS_SYSCALL_ARG(int, 1);
-    int op   = COM_SYS_SYSCALL_ARG(int, 2);
-    int arg1 = COM_SYS_SYSCALL_ARG(int, 3);
+    int fd = COM_SYS_SYSCALL_ARG(int, 1);
+
+    if (fd < 0 || fd > COM_SYS_PROC_MAX_FDS) {
+        return COM_SYS_SYSCALL_ERR(EBADF);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret    = COM_SYS_SYSCALL_BASE_OK();
-    com_filedesc_t   *fildes = com_sys_proc_get_fildesc(curr_proc, fd);
-    com_file_t       *file   = com_sys_proc_get_file(curr_proc, fd);
+    com_spinlock_acquire(&curr_proc->fd_lock);
+    com_filedesc_t *fildesc = &curr_proc->fd[fd];
 
-    if (NULL == file || NULL == fildes) {
-        KDEBUG("%d is not a valid fd, arg1=%d", fd, arg1);
+    if (NULL == fildesc->file) {
+        com_spinlock_release(&curr_proc->fd_lock);
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    if (F_GETFL == op) {
-        ret.value = file->flags;
-        goto end;
-    }
+    KDEBUG("closing fd=%d with refcount=%d (vn=%x)",
+           fd,
+           fildesc->file->num_ref,
+           fildesc->file->vnode);
+    COM_FS_FILE_RELEASE(fildesc->file);
+    KDEBUG("after close, file=%x", fildesc->file);
+    *fildesc = (com_filedesc_t){0};
 
-    if (F_GETFD == op) {
-        ret.value = fildes->flags;
-        goto end;
-    }
-
-    if (F_SETFD == op || F_SETFL == op) {
-        // TODO: probably wrong
-        fildes->flags = arg1;
-        goto end;
-    }
-
-    if (F_DUPFD == op || F_DUPFD_CLOEXEC == op) {
-        ret = fcntl_dup(curr_proc, fd, op, arg1);
-        goto end;
-    }
-
-    ret = COM_SYS_SYSCALL_ERR(ENOSYS);
-
-end:
-    // NOTE: these are the same, but they're also held twice above
-    COM_FS_FILE_RELEASE(file);
-    COM_FS_FILE_RELEASE(fildes->file);
-    return ret;
+    com_spinlock_release(&curr_proc->fd_lock);
+    return COM_SYS_SYSCALL_OK(0);
 }

@@ -95,6 +95,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x21, com_sys_syscall_dup3);
     com_sys_syscall_register(0x22, com_sys_syscall_getcwd);
     com_sys_syscall_register(0x23, com_sys_syscall_fcntl);
+    com_sys_syscall_register(0x24, com_sys_syscall_close);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

@@ -38,7 +38,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
 
     while (true) {
         if (towait->exited) {
-            *status = towait->exit_status;
+            *status = (towait->exit_status & 0xff) << 8;
             int ret = towait->pid;
             // TODO: i think this creates issues with multithreading (race where
             // one of two wating threads may read from deallocated memory)

@@ -131,8 +131,8 @@ com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd) {
 
     com_spinlock_acquire(&proc->fd_lock);
     com_filedesc_t *fildesc = &proc->fd[fd];
-    com_spinlock_release(&proc->fd_lock);
     COM_FS_FILE_HOLD(fildesc->file);
+    com_spinlock_release(&proc->fd_lock);
     return fildesc;
 }
 
@@ -147,8 +147,8 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
 
     com_spinlock_acquire(&proc->fd_lock);
     com_file_t *file = proc->fd[fd].file;
-    com_spinlock_release(&proc->fd_lock);
     COM_FS_FILE_HOLD(file);
+    com_spinlock_release(&proc->fd_lock);
     return file;
 }
 
@@ -161,10 +161,15 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
         goto end;
     }
 
-    COM_FS_FILE_RELEASE(proc->fd[new_fd].file);
-
     proc->fd[new_fd]       = proc->fd[old_fd];
     proc->fd[new_fd].flags = 0;
+
+    COM_FS_FILE_HOLD(proc->fd[new_fd].file);
+    KDEBUG("after dup, fd=%d/%d has ref=%d/%d",
+           old_fd,
+           new_fd,
+           proc->fd[old_fd].file->num_ref,
+           proc->fd[new_fd].file->num_ref);
 
     ret = new_fd;
 
@@ -231,6 +236,10 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
+            KDEBUG("(pid=%d) closed fd %d because proc exited, ref=%d",
+                   proc->pid,
+                   i,
+                   (proc->fd[i].file) ? proc->fd[i].file->num_ref : 0);
         }
     }
 

@@ -25,6 +25,7 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/util.h>
 #include <stdint.h>
 
 // SYSCALL: pipe(int *fildes);
@@ -63,6 +64,7 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe) {
 
     fildes[0] = rfd;
     fildes[1] = wfd;
+    KDEBUG("returning fd %d, %d", rfd, wfd);
 
     return COM_SYS_SYSCALL_OK(0);
 }

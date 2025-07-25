@@ -49,7 +49,12 @@ void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink) {
 
 int com_fs_vfs_close(com_vnode_t *vnode) {
     GET_VLINK_CHILD(vnode);
-    return vnode->ops->close(vnode);
+
+    if (NULL != vnode->ops->close) {
+        return vnode->ops->close(vnode);
+    }
+
+    return ENOTSUP;
 }
 
 int com_fs_vfs_lookup(com_vnode_t **out,

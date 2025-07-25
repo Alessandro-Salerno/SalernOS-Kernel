@@ -41,8 +41,7 @@ COM_SYS_SYSCALL(com_sys_syscall_truncate) {
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
 
     if (NULL == file) {
-        ret.err = EBADF;
-        goto cleanup;
+        return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
     ret.err = com_fs_vfs_truncate(file->vnode, size);

@@ -102,10 +102,15 @@ static int tty_isatty(void *devdata) {
     return 0;
 }
 
+static int tty_close(void *devdata) {
+    KASSERT(false);
+}
+
 static com_dev_ops_t TextTtyDevOps = {.read   = tty_read,
                                       .write  = tty_write,
                                       .ioctl  = tty_ioctl,
-                                      .isatty = tty_isatty};
+                                      .isatty = tty_isatty,
+                                      .close  = tty_close};
 
 static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;

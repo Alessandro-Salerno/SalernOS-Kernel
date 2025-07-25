@@ -45,10 +45,9 @@ static com_vfs_t *Devfs = NULL;
 
 // VNODE OPS
 
-// TODO: implement close
-int com_fs_devfs_close(com_vnode_t *vnode) {
-    (void)vnode;
-    return 0;
+int com_fs_devfs_close(com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+    return dev->devops->close(dev->devdata);
 }
 
 int com_fs_devfs_create(com_vnode_t **out,

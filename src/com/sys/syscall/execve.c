@@ -29,6 +29,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <lib/str.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,14 +43,16 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
 
     com_thread_t *thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *proc   = thread->proc;
+    com_spinlock_acquire(&proc->signal_lock);
     com_spinlock_acquire(&thread->sched_lock);
-    com_proc_t *proc = thread->proc;
 
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status =
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
 
     if (0 != status) {
+        com_spinlock_release(&proc->signal_lock);
         com_spinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
@@ -75,10 +78,14 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
+            KDEBUG("(pid=%d) closed fd %d because it has FD_CLOEXECL, ref=%d",
+                   proc->pid,
+                   i,
+                   (proc->fd[i].file) ? proc->fd[i].file->num_ref : 0);
+            proc->fd[i] = (com_filedesc_t){0};
         }
     }
 
-    com_spinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i] &&
             (SIGCHLD != i || SIG_IGN != proc->sigaction[i]->sa_action)) {
@@ -86,10 +93,12 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->sigaction[i] = NULL;
         }
     }
-    com_spinlock_release(&proc->signal_lock);
 
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
+
     com_spinlock_release(&thread->sched_lock);
+    com_spinlock_release(&proc->signal_lock);
+
     return COM_SYS_SYSCALL_OK(0);
 }
