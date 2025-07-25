@@ -40,12 +40,14 @@ COM_SYS_SYSCALL(com_sys_syscall_isatty) {
     com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
 
     if (NULL == file) {
+        KDEBUG("isatty(%d) failed", fd);
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
     int vfs_ret = com_fs_vfs_isatty(file->vnode);
 
     if (0 != vfs_ret) {
+        KDEBUG("isatty(%d) failed", fd);
         ret.value = -1;
         ret.err   = vfs_ret;
         goto cleanup;

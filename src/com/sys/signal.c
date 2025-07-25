@@ -107,6 +107,9 @@ void com_sys_signal_sigset_emptY(com_sigset_t *set) {
 }
 
 int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
+    (void)sender;
+    // TODO: should I check permission to send the signal?
+
     if (!IS_VALID_SIGNAL(sig)) {
         return EINVAL;
     }
@@ -170,7 +173,9 @@ int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
 int com_sys_signal_send_to_thread(struct com_thread *thread,
                                   int                sig,
                                   com_proc_t        *sender) {
-    // TODO: actually check that this can be done (sender check)
+    (void)sender;
+    // TODO: (same as for proc) actually check that this can be done (sender
+    // check)
     com_spinlock_acquire(&thread->proc->signal_lock);
     int ret = send_to_thread(thread, sig);
     com_spinlock_release(&thread->proc->signal_lock);
@@ -258,7 +263,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
            proc->pid,
            sigaction->sa_restorer,
            sig);
-    arch_context_setup_sigrestore(sframe, &stack, sigaction->sa_restorer);
+    arch_context_setup_sigrestore(&stack, sigaction->sa_restorer);
     arch_context_signal_trampoline(
         sframe, ctx, stack, sigaction->sa_action, sig);
 

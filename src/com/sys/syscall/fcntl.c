@@ -78,7 +78,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
         goto end;
     }
 
-    if (F_SETFD == op || F_SETFL == op) {
+    if (F_SETFL == op) {
         // TODO: probably wrong
         fildes->flags = arg1;
         goto end;

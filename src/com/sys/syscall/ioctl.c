@@ -40,14 +40,13 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     com_file_t *file = com_sys_proc_get_file(curr, fd);
 
     if (NULL == file) {
-        ret.err = EBADF;
-        return ret;
+        return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
     int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
 
     if (0 != vfs_op) {
-        ret.err = vfs_op;
+        ret = COM_SYS_SYSCALL_ERR(vfs_op);
         goto end;
     }
 

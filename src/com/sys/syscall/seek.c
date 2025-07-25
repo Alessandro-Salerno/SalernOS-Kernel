@@ -42,8 +42,7 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
 
     if (NULL == file) {
-        ret.err = EBADF;
-        goto cleanup;
+        return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
     // TODO: handle errors (no seek on pipes etc, no seek out of bounds)
@@ -72,6 +71,7 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
     file->off = new_off;
     ret.value = new_off;
 cleanup:
+    KASSERT(NULL != file);
     com_spinlock_release(&file->off_lock);
     COM_FS_FILE_RELEASE(file);
     return ret;

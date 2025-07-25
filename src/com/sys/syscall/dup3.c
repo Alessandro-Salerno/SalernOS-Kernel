@@ -32,11 +32,12 @@
 // SYSCALL: dup3(int old_fd, int new_fd, int fd_flags)
 COM_SYS_SYSCALL(com_sys_syscall_dup3) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+    COM_SYS_SYSCALL_UNUSED_START(3);
 
     int old_fd = COM_SYS_SYSCALL_ARG(int, 1);
     int new_fd = COM_SYS_SYSCALL_ARG(int, 2);
-    int flags  = COM_SYS_SYSCALL_ARG(int, 3);
+    // int flags  = COM_SYS_SYSCALL_ARG(int, 3);
+    // TODO: handle flags
 
     if (new_fd < 0 || old_fd < 0 || new_fd > COM_SYS_PROC_MAX_FDS ||
         old_fd > COM_SYS_PROC_MAX_FDS) {

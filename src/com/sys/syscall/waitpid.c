@@ -62,8 +62,11 @@ static int waitpid_proc(com_proc_t *curr_proc,
     }
 }
 
-static int waitpid_group(com_proc_t *curr_proc, int pgid, int flasg) {
+static int waitpid_group(com_proc_t *curr_proc, int pgid, int flags) {
     // TODO: implement this
+    (void)curr_proc;
+    (void)pgid;
+    (void)flags;
     return -ENOSYS;
 }
 

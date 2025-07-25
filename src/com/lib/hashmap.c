@@ -165,5 +165,6 @@ int khashmap_default(void      **out,
 
 // TODO: implement hashmap destroy
 int khashmap_destroy(khashmap_t *hashmap) {
+    (void)hashmap;
     return 0;
 }

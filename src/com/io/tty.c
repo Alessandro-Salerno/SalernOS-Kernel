@@ -103,6 +103,7 @@ static int tty_isatty(void *devdata) {
 }
 
 static int tty_close(void *devdata) {
+    (void)devdata;
     KASSERT(false);
 }
 

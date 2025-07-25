@@ -303,7 +303,7 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
         entry = interp_data.entry;
     }
 
-    uintptr_t stack_end   = 0x60000000; // TODO: why?
+    uintptr_t stack_end   = 0x60000000;
     uintptr_t stack_start = stack_end - (ARCH_PAGE_SIZE * 64);
     void     *stack_phys  = NULL;
 

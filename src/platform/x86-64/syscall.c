@@ -32,7 +32,6 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
     arch_context_t orig_ctx = *ctx;
 #endif
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-#define X86_64_SYSCALL_LOG
 #ifdef X86_64_SYSCALL_LOG
     KDEBUG("handling syscall %u(%u, %u, %u, %u) invoked at rip=%x (pid=%d, "
            "cpu=%d)",
@@ -47,7 +46,7 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                : -1,
            (NULL != curr_thread && NULL != curr_thread->cpu)
                ? curr_thread->cpu->id
-               : -1);
+               : 100000);
 #endif
     ARCH_CPU_GET_THREAD()->lock_depth = 0;
     ARCH_CPU_ENABLE_INTERRUPTS();

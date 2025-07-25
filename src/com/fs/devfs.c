@@ -117,6 +117,7 @@ int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
 }
 
 int com_fs_devfs_isatty(com_vnode_t *node) {
+    KDEBUG("devfs isatty called");
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
     return dev->devops->isatty(dev->devdata);
 }

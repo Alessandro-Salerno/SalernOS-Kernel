@@ -161,6 +161,8 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
         goto end;
     }
 
+    COM_FS_FILE_RELEASE(proc->fd[new_fd].file);
+
     proc->fd[new_fd]       = proc->fd[old_fd];
     proc->fd[new_fd].flags = 0;
 

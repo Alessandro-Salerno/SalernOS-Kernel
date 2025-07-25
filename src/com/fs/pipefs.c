@@ -47,6 +47,9 @@ struct pipefs_node {
 };
 
 static int pipe_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
+    (void)node;
+    (void)op;
+    (void)buf;
     KASSERT(false);
 }
 
@@ -106,8 +109,6 @@ int com_fs_pipefs_read(void        *buf,
 
         com_sys_sched_notify(&pipe->writers);
     }
-
-    KDEBUG("got to the end of read");
 
 end:
     com_spinlock_release(&pipe->lock);

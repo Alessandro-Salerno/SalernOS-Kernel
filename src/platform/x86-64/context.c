@@ -92,9 +92,7 @@ void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL] = ctx->rflags;
 }
 
-void arch_context_setup_sigrestore(com_sigframe_t *sframe,
-                                   uintptr_t      *stackptr,
-                                   void           *restorer) {
+void arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer) {
     uint64_t stack = *stackptr;
     stack -= 8;
     *(uint64_t *)stack = (uint64_t)restorer;

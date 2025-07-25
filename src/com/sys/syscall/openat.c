@@ -65,11 +65,6 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     int          vfs_err = 0;
     com_vnode_t *file_vn = NULL;
 
-    if (0 == kstrcmp(path, "/dev/tty")) {
-        file_vn = curr_proc->proc_group->session->tty;
-        goto setup_fd;
-    }
-
     // TODO: race condition here. File could be deleted or created while we look
     // it up
     if (O_CREAT & flags) {
@@ -106,7 +101,6 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
         goto setup_fd;
     }
 
-    KDEBUG("ignored O_CREAT");
     // if no O_CREAT
     vfs_err = com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir);
     if (0 != vfs_err) {
@@ -131,7 +125,7 @@ setup_fd:
     file->num_ref          = 1;
     file->off              = 0;
     ret.value              = fd;
-    KDEBUG("returnig fd=%d", fd);
+    KDEBUG("returning fd=%d (vn=%x) for %s", fd, file_vn, path);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);

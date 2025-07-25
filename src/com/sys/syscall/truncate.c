@@ -36,7 +36,7 @@ COM_SYS_SYSCALL(com_sys_syscall_truncate) {
     int   fd   = COM_SYS_SYSCALL_ARG(int, 1);
     off_t size = COM_SYS_SYSCALL_ARG(off_t, 2);
 
-    com_syscall_ret_t ret  = {0};
+    com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
     com_proc_t       *curr = ARCH_CPU_GET_THREAD()->proc;
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
 
@@ -44,9 +44,12 @@ COM_SYS_SYSCALL(com_sys_syscall_truncate) {
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    ret.err = com_fs_vfs_truncate(file->vnode, size);
+    int vfs_ret = com_fs_vfs_truncate(file->vnode, size);
 
-cleanup:
+    if (vfs_ret < 0) {
+        ret = COM_SYS_SYSCALL_ERR(vfs_ret);
+    }
+
     COM_FS_FILE_RELEASE(file);
     return ret;
 }

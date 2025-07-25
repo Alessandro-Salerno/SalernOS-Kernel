@@ -44,6 +44,11 @@ void com_spinlock_release(com_spinlock_t *lock) {
     if (!(*lock)) {
         KDEBUG("trying to unlock unlocked lock at %x",
                __builtin_return_address(0));
+    } else if (1 != *lock) {
+        KDEBUG("lock %x (released at %x) has value %d",
+               lock,
+               __builtin_return_address(0),
+               *lock);
     }
     KASSERT(1 == *lock);
     __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
