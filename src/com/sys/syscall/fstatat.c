@@ -45,8 +45,9 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
+    com_vnode_t *dir       = NULL;
+    com_file_t  *dir_file  = NULL;
+    bool         do_lookup = false;
 
     if (AT_FDCWD == dir_fd) {
         dir = atomic_load(&curr_proc->cwd);
@@ -62,9 +63,9 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
 
     KASSERT(NULL != dir);
 
-    bool         do_lookup = (AT_EMPTY_PATH & flags) && 0 == kstrlen(path);
-    int          vfs_err   = 0;
-    com_vnode_t *target    = dir;
+    do_lookup            = (AT_EMPTY_PATH & flags) && 0 == kstrlen(path);
+    int          vfs_err = 0;
+    com_vnode_t *target  = dir;
 
     if (!do_lookup) {
         vfs_err = com_fs_vfs_lookup(

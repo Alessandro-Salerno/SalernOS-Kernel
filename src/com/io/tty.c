@@ -20,6 +20,7 @@
 #define _DEFAULT_SOURCE
 
 #include <arch/cpu.h>
+#include <asm/ioctls.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/devfs.h>
@@ -408,7 +409,11 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
     backend->termios.c_iflag        = TTYDEF_IFLAG;
     backend->termios.c_lflag        = TTYDEF_LFLAG;
     backend->termios.c_oflag        = TTYDEF_OFLAG;
+#ifdef __linux__
     backend->termios.c_ispeed = backend->termios.c_ospeed = TTYDEF_SPEED;
+#else
+    backend->termios.ibaud = backend->termios.obaud = TTYDEF_SPEED;
+#endif
 }
 
 int com_io_tty_init_text(com_vnode_t **out,
