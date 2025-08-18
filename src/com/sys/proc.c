@@ -49,13 +49,14 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              com_vnode_t          *root,
                              com_vnode_t          *cwd) {
 
-    com_proc_t *proc   = com_mm_slab_alloc(sizeof(com_proc_t));
-    proc->page_table   = page_table;
-    proc->exited       = false;
-    proc->stopped      = false;
-    proc->exit_status  = 0;
-    proc->num_children = 0;
-    proc->parent_pid   = parent_pid;
+    com_proc_t *proc    = com_mm_slab_alloc(sizeof(com_proc_t));
+    proc->page_table    = page_table;
+    proc->exited        = false;
+    proc->stop_signal   = COM_SYS_SIGNAL_NONE;
+    proc->stop_notified = false;
+    proc->exit_status   = 0;
+    proc->num_children  = 0;
+    proc->parent_pid    = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
     proc->root       = root;
@@ -260,26 +261,27 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_sys_proc_release_glock();
 }
 
-void com_sys_proc_stop(com_proc_t *proc) {
+void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
     com_sys_proc_acquire_glock();
 
-    if (proc->stopped) {
+    if (COM_SYS_SIGNAL_NONE != proc->stop_signal) {
         goto end;
     }
 
-    com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
-    proc->stopped      = true;
+    com_proc_t *parent  = com_sys_proc_get_by_pid(proc->parent_pid);
+    proc->stop_signal   = stop_signal;
+    proc->stop_notified = false;
 
     if (NULL != parent) {
         com_sys_sched_notify(&parent->notifications);
         com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
-    // TODO: lock here?
-    com_thread_t *t, *_;
+    // TODO: lock here and avoid sending multiple times
+    /*com_thread_t *t, *_;
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        com_sys_signal_send_to_thread(t, SIGSTOP, proc);
-    }
+        com_sys_signal_send_to_thread(t, stop_signal, proc);
+    }*/
 
 end:
     com_sys_proc_release_glock();

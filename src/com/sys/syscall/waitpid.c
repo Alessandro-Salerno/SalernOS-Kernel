@@ -25,6 +25,7 @@
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <sys/wait.h>
 
 static int waitpid_proc(com_proc_t *curr_proc,
                         com_proc_t *towait,
@@ -46,8 +47,14 @@ static int waitpid_proc(com_proc_t *curr_proc,
             return ret;
         }
 
-        if (towait->stopped) {
-            *status = 0x7F | (SIGTSTP << 8);
+        if (COM_SYS_SIGNAL_NONE != towait->stop_signal) {
+            if (towait->stop_notified) {
+                KASSERT(WNOHANG & flags);
+                return 0;
+            }
+
+            *status               = 0x7F | (towait->stop_signal << 8);
+            towait->stop_notified = true;
             return towait->pid;
         }
 
@@ -57,6 +64,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
         com_sys_proc_wait(curr_proc);
 
         if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+            KASSERT(false);
             return -EINTR;
         }
     }

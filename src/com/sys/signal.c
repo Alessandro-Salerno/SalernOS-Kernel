@@ -81,7 +81,7 @@ static int send_to_thread(com_thread_t *thread, int sig) {
         return TKILL_STATUS_MASKED;
     }
 
-    if (thread->proc->stopped && SIGCONT != sig) {
+    if (COM_SYS_SIGNAL_NONE != thread->proc->stop_signal && SIGCONT != sig) {
         return TKILL_STATUS_BAD;
     }
 
@@ -223,7 +223,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
             com_spinlock_release(&proc->signal_lock);
-            com_sys_proc_stop(proc);
+            com_sys_proc_stop(proc, sig);
             com_spinlock_acquire(&thread->sched_lock);
             thread->runnable = false;
             com_sys_sched_yield_nolock();
@@ -233,7 +233,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // can be seen in send_to_thread
             COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
             com_sys_proc_acquire_glock();
-            proc->stopped = false;
+            proc->stop_signal = COM_SYS_SIGNAL_NONE;
             com_sys_proc_release_glock();
             // TODO: I should kill all threads right?
             return;

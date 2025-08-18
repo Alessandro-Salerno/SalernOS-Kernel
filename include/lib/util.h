@@ -18,7 +18,7 @@
 
 #pragma once
 
-#define DISABLE_LOGGING
+// #define DISABLE_LOGGING
 
 #include <kernel/com/io/log.h>
 
