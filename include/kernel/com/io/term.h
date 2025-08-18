@@ -49,14 +49,12 @@ typedef struct com_term_backend {
 typedef struct com_term {
     com_term_backend_t backend;
     com_spinlock_t     lock;
+    bool               enabled;
     struct {
         bool                    enabled;
         char                    buffer[COM_IO_TERM_BUFSZ];
         size_t                  index;
         struct com_thread_tailq waiters;
-        struct {
-            TAILQ_ENTRY(com_term) queue;
-        } internal;
     } buffering;
 } com_term_t;
 

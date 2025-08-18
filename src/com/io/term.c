@@ -19,67 +19,51 @@
 #include <kernel/com/io/term.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/spinlock.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/sched.h>
 #include <lib/str.h>
 #include <stdatomic.h>
 #include <vendor/tailq.h>
 
-#define THREAD_INTERVAL 2
+#define TERM_FPS 60
 
 static _Atomic(com_term_t *) FallbackTerm = NULL;
-static size_t                ThreadTicks  = 0;
-
-static com_spinlock_t BufferedQueueLock = COM_SPINLOCK_NEW();
-static TAILQ_HEAD(, com_term) BufferQueue;
 
 static void flush_buffer_nolock(com_term_t *term) {
     if (0 == term->buffering.index) {
-        goto skip;
+        return;
     }
 
     term->backend.ops->putsn(
         term->backend.data, term->buffering.buffer, term->buffering.index);
     term->buffering.index = 0;
     com_sys_sched_notify_all(&term->buffering.waiters);
-
-skip:
-    ThreadTicks = 0;
 }
 
 static void refresh_term_nolock(com_term_t *term) {
     if (term->buffering.enabled) {
         flush_buffer_nolock(term);
     }
+
     term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
 }
 
-static void flush_thread(void) {
-    while (true) {
-        if (THREAD_INTERVAL != ThreadTicks) {
-            ThreadTicks++;
-            goto next_time;
-        }
-
-        com_spinlock_acquire(&BufferedQueueLock);
-        struct com_term *c, *_;
-        TAILQ_FOREACH_SAFE(c, &BufferQueue, buffering.internal.queue, _) {
-            com_spinlock_acquire(&c->lock);
-            flush_buffer_nolock(c);
-            com_spinlock_release(&c->lock);
-        }
-        com_spinlock_release(&BufferedQueueLock);
-
-    next_time:
-        // TODO: why does this not preempt?
-        com_sys_sched_yield();
+static void flush_callout(void *arg) {
+    com_term_t *c = arg;
+    com_spinlock_acquire(&c->lock);
+    flush_buffer_nolock(c);
+    if (c->buffering.enabled && c->enabled) {
+        com_sys_callout_add(flush_callout, arg, KFPS(TERM_FPS));
     }
+    com_spinlock_release(&c->lock);
 }
 
 com_term_t *com_io_term_new(com_term_backend_t backend) {
     com_term_t *ret        = com_mm_slab_alloc(sizeof(com_term_t));
     ret->backend           = backend;
     ret->lock              = COM_SPINLOCK_NEW();
+    ret->enabled           = true;
     ret->buffering.enabled = false;
     TAILQ_INIT(&ret->buffering.waiters);
 
@@ -95,6 +79,7 @@ com_term_t *com_io_term_clone(com_term_t *parent) {
     TAILQ_INIT(&ret->buffering.waiters);
 
     if (NULL != parent) {
+        ret->enabled      = parent->enabled;
         ret->backend.ops  = parent->backend.ops;
         ret->backend.data = ret->backend.ops->init();
         com_spinlock_acquire(&parent->lock);
@@ -207,13 +192,9 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
     term->buffering.enabled = state;
     com_spinlock_release(&term->lock);
 
-    com_spinlock_acquire(&BufferedQueueLock);
     if (state) {
-        TAILQ_INSERT_TAIL(&BufferQueue, term, buffering.internal.queue);
-    } else {
-        TAILQ_REMOVE(&BufferQueue, term, buffering.internal.queue);
+        com_sys_callout_add(flush_callout, term, KFPS(TERM_FPS));
     }
-    com_spinlock_release(&BufferedQueueLock);
 }
 
 void com_io_term_enable(com_term_t *term) {
@@ -223,9 +204,14 @@ void com_io_term_enable(com_term_t *term) {
 
     com_spinlock_acquire(&term->lock);
     term->backend.ops->enable(term->backend.data);
+    term->enabled = true;
 
     refresh_term_nolock(term);
     com_spinlock_release(&term->lock);
+
+    if (term->buffering.enabled) {
+        com_sys_callout_add(flush_callout, term, KFPS(TERM_FPS));
+    }
 }
 
 void com_io_term_disable(com_term_t *term) {
@@ -234,6 +220,7 @@ void com_io_term_disable(com_term_t *term) {
     }
 
     com_spinlock_acquire(&term->lock);
+    term->enabled = false;
     term->backend.ops->disable(term->backend.data);
     com_spinlock_release(&term->lock);
 }
@@ -257,11 +244,4 @@ void com_io_term_set_fallback(com_term_t *fallback_term) {
 }
 
 void com_io_term_init(void) {
-    TAILQ_INIT(&BufferQueue);
-    com_thread_t *print_thread = com_sys_thread_new_kernel(NULL, flush_thread);
-    // com_sys_thread_ready(PrintThread);
-    com_spinlock_acquire(&ARCH_CPU_GET()->runqueue_lock);
-    print_thread->runnable = true;
-    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, print_thread, threads);
-    com_spinlock_release(&ARCH_CPU_GET()->runqueue_lock);
 }

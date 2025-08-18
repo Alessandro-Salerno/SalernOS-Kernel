@@ -94,6 +94,12 @@ static void calibrate(void) {
     TicksPerSec         = (meas_lapic * 1193182UL) / meas_pit;
 }
 
+static void periodic(uint64_t ns, size_t interrupt) {
+    lapic_write(LAPIC_LVT_TIMER, interrupt | 0x20000);
+    lapic_write(LAPIC_INIT_COUNT,
+                ((ns * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
+}
+
 void x86_64_lapic_bsp_init(void) {
     arch_mmu_map(ARCH_CPU_GET()->root_page_table,
                  (void *)ARCH_PHYS_TO_HHDM(BSP_APIC_ADDR),
@@ -108,7 +114,5 @@ void x86_64_lapic_init(void) {
     lapic_write(LAPIC_SIVR, 0x1ff);
     lapic_write(LAPIC_LVT_TIMER, 0x30);
     lapic_write(LAPIC_DIV_CONF, 0);
-    lapic_write(LAPIC_LVT_TIMER, 0x30 | 0x20000);
-    lapic_write(LAPIC_INIT_COUNT,
-                ((1000000UL * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
+    periodic(ARCH_TIMER_NS, X86_64_LAPIC_TIMER_INTERRUPT);
 }

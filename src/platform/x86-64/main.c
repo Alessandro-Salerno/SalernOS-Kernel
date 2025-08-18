@@ -30,6 +30,7 @@
 #include <kernel/com/io/tty.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
@@ -206,6 +207,7 @@ USED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
 void kernel_entry(void) {
     ARCH_CPU_SET(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
+    TAILQ_INIT(&BaseCpu.callout.queue);
     BaseCpu.runqueue_lock = COM_SPINLOCK_NEW();
 
     X86_64_IO_OUTB(0x20, 0x11);
@@ -236,7 +238,8 @@ void kernel_entry(void) {
     com_term_t        *main_term = com_io_term_new(main_tb);
     com_io_term_set_fallback(main_term);
 
-    com_sys_interrupt_register(0x30, com_sys_sched_isr, x86_64_lapic_eoi);
+    com_sys_interrupt_register(
+        X86_64_LAPIC_TIMER_INTERRUPT, com_sys_callout_isr, x86_64_lapic_eoi);
     com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();

@@ -49,7 +49,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
 
         if (COM_SYS_SIGNAL_NONE != towait->stop_signal) {
             if (towait->stop_notified) {
-                KASSERT(WNOHANG & flags);
+                // KASSERT(WNOHANG & flags);
                 return 0;
             }
 
@@ -64,7 +64,6 @@ static int waitpid_proc(com_proc_t *curr_proc,
         com_sys_proc_wait(curr_proc);
 
         if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
-            KASSERT(false);
             return -EINTR;
         }
     }

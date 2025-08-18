@@ -18,10 +18,35 @@
 
 #pragma once
 
+#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/interrupt.h>
+#include <stdint.h>
+#include <vendor/tailq.h>
 
-#define X86_64_LAPIC_TIMER_INTERRUPT 0x30
+typedef void (*com_callout_intf_t)(void *arg);
 
-void x86_64_lapic_eoi(com_isr_t *isr);
-void x86_64_lapic_bsp_init(void);
-void x86_64_lapic_init(void);
+typedef struct com_callout {
+    uintmax_t          ns;
+    com_callout_intf_t handler;
+    void              *arg;
+    TAILQ_ENTRY(com_callout) queue;
+} com_callout_t;
+
+TAILQ_HEAD(com_callout_tailq, com_callout);
+
+typedef struct com_callout_queue {
+    uintmax_t                ns;
+    uintmax_t                next_preempt;
+    struct com_callout_tailq queue;
+    com_spinlock_t           lock;
+} com_callout_queue_t;
+
+uintmax_t com_sys_callout_get_time(void);
+void      com_sys_callout_run(void);
+void      com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx);
+void      com_sys_callout_add_at(com_callout_intf_t handler,
+                                 void              *arg,
+                                 uintmax_t          ns);
+void      com_sys_callout_add(com_callout_intf_t handler,
+                              void              *arg,
+                              uintmax_t          delay);

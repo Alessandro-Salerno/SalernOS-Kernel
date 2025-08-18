@@ -38,6 +38,9 @@
      LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
      LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
+#define ARCH_TIMER_NS (100UL * 1000UL)
+#define ARCH_SCHED_NS (1000UL * 1000UL)
+
 // This type must contain the following fields:
 //  - uintmax_t (or any integer) type
 //  - uintptr_t (or uint64_t) base

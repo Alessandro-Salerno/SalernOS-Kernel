@@ -233,7 +233,8 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // can be seen in send_to_thread
             COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
             com_sys_proc_acquire_glock();
-            proc->stop_signal = COM_SYS_SIGNAL_NONE;
+            proc->stop_signal   = COM_SYS_SIGNAL_NONE;
+            proc->stop_notified = false;
             com_sys_proc_release_glock();
             // TODO: I should kill all threads right?
             return;

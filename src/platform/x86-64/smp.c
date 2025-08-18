@@ -67,6 +67,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     arch_mmu_switch_default();
 
     x86_64_lapic_init();
+    TAILQ_INIT(&cpu->callout.queue);
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {

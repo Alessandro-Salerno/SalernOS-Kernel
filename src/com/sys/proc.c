@@ -193,7 +193,8 @@ com_proc_t *com_sys_proc_get_arbitray_child(com_proc_t *proc) {
     for (size_t i = 0; i < MAX_PROCS; i++) {
         com_proc_t *candidate = Processes[i];
 
-        if (candidate->parent_pid == proc->pid && !candidate->exited) {
+        if (candidate->parent_pid == proc->pid && !candidate->exited &&
+            !candidate->stop_notified) {
             return candidate;
         }
     }

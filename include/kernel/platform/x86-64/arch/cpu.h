@@ -19,6 +19,7 @@
 #pragma once
 
 #include <kernel/com/spinlock.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
@@ -43,18 +44,18 @@
 #define ARCH_CPU_HALT() asm volatile("hlt");
 
 typedef struct arch_cpu {
-    struct com_thread      *thread;
-    struct arch_cpu        *self;
-    void                   *dummy2;
-    uint64_t                id;
-    uint64_t                gdt[7];
-    x86_64_ist_t            ist;
-    bool                    intstatus;
-    arch_mmu_pagetable_t   *root_page_table;
-    com_spinlock_t          runqueue_lock;
-    struct com_thread_tailq sched_queue;
-    struct com_thread      *idle_thread;
-    struct com_thread_tailq zombie_queue;
+    struct com_thread       *thread;
+    struct arch_cpu         *self;
+    void                    *dummy2;
+    uint64_t                 id;
+    uint64_t                 gdt[7];
+    x86_64_ist_t             ist;
+    bool                     intstatus;
+    arch_mmu_pagetable_t    *root_page_table;
+    com_spinlock_t           runqueue_lock;
+    struct com_thread_tailq  sched_queue;
+    struct com_callout_queue callout;
+    struct com_thread       *idle_thread;
 } arch_cpu_t;
 
 #define ARCH_CPU_SET(cpuptr)                                 \
