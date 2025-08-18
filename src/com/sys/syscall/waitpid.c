@@ -98,7 +98,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     com_proc_t *towait = NULL;
 
     if (-1 == pid) {
-        towait = com_sys_proc_get_arbitray_child(curr_proc);
+        towait = com_sys_proc_get_arbitrary_child(curr_proc);
     } else {
         towait = com_sys_proc_get_by_pid(pid);
     }

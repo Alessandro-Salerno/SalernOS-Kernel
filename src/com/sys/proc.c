@@ -189,7 +189,7 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     return Processes[pid - 1];
 }
 
-com_proc_t *com_sys_proc_get_arbitray_child(com_proc_t *proc) {
+com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
     for (size_t i = 0; i < MAX_PROCS; i++) {
         com_proc_t *candidate = Processes[i];
 

@@ -99,7 +99,7 @@ com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
 int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
-com_proc_t *com_sys_proc_get_arbitray_child(com_proc_t *proc);
+com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
 void        com_sys_proc_acquire_glock(void);
 void        com_sys_proc_release_glock(void);
 void        com_sys_proc_wait(com_proc_t *proc);
