@@ -60,7 +60,7 @@ static uint16_t pit_read(void) {
     X86_64_IO_OUTB(0x43, 0);
     uint8_t low  = X86_64_IO_INB(0x40);
     uint8_t high = X86_64_IO_INB(0x40);
-    return (uint16_t)low | ((uint16_t)high << 8);
+    return low | high << 8;
 }
 
 void x86_64_lapic_eoi(com_isr_t *isr) {
@@ -69,7 +69,7 @@ void x86_64_lapic_eoi(com_isr_t *isr) {
 }
 
 static void calibrate(void) {
-    lapic_write(LAPIC_LVT_TIMER, 1 << 16);
+    lapic_write(LAPIC_LVT_TIMER, 1UL << 16);
     lapic_write(LAPIC_DIV_CONF, 0);
 
     X86_64_IO_OUTB(0x43, 0x34);
@@ -77,7 +77,7 @@ static void calibrate(void) {
     X86_64_IO_OUTB(0x40, 0xff);
 
     uint64_t delta    = 32768;
-    uint16_t start    = pit_read();
+    uint16_t start    = 0xffff - pit_read();
     uint16_t meas_pit = start;
 
     lapic_write(LAPIC_INIT_COUNT, 0xffffffff);
@@ -97,7 +97,7 @@ static void calibrate(void) {
 static void periodic(uint64_t ns, size_t interrupt) {
     lapic_write(LAPIC_LVT_TIMER, interrupt | 0x20000);
     lapic_write(LAPIC_INIT_COUNT,
-                ((ns * TicksPerSec) + 1000000000UL - 1) / 100000000UL);
+                ((ns * TicksPerSec) + 1000000000UL - 1) / 1000000000UL);
 }
 
 void x86_64_lapic_bsp_init(void) {
@@ -111,8 +111,8 @@ void x86_64_lapic_bsp_init(void) {
 }
 
 void x86_64_lapic_init(void) {
-    lapic_write(LAPIC_SIVR, 0x1ff);
-    lapic_write(LAPIC_LVT_TIMER, 0x30);
+    lapic_write(LAPIC_SIVR, (1UL << 8) | 0xff);
+    lapic_write(LAPIC_LVT_TIMER, X86_64_LAPIC_TIMER_INTERRUPT);
     lapic_write(LAPIC_DIV_CONF, 0);
     periodic(ARCH_TIMER_NS, X86_64_LAPIC_TIMER_INTERRUPT);
 }

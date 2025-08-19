@@ -52,7 +52,7 @@ uintmax_t com_sys_callout_get_time(void) {
     com_callout_queue_t *callout = &ARCH_CPU_GET()->callout;
     com_spinlock_acquire(&callout->lock);
     uintmax_t time = callout->ns;
-    com_spinlock_acquire(&callout->lock);
+    com_spinlock_release(&callout->lock);
     return time;
 }
 

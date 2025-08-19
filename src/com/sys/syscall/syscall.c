@@ -98,6 +98,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x24, com_sys_syscall_close);
     com_sys_syscall_register(0x25, com_sys_syscall_readdir);
     com_sys_syscall_register(0x26, com_sys_syscall_chdir);
+    com_sys_syscall_register(0x27, com_sys_syscall_clock_get);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }
