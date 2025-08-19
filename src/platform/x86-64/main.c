@@ -249,6 +249,12 @@ void kernel_entry(void) {
     com_vfs_t *rootfs = NULL;
     com_fs_tmpfs_mount(&rootfs, NULL);
 
+    com_vnode_t *tmpfs_mountpoint = NULL;
+    com_vfs_t   *tmpfs            = NULL;
+    com_fs_tmpfs_mkdir(
+        &tmpfs_mountpoint, rootfs->root, "tmp", kstrlen("tmp"), 0);
+    com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
+
     arch_file_t *initrd = arch_info_get_initrd();
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
