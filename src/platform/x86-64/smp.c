@@ -112,6 +112,7 @@ void x86_64_smp_init(void) {
     for (size_t i = 0; i < avail_cpus; i++) {
         struct limine_smp_info *info = smp->cpus[i];
         arch_cpu_t             *cpu  = &cpus[i];
+        cpu->lapic_id                = info->lapic_id;
         cpu->id                      = i;
         info->extra_argument         = (uint64_t)cpu;
 

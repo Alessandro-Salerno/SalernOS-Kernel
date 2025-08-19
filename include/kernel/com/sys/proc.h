@@ -82,6 +82,7 @@ typedef struct com_proc {
     com_spinlock_t    pg_lock;
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
+    bool did_execve;
 
     com_spinlock_t        signal_lock;
     struct com_sigaction *sigaction[NSIG];
@@ -108,8 +109,14 @@ void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);
+void com_sys_proc_kill_other_threads(com_proc_t        *proc,
+                                     struct com_thread *excluded);
+void com_sys_proc_kill_other_threads_nolock(com_proc_t        *proc,
+                                            struct com_thread *excluded);
 void com_sys_proc_exit(com_proc_t *proc, int status);
 void com_sys_proc_stop(com_proc_t *proc, int stop_signal);
+void com_sys_proc_terminate(com_proc_t *proc, int ecode, bool lock_curr);
+
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
                                          com_proc_session_t *session);
 int com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group);

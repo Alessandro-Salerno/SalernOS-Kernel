@@ -57,6 +57,8 @@ com_thread_t *com_sys_thread_new(struct com_proc *proc,
                                  uintmax_t        stack_size,
                                  void            *entry);
 com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
+void          com_sys_thread_exit(com_thread_t *thread);
+void          com_sys_thread_exit_nolock(com_thread_t *thread);
 void          com_sys_thread_destroy(com_thread_t *thread);
 void          com_sys_thread_ready_nolock(com_thread_t *thread);
 void          com_sys_thread_ready(com_thread_t *thread);

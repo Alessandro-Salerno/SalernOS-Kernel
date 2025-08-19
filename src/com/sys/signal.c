@@ -94,11 +94,12 @@ static int send_to_thread(com_thread_t *thread, int sig) {
     } else if (!thread->runnable) {
         com_sys_thread_ready_nolock(thread);
     }
+
+    if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
+        ARCH_CPU_SEND_IPI(thread->cpu);
+    }
+
     com_spinlock_release(&thread->sched_lock);
-
-    // TODO:, remember not to send self-IPI because that could probably create
-    // issues with like SIGSTOP
-
     return 0;
 }
 
@@ -209,13 +210,11 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
                    sig);
             com_spinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
-            com_sys_proc_exit(proc, sig);
-            com_spinlock_acquire(&thread->sched_lock);
-            // TODO: hacky behaviour, does not kill all threads
-            thread->runnable = false;
-            thread->exited   = true;
-            com_spinlock_release(&thread->sched_lock);
+
+            com_sys_proc_terminate(proc, sig, true);
             com_sys_sched_yield();
+
+            // This should never be reached
             KDEBUG("tid=%d in pid=%d is somehow still alive",
                    thread->tid,
                    proc->pid);
@@ -236,7 +235,6 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             proc->stop_signal   = COM_SYS_SIGNAL_NONE;
             proc->stop_notified = false;
             com_sys_proc_release_glock();
-            // TODO: I should kill all threads right?
             return;
         } else if (SA_IGNORE & SignalProperties[sig]) {
             goto end;

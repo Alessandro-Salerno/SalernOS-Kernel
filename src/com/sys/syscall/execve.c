@@ -57,20 +57,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
         return COM_SYS_SYSCALL_ERR(status);
     }
 
-    // TODO: this is wrong for multithreaded applications but it's agood start
-    com_spinlock_acquire(&proc->threads_lock);
-    com_thread_t *t, *_;
-    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        if (t != thread) {
-            com_spinlock_acquire(&t->sched_lock);
-            t->exited   = true;
-            t->runnable = false;
-            com_sys_proc_remove_thread_nolock(proc, t);
-            com_spinlock_release(&t->sched_lock);
-        }
-    }
-    com_spinlock_release(&proc->threads_lock);
-
+    com_sys_proc_kill_other_threads(proc, thread);
     arch_mmu_switch(new_pt);
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
@@ -97,6 +84,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
+    proc->did_execve = true;
     com_spinlock_release(&thread->sched_lock);
     com_spinlock_release(&proc->signal_lock);
 

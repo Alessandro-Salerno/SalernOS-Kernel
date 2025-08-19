@@ -27,7 +27,6 @@
 #include <lib/util.h>
 #include <stdint.h>
 
-// TODO: what happens if two threads of the same process call exit?
 // SYSCALL: exit(int status)
 COM_SYS_SYSCALL(com_sys_syscall_exit) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
@@ -37,14 +36,8 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
-    // KDEBUG(
-    // "exiting pid=%u with num_ref=%u", curr_proc->pid, curr_proc->num_ref);
 
-    com_sys_proc_exit(curr_proc, exit_status);
-    com_spinlock_acquire(&curr_thread->sched_lock);
-    curr_thread->runnable = false;
-    curr_thread->exited   = true;
-    com_spinlock_release(&curr_thread->sched_lock);
+    com_sys_proc_terminate(curr_proc, exit_status, true);
     com_sys_sched_yield();
 
     __builtin_unreachable();

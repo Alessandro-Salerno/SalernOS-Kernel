@@ -27,3 +27,4 @@ void x86_64_lapic_eoi(com_isr_t *isr);
 void x86_64_lapic_bsp_init(void);
 void x86_64_lapic_init(void);
 void x86_64_lapic_selfipi(void);
+void x86_64_lapic_send_ipi(uint8_t apic_id, uint8_t vector);

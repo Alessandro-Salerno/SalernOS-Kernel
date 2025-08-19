@@ -36,22 +36,23 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
+    com_spinlock_acquire(&curr_thread->proc->threads_lock);
     com_spinlock_acquire(&curr_thread->sched_lock);
 
     KASSERT(curr_thread->runnable);
-
-    curr_thread->runnable = false;
-    curr_thread->exited   = true;
+    com_sys_thread_exit_nolock(curr_thread);
     KASSERT(0 == curr_thread->pending_signals);
 
-    com_spinlock_acquire(&curr_thread->proc->threads_lock);
     com_sys_proc_remove_thread_nolock(curr_thread->proc, curr_thread);
+
+    // com_sys_proc_terminate is not needed here because there's only this
+    // thread left
     if (TAILQ_EMPTY(&curr_thread->proc->threads)) {
         com_sys_proc_exit(curr_thread->proc, 0);
     }
 
-    com_spinlock_release(&curr_thread->proc->threads_lock);
     com_spinlock_release(&curr_thread->sched_lock);
+    com_spinlock_release(&curr_thread->proc->threads_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();

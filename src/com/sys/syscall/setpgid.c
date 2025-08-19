@@ -66,7 +66,10 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
         }
     }
 
-    // TODO: handle case in which child has executed execve
+    if (proc->did_execve) {
+        ret.err = EACCES;
+        goto end;
+    }
 
     // Doing a query on the process group hashmap is actually thread safe even
     // if the lock is acquired only inside the function. This is because we know

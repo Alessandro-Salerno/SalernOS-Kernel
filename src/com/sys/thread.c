@@ -76,6 +76,20 @@ com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
     return t;
 }
 
+void com_sys_thread_exit(com_thread_t *thread) {
+    com_spinlock_acquire(&thread->sched_lock);
+    com_sys_thread_exit_nolock(thread);
+    com_spinlock_release(&thread->sched_lock);
+}
+
+void com_sys_thread_exit_nolock(com_thread_t *thread) {
+    thread->runnable = false;
+    thread->exited   = true;
+    if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
+        ARCH_CPU_SEND_IPI(thread->cpu);
+    }
+}
+
 void com_sys_thread_destroy(com_thread_t *thread) {
     thread->runnable = false;
     if (NULL != thread->proc) {

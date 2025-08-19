@@ -81,6 +81,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
     proc->pg_lock    = COM_SPINLOCK_NEW();
     proc->proc_group = NULL;
+    proc->did_execve = false;
 
     proc->signal_lock = COM_SPINLOCK_NEW();
     COM_SYS_SIGNAL_SIGMASK_INIT(&proc->pending_signals);
@@ -193,8 +194,7 @@ com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
     for (size_t i = 0; i < MAX_PROCS; i++) {
         com_proc_t *candidate = Processes[i];
 
-        if (candidate->parent_pid == proc->pid && !candidate->exited &&
-            !candidate->stop_notified) {
+        if (candidate->parent_pid == proc->pid && !candidate->exited) {
             return candidate;
         }
     }
@@ -232,6 +232,25 @@ void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
     TAILQ_REMOVE(&proc->threads, thread, proc_threads);
 }
 
+void com_sys_proc_kill_other_threads(com_proc_t *proc, com_thread_t *excluded) {
+    com_spinlock_acquire(&proc->threads_lock);
+    com_sys_proc_kill_other_threads_nolock(proc, excluded);
+    com_spinlock_release(&proc->threads_lock);
+}
+
+void com_sys_proc_kill_other_threads_nolock(com_proc_t   *proc,
+                                            com_thread_t *excluded) {
+    com_thread_t *t, *_;
+    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
+        if (t->tid != excluded->tid) {
+            com_spinlock_acquire(&t->sched_lock);
+            com_sys_thread_exit_nolock(t);
+            com_sys_proc_remove_thread_nolock(proc, t);
+            com_spinlock_release(&t->sched_lock);
+        }
+    }
+}
+
 void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_sys_proc_acquire_glock();
     com_spinlock_acquire(&proc->signal_lock);
@@ -240,10 +259,6 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     for (int i = 0; i < proc->next_fd; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
-            KDEBUG("(pid=%d) closed fd %d because proc exited, ref=%d",
-                   proc->pid,
-                   i,
-                   (proc->fd[i].file) ? proc->fd[i].file->num_ref : 0);
         }
     }
 
@@ -286,6 +301,16 @@ void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
 
 end:
     com_sys_proc_release_glock();
+}
+
+void com_sys_proc_terminate(com_proc_t *proc, int ecode, bool lock_curr) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(curr_thread->proc == proc);
+
+    com_sys_proc_kill_other_threads(proc, curr_thread);
+    com_sys_proc_exit(proc, ecode);
+    com_sys_proc_remove_thread(proc, curr_thread);
+    com_sys_thread_exit(curr_thread);
 }
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,

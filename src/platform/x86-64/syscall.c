@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/syscall.h>
 #include <kernel/platform/x86-64/msr.h>
