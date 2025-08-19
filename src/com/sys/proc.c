@@ -254,7 +254,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
     if (NULL != parent) {
         com_sys_sched_notify(&parent->notifications);
-        // com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
+        com_sys_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
     com_spinlock_release(&proc->fd_lock);

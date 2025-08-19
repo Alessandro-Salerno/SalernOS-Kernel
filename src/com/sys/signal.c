@@ -238,6 +238,8 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             com_sys_proc_release_glock();
             // TODO: I should kill all threads right?
             return;
+        } else if (SA_IGNORE & SignalProperties[sig]) {
+            goto end;
         }
     }
 
