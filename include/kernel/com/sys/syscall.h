@@ -122,3 +122,4 @@ COM_SYS_SYSCALL(com_sys_syscall_close);
 COM_SYS_SYSCALL(com_sys_syscall_readdir);
 COM_SYS_SYSCALL(com_sys_syscall_chdir);
 COM_SYS_SYSCALL(com_sys_syscall_clock_get);
+COM_SYS_SYSCALL(com_sys_syscall_faccessat);

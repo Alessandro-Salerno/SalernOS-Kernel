@@ -172,7 +172,6 @@ int kringbuffer_read_nolock(void          *dst,
         }
 
         com_sys_sched_wait(&rb->read.queue, &rb->lock);
-        KDEBUG("finished waiting on ring buffer");
 
         if (rb->is_eof) {
             rb->is_eof = false;

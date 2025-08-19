@@ -36,7 +36,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <stdint.h>
 #include <sys/types.h>
 
-#define COM_SYS_PROC_MAX_FDS 48
+#define COM_SYS_PROC_MAX_FDS 64
 
 typedef struct com_proc_session {
     pid_t                       sid;
