@@ -49,14 +49,16 @@ static void refresh_term_nolock(com_term_t *term) {
     term->backend.ops->refresh(term->backend.data);
 }
 
-static void flush_callout(void *arg) {
-    com_term_t *c = arg;
-    com_spinlock_acquire(&c->lock);
-    flush_buffer_nolock(c);
-    if (c->buffering.enabled && c->enabled) {
-        com_sys_callout_add(flush_callout, arg, KFPS(TERM_FPS));
+static void flush_callout(com_callout_t *callout) {
+    com_term_t *term = callout->arg;
+    com_spinlock_acquire(&term->lock);
+    flush_buffer_nolock(term);
+    bool should_resched = term->buffering.enabled && term->enabled;
+    com_spinlock_release(&term->lock);
+
+    if (should_resched) {
+        com_sys_callout_reschedule(callout, KFPS(TERM_FPS));
     }
-    com_spinlock_release(&c->lock);
 }
 
 com_term_t *com_io_term_new(com_term_backend_t backend) {

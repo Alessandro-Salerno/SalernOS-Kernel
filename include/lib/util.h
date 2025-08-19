@@ -36,7 +36,7 @@
 #define USED      __attribute__((used))
 
 // TODO: this should be 1B, but for some reason it's way too laggy
-#define KNANOS_PER_SEC 1000000UL
+#define KNANOS_PER_SEC 100000000UL
 #define KFPS(fps)      (KNANOS_PER_SEC / (fps))
 
 #ifndef DISABLE_LOGGING

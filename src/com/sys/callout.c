@@ -26,6 +26,28 @@
 // CREDIT: vloxei64/ke
 // CREDIT: FreeBSD
 
+static void enqueue_callout(com_callout_queue_t *cpu_callout,
+                            com_callout_t       *callout) {
+    // Add callout to the queue so that it is ordered
+    bool           added = false;
+    com_callout_t *curr  = TAILQ_FIRST(&cpu_callout->queue);
+    while (NULL != curr) {
+        if (callout->ns < curr->ns) {
+            TAILQ_INSERT_BEFORE(curr, callout, queue);
+            added = true;
+            break;
+        }
+        curr = TAILQ_NEXT(curr, queue);
+    }
+
+    // If the new callout was not added by the previous block, it means that its
+    // delay is higher than that of any other callout in the queue, so it needs
+    // to be placed at the end
+    if (!added) {
+        TAILQ_INSERT_TAIL(&cpu_callout->queue, callout, queue);
+    }
+}
+
 uintmax_t com_sys_callout_get_time(void) {
     com_callout_queue_t *callout = &ARCH_CPU_GET()->callout;
     com_spinlock_acquire(&callout->lock);
@@ -49,13 +71,15 @@ void com_sys_callout_run(void) {
         }
 
         TAILQ_REMOVE_HEAD(&cpu_callout->queue, queue);
-        com_callout_intf_t handler = callout->handler;
-        void              *arg     = callout->arg;
-        com_mm_slab_free(callout, sizeof(com_callout_t));
+        callout->reuse = false;
 
         com_spinlock_release(&cpu_callout->lock);
-        handler(arg);
+        callout->handler(callout);
         com_spinlock_acquire(&cpu_callout->lock);
+
+        if (!callout->reuse) {
+            com_mm_slab_free(callout, sizeof(com_callout_t));
+        }
     }
 
     bool resched = false;
@@ -77,36 +101,33 @@ void com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_sys_callout_run();
 }
 
+void com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns) {
+    com_callout_queue_t *cpu_callout = &ARCH_CPU_GET()->callout;
+    callout->reuse                   = true;
+    callout->ns                      = ns;
+
+    com_spinlock_acquire(&cpu_callout->lock);
+    enqueue_callout(cpu_callout, callout);
+    com_spinlock_release(&cpu_callout->lock);
+}
+
+void com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay) {
+    com_sys_callout_reschedule_at(callout, ARCH_CPU_GET()->callout.ns + delay);
+}
+
 void com_sys_callout_add_at(com_callout_intf_t handler,
                             void              *arg,
                             uintmax_t          ns) {
     com_callout_queue_t *cpu_callout = &ARCH_CPU_GET()->callout;
-    com_spinlock_acquire(&cpu_callout->lock);
 
     com_callout_t *new = com_mm_slab_alloc(sizeof(com_callout_t));
     new->handler       = handler;
     new->arg           = arg;
     new->ns            = ns;
+    new->reuse         = false;
 
-    // Add callout to the queue so that it is ordered
-    bool           added = false;
-    com_callout_t *curr  = TAILQ_FIRST(&cpu_callout->queue);
-    while (NULL != curr) {
-        if (ns < curr->ns) {
-            TAILQ_INSERT_BEFORE(curr, new, queue);
-            added = true;
-            break;
-        }
-        curr = TAILQ_NEXT(curr, queue);
-    }
-
-    // If the new callout was not added by the previous block, it means that its
-    // delay is higher than that of any other callout in the queue, so it needs
-    // to be placed at the end
-    if (!added) {
-        TAILQ_INSERT_TAIL(&cpu_callout->queue, new, queue);
-    }
-
+    com_spinlock_acquire(&cpu_callout->lock);
+    enqueue_callout(cpu_callout, new);
     com_spinlock_release(&cpu_callout->lock);
 }
 

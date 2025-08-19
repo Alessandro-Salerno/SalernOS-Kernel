@@ -20,15 +20,18 @@
 
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/interrupt.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-typedef void (*com_callout_intf_t)(void *arg);
+typedef struct com_callout com_callout_t;
+typedef void (*com_callout_intf_t)(com_callout_t *callout);
 
 typedef struct com_callout {
     uintmax_t          ns;
     com_callout_intf_t handler;
     void              *arg;
+    bool               reuse;
     TAILQ_ENTRY(com_callout) queue;
 } com_callout_t;
 
@@ -44,6 +47,8 @@ typedef struct com_callout_queue {
 uintmax_t com_sys_callout_get_time(void);
 void      com_sys_callout_run(void);
 void      com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx);
+void      com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns);
+void      com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay);
 void      com_sys_callout_add_at(com_callout_intf_t handler,
                                  void              *arg,
                                  uintmax_t          ns);
