@@ -22,6 +22,7 @@
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
@@ -40,6 +41,7 @@
 
 #define ARCH_CPU_DISABLE_INTERRUPTS() asm volatile("cli")
 #define ARCH_CPU_ENABLE_INTERRUPTS()  asm volatile("sti")
+#define ARCH_CPU_SELFIPI()            x86_64_lapic_selfipi()
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
 

@@ -79,6 +79,8 @@ static int write_blocking(kringbuffer_t *rb,
         if (NULL != callback) {
             callback(cb_arg);
         }
+
+        ARCH_CPU_SELFIPI();
     }
 
     return 0;
@@ -108,6 +110,7 @@ static int write_nonblocking(kringbuffer_t *rb,
         callback(cb_arg);
     }
 
+    ARCH_CPU_SELFIPI();
     return 0;
 }
 

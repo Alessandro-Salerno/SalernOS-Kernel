@@ -240,6 +240,8 @@ void kernel_entry(void) {
 
     com_sys_interrupt_register(
         X86_64_LAPIC_TIMER_INTERRUPT, com_sys_callout_isr, x86_64_lapic_eoi);
+    com_sys_interrupt_register(
+        X86_64_LAPIC_SELF_IPI_INTERRUPT, com_sys_sched_isr, x86_64_lapic_eoi);
     com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();

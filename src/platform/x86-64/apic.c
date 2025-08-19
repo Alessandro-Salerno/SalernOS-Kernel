@@ -116,3 +116,12 @@ void x86_64_lapic_init(void) {
     lapic_write(LAPIC_DIV_CONF, 0);
     periodic(ARCH_TIMER_NS, X86_64_LAPIC_TIMER_INTERRUPT);
 }
+
+void x86_64_lapic_selfipi(void) {
+    while (lapic_read(LAPIC_ICR_LOW) & 0x1000)
+        ;
+    lapic_write(LAPIC_ICR_LOW,
+                X86_64_LAPIC_SELF_IPI_INTERRUPT | LAPIC_ICR_DEST_SELF |
+                    LAPIC_ICR_ASSERT | LAPIC_ICR_EDGE);
+    lapic_write(LAPIC_ICR_HIGH, 0);
+}

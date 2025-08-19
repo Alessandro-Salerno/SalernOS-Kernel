@@ -20,8 +20,10 @@
 
 #include <kernel/com/sys/interrupt.h>
 
-#define X86_64_LAPIC_TIMER_INTERRUPT 0x30
+#define X86_64_LAPIC_TIMER_INTERRUPT    0x30
+#define X86_64_LAPIC_SELF_IPI_INTERRUPT 0x40
 
 void x86_64_lapic_eoi(com_isr_t *isr);
 void x86_64_lapic_bsp_init(void);
 void x86_64_lapic_init(void);
+void x86_64_lapic_selfipi(void);
