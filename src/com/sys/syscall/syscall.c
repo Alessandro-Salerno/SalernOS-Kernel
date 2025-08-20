@@ -100,6 +100,7 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x26, com_sys_syscall_chdir);
     com_sys_syscall_register(0x27, com_sys_syscall_clock_get);
     com_sys_syscall_register(0x28, com_sys_syscall_faccessat);
+    com_sys_syscall_register(0x29, com_sys_syscall_poll);
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

@@ -16,48 +16,25 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <errno.h>
+#pragma once
+
 #include <kernel/com/fs/file.h>
-#include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
+#include <kernel/com/sys/thread.h>
+#include <vendor/tailq.h>
 
-// SYSCALL: read(int fd, void *buf, size_t buflen)
-COM_SYS_SYSCALL(com_sys_syscall_read) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+typedef struct com_poller {
+    struct com_thread_tailq waiters;
+    com_spinlock_t          lock;
+} com_poller_t;
 
-    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
-    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
-    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+typedef struct com_polled {
+    com_poller_t *poller;
+    com_file_t   *file;
+    LIST_ENTRY(com_polled) polled_list;
+} com_polled_t;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
-
-    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t *file = com_sys_proc_get_file(curr, fd);
-
-    if (NULL == file) {
-        ret.err = EBADF;
-        return ret;
-    }
-
-    size_t bytes_read = 0;
-    int    vfs_op     = com_fs_vfs_read(
-        buf, buflen, &bytes_read, file->vnode, file->off, file->flags);
-
-    if (0 != vfs_op) {
-        ret.err = vfs_op;
-        goto cleanup;
-    }
-
-    com_spinlock_acquire(&file->off_lock);
-    file->off += bytes_read;
-    com_spinlock_release(&file->off_lock);
-
-    ret.value = bytes_read;
-cleanup:
-    COM_FS_FILE_RELEASE(file);
-    return ret;
-}
+typedef struct com_poll_head {
+    LIST_HEAD(, com_polled) polled_list;
+    com_spinlock_t lock;
+} com_poll_head_t;

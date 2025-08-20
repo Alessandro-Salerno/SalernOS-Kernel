@@ -299,3 +299,19 @@ int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf) {
 
     return node->ops->vnctl(node, op, buf);
 }
+
+int com_fs_vfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {
+    if (NULL == node->ops->poll_head) {
+        return ENOSYS;
+    }
+
+    return node->ops->poll_head(out, node);
+}
+
+int com_fs_vfs_poll(short *revents, com_vnode_t *node, short events) {
+    if (NULL == node->ops->poll) {
+        return ENOSYS;
+    }
+
+    return node->ops->poll(revents, node, events);
+}

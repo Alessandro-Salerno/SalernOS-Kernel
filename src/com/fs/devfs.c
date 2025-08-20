@@ -33,15 +33,17 @@ struct devfs_dev {
 };
 
 static com_vnode_ops_t DevfsNodeOps =
-    (com_vnode_ops_t){.read   = com_fs_devfs_read,
-                      .write  = com_fs_devfs_write,
-                      .ioctl  = com_fs_devfs_ioctl,
-                      .close  = com_fs_devfs_close,
-                      .create = com_fs_devfs_create,
-                      .mkdir  = com_fs_devfs_mkdir,
-                      .lookup = com_fs_tmpfs_lookup,
-                      .isatty = com_fs_devfs_isatty,
-                      .stat   = com_fs_devfs_stat};
+    (com_vnode_ops_t){.read      = com_fs_devfs_read,
+                      .write     = com_fs_devfs_write,
+                      .ioctl     = com_fs_devfs_ioctl,
+                      .close     = com_fs_devfs_close,
+                      .create    = com_fs_devfs_create,
+                      .mkdir     = com_fs_devfs_mkdir,
+                      .lookup    = com_fs_tmpfs_lookup,
+                      .isatty    = com_fs_devfs_isatty,
+                      .stat      = com_fs_devfs_stat,
+                      .poll_head = com_fs_devfs_poll_head,
+                      .poll      = com_fs_devfs_poll};
 
 static com_vfs_t *Devfs = NULL;
 
@@ -156,6 +158,26 @@ int com_fs_devfs_stat(struct stat *out, com_vnode_t *node) {
     }
 
     return dev->devops->stat(out, dev->devdata);
+}
+
+int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->poll_head) {
+        return ENOSYS;
+    }
+
+    return dev->devops->poll_head(out, dev->devdata);
+}
+
+int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->poll) {
+        return ENOSYS;
+    }
+
+    return dev->devops->poll(revents, dev->devdata, events);
 }
 
 // OTHER FUNCTIONS

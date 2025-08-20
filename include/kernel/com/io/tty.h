@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/spinlock.h>
@@ -47,6 +48,7 @@ typedef struct com_text_tty_backend {
     pid_t          fg_pgid;
     kringbuffer_t  slave_rb; // this is called slave for familiarity with PTYs
                              // (even if it used by TTYs as well)
+    com_poll_head_t slave_ph;
     struct {
         char   buffer[COM_IO_TTY_BUF_SZ];
         size_t index;
@@ -82,6 +84,7 @@ int  com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
                                    com_vnode_t            *tty_vn,
                                    uintmax_t               op,
                                    void                   *buf);
+void com_io_tty_text_backend_poll_callback(void *data);
 void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                              char                    c,
                              bool                    blocking,

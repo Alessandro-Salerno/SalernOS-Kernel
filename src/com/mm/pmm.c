@@ -129,7 +129,6 @@ void *com_mm_pmm_alloc(void) {
 
 void *com_mm_pmm_alloc_many(size_t pages) {
     com_spinlock_acquire(&Lock);
-    KDEBUG("allocating %u contiguous pages", pages);
     void  *ret       = NULL;
     size_t num_found = 0;
     bool   was_free  = false;

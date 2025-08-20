@@ -45,7 +45,7 @@ COM_SYS_SYSCALL(com_sys_syscall_write) {
 
     size_t bytes_written = 0;
     int    vfs_op        = com_fs_vfs_write(
-        &bytes_written, file->vnode, buf, buflen, file->off, 0);
+        &bytes_written, file->vnode, buf, buflen, file->off, file->flags);
 
     if (0 != vfs_op) {
         ret.err = vfs_op;

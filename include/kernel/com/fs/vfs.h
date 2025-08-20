@@ -18,11 +18,16 @@
 
 #pragma once
 
+#include <kernel/com/spinlock.h>
 #include <lib/util.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <vendor/tailq.h>
+
+// TODO: Invent something so this is not an issue
+struct com_poll_head;
 
 #define COM_VFS_PATH_SEP '/'
 
@@ -110,6 +115,8 @@ typedef struct com_fs_vfs_vnode_ops {
     int (*stat)(struct stat *out, com_vnode_t *node);
     int (*truncate)(com_vnode_t *node, size_t size);
     int (*vnctl)(com_vnode_t *node, uintmax_t op, void *buf);
+    int (*poll_head)(struct com_poll_head **out, com_vnode_t *node);
+    int (*poll)(short *revents, com_vnode_t *node, short events);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -177,3 +184,5 @@ int com_fs_vfs_isatty(com_vnode_t *node);
 int com_fs_vfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_vfs_truncate(com_vnode_t *node, size_t size);
 int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
+int com_fs_vfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
+int com_fs_vfs_poll(short *revents, com_vnode_t *node, short events);

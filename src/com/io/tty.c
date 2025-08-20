@@ -35,6 +35,7 @@
 #include <lib/mem.h>
 #include <lib/str.h>
 #include <lib/util.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -66,8 +67,8 @@ static int tty_read(void     *buf,
                             &tty->backend.slave_rb,
                             buflen,
                             !(O_NONBLOCK & flags),
-                            NULL,
-                            NULL);
+                            com_io_tty_text_backend_poll_callback,
+                            &tty->backend);
 }
 
 static int tty_write(size_t   *bytes_written,
@@ -116,12 +117,41 @@ static int tty_stat(struct stat *out, void *devdata) {
     return 0;
 }
 
-static com_dev_ops_t TextTtyDevOps = {.read   = tty_read,
-                                      .write  = tty_write,
-                                      .ioctl  = tty_ioctl,
-                                      .isatty = tty_isatty,
-                                      .close  = tty_close,
-                                      .stat   = tty_stat};
+static int tty_poll_head(com_poll_head_t **out, void *devdata) {
+    com_tty_t *tty_data = devdata;
+    KASSERT(COM_TTY_TEXT == tty_data->type);
+    com_text_tty_t *tty = &tty_data->tty.text;
+    *out                = &tty->backend.slave_ph;
+    return 0;
+}
+
+static int tty_poll(short *revents, void *devdata, short events) {
+    com_tty_t *tty_data = devdata;
+    KASSERT(COM_TTY_TEXT == tty_data->type);
+    com_text_tty_t *tty = &tty_data->tty.text;
+    short           out = POLLOUT;
+
+    if (tty->backend.slave_rb.write.index != tty->backend.slave_rb.read.index) {
+        out |= POLLIN;
+    }
+
+    KDEBUG("revents = %x - mask = %x - revents & mask = %x",
+           out,
+           events,
+           out & events);
+
+    *revents = out & events;
+    return 0;
+}
+
+static com_dev_ops_t TextTtyDevOps = {.read      = tty_read,
+                                      .write     = tty_write,
+                                      .ioctl     = tty_ioctl,
+                                      .isatty    = tty_isatty,
+                                      .close     = tty_close,
+                                      .stat      = tty_stat,
+                                      .poll_head = tty_poll_head,
+                                      .poll      = tty_poll};
 
 static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
@@ -246,6 +276,19 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
     return ENOSYS;
 }
 
+void com_io_tty_text_backend_poll_callback(void *data) {
+    com_text_tty_backend_t *backend = data;
+
+    com_spinlock_acquire(&backend->slave_ph.lock);
+    com_polled_t *polled, *_;
+    LIST_FOREACH_SAFE(polled, &backend->slave_ph.polled_list, polled_list, _) {
+        com_spinlock_acquire(&polled->poller->lock);
+        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_spinlock_release(&polled->poller->lock);
+    }
+    com_spinlock_release(&backend->slave_ph.lock);
+}
+
 // CREDIT: vloxei64/ke
 // (reworked somewhat now, will probably be reworked more soon)
 void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
@@ -288,8 +331,13 @@ void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
     // handle raw mode
     if (!(ICANON & tty_backend->termios.c_lflag)) {
-        kringbuffer_write(
-            NULL, &tty_backend->slave_rb, &c, 1, false, NULL, NULL);
+        kringbuffer_write(NULL,
+                          &tty_backend->slave_rb,
+                          &c,
+                          1,
+                          false,
+                          com_io_tty_text_backend_poll_callback,
+                          tty_backend);
         handled = true;
         goto end;
     }
@@ -351,8 +399,8 @@ end:
                           tty_backend->canon.buffer,
                           nbytes,
                           blocking,
-                          NULL,
-                          NULL);
+                          com_io_tty_text_backend_poll_callback,
+                          tty_backend);
         tty_backend->canon.index = 0;
     }
 
@@ -384,7 +432,9 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                                  void       *passthrough)) {
     kmemset(backend, sizeof(com_text_tty_backend_t), 0);
     KRINGBUFFER_INIT(&backend->slave_rb);
-    backend->echo = echo;
+    LIST_INIT(&backend->slave_ph.polled_list);
+    backend->slave_ph.lock = COM_SPINLOCK_NEW();
+    backend->echo          = echo;
 
     backend->rows = rows;
     backend->cols = cols;

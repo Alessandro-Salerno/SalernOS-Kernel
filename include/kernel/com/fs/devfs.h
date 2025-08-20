@@ -37,7 +37,8 @@ typedef struct com_dev_ops {
     int (*isatty)(void *devdata);
     int (*close)(void *devdata);
     int (*stat)(struct stat *out, void *devdata);
-    // TODO: add mmap, munmap and other fast things
+    int (*poll_head)(struct com_poll_head **out, void *devdata);
+    int (*poll)(short *revents, void *devdata, short events);
 } com_dev_ops_t;
 
 // VNODE OPS
@@ -68,6 +69,8 @@ int com_fs_devfs_write(size_t      *bytes_written,
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_devfs_isatty(com_vnode_t *node);
 int com_fs_devfs_stat(struct stat *out, com_vnode_t *node);
+int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
+int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events);
 
 // OTHER FUNCTIONS
 
