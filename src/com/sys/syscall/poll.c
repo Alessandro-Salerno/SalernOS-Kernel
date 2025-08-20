@@ -55,8 +55,12 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     TAILQ_INIT(&poller.waiters);
 
     bool do_wait = true;
-    (void)timeout;
-    // TODO: handle timeout
+    if (NULL != timeout) {
+        if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
+            do_wait = false;
+        }
+    }
+    // TODO: handle rest of timeout
 
     com_polled_t  stack_polleds[NUM_STACK_POLLEDS] = {0};
     com_polled_t *polleds                          = stack_polleds;
@@ -108,9 +112,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
             short revents = 0;
             com_fs_vfs_poll(&revents, polled->file->vnode, fds[i].events);
+            revents &= fds[i].events | POLLHUP | POLLERR;
 
             if (0 != revents) {
-                KDEBUG("passed with revents = %x", revents);
                 fds[i].revents = revents;
                 count++;
             }
@@ -153,6 +157,5 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         return COM_SYS_SYSCALL_ERR(EINTR);
     }
 
-    KDEBUG("got back from poll with count=%d", count);
     return COM_SYS_SYSCALL_OK(count);
 }

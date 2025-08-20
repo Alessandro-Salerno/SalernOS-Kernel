@@ -1,4 +1,4 @@
-/*************************************************************************
+/*************************************************************************tty.c
 | SalernOS Kernel                                                        |
 | Copyright (C) 2021 - 2025 Alessandro Salerno                           |
 |                                                                        |
@@ -126,6 +126,7 @@ static int tty_poll_head(com_poll_head_t **out, void *devdata) {
 }
 
 static int tty_poll(short *revents, void *devdata, short events) {
+    (void)events;
     com_tty_t *tty_data = devdata;
     KASSERT(COM_TTY_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
@@ -135,12 +136,7 @@ static int tty_poll(short *revents, void *devdata, short events) {
         out |= POLLIN;
     }
 
-    KDEBUG("revents = %x - mask = %x - revents & mask = %x",
-           out,
-           events,
-           out & events);
-
-    *revents = out & events;
+    *revents = out;
     return 0;
 }
 

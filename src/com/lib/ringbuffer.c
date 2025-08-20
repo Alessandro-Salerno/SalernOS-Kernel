@@ -214,7 +214,6 @@ end:
         *bytes_read = nbytes;
     }
 
-    KDEBUG("read %u bytes", nbytes);
     return ret;
 }
 
