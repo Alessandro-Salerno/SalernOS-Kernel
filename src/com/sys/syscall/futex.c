@@ -69,54 +69,54 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     uint32_t temp = value;
 
     switch (op) {
-    case FUTEX_WAIT:
-        if (__atomic_compare_exchange_n(
-                word_ptr, // cast away const (we don't change value anyway)
-                &temp,    // expected value
-                value,    // new value (same as expected, so no change)
-                false,    // don't allow spurious failures
-                __ATOMIC_SEQ_CST, // memory order for success
-                __ATOMIC_SEQ_CST  // memory order for failure
-                )) {
+        case FUTEX_WAIT:
+            if (__atomic_compare_exchange_n(
+                    word_ptr, // cast away const (we don't change value anyway)
+                    &temp,    // expected value
+                    value,    // new value (same as expected, so no change)
+                    false,    // don't allow spurious failures
+                    __ATOMIC_SEQ_CST, // memory order for success
+                    __ATOMIC_SEQ_CST  // memory order for failure
+                    )) {
+                struct futex *futex;
+                int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+                if (ENOENT == get_ret) {
+                    struct futex *default_futex =
+                        com_mm_slab_alloc(sizeof(struct futex));
+                    TAILQ_INIT(&default_futex->waiters);
+
+                    KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
+                    futex = default_futex;
+                } else if (0 != get_ret) {
+                    ret.err = get_ret;
+                    goto end;
+                }
+                com_sys_sched_wait(&futex->waiters, &FutexLock);
+            }
+            break;
+
+        case FUTEX_WAKE: {
             struct futex *futex;
             int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
             if (ENOENT == get_ret) {
-                struct futex *default_futex =
-                    com_mm_slab_alloc(sizeof(struct futex));
-                TAILQ_INIT(&default_futex->waiters);
-
-                KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
-                futex = default_futex;
+                goto end;
             } else if (0 != get_ret) {
                 ret.err = get_ret;
                 goto end;
             }
-            com_sys_sched_wait(&futex->waiters, &FutexLock);
+            if (INT_MAX == value) {
+                com_sys_sched_notify_all(&futex->waiters);
+            } else if (1 == value) {
+                com_sys_sched_notify(&futex->waiters);
+            } else {
+                ret.err = EINVAL;
+            }
+            break;
         }
-        break;
 
-    case FUTEX_WAKE: {
-        struct futex *futex;
-        int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
-        if (ENOENT == get_ret) {
+        default:
+            ret.err = ENOSYS;
             goto end;
-        } else if (0 != get_ret) {
-            ret.err = get_ret;
-            goto end;
-        }
-        if (INT_MAX == value) {
-            com_sys_sched_notify_all(&futex->waiters);
-        } else if (1 == value) {
-            com_sys_sched_notify(&futex->waiters);
-        } else {
-            ret.err = EINVAL;
-        }
-        break;
-    }
-
-    default:
-        ret.err = ENOSYS;
-        goto end;
     }
 
 end:

@@ -50,7 +50,11 @@ flanterm_backend_set_size(void *termdata, size_t rows, size_t cols) {
 
 static void flanterm_backend_flush(void *termdata) {
     struct flanterm_context *context = termdata;
-    flanterm_flush(context);
+    (void)context;
+    // TODO: this is apparently broken, either they fix it or I fix it. One
+    // solution to the cursor problem would be to only call flanterm_flush if
+    // new stuff has been printed to the screen since the last flush?
+    // flanterm_flush(context);
 }
 
 static void flanterm_backend_enable(void *termdata) {
@@ -74,11 +78,8 @@ static void *flanterm_backend_malloc(size_t bytes) {
 }
 
 static void flanterm_backend_free(void *buf, size_t bytes) {
-    for (uintptr_t page = (uintptr_t)buf;
-         page < (uintptr_t)buf + bytes * ARCH_PAGE_SIZE;
-         page += ARCH_PAGE_SIZE) {
-        com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(page));
-    }
+    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(buf),
+                         bytes / ARCH_PAGE_SIZE + 1);
 }
 
 void *opt_flanterm_init(arch_framebuffer_t *fb,

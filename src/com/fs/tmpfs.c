@@ -410,7 +410,7 @@ int com_fs_tmpfs_readdir(void        *buf,
                          com_vnode_t *dir,
                          uintmax_t    off) {
     if (COM_VNODE_TYPE_DIR != dir->type) {
-        return EBADF; // or ENODIR?
+        return 0;
     }
 
     if (0 == buflen) {

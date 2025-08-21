@@ -99,72 +99,72 @@ USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
         }
 
         switch (code) {
-        case 0x4b:
-            com_io_console_kbd_in('D', COM_IO_TTY_MOD_ARROW);
-            break;
+            case 0x4b:
+                com_io_console_kbd_in('D', COM_IO_TTY_MOD_ARROW);
+                break;
 
-        case 0x4d:
-            com_io_console_kbd_in('C', COM_IO_TTY_MOD_ARROW);
-            break;
+            case 0x4d:
+                com_io_console_kbd_in('C', COM_IO_TTY_MOD_ARROW);
+                break;
 
-        case 0x48:
-            com_io_console_kbd_in('A', COM_IO_TTY_MOD_ARROW);
-            break;
+            case 0x48:
+                com_io_console_kbd_in('A', COM_IO_TTY_MOD_ARROW);
+                break;
 
-        case 0x50:
-            com_io_console_kbd_in('B', COM_IO_TTY_MOD_ARROW);
-            break;
+            case 0x50:
+                com_io_console_kbd_in('B', COM_IO_TTY_MOD_ARROW);
+                break;
         }
     } else {
         switch (code) {
-        case 0x2a:
-            mod = mod | COM_IO_TTY_MOD_LSHIFT;
-            break;
+            case 0x2a:
+                mod = mod | COM_IO_TTY_MOD_LSHIFT;
+                break;
 
-        case 0xaa:
-            mod = mod & ~COM_IO_TTY_MOD_LSHIFT;
-            break;
+            case 0xaa:
+                mod = mod & ~COM_IO_TTY_MOD_LSHIFT;
+                break;
 
-        case 0x36:
-            mod = mod | COM_IO_TTY_MOD_RSHIFT;
-            break;
+            case 0x36:
+                mod = mod | COM_IO_TTY_MOD_RSHIFT;
+                break;
 
-        case 0xb6:
-            mod = mod & ~COM_IO_TTY_MOD_RSHIFT;
-            break;
+            case 0xb6:
+                mod = mod & ~COM_IO_TTY_MOD_RSHIFT;
+                break;
 
-        case 0x1d:
-            mod = mod | COM_IO_TTY_MOD_LCTRL;
-            break;
+            case 0x1d:
+                mod = mod | COM_IO_TTY_MOD_LCTRL;
+                break;
 
-        case 0x9d:
-            mod = mod & ~COM_IO_TTY_MOD_LCTRL;
-            break;
+            case 0x9d:
+                mod = mod & ~COM_IO_TTY_MOD_LCTRL;
+                break;
 
-        case 0x38:
-            mod = mod | COM_IO_TTY_MOD_LALT;
-            break;
+            case 0x38:
+                mod = mod | COM_IO_TTY_MOD_LALT;
+                break;
 
-        case 0xb8:
-            mod = mod & ~COM_IO_TTY_MOD_LALT;
-            break;
+            case 0xb8:
+                mod = mod & ~COM_IO_TTY_MOD_LALT;
+                break;
 
-        default:
-            if (code >= 0x3b && code <= 0x44) {
-                int  fkey = code - 0x3b;
-                char key_c =
-                    'A' + fkey; // TODO: this is not standard, has to be
-                                // translated in tty to be sent to userspace
-                com_io_console_kbd_in(key_c, mod | COM_IO_TTY_MOD_FKEY);
-            } else if (code < 0x80) {
-                if (COM_IO_TTY_MOD_LSHIFT & mod ||
-                    COM_IO_TTY_MOD_RSHIFT & mod) {
-                    com_io_console_kbd_in(asciitableShifted[code], mod);
-                } else {
-                    com_io_console_kbd_in(asciitable[code], mod);
+            default:
+                if (code >= 0x3b && code <= 0x44) {
+                    int  fkey = code - 0x3b;
+                    char key_c =
+                        'A' + fkey; // TODO: this is not standard, has to be
+                                    // translated in tty to be sent to userspace
+                    com_io_console_kbd_in(key_c, mod | COM_IO_TTY_MOD_FKEY);
+                } else if (code < 0x80) {
+                    if (COM_IO_TTY_MOD_LSHIFT & mod ||
+                        COM_IO_TTY_MOD_RSHIFT & mod) {
+                        com_io_console_kbd_in(asciitableShifted[code], mod);
+                    } else {
+                        com_io_console_kbd_in(asciitable[code], mod);
+                    }
                 }
-            }
-            break;
+                break;
         }
     }
 

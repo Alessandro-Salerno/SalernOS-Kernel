@@ -59,6 +59,11 @@ COM_SYS_SYSCALL(com_sys_syscall_close) {
     KDEBUG("after close, file=%x", fildesc->file);
     *fildesc = (com_filedesc_t){0};
 
+    // Recycle file descriptors
+    if (fd < curr_proc->next_fd) {
+        curr_proc->next_fd = fd;
+    }
+
     com_spinlock_release(&curr_proc->fd_lock);
     return COM_SYS_SYSCALL_OK(0);
 }

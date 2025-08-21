@@ -114,11 +114,19 @@ void com_sys_proc_destroy(com_proc_t *proc) {
 int com_sys_proc_next_fd(com_proc_t *proc) {
     com_spinlock_acquire(&proc->fd_lock);
     int ret = proc->next_fd;
+
+    // Update next_fd to point to the first free file descriptor
     proc->next_fd++;
+    for (; proc->next_fd < COM_SYS_PROC_MAX_FDS &&
+           NULL != proc->fd[proc->next_fd].file;
+         proc->next_fd++);
+
     com_spinlock_release(&proc->fd_lock);
+
     if (ret >= COM_SYS_PROC_MAX_FDS) {
         return -1;
     }
+
     return ret;
 }
 
@@ -256,7 +264,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_spinlock_acquire(&proc->signal_lock);
 
     com_spinlock_acquire(&proc->fd_lock);
-    for (int i = 0; i < proc->next_fd; i++) {
+    for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }
@@ -303,7 +311,7 @@ end:
     com_sys_proc_release_glock();
 }
 
-void com_sys_proc_terminate(com_proc_t *proc, int ecode, bool lock_curr) {
+void com_sys_proc_terminate(com_proc_t *proc, int ecode) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(curr_thread->proc == proc);
 

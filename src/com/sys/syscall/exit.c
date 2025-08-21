@@ -37,7 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_sys_proc_terminate(curr_proc, exit_status, true);
+    com_sys_proc_terminate(curr_proc, exit_status);
     com_sys_sched_yield();
 
     __builtin_unreachable();

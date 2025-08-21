@@ -62,7 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
 
-    for (int i = 0; i < proc->next_fd; i++) {
+    for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
         if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
             KDEBUG("(pid=%d) closed fd %d because it has FD_CLOEXECL, ref=%d",

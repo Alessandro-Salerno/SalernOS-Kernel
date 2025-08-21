@@ -38,8 +38,6 @@
 #define KNANOS_PER_SEC 1000000000UL
 #define KFPS(fps)      (KNANOS_PER_SEC / (fps))
 
-// #define DISABLE_LOGGING
-
 #ifndef DISABLE_LOGGING
 
 #define KLOG(...)                             \

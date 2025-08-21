@@ -36,7 +36,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <stdint.h>
 #include <sys/types.h>
 
-#define COM_SYS_PROC_MAX_FDS 64
+#define COM_SYS_PROC_MAX_FDS 96
 
 typedef struct com_proc_session {
     pid_t                       sid;
@@ -115,7 +115,7 @@ void com_sys_proc_kill_other_threads_nolock(com_proc_t        *proc,
                                             struct com_thread *excluded);
 void com_sys_proc_exit(com_proc_t *proc, int status);
 void com_sys_proc_stop(com_proc_t *proc, int stop_signal);
-void com_sys_proc_terminate(com_proc_t *proc, int ecode, bool lock_curr);
+void com_sys_proc_terminate(com_proc_t *proc, int ecode);
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
                                          com_proc_session_t *session);

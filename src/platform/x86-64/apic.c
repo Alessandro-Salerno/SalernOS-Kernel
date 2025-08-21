@@ -118,8 +118,7 @@ void x86_64_lapic_init(void) {
 }
 
 void x86_64_lapic_selfipi(void) {
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000)
-        ;
+    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
     lapic_write(LAPIC_ICR_LOW,
                 X86_64_LAPIC_SELF_IPI_INTERRUPT | LAPIC_ICR_DEST_SELF |
                     LAPIC_ICR_ASSERT | LAPIC_ICR_EDGE);
@@ -128,8 +127,7 @@ void x86_64_lapic_selfipi(void) {
 
 void x86_64_lapic_send_ipi(uint8_t apic_id, uint8_t vector) {
     // Wait until the previous IPI has been sent
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000)
-        ;
+    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
 
     // Set the target APIC ID in the high ICR register
     lapic_write(LAPIC_ICR_HIGH, ((uint32_t)apic_id) << 24);
@@ -140,6 +138,5 @@ void x86_64_lapic_send_ipi(uint8_t apic_id, uint8_t vector) {
                     LAPIC_ICR_EDGE); // Fixed delivery mode by default (000)
 
     // Wait for the IPI to be delivered
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000)
-        ;
+    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
 }

@@ -59,7 +59,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
         return COM_SYS_SYSCALL_ERR(ENOMEM);
     }
 
-    for (int i = 0; i < proc->next_fd; i++) {
+    for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
         if (NULL != proc->fd[i].file) {
             new_proc->fd[i].flags = proc->fd[i].flags;
             COM_FS_FILE_HOLD(proc->fd[i].file);

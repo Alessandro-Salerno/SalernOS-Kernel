@@ -211,7 +211,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             com_spinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
-            com_sys_proc_terminate(proc, sig, true);
+            com_sys_proc_terminate(proc, sig);
             com_sys_sched_yield();
 
             // This should never be reached
@@ -286,17 +286,17 @@ int com_sys_signal_set_mask_nolock(com_sigmask_t *mask,
     }
 
     switch (how) {
-    case SIG_BLOCK:
-        *mask |= set->sig[0];
-        break;
-    case SIG_SETMASK:
-        *mask = set->sig[0];
-        break;
-    case SIG_UNBLOCK:
-        *mask &= ~set->sig[0];
-        break;
-    default:
-        return EINVAL;
+        case SIG_BLOCK:
+            *mask |= set->sig[0];
+            break;
+        case SIG_SETMASK:
+            *mask = set->sig[0];
+            break;
+        case SIG_UNBLOCK:
+            *mask &= ~set->sig[0];
+            break;
+        default:
+            return EINVAL;
     }
 
 noset:

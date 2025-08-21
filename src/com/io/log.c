@@ -51,14 +51,12 @@ void com_io_log_puts(const char *s) {
 }
 
 void com_io_log_acquire(void) {
-    while (InPanic)
-        ;
+    while (InPanic);
     com_spinlock_acquire(&LogLock);
 }
 
 void com_io_log_release(void) {
-    while (InPanic)
-        ;
+    while (InPanic);
     com_spinlock_release(&LogLock);
 }
 

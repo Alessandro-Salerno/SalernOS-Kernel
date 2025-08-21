@@ -165,34 +165,35 @@ int com_sys_elf64_load(com_elf_data_t       *out,
         uintptr_t vaddr = virt_off + phdr.virt_addr;
 
         switch (phdr.type) {
-        case PT_INTERP:
-            KDEBUG("found PT_INTERP at offset %u", phdr_off);
-            ret = com_fs_vfs_read(out->interpreter_path,
-                                  phdr.file_sz,
-                                  &bytes_read,
-                                  elf_file,
-                                  phdr.off,
-                                  0);
-            if (0 != ret) {
-                goto cleanup;
-            }
-            break;
+            case PT_INTERP:
+                KDEBUG("found PT_INTERP at offset %u", phdr_off);
+                ret = com_fs_vfs_read(out->interpreter_path,
+                                      phdr.file_sz,
+                                      &bytes_read,
+                                      elf_file,
+                                      phdr.off,
+                                      0);
+                if (0 != ret) {
+                    goto cleanup;
+                }
+                break;
 
-        case PT_PHDR:
-            out->phdr = vaddr;
-            break;
+            case PT_PHDR:
+                out->phdr = vaddr;
+                break;
 
-        case PT_LOAD:
-            KDEBUG("found PT_LOAD at offset %u with segment at offset %u and "
-                   "virt %x",
-                   phdr_off,
-                   phdr.off,
-                   phdr.virt_addr);
-            ret = load(vaddr, &phdr, elf_file, pt);
-            if (0 != ret) {
-                goto cleanup;
-            }
-            break;
+            case PT_LOAD:
+                KDEBUG(
+                    "found PT_LOAD at offset %u with segment at offset %u and "
+                    "virt %x",
+                    phdr_off,
+                    phdr.off,
+                    phdr.virt_addr);
+                ret = load(vaddr, &phdr, elf_file, pt);
+                if (0 != ret) {
+                    goto cleanup;
+                }
+                break;
         }
     }
 
