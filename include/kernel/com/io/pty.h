@@ -19,6 +19,7 @@
 #pragma once
 
 #include <arch/info.h>
+#include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/spinlock.h>
@@ -29,11 +30,22 @@
 #include <termios.h>
 
 typedef struct com_pty {
-    com_text_tty_backend_t data;
+    com_text_tty_backend_t backend;
 
-    com_vnode_t  *master_vn;
-    kringbuffer_t master_rb;
+    com_vnode_t    *master_vn;
+    kringbuffer_t   master_rb;
+    com_poll_head_t master_ph;
 
-    com_vnode_t *slave_vn;
-    // no slave_rb since the TTY backend already has it
+    // no slave_rb/ph because they're in backend
+    // no slave_vn because there may be multiple slaves (?)
+
+    int    pts_num;
+    size_t num_slaves;
 } com_pty_t;
+
+typedef struct com_pty_slave {
+    com_vnode_t *vnode;
+    com_pty_t   *pty;
+} com_pty_slave_t;
+
+int com_io_pty_init(void);

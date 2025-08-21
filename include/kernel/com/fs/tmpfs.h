@@ -20,6 +20,8 @@
 
 #include <kernel/com/fs/vfs.h>
 
+#define COM_FS_TMPFS_NO_DIRENT (1UL << 16)
+
 // VFS OPS
 
 int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode);

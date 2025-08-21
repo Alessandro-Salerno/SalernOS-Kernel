@@ -30,9 +30,9 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
-    int   fd  = COM_SYS_SYSCALL_ARG(int, 1);
-    int   op  = COM_SYS_SYSCALL_ARG(int, 2);
-    void *buf = COM_SYS_SYSCALL_ARG(void *, 3);
+    int       fd  = COM_SYS_SYSCALL_ARG(int, 1);
+    uintmax_t op  = COM_SYS_SYSCALL_ARG(uintmax_t, 2);
+    void     *buf = COM_SYS_SYSCALL_ARG(void *, 3);
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 

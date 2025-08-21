@@ -63,7 +63,9 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     proc->page_table = new_pt;
 
     for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
-        if (NULL != proc->fd[i].file && (FD_CLOEXEC & proc->fd[i].flags)) {
+        if (NULL != proc->fd[i].file &&
+            ((FD_CLOEXEC & proc->fd[i].flags) ||
+             (O_CLOEXEC & proc->fd[i].file->flags))) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
             KDEBUG("(pid=%d) closed fd %d because it has FD_CLOEXECL, ref=%d",
                    proc->pid,

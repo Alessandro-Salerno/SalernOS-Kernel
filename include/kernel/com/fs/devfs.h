@@ -39,6 +39,7 @@ typedef struct com_dev_ops {
     int (*stat)(struct stat *out, void *devdata);
     int (*poll_head)(struct com_poll_head **out, void *devdata);
     int (*poll)(short *revents, void *devdata, short events);
+    int (*open)(com_vnode_t **out, void *devdata);
 } com_dev_ops_t;
 
 // VNODE OPS
@@ -71,6 +72,7 @@ int com_fs_devfs_isatty(com_vnode_t *node);
 int com_fs_devfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events);
+int com_fs_devfs_open(com_vnode_t **out, com_vnode_t *node);
 
 // OTHER FUNCTIONS
 
@@ -81,4 +83,7 @@ int   com_fs_devfs_register(com_vnode_t  **out,
                             size_t         namelen,
                             com_dev_ops_t *devops,
                             void          *devdata);
+int   com_fs_devfs_register_anonymous(com_vnode_t  **out,
+                                      com_dev_ops_t *devops,
+                                      void          *devdata);
 int   com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs);

@@ -93,16 +93,21 @@ static int createat(struct tmpfs_dir_entry **outent,
     tn_new->lock              = COM_SPINLOCK_NEW();
     tn_new->num_links         = 1;
 
-    struct tmpfs_dir_entry *dirent =
-        com_mm_slab_alloc(sizeof(struct tmpfs_dir_entry) + namelen);
-    dirent->tnode   = tn_new;
-    dirent->namelen = namelen;
-    kmemcpy(dirent->name, name, namelen);
+    struct tmpfs_dir_entry *dirent = NULL;
+    if (!(COM_FS_TMPFS_NO_DIRENT & attr)) {
+        dirent = com_mm_slab_alloc(sizeof(struct tmpfs_dir_entry) + namelen);
+        dirent->tnode   = tn_new;
+        dirent->namelen = namelen;
+        kmemcpy(dirent->name, name, namelen);
+    }
 
     com_fs_tmpfs_vget(out, dir->vfs, tn_new);
 
-    tn_new->dirent = dirent;
-    *outent        = dirent;
+    if (NULL != dirent) {
+        tn_new->dirent = dirent;
+    }
+
+    *outent = dirent;
     return 0;
 }
 
@@ -176,10 +181,12 @@ int com_fs_tmpfs_create(com_vnode_t **out,
         (*out)->type          = COM_VNODE_TYPE_FILE;
     }
 
-    struct tmpfs_node *parent = dir->extra;
-    com_spinlock_acquire(&parent->lock);
-    TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
-    com_spinlock_release(&parent->lock);
+    if (NULL != dirent) {
+        struct tmpfs_node *parent = dir->extra;
+        com_spinlock_acquire(&parent->lock);
+        TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
+        com_spinlock_release(&parent->lock);
+    }
 
     return 0;
 }

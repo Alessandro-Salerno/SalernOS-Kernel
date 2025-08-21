@@ -26,6 +26,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/io/pty.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/mm/pmm.h>
@@ -277,6 +278,8 @@ void kernel_entry(void) {
         com_io_term_set_buffering(term, true);
         com_io_console_add_tty(tty_data);
     }
+
+    com_io_pty_init();
 
     char *const   argv[] = {"/boot/init", NULL};
     char *const   envp[] = {NULL};

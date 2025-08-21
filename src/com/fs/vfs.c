@@ -315,3 +315,12 @@ int com_fs_vfs_poll(short *revents, com_vnode_t *node, short events) {
 
     return node->ops->poll(revents, node, events);
 }
+
+int com_fs_vfs_open(com_vnode_t **out, com_vnode_t *node) {
+    if (NULL == node->ops->open) {
+        *out = node;
+        return 0;
+    }
+
+    return node->ops->open(out, node);
+}

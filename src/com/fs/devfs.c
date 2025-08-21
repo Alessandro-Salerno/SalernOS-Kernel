@@ -43,7 +43,8 @@ static com_vnode_ops_t DevfsNodeOps =
                       .isatty    = com_fs_devfs_isatty,
                       .stat      = com_fs_devfs_stat,
                       .poll_head = com_fs_devfs_poll_head,
-                      .poll      = com_fs_devfs_poll};
+                      .poll      = com_fs_devfs_poll,
+                      .open      = com_fs_devfs_open};
 
 static com_vfs_t *Devfs = NULL;
 
@@ -65,7 +66,7 @@ int com_fs_devfs_create(com_vnode_t **out,
                         size_t        namelen,
                         uintmax_t     attr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_create(
+    int ret          = com_fs_tmpfs_create(
         &new, dir, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
@@ -85,8 +86,12 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
                        const char   *name,
                        size_t        namelen,
                        uintmax_t     attr) {
+    if (NULL == parent) {
+        parent = Devfs->root;
+    }
+
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_mkdir(
+    int ret          = com_fs_tmpfs_mkdir(
         &new, parent, name, namelen, attr | COM_VFS_CREAT_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
@@ -94,8 +99,8 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
         return ret;
     }
 
-    new->ops = &DevfsNodeOps;
-    *out     = new;
+    // new->ops = &DevfsNodeOps;
+    *out = new;
     return 0;
 }
 
@@ -107,7 +112,7 @@ int com_fs_devfs_read(void        *buf,
                       uintmax_t    flags) {
     struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
 
-    if (NULL == dev->devops->stat) {
+    if (NULL == dev->devops->read) {
         return ENOSYS;
     }
 
@@ -180,6 +185,17 @@ int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events) {
     return dev->devops->poll(revents, dev->devdata, events);
 }
 
+int com_fs_devfs_open(com_vnode_t **out, com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->open) {
+        *out = node;
+        return 0;
+    }
+
+    return dev->devops->open(out, dev->devdata);
+}
+
 // OTHER FUNCTIONS
 
 void *com_fs_devfs_get_data(com_vnode_t *node) {
@@ -199,6 +215,25 @@ int com_fs_devfs_register(com_vnode_t  **out,
 
     com_vnode_t *devnode = NULL;
     int          ret     = com_fs_devfs_create(&devnode, dir, name, namelen, 0);
+
+    if (0 != ret || NULL == devnode) {
+        *out = NULL;
+        return ret;
+    }
+
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(devnode);
+    dev->devops           = devops;
+    dev->devdata          = devdata;
+    *out                  = devnode;
+    return 0;
+}
+
+int com_fs_devfs_register_anonymous(com_vnode_t  **out,
+                                    com_dev_ops_t *devops,
+                                    void          *devdata) {
+    com_vnode_t *devnode = NULL;
+    int          ret     = com_fs_devfs_create(
+        &devnode, Devfs->root, NULL, 0, COM_FS_TMPFS_NO_DIRENT);
 
     if (0 != ret || NULL == devnode) {
         *out = NULL;

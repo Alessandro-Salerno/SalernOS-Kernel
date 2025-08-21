@@ -54,10 +54,11 @@ typedef struct com_text_tty_backend {
         size_t index;
     } canon;
 
-    size_t (*echo)(const char *buf,
-                   size_t      buflen,
-                   bool        blocking,
-                   void       *passthrough);
+    int (*echo)(size_t     *bytes_written,
+                const char *buf,
+                size_t      buflen,
+                bool        blocking,
+                void       *passthrough);
 } com_text_tty_backend_t;
 
 typedef struct com_text_tty {
@@ -85,11 +86,12 @@ int  com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
                                    uintmax_t               op,
                                    void                   *buf);
 void com_io_tty_text_backend_poll_callback(void *data);
-void com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
+int  com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                              char                    c,
                              bool                    blocking,
                              void                   *passthrough);
-void com_io_tty_process_chars(com_text_tty_backend_t *tty_backend,
+int  com_io_tty_process_chars(size_t                 *bytes_processed,
+                              com_text_tty_backend_t *tty_backend,
                               const char             *buf,
                               size_t                  buflen,
                               bool                    blocking,
@@ -98,10 +100,11 @@ void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod);
 void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                   size_t                  rows,
                                   size_t                  cols,
-                                  size_t (*echo)(const char *buf,
-                                                 size_t      buflen,
-                                                 bool        blocking,
-                                                 void       *passthrough));
+                                  int (*echo)(size_t     *bytes_written,
+                                              const char *buf,
+                                              size_t      buflen,
+                                              bool        blocking,
+                                              void       *passthrough));
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);

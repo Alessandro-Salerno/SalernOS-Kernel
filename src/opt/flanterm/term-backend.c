@@ -51,10 +51,7 @@ flanterm_backend_set_size(void *termdata, size_t rows, size_t cols) {
 static void flanterm_backend_flush(void *termdata) {
     struct flanterm_context *context = termdata;
     (void)context;
-    // TODO: this is apparently broken, either they fix it or I fix it. One
-    // solution to the cursor problem would be to only call flanterm_flush if
-    // new stuff has been printed to the screen since the last flush?
-    // flanterm_flush(context);
+    flanterm_flush(context);
 }
 
 static void flanterm_backend_enable(void *termdata) {

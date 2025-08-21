@@ -117,6 +117,7 @@ typedef struct com_fs_vfs_vnode_ops {
     int (*vnctl)(com_vnode_t *node, uintmax_t op, void *buf);
     int (*poll_head)(struct com_poll_head **out, com_vnode_t *node);
     int (*poll)(short *revents, com_vnode_t *node, short events);
+    int (*open)(com_vnode_t **out, com_vnode_t *node);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -186,3 +187,4 @@ int com_fs_vfs_truncate(com_vnode_t *node, size_t size);
 int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_vfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_vfs_poll(short *revents, com_vnode_t *node, short events);
+int com_fs_vfs_open(com_vnode_t **out, com_vnode_t *node);
