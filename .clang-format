@@ -15,12 +15,13 @@ AlignConsecutiveShortCaseStatements:
   AcrossComments: true
   AlignCaseColons: false
 AllowShortFunctionsOnASingleLine: 'false'
-IndentCaseLabels: 'false'
 IndentWidth: '4'
 SpaceBeforeParens: ControlStatements
 SpacesInCStyleCastParentheses: 'false'
 SpacesInSquareBrackets: 'false'
 TabWidth: '4'
+IndentCaseLabels: true
+AllowShortLoopsOnASingleLine: true
 IncludeBlocks: Regroup
 IncludeCategories:
   - Regex:           '<[[:alnum:].\/-]+>'
