@@ -580,10 +580,15 @@ static int devtty_open(com_vnode_t **out, void *devdata) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_vnode_t *ctty = curr_proc->proc_group->session->tty;
-    COM_FS_VFS_VNODE_HOLD(ctty);
-    KASSERT(NULL != ctty);
-    *out = ctty;
-    return 0;
+
+    if (NULL != ctty) {
+        COM_FS_VFS_VNODE_HOLD(ctty);
+        *out = ctty;
+        return 0;
+    }
+
+    *out = NULL;
+    return ENXIO;
 }
 
 static com_dev_ops_t TtyCloneDevOps = {.open = devtty_open, .stat = tty_stat};

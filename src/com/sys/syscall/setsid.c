@@ -37,8 +37,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setsid) {
         goto end;
     }
 
-    com_sys_proc_new_session_nolock(curr_proc,
-                                    curr_proc->proc_group->session->tty);
+    com_sys_proc_new_session_nolock(curr_proc, NULL);
 
     ret.value = curr_proc->proc_group->pgid;
 

@@ -1,4 +1,4 @@
-/*************************************************************************term.c
+/*************************************************************************
 | SalernOS Kernel                                                        |
 | Copyright (C) 2021 - 2025 Alessandro Salerno                           |
 |                                                                        |
@@ -191,6 +191,7 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
     }
 
     term->backend.ops->flush(term->backend.data);
+    term->backend.ops->refresh(term->backend.data);
     term->buffering.enabled = state;
     com_spinlock_release(&term->lock);
 

@@ -103,11 +103,10 @@ static int ptm_read(void     *buf,
     KDEBUG("PTM READ");
     com_spinlock_acquire(&pty->master_rb.lock);
 
-    // TODO: figure this out
-    /*if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
+    if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
         ret = EIO;
         goto end;
-    }*/
+    }
 
     ret = kringbuffer_read_nolock(buf,
                                   bytes_read,

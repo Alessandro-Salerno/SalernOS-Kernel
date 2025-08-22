@@ -50,7 +50,7 @@ static int pipe_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
     (void)node;
     (void)op;
     (void)buf;
-    KASSERT(false);
+    return ENOSYS;
 }
 
 static com_vnode_ops_t PipefsNodeOps = {.read   = com_fs_pipefs_read,
