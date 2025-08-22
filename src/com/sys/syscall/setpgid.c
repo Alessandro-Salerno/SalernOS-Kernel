@@ -58,7 +58,10 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     }
 
     if (0 != pid) {
+        com_spinlock_release(&proc->pg_lock);
         proc = com_sys_proc_get_by_pid(pid);
+        com_spinlock_acquire(&proc->pg_lock);
+
         if (NULL == proc || (proc->pid != curr_proc->pid &&
                              proc->parent_pid != curr_proc->pid)) {
             ret.err = ESRCH;

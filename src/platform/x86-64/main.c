@@ -262,6 +262,9 @@ void kernel_entry(void) {
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
 
+    com_vnode_t *devtty = NULL;
+    com_io_tty_devtty_init(&devtty);
+
     com_vnode_t *main_tty_dev  = NULL;
     com_tty_t   *main_tty_data = NULL;
     com_io_tty_init_text(&main_tty_dev, &main_tty_data, main_term);

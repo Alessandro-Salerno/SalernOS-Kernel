@@ -49,6 +49,7 @@ static int pty_echo(size_t     *bytes_written,
                     bool        blocking,
                     void       *passthrough) {
     com_pty_t *pty = passthrough;
+    KDEBUG("PTM ECHO %.*s", buflen, buf);
     return kringbuffer_write(bytes_written,
                              &pty->master_rb,
                              (void *)buf,
@@ -77,6 +78,7 @@ static void pty_free(com_pty_t *pty) {
 
 static void ptm_poll_callback(void *arg) {
     com_pty_t *pty = arg;
+    KDEBUG("PTM POLL CALLBACK");
 
     com_spinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
@@ -97,6 +99,7 @@ static int ptm_read(void     *buf,
     (void)off;
     com_pty_t *pty = devdata;
     int        ret = 0;
+    KDEBUG("PTM READ");
     com_spinlock_acquire(&pty->master_rb.lock);
 
     // TODO: figure this out
@@ -115,6 +118,7 @@ static int ptm_read(void     *buf,
 
 end:
     com_spinlock_release(&pty->master_rb.lock);
+    KDEBUG("PTM READ: %.*s", *bytes_read, buf);
     return ret;
 }
 
@@ -150,12 +154,19 @@ static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
         return 0;
     }
 
+    if (TIOCGWINSZ == op) {
+        struct winsize *ws = (void *)buf;
+        ws->ws_col         = pty->backend.cols;
+        ws->ws_row         = pty->backend.rows;
+        return 0;
+    }
+
     return ENOSYS;
 }
 
 static int ptm_isatty(void *devdata) {
     (void)devdata;
-    return ENOTTY;
+    return 0;
 }
 
 static int ptm_close(void *devdata) {
@@ -167,23 +178,31 @@ static int ptm_close(void *devdata) {
 static int ptm_poll_head(com_poll_head_t **out, void *devdata) {
     com_pty_t *pty = devdata;
     *out           = &pty->master_ph;
+    KDEBUG("PTM POLL HEAD");
     return 0;
 }
 
 static int ptm_poll(short *revents, void *devdata, short events) {
     com_pty_t *pty = devdata;
     (void)events;
+    KDEBUG("PTM POLL CHECK");
 
     short out = 0;
-    if (1 == pty->num_slaves) {
+    if (0 == pty->num_slaves) {
         out |= POLLHUP;
     }
     if (pty->master_rb.write.index != pty->master_rb.read.index) {
+        KDEBUG("PTM POLLIN %u != %u",
+               pty->master_rb.write.index,
+               pty->master_rb.read.index);
         out |= POLLIN;
     }
     if (KRINGBUFFER_SIZE -
             (pty->master_rb.write.index - pty->master_rb.read.index) >
         0) {
+        KDEBUG("PTM POLLOUT %u",
+               KRINGBUFFER_SIZE -
+                   (pty->master_rb.write.index - pty->master_rb.read.index))
         out |= POLLOUT;
     }
 
@@ -210,13 +229,16 @@ static int pts_read(void     *buf,
     (void)off;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    return kringbuffer_read(buf,
-                            bytes_read,
-                            &pty->backend.slave_rb,
-                            buflen,
-                            !(O_NONBLOCK & flags),
-                            com_io_tty_text_backend_poll_callback,
-                            &pty->backend);
+    KDEBUG("PTS READ");
+    int ret = kringbuffer_read(buf,
+                               bytes_read,
+                               &pty->backend.slave_rb,
+                               buflen,
+                               !(O_NONBLOCK & flags),
+                               com_io_tty_text_backend_poll_callback,
+                               &pty->backend);
+    KDEBUG("PTS READ: %.*s", *bytes_read, buf);
+    return ret;
 }
 
 static int pts_write(size_t   *bytes_written,
@@ -229,6 +251,7 @@ static int pts_write(size_t   *bytes_written,
     (void)flags;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
+    KDEBUG("PTS WRITE");
     return pty_echo(bytes_written, buf, buflen, true, pty);
 }
 
@@ -271,6 +294,7 @@ static int pts_stat(struct stat *out, void *devdata) {
 static int pts_poll_head(com_poll_head_t **out, void *devdata) {
     com_pty_t *pty = devdata;
     *out           = &pty->backend.slave_ph;
+    KDEBUG("PTS POLL HEAD");
     return 0;
 }
 
@@ -278,6 +302,7 @@ static int pts_poll(short *revents, void *devdata, short events) {
     (void)events;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
+    KDEBUG("PTS POLL CHECK");
 
     short out = 0;
 

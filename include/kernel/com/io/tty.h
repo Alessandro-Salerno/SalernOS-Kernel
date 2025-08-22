@@ -108,3 +108,4 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);
+int  com_io_tty_devtty_init(com_vnode_t **devtty);

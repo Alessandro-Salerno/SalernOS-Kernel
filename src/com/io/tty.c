@@ -46,6 +46,8 @@
 
 #define CONTROL_DEL 127
 
+// #define TTY_HOST_OUTPUT
+
 static size_t NextttyNum = 0;
 
 // DEV OPS
@@ -566,5 +568,31 @@ end:
     }
 
     KDEBUG("created tty with name %s", tty_name);
+    return ret;
+}
+
+// DEVTTY FUNCTIONS
+
+static int devtty_open(com_vnode_t **out, void *devdata) {
+    (void)devdata;
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
+
+    com_vnode_t *ctty = curr_proc->proc_group->session->tty;
+    COM_FS_VFS_VNODE_HOLD(ctty);
+    *out = ctty;
+    return 0;
+}
+
+static com_dev_ops_t TtyCloneDevOps = {.open = devtty_open, .stat = tty_stat};
+
+int com_io_tty_devtty_init(com_vnode_t **devtty) {
+    KLOG("initializing /dev/tty clone device");
+
+    com_vnode_t *dev = NULL;
+    int          ret =
+        com_fs_devfs_register(&dev, NULL, "tty", 3, &TtyCloneDevOps, NULL);
+
+    *devtty = dev;
     return ret;
 }
