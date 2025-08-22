@@ -85,10 +85,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
     bool do_wait = true;
     if (NULL != timeout) {
-        KDEBUG("poll(nfds = %d, tv_sec = %d, tv_nsec = %d)",
-               nfds,
-               timeout->tv_sec,
-               timeout->tv_nsec);
         if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
             do_wait = false;
         } else if (timeout->tv_nsec >= 0 && timeout->tv_nsec >= 0) {
@@ -100,8 +96,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             com_sys_callout_add(poll_timeout, timeout_arg, delay_ns);
             com_spinlock_release(&poller.lock);
         }
-    } else {
-        KDEBUG("poll(nfds = %d, timeout = -1)", nfds);
     }
 
     com_polled_t  stack_polleds[NUM_STACK_POLLEDS] = {0};
@@ -112,14 +106,12 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(polleds_pages));
     }
 
-    kprintf("pollfds = [");
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
         polled->poller       = &poller;
         polled->file         = NULL; // overriden if all checks pass
         fds[i].revents       = 0;
         int fd               = fds[i].fd;
-        kprintf("%d, ", fd);
 
         if (fd < 0) {
             continue;
@@ -143,7 +135,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             com_spinlock_release(&poll_head->lock);
         }
     }
-    kprintf("]\n");
 
     int count = 0;
     int sig   = COM_SYS_SIGNAL_NONE;

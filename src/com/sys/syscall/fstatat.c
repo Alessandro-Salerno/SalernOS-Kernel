@@ -89,7 +89,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
 
 end:
     COM_FS_FILE_RELEASE(dir_file);
-    if (do_lookup) {
+    if (!do_lookup) {
         COM_FS_VFS_VNODE_RELEASE(target);
     }
     return ret;

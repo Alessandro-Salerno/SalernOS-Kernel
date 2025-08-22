@@ -85,7 +85,7 @@ static void ptm_poll_callback(void *arg) {
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
         KDEBUG("notifying polled %x", polled);
         com_spinlock_acquire(&polled->poller->lock);
-        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_sys_sched_notify(&polled->poller->waiters);
         com_spinlock_release(&polled->poller->lock);
     }
     com_spinlock_release(&pty->master_ph.lock);
@@ -113,7 +113,7 @@ static int ptm_read(void     *buf,
                                   bytes_read,
                                   &pty->master_rb,
                                   buflen,
-                                  !(O_NONBLOCK & flags),
+                                  false,
                                   ptm_poll_callback,
                                   pty);
 
@@ -253,7 +253,7 @@ static int pts_write(size_t   *bytes_written,
     (void)flags;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    KDEBUG("PTS WRITE");
+    KDEBUG("PTS WRITE TO PTY %x", pty);
     return pty_echo(bytes_written, buf, buflen, true, pty);
 }
 
@@ -340,6 +340,7 @@ static int pts_open(com_vnode_t **out, void *devdata) {
     if (0 != ret) {
         com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
         __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST);
+        KASSERT(false);
         goto end;
     }
 
@@ -381,7 +382,6 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
     *out = pty->master_vn;
 
 end:
-    pty_free(pty);
     return ret;
 }
 
