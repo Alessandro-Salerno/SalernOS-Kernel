@@ -70,7 +70,8 @@ static int tty_read(void     *buf,
                             buflen,
                             !(O_NONBLOCK & flags),
                             com_io_tty_text_backend_poll_callback,
-                            &tty->backend);
+                            &tty->backend,
+                            NULL);
 }
 
 static int tty_write(size_t   *bytes_written,
@@ -363,7 +364,8 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                                 1,
                                 false,
                                 com_io_tty_text_backend_poll_callback,
-                                tty_backend);
+                                tty_backend,
+                                NULL);
         handled = true;
         goto end;
     }
@@ -437,7 +439,8 @@ end:
                                 nbytes,
                                 blocking,
                                 com_io_tty_text_backend_poll_callback,
-                                tty_backend);
+                                tty_backend,
+                                NULL);
         tty_backend->canon.index = 0;
     }
 

@@ -27,15 +27,40 @@
 // CREDIT: vloxei64/ke
 // This is my reinterpretation of his code.
 
+#define CHECK_HANGUP_GENERIC(new_nbytes, curr_nbytes, rb, op, arg)             \
+    {                                                                          \
+        bool force_return = false;                                             \
+        int  hup_ret =                                                         \
+            check_hangup(new_nbytes, curr_nbytes, &force_return, rb, op, arg); \
+        if (0 != hup_ret || force_return) {                                    \
+            return hup_ret;                                                    \
+        }                                                                      \
+    }
+
+static int check_hangup(size_t        *new_nbytes,
+                        size_t         curr_nbytes,
+                        bool          *force_return,
+                        kringbuffer_t *rb,
+                        int            op,
+                        void          *arg) {
+    if (NULL == rb->check_hangup) {
+        return 0;
+    }
+
+    return rb->check_hangup(new_nbytes, curr_nbytes, force_return, rb, op, arg);
+}
+
 static int write_blocking(kringbuffer_t *rb,
                           void          *buf,
                           size_t        *buflen,
                           void (*callback)(void *),
-                          void *cb_arg) {
+                          void *cb_arg,
+                          void *hu_arg) {
     size_t to_write      = *buflen;
     size_t bytes_written = 0;
 
     while (to_write > 0) {
+        CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
         size_t space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
 
         while (0 == space) {
@@ -52,6 +77,7 @@ static int write_blocking(kringbuffer_t *rb,
                 return 0;
             }
 
+            CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
             space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
         }
 
@@ -90,7 +116,10 @@ static int write_nonblocking(kringbuffer_t *rb,
                              void          *buf,
                              size_t        *buflen,
                              void (*callback)(void *),
-                             void *cb_arg) {
+                             void *cb_arg,
+                             void *hu_arg) {
+    CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
+
     size_t space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
 
     size_t can_write = KMIN(*buflen, space);
@@ -121,13 +150,14 @@ int kringbuffer_write_nolock(size_t        *bytes_written,
                              size_t         buflen,
                              bool           blocking,
                              void (*callback)(void *),
-                             void *cb_arg) {
+                             void *cb_arg,
+                             void *hu_arg) {
     int ret;
 
     if (blocking) {
-        ret = write_blocking(rb, buf, &buflen, callback, cb_arg);
+        ret = write_blocking(rb, buf, &buflen, callback, cb_arg, hu_arg);
     } else {
-        ret = write_nonblocking(rb, buf, &buflen, callback, cb_arg);
+        ret = write_nonblocking(rb, buf, &buflen, callback, cb_arg, hu_arg);
     }
 
     if (NULL != bytes_written) {
@@ -143,10 +173,11 @@ int kringbuffer_write(size_t        *bytes_written,
                       size_t         buflen,
                       bool           blocking,
                       void (*callback)(void *),
-                      void *cb_arg) {
+                      void *cb_arg,
+                      void *hu_arg) {
     com_spinlock_acquire(&rb->lock);
     int ret = kringbuffer_write_nolock(
-        bytes_written, rb, buf, buflen, blocking, callback, cb_arg);
+        bytes_written, rb, buf, buflen, blocking, callback, cb_arg, hu_arg);
     com_spinlock_release(&rb->lock);
     return ret;
 }
@@ -165,7 +196,8 @@ int kringbuffer_read_nolock(void          *dst,
                             size_t         nbytes,
                             bool           blocking,
                             void (*callback)(void *),
-                            void *cb_arg) {
+                            void *cb_arg,
+                            void *hu_arg) {
     int ret = 0;
 
     while (rb->write.index == rb->read.index || rb->is_eof) {
@@ -176,6 +208,7 @@ int kringbuffer_read_nolock(void          *dst,
         }
 
         com_sys_sched_wait(&rb->read.queue, &rb->lock);
+        CHECK_HANGUP_GENERIC(&nbytes, nbytes, rb, KRINGBUFFER_OP_READ, hu_arg);
 
         if (rb->is_eof) {
             rb->is_eof = false;
@@ -224,10 +257,11 @@ int kringbuffer_read(void          *dst,
                      size_t         nbytes,
                      bool           blocking,
                      void (*callback)(void *),
-                     void *cb_arg) {
+                     void *cb_arg,
+                     void *hu_arg) {
     com_spinlock_acquire(&rb->lock);
     int ret = kringbuffer_read_nolock(
-        dst, bytes_read, rb, nbytes, blocking, callback, cb_arg);
+        dst, bytes_read, rb, nbytes, blocking, callback, cb_arg, hu_arg);
     com_spinlock_release(&rb->lock);
     return ret;
 }

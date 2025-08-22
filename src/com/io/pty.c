@@ -43,6 +43,33 @@ static com_dev_ops_t PtsDevOps;
 
 // GENERIC PTY FUNCTIONS
 
+static int pty_rb_check_hangup(size_t        *new_nbytes,
+                               size_t         curr_nbytes,
+                               bool          *force_return,
+                               kringbuffer_t *rb,
+                               int            op,
+                               void          *arg) {
+    (void)rb;
+    com_pty_t *pty = arg;
+
+    if (KRINGBUFFER_OP_WRITE == op) {
+        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
+            *new_nbytes = 0;
+            return EIO;
+        }
+    } else if (KRINGBUFFER_OP_READ == op) {
+        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
+            *new_nbytes = 0;
+            return EIO;
+        } else if (NULL == atomic_load(&pty->master_vn)) {
+            *new_nbytes   = 0;
+            *force_return = true;
+        }
+    }
+
+    return 0;
+}
+
 static int pty_echo(size_t     *bytes_written,
                     const char *buf,
                     size_t      buflen,
@@ -56,6 +83,7 @@ static int pty_echo(size_t     *bytes_written,
                              buflen,
                              blocking,
                              ptm_poll_callback,
+                             pty,
                              pty);
 }
 
@@ -64,14 +92,11 @@ static com_pty_t *pty_alloc(void) {
     pty->pts_num   = __atomic_fetch_add(&NextPtsNum, 1, __ATOMIC_SEQ_CST);
     com_io_tty_init_text_backend(&pty->backend, 80, 25, pty_echo);
     KRINGBUFFER_INIT(&pty->master_rb);
+    pty->master_rb.check_hangup        = pty_rb_check_hangup;
+    pty->backend.slave_rb.check_hangup = pty_rb_check_hangup;
     LIST_INIT(&pty->master_ph.polled_list);
     pty->master_ph.lock = COM_SPINLOCK_NEW();
     return pty;
-}
-
-static void pty_free(com_pty_t *pty) {
-    // TODO: implement pty_free
-    (void)pty;
 }
 
 // PTM FUNCTIONS
@@ -114,6 +139,7 @@ static int ptm_read(void     *buf,
                                   buflen,
                                   false,
                                   ptm_poll_callback,
+                                  pty,
                                   pty);
 
 end:
@@ -161,7 +187,12 @@ static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
         return 0;
     }
 
-    KASSERT(false);
+    if (TCGETS == op) {
+        struct termios *termios = buf;
+        *termios                = pty->backend.termios;
+        return 0;
+    }
+
     return ENOSYS;
 }
 
@@ -171,8 +202,8 @@ static int ptm_isatty(void *devdata) {
 }
 
 static int ptm_close(void *devdata) {
-    (void)devdata;
-    // TODO: should I do something here?
+    com_pty_t *pty = devdata;
+    atomic_store(&pty->master_vn, NULL);
     return 0;
 }
 
@@ -237,7 +268,8 @@ static int pts_read(void     *buf,
                                buflen,
                                !(O_NONBLOCK & flags),
                                com_io_tty_text_backend_poll_callback,
-                               &pty->backend);
+                               &pty->backend,
+                               pty);
     KDEBUG("PTS READ: %.*s", *bytes_read, buf);
     return ret;
 }
@@ -301,8 +333,9 @@ static int pts_stat(struct stat *out, void *devdata) {
 }
 
 static int pts_poll_head(com_poll_head_t **out, void *devdata) {
-    com_pty_t *pty = devdata;
-    *out           = &pty->backend.slave_ph;
+    com_pty_slave_t *pty_slave = devdata;
+    com_pty_t       *pty       = pty_slave->pty;
+    *out                       = &pty->backend.slave_ph;
     KDEBUG("PTS POLL HEAD");
     return 0;
 }
@@ -373,12 +406,14 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
         goto end;
     }
 
-    ret = com_fs_devfs_register_anonymous(&pty->master_vn, &PtmDevOps, pty);
+    com_vnode_t *master_vn = NULL;
+    ret = com_fs_devfs_register_anonymous(&master_vn, &PtmDevOps, pty);
     if (0 != ret) {
         goto end;
     }
 
-    *out = pty->master_vn;
+    atomic_store(&pty->master_vn, master_vn);
+    *out = master_vn;
 
 end:
     return ret;

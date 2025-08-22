@@ -122,7 +122,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             continue;
         }
 
-        com_poll_head_t *poll_head;
+        com_poll_head_t *poll_head = NULL;
         if (0 != com_fs_vfs_poll_head(&poll_head, file->vnode)) {
             continue;
         }

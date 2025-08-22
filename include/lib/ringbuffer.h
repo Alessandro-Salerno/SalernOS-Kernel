@@ -26,12 +26,16 @@
 
 #define KRINGBUFFER_SIZE (ARCH_PAGE_SIZE / 4)
 
-#define KRINGBUFFER_INIT(rb_ptr)                \
-    (rb_ptr)->lock        = COM_SPINLOCK_NEW(); \
-    (rb_ptr)->write.index = 0;                  \
-    (rb_ptr)->read.index  = 0;                  \
-    (rb_ptr)->is_eof      = false;              \
-    TAILQ_INIT(&(rb_ptr)->write.queue);         \
+#define KRINGBUFFER_OP_READ  0
+#define KRINGBUFFER_OP_WRITE 1
+
+#define KRINGBUFFER_INIT(rb_ptr)                 \
+    (rb_ptr)->lock         = COM_SPINLOCK_NEW(); \
+    (rb_ptr)->write.index  = 0;                  \
+    (rb_ptr)->read.index   = 0;                  \
+    (rb_ptr)->is_eof       = false;              \
+    (rb_ptr)->check_hangup = NULL;               \
+    TAILQ_INIT(&(rb_ptr)->write.queue);          \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
 typedef struct kringbuffer {
@@ -46,6 +50,12 @@ typedef struct kringbuffer {
         size_t                  index;
     } read;
     bool is_eof;
+    int (*check_hangup)(size_t             *new_nbytes,
+                        size_t              curr_nbytes,
+                        bool               *force_return,
+                        struct kringbuffer *rb,
+                        int                 op,
+                        void               *arg);
 } kringbuffer_t;
 
 int kringbuffer_write_nolock(size_t        *bytes_written,
@@ -54,25 +64,29 @@ int kringbuffer_write_nolock(size_t        *bytes_written,
                              size_t         buflen,
                              bool           blocking,
                              void (*callback)(void *),
-                             void *cb_arg);
+                             void *cb_arg,
+                             void *hu_arg);
 int kringbuffer_write(size_t        *bytes_written,
                       kringbuffer_t *rb,
                       void          *buf,
                       size_t         buflen,
                       bool           blocking,
                       void (*callback)(void *),
-                      void *cb_arg);
+                      void *cb_arg,
+                      void *hu_arg);
 int kringbuffer_read_nolock(void          *dst,
                             size_t        *bytes_read,
                             kringbuffer_t *rb,
                             size_t         nbytes,
                             bool           blocking,
                             void (*callback)(void *),
-                            void *cb_arg);
+                            void *cb_arg,
+                            void *hu_arg);
 int kringbuffer_read(void          *dst,
                      size_t        *bytes_read,
                      kringbuffer_t *rb,
                      size_t         nbytes,
                      bool           blocking,
                      void (*callback)(void *),
-                     void *cb_arg);
+                     void *cb_arg,
+                     void *hu_arg);

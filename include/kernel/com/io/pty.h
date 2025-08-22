@@ -25,6 +25,7 @@
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ringbuffer.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <termios.h>
@@ -32,9 +33,9 @@
 typedef struct com_pty {
     com_text_tty_backend_t backend;
 
-    com_vnode_t    *master_vn;
-    kringbuffer_t   master_rb;
-    com_poll_head_t master_ph;
+    _Atomic(com_vnode_t *) master_vn;
+    kringbuffer_t          master_rb;
+    com_poll_head_t        master_ph;
 
     // no slave_rb/ph because they're in backend
     // no slave_vn because there may be multiple slaves (?)
