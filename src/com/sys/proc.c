@@ -44,6 +44,21 @@ static khashmap_t     ProcGroupMap;
 static com_spinlock_t ProcGroupLock = COM_SPINLOCK_NEW();
 static bool           ProcGroupInit = false;
 
+static void proc_update_fd_hint(com_proc_t *proc) {
+    // Best case: there's a file after the hint
+    for (; proc->next_fd < COM_SYS_PROC_MAX_FDS; proc->next_fd++) {
+        if (NULL == proc->fd[proc->next_fd].file) {
+            return;
+        }
+    }
+
+    // Worst case: retry from the start, files might have been liberated without
+    // calling close
+    for (proc->next_fd = 0; proc->next_fd < COM_SYS_PROC_MAX_FDS &&
+                            NULL != proc->fd[proc->next_fd].file;
+         proc->next_fd++);
+}
+
 com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
                              pid_t                 parent_pid,
                              com_vnode_t          *root,
@@ -117,9 +132,7 @@ int com_sys_proc_next_fd(com_proc_t *proc) {
 
     // Update next_fd to point to the first free file descriptor
     proc->next_fd++;
-    for (; proc->next_fd < COM_SYS_PROC_MAX_FDS &&
-           NULL != proc->fd[proc->next_fd].file;
-         proc->next_fd++);
+    proc_update_fd_hint(proc);
 
     com_spinlock_release(&proc->fd_lock);
 
@@ -162,19 +175,23 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
     return file;
 }
 
-int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
-    int ret = 0;
-    com_spinlock_acquire(&proc->fd_lock);
-
-    if (NULL == proc->fd[old_fd].file) {
-        ret = -EBADF;
-        goto end;
+int com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
+                                       int         new_fd,
+                                       int         old_fd) {
+    if (old_fd < 0 || old_fd > COM_SYS_PROC_MAX_FDS || new_fd < 0 ||
+        new_fd > COM_SYS_PROC_MAX_FDS) {
+        return -EINVAL;
     }
 
-    COM_FS_FILE_RELEASE(proc->fd[new_fd].file);
+    for (; NULL != proc->fd[new_fd].file; new_fd++) {
+        if (new_fd >= COM_SYS_PROC_MAX_FDS) {
+            return -EMFILE;
+        }
+    }
 
     proc->fd[new_fd]       = proc->fd[old_fd];
     proc->fd[new_fd].flags = 0;
+    proc_update_fd_hint(proc);
 
     COM_FS_FILE_HOLD(proc->fd[new_fd].file);
     KDEBUG("after dup, fd=%d/%d has ref=%d/%d",
@@ -183,9 +200,40 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
            proc->fd[old_fd].file->num_ref,
            proc->fd[new_fd].file->num_ref);
 
-    ret = new_fd;
+    return new_fd;
+}
 
-end:
+int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
+    com_spinlock_acquire(&proc->fd_lock);
+    int ret = com_sys_proc_duplicate_file_nolock(proc, new_fd, old_fd);
+    com_spinlock_release(&proc->fd_lock);
+    return ret;
+}
+
+int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd) {
+    if (fd < 0 || fd > COM_SYS_PROC_MAX_FDS) {
+        return EBADF;
+    }
+
+    com_filedesc_t *fildesc = &proc->fd[fd];
+    if (NULL == fildesc->file) {
+        return EBADF;
+    }
+
+    COM_FS_FILE_RELEASE(fildesc->file);
+    *fildesc = (com_filedesc_t){0};
+
+    // Recycle file descriptors
+    if (fd < proc->next_fd) {
+        proc->next_fd = fd;
+    }
+
+    return 0;
+}
+
+int com_sys_proc_close_file(com_proc_t *proc, int fd) {
+    com_spinlock_acquire(&proc->fd_lock);
+    int ret = com_sys_proc_close_file_nolock(proc, fd);
     com_spinlock_release(&proc->fd_lock);
     return ret;
 }
@@ -357,10 +405,10 @@ int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group) {
         KASSERT(NULL != proc->proc_group->session);
         KASSERT(NULL != group->session);
 
-        // If sid is equal to the pid, then this process is the session leader
-        // (useful, for example, in setsid). Whereas, if the two are different,
-        // then it means that the process is trying to migrate sessions (which
-        // POSIX does not allow)
+        // If sid is equal to the pid, then this process is the session
+        // leader (useful, for example, in setsid). Whereas, if the two are
+        // different, then it means that the process is trying to migrate
+        // sessions (which POSIX does not allow)
         /*if (proc->proc_group->session->sid != proc->pid &&
             proc->proc_group->session->sid != group->session->sid) {
             return EPERM;

@@ -98,7 +98,12 @@ void            com_sys_proc_destroy(com_proc_t *proc);
 int             com_sys_proc_next_fd(com_proc_t *proc);
 com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
+int             com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
+                                                   int         new_fd,
+                                                   int         old_fd);
 int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
+int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd);
+int com_sys_proc_close_file(com_proc_t *proc, int fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
 void        com_sys_proc_acquire_glock(void);

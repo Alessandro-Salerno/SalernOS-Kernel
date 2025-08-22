@@ -49,7 +49,7 @@ static int pty_echo(size_t     *bytes_written,
                     bool        blocking,
                     void       *passthrough) {
     com_pty_t *pty = passthrough;
-    KDEBUG("PTM ECHO %.*s", buflen, buf);
+    KDEBUG("PTM ECHO %.*s TO PTY %x", buflen, buf, pty);
     return kringbuffer_write(bytes_written,
                              &pty->master_rb,
                              (void *)buf,
@@ -78,11 +78,12 @@ static void pty_free(com_pty_t *pty) {
 
 static void ptm_poll_callback(void *arg) {
     com_pty_t *pty = arg;
-    KDEBUG("PTM POLL CALLBACK");
+    KDEBUG("PTM POLL CALLBACK ON PTY %x", pty);
 
     com_spinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
+        KDEBUG("notifying polled %x", polled);
         com_spinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify_all(&polled->poller->waiters);
         com_spinlock_release(&polled->poller->lock);
@@ -161,6 +162,7 @@ static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
         return 0;
     }
 
+    KASSERT(false);
     return ENOSYS;
 }
 
@@ -258,6 +260,14 @@ static int pts_write(size_t   *bytes_written,
 static int pts_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
+
+    if (TIOCSWINSZ == op) {
+        struct winsize *ws = (void *)buf;
+        pty->backend.cols  = ws->ws_col;
+        pty->backend.rows  = ws->ws_row;
+        return 0;
+    }
+
     return com_io_tty_text_backend_ioctl(
         &pty->backend, pty_slave->vnode, op, buf);
 }

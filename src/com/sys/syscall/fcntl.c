@@ -31,20 +31,22 @@
 
 static com_syscall_ret_t
 fcntl_dup(com_proc_t *curr_proc, int fd, int op, int arg1) {
-    int dup_ret = com_sys_proc_duplicate_file(curr_proc, arg1, fd);
+    com_spinlock_acquire(&curr_proc->fd_lock);
+    int new_fd = com_sys_proc_duplicate_file_nolock(curr_proc, arg1, fd);
 
-    if (dup_ret < 0) {
-        KASSERT(false);
-        return COM_SYS_SYSCALL_ERR(-dup_ret);
+    if (new_fd < 0) {
+        com_spinlock_release(&curr_proc->fd_lock);
+        return COM_SYS_SYSCALL_ERR(-new_fd);
     }
 
     if (F_DUPFD_CLOEXEC == op) {
-        com_filedesc_t *fildesc = com_sys_proc_get_fildesc(curr_proc, dup_ret);
+        com_filedesc_t *fildesc = com_sys_proc_get_fildesc(curr_proc, new_fd);
         fildesc->flags |= FD_CLOEXEC;
         COM_FS_FILE_RELEASE(fildesc->file);
     }
 
-    return COM_SYS_SYSCALL_OK(dup_ret);
+    com_spinlock_release(&curr_proc->fd_lock);
+    return COM_SYS_SYSCALL_OK(new_fd);
 }
 
 // SYSCALL: fcntl(fd, op, arg1)

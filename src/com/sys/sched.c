@@ -201,6 +201,9 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         com_spinlock_t          *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    KDEBUG("pid=%d is going to sleep at %x",
+           curr->proc->pid,
+           __builtin_return_address(0));
     com_spinlock_acquire(&curr->sched_lock);
 
     // curr->cpu is nulled and curr is removed from runqueue in sched, no need

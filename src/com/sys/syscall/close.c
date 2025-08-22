@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -27,7 +26,6 @@
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include <stdio.h>
 
 // SYSCALL: close(int fd)
 COM_SYS_SYSCALL(com_sys_syscall_close) {
@@ -36,34 +34,14 @@ COM_SYS_SYSCALL(com_sys_syscall_close) {
 
     int fd = COM_SYS_SYSCALL_ARG(int, 1);
 
-    if (fd < 0 || fd > COM_SYS_PROC_MAX_FDS) {
-        return COM_SYS_SYSCALL_ERR(EBADF);
-    }
-
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_spinlock_acquire(&curr_proc->fd_lock);
-    com_filedesc_t *fildesc = &curr_proc->fd[fd];
+    int close_ret = com_sys_proc_close_file(curr_proc, fd);
 
-    if (NULL == fildesc->file) {
-        com_spinlock_release(&curr_proc->fd_lock);
-        return COM_SYS_SYSCALL_ERR(EBADF);
+    if (0 != close_ret) {
+        return COM_SYS_SYSCALL_ERR(close_ret);
     }
 
-    KDEBUG("closing fd=%d with refcount=%d (vn=%x)",
-           fd,
-           fildesc->file->num_ref,
-           fildesc->file->vnode);
-    COM_FS_FILE_RELEASE(fildesc->file);
-    KDEBUG("after close, file=%x", fildesc->file);
-    *fildesc = (com_filedesc_t){0};
-
-    // Recycle file descriptors
-    if (fd < curr_proc->next_fd) {
-        curr_proc->next_fd = fd;
-    }
-
-    com_spinlock_release(&curr_proc->fd_lock);
     return COM_SYS_SYSCALL_OK(0);
 }

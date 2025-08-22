@@ -44,14 +44,17 @@ COM_SYS_SYSCALL(com_sys_syscall_dup3) {
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    com_syscall_ret_t ret         = COM_SYS_SYSCALL_BASE_OK();
+    com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t       *curr_proc   = curr_thread->proc;
 
-    int dup_ret = com_sys_proc_duplicate_file(curr_proc, new_fd, old_fd);
-
+    com_spinlock_acquire(&curr_proc->fd_lock);
+    com_sys_proc_close_file_nolock(curr_proc, new_fd);
+    int dup_ret = com_sys_proc_duplicate_file_nolock(curr_proc, new_fd, old_fd);
     if (dup_ret < 0) {
-        return COM_SYS_SYSCALL_ERR(-dup_ret);
+        ret = COM_SYS_SYSCALL_ERR(-dup_ret);
     }
 
-    return COM_SYS_SYSCALL_OK(dup_ret);
+    com_spinlock_release(&curr_proc->fd_lock);
+    return ret;
 }

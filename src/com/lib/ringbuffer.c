@@ -42,7 +42,6 @@ static int write_blocking(kringbuffer_t *rb,
             com_sys_sched_wait(&rb->write.queue, &rb->lock);
 
             int sig = com_sys_signal_check();
-
             if (COM_SYS_SIGNAL_NONE != sig) {
                 if (0 == bytes_written) {
                     *buflen = 0;
@@ -83,6 +82,7 @@ static int write_blocking(kringbuffer_t *rb,
         ARCH_CPU_SELF_IPI();
     }
 
+    *buflen = bytes_written;
     return 0;
 }
 
@@ -110,6 +110,7 @@ static int write_nonblocking(kringbuffer_t *rb,
         callback(cb_arg);
     }
 
+    *buflen = can_write;
     ARCH_CPU_SELF_IPI();
     return 0;
 }

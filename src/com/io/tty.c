@@ -294,6 +294,7 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
         return 0;
     }
 
+    KDEBUG("unsupported ioctl %x", op);
     return ENOSYS;
 }
 
@@ -580,6 +581,7 @@ static int devtty_open(com_vnode_t **out, void *devdata) {
 
     com_vnode_t *ctty = curr_proc->proc_group->session->tty;
     COM_FS_VFS_VNODE_HOLD(ctty);
+    KASSERT(NULL != ctty);
     *out = ctty;
     return 0;
 }
