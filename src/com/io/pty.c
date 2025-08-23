@@ -49,6 +49,7 @@ static int pty_rb_check_hangup(size_t        *new_nbytes,
                                kringbuffer_t *rb,
                                int            op,
                                void          *arg) {
+    (void)curr_nbytes;
     (void)rb;
     com_pty_t *pty = arg;
 
@@ -77,6 +78,59 @@ static int pty_echo(size_t     *bytes_written,
                     void       *passthrough) {
     com_pty_t *pty = passthrough;
     KDEBUG("PTM ECHO %.*s TO PTY %x", buflen, buf, pty);
+
+    // TODO: share this with tty
+    if ((OPOST | ONLCR) & pty->backend.termios.c_oflag) {
+        size_t count = 0;
+        int    e     = 0;
+
+        while (buflen > 0) {
+            char *first_nl = kmemchr(buf, '\n', buflen);
+
+            if (NULL == first_nl) {
+                goto normal;
+            }
+
+            char  *echo_buf = (void *)buf;
+            size_t bw       = 0;
+            size_t echo_len = first_nl - buf;
+
+            e = kringbuffer_write(&bw,
+                                  &pty->master_rb,
+                                  echo_buf,
+                                  echo_len,
+                                  blocking,
+                                  ptm_poll_callback,
+                                  pty,
+                                  pty);
+            count += bw + 1;
+
+            if (0 != e) {
+                break;
+            }
+
+            e = kringbuffer_write(NULL,
+                                  &pty->master_rb,
+                                  "\r\n",
+                                  2,
+                                  blocking,
+                                  ptm_poll_callback,
+                                  pty,
+                                  pty);
+
+            if (0 != e) {
+                break;
+            }
+
+            buf += echo_len + 1;
+            buflen -= echo_len + 1;
+        }
+
+        *bytes_written = count;
+        return e;
+    }
+
+normal:
     return kringbuffer_write(bytes_written,
                              &pty->master_rb,
                              (void *)buf,
@@ -127,11 +181,6 @@ static int ptm_read(void     *buf,
     int        ret = 0;
     KDEBUG("PTM READ");
     com_spinlock_acquire(&pty->master_rb.lock);
-
-    if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
-        ret = EIO;
-        goto end;
-    }
 
     ret = kringbuffer_read_nolock(buf,
                                   bytes_read,

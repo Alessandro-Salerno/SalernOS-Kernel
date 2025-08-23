@@ -167,15 +167,17 @@ void com_mm_pmm_free(void *page) {
 
 void com_mm_pmm_free_many(void *base, size_t pages) {
     com_spinlock_acquire(&Lock);
-    for (size_t i = 0; i < pages; i++) {
-        void *page = (void *)((uintptr_t)base + i * ARCH_PAGE_SIZE);
 
 #if defined(COM_MM_PMM_ZERO_POLICY) && \
     COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
-        kmemset((void *)ARCH_PHYS_TO_HHDM(page), ARCH_PAGE_SIZE, 0);
+    kmemset((void *)ARCH_PHYS_TO_HHDM(base), ARCH_PAGE_SIZE * pages, 0);
 #endif
+
+    for (size_t i = 0; i < pages; i++) {
+        void *page = (void *)((uintptr_t)base + i * ARCH_PAGE_SIZE);
         unreserve_page(page, &UsedMem);
     }
+
     com_spinlock_release(&Lock);
 }
 

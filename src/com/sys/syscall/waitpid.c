@@ -58,8 +58,9 @@ static int waitpid_proc(com_proc_t *curr_proc,
             return towait->pid;
         }
 
-        (void)flags;
-        // TODO: handle flags
+        if (WNOHANG & flags) {
+            return 0;
+        }
 
         com_sys_proc_wait(curr_proc);
 

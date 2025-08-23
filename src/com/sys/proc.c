@@ -405,10 +405,6 @@ int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group) {
         KASSERT(NULL != proc->proc_group->session);
         KASSERT(NULL != group->session);
 
-        // If sid is equal to the pid, then this process is the session
-        // leader (useful, for example, in setsid). Whereas, if the two are
-        // different, then it means that the process is trying to migrate
-        // sessions (which POSIX does not allow)
         /*if (proc->proc_group->session->sid != proc->pid &&
             proc->proc_group->session->sid != group->session->sid) {
             return EPERM;

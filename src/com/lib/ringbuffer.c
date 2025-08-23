@@ -198,9 +198,10 @@ int kringbuffer_read_nolock(void          *dst,
                             void (*callback)(void *),
                             void *cb_arg,
                             void *hu_arg) {
+    CHECK_HANGUP_GENERIC(&nbytes, nbytes, rb, KRINGBUFFER_OP_READ, hu_arg);
     int ret = 0;
 
-    while (rb->write.index == rb->read.index || rb->is_eof) {
+    while (rb->write.index == rb->read.index && !rb->is_eof) {
         if (!blocking) {
             ret    = EAGAIN;
             nbytes = 0;
@@ -211,9 +212,7 @@ int kringbuffer_read_nolock(void          *dst,
         CHECK_HANGUP_GENERIC(&nbytes, nbytes, rb, KRINGBUFFER_OP_READ, hu_arg);
 
         if (rb->is_eof) {
-            rb->is_eof = false;
-            nbytes     = 0;
-            goto end;
+            break;
         }
 
         int sig = com_sys_signal_check();
@@ -222,6 +221,12 @@ int kringbuffer_read_nolock(void          *dst,
             ret    = EINTR;
             goto end;
         }
+    }
+
+    if (rb->is_eof) {
+        rb->is_eof = false;
+        nbytes     = 0;
+        goto end;
     }
 
     size_t space    = rb->write.index - rb->read.index;
