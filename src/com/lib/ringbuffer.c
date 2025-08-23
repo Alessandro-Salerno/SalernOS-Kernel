@@ -47,6 +47,10 @@ static int check_hangup(size_t        *new_nbytes,
         return 0;
     }
 
+    if (NULL == arg) {
+        arg = rb->fallback_hu_arg;
+    }
+
     return rb->check_hangup(new_nbytes, curr_nbytes, force_return, rb, op, arg);
 }
 

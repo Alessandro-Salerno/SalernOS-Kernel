@@ -426,7 +426,7 @@ end:
         if (ECHO & tty_backend->termios.c_lflag) {
             ret = tty_backend->echo(NULL, &c, 1, blocking, passthrough);
             if (0 != ret) {
-                goto end;
+                goto sighandler;
             }
         }
     }
@@ -444,6 +444,7 @@ end:
         tty_backend->canon.index = 0;
     }
 
+sighandler:
     if (COM_SYS_SIGNAL_NONE != sig) {
         com_sys_signal_send_to_proc_group(tty_backend->fg_pgid, sig, NULL);
     }

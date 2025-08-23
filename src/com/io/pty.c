@@ -52,6 +52,7 @@ static int pty_rb_check_hangup(size_t        *new_nbytes,
     (void)curr_nbytes;
     (void)rb;
     com_pty_t *pty = arg;
+    KASSERT(NULL != pty);
 
     if (KRINGBUFFER_OP_WRITE == op) {
         if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
@@ -77,7 +78,6 @@ static int pty_echo(size_t     *bytes_written,
                     bool        blocking,
                     void       *passthrough) {
     com_pty_t *pty = passthrough;
-    KDEBUG("PTM ECHO %.*s TO PTY %x", buflen, buf, pty);
 
     // TODO: share this with tty
     if ((OPOST | ONLCR) & pty->backend.termios.c_oflag) {
@@ -102,7 +102,7 @@ static int pty_echo(size_t     *bytes_written,
                                   blocking,
                                   ptm_poll_callback,
                                   pty,
-                                  pty);
+                                  NULL);
             count += bw + 1;
 
             if (0 != e) {
@@ -116,7 +116,7 @@ static int pty_echo(size_t     *bytes_written,
                                   blocking,
                                   ptm_poll_callback,
                                   pty,
-                                  pty);
+                                  NULL);
 
             if (0 != e) {
                 break;
@@ -138,16 +138,23 @@ normal:
                              blocking,
                              ptm_poll_callback,
                              pty,
-                             pty);
+                             NULL);
 }
 
 static com_pty_t *pty_alloc(void) {
+    // pty initialization
     com_pty_t *pty = com_mm_slab_alloc(sizeof(com_pty_t));
     pty->pts_num   = __atomic_fetch_add(&NextPtsNum, 1, __ATOMIC_SEQ_CST);
     com_io_tty_init_text_backend(&pty->backend, 80, 25, pty_echo);
+
+    // ringbuffer initializations (slave is done by tty)
     KRINGBUFFER_INIT(&pty->master_rb);
-    pty->master_rb.check_hangup        = pty_rb_check_hangup;
-    pty->backend.slave_rb.check_hangup = pty_rb_check_hangup;
+    pty->master_rb.check_hangup           = pty_rb_check_hangup;
+    pty->master_rb.fallback_hu_arg        = pty;
+    pty->backend.slave_rb.check_hangup    = pty_rb_check_hangup;
+    pty->backend.slave_rb.fallback_hu_arg = pty;
+
+    // poll initialization
     LIST_INIT(&pty->master_ph.polled_list);
     pty->master_ph.lock = COM_SPINLOCK_NEW();
     return pty;
@@ -157,12 +164,10 @@ static com_pty_t *pty_alloc(void) {
 
 static void ptm_poll_callback(void *arg) {
     com_pty_t *pty = arg;
-    KDEBUG("PTM POLL CALLBACK ON PTY %x", pty);
 
     com_spinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
-        KDEBUG("notifying polled %x", polled);
         com_spinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify(&polled->poller->waiters);
         com_spinlock_release(&polled->poller->lock);
@@ -178,23 +183,14 @@ static int ptm_read(void     *buf,
                     uintmax_t flags) {
     (void)off;
     com_pty_t *pty = devdata;
-    int        ret = 0;
-    KDEBUG("PTM READ");
-    com_spinlock_acquire(&pty->master_rb.lock);
-
-    ret = kringbuffer_read_nolock(buf,
-                                  bytes_read,
-                                  &pty->master_rb,
-                                  buflen,
-                                  false,
-                                  ptm_poll_callback,
-                                  pty,
-                                  pty);
-
-end:
-    com_spinlock_release(&pty->master_rb.lock);
-    KDEBUG("PTM READ: %.*s", *bytes_read, buf);
-    return ret;
+    return kringbuffer_read(buf,
+                            bytes_read,
+                            &pty->master_rb,
+                            buflen,
+                            !(O_NONBLOCK & flags),
+                            ptm_poll_callback,
+                            pty,
+                            NULL);
 }
 
 static int ptm_write(size_t   *bytes_written,
@@ -210,6 +206,8 @@ static int ptm_write(size_t   *bytes_written,
         bytes_written, &pty->backend, buf, buflen, true, pty);
 }
 
+// NOTE: this is different from ioctl on a tty or pts because ptms are not
+// properly ttys
 static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_pty_t *pty = devdata;
 
@@ -259,31 +257,23 @@ static int ptm_close(void *devdata) {
 static int ptm_poll_head(com_poll_head_t **out, void *devdata) {
     com_pty_t *pty = devdata;
     *out           = &pty->master_ph;
-    KDEBUG("PTM POLL HEAD");
     return 0;
 }
 
 static int ptm_poll(short *revents, void *devdata, short events) {
     com_pty_t *pty = devdata;
     (void)events;
-    KDEBUG("PTM POLL CHECK");
 
     short out = 0;
     if (0 == pty->num_slaves) {
         out |= POLLHUP;
     }
     if (pty->master_rb.write.index != pty->master_rb.read.index) {
-        KDEBUG("PTM POLLIN %u != %u",
-               pty->master_rb.write.index,
-               pty->master_rb.read.index);
         out |= POLLIN;
     }
     if (KRINGBUFFER_SIZE -
             (pty->master_rb.write.index - pty->master_rb.read.index) >
         0) {
-        KDEBUG("PTM POLLOUT %u",
-               KRINGBUFFER_SIZE -
-                   (pty->master_rb.write.index - pty->master_rb.read.index))
         out |= POLLOUT;
     }
 
@@ -310,17 +300,14 @@ static int pts_read(void     *buf,
     (void)off;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    KDEBUG("PTS READ");
-    int ret = kringbuffer_read(buf,
-                               bytes_read,
-                               &pty->backend.slave_rb,
-                               buflen,
-                               !(O_NONBLOCK & flags),
-                               com_io_tty_text_backend_poll_callback,
-                               &pty->backend,
-                               pty);
-    KDEBUG("PTS READ: %.*s", *bytes_read, buf);
-    return ret;
+    return kringbuffer_read(buf,
+                            bytes_read,
+                            &pty->backend.slave_rb,
+                            buflen,
+                            !(O_NONBLOCK & flags),
+                            com_io_tty_text_backend_poll_callback,
+                            &pty->backend,
+                            NULL);
 }
 
 static int pts_write(size_t   *bytes_written,
@@ -333,20 +320,12 @@ static int pts_write(size_t   *bytes_written,
     (void)flags;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    KDEBUG("PTS WRITE TO PTY %x", pty);
     return pty_echo(bytes_written, buf, buflen, true, pty);
 }
 
 static int pts_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-
-    if (TIOCSWINSZ == op) {
-        struct winsize *ws = (void *)buf;
-        pty->backend.cols  = ws->ws_col;
-        pty->backend.rows  = ws->ws_row;
-        return 0;
-    }
 
     return com_io_tty_text_backend_ioctl(
         &pty->backend, pty_slave->vnode, op, buf);
@@ -385,7 +364,6 @@ static int pts_poll_head(com_poll_head_t **out, void *devdata) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
     *out                       = &pty->backend.slave_ph;
-    KDEBUG("PTS POLL HEAD");
     return 0;
 }
 
@@ -393,7 +371,6 @@ static int pts_poll(short *revents, void *devdata, short events) {
     (void)events;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    KDEBUG("PTS POLL CHECK");
 
     short out = 0;
 

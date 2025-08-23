@@ -29,13 +29,14 @@
 #define KRINGBUFFER_OP_READ  0
 #define KRINGBUFFER_OP_WRITE 1
 
-#define KRINGBUFFER_INIT(rb_ptr)                 \
-    (rb_ptr)->lock         = COM_SPINLOCK_NEW(); \
-    (rb_ptr)->write.index  = 0;                  \
-    (rb_ptr)->read.index   = 0;                  \
-    (rb_ptr)->is_eof       = false;              \
-    (rb_ptr)->check_hangup = NULL;               \
-    TAILQ_INIT(&(rb_ptr)->write.queue);          \
+#define KRINGBUFFER_INIT(rb_ptr)                    \
+    (rb_ptr)->lock            = COM_SPINLOCK_NEW(); \
+    (rb_ptr)->write.index     = 0;                  \
+    (rb_ptr)->read.index      = 0;                  \
+    (rb_ptr)->is_eof          = false;              \
+    (rb_ptr)->check_hangup    = NULL;               \
+    (rb_ptr)->fallback_hu_arg = NULL;               \
+    TAILQ_INIT(&(rb_ptr)->write.queue);             \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
 typedef struct kringbuffer {
@@ -56,6 +57,11 @@ typedef struct kringbuffer {
                         struct kringbuffer *rb,
                         int                 op,
                         void               *arg);
+    // If passed NULL as hu_arg, calls to check_hangup will use this instead.
+    // This double system is present for flexibility: a TTY function may pass a
+    // NULL hu_arg to a PTY, but individual hu_arg are useful in case other
+    // usecases arise
+    void *fallback_hu_arg;
 } kringbuffer_t;
 
 int kringbuffer_write_nolock(size_t        *bytes_written,

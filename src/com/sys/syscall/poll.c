@@ -216,8 +216,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         atomic_store(&timeout_arg->invalidated, true);
     }
 
-    KDEBUG("poll returining to pid %d", curr_proc->pid);
-
     if (COM_SYS_SIGNAL_NONE != sig) {
         return COM_SYS_SYSCALL_ERR(EINTR);
     }
