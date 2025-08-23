@@ -62,7 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
 
-    for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
+    for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != proc->fd[i].file &&
             ((FD_CLOEXEC & proc->fd[i].flags) ||
              (O_CLOEXEC & proc->fd[i].file->flags))) {

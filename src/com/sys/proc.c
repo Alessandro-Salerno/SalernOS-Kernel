@@ -33,12 +33,10 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-#define MAX_PROCS 1024
-
-static com_spinlock_t PidLock              = COM_SPINLOCK_NEW();
-static com_spinlock_t GlobalProcLock       = COM_SPINLOCK_NEW();
-static com_proc_t    *Processes[MAX_PROCS] = {0};
-static pid_t          NextPid              = 1;
+static com_spinlock_t PidLock                    = COM_SPINLOCK_NEW();
+static com_spinlock_t GlobalProcLock             = COM_SPINLOCK_NEW();
+static com_proc_t    *Processes[CONFIG_PROC_MAX] = {0};
+static pid_t          NextPid                    = 1;
 
 static khashmap_t     ProcGroupMap;
 static com_spinlock_t ProcGroupLock = COM_SPINLOCK_NEW();
@@ -46,7 +44,7 @@ static bool           ProcGroupInit = false;
 
 static void proc_update_fd_hint(com_proc_t *proc) {
     // Best case: there's a file after the hint
-    for (; proc->next_fd < COM_SYS_PROC_MAX_FDS; proc->next_fd++) {
+    for (; proc->next_fd < CONFIG_OPEN_MAX; proc->next_fd++) {
         if (NULL == proc->fd[proc->next_fd].file) {
             return;
         }
@@ -54,7 +52,7 @@ static void proc_update_fd_hint(com_proc_t *proc) {
 
     // Worst case: retry from the start, files might have been liberated without
     // calling close
-    for (proc->next_fd = 0; proc->next_fd < COM_SYS_PROC_MAX_FDS &&
+    for (proc->next_fd = 0; proc->next_fd < CONFIG_OPEN_MAX &&
                             NULL != proc->fd[proc->next_fd].file;
          proc->next_fd++);
 }
@@ -86,7 +84,7 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
     // TODO: use atomic operations (faster)
     com_spinlock_acquire(&PidLock);
-    KASSERT(NextPid <= MAX_PROCS);
+    KASSERT(NextPid <= CONFIG_PROC_MAX);
     proc->pid                = NextPid++;
     Processes[proc->pid - 1] = proc;
     com_spinlock_release(&PidLock);
@@ -136,7 +134,7 @@ int com_sys_proc_next_fd(com_proc_t *proc) {
 
     com_spinlock_release(&proc->fd_lock);
 
-    if (ret >= COM_SYS_PROC_MAX_FDS) {
+    if (ret >= CONFIG_OPEN_MAX) {
         return -1;
     }
 
@@ -148,7 +146,7 @@ com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    if (fd > COM_SYS_PROC_MAX_FDS || fd < 0) {
+    if (fd > CONFIG_OPEN_MAX || fd < 0) {
         return NULL;
     }
 
@@ -164,7 +162,7 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    if (fd > COM_SYS_PROC_MAX_FDS || fd < 0) {
+    if (fd > CONFIG_OPEN_MAX || fd < 0) {
         return NULL;
     }
 
@@ -178,13 +176,13 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
 int com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
                                        int         new_fd,
                                        int         old_fd) {
-    if (old_fd < 0 || old_fd > COM_SYS_PROC_MAX_FDS || new_fd < 0 ||
-        new_fd > COM_SYS_PROC_MAX_FDS) {
+    if (old_fd < 0 || old_fd > CONFIG_OPEN_MAX || new_fd < 0 ||
+        new_fd > CONFIG_OPEN_MAX) {
         return -EINVAL;
     }
 
     for (; NULL != proc->fd[new_fd].file; new_fd++) {
-        if (new_fd >= COM_SYS_PROC_MAX_FDS) {
+        if (new_fd >= CONFIG_OPEN_MAX) {
             return -EMFILE;
         }
     }
@@ -211,7 +209,7 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
 }
 
 int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd) {
-    if (fd < 0 || fd > COM_SYS_PROC_MAX_FDS) {
+    if (fd < 0 || fd > CONFIG_OPEN_MAX) {
         return EBADF;
     }
 
@@ -239,7 +237,7 @@ int com_sys_proc_close_file(com_proc_t *proc, int fd) {
 }
 
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
-    if (pid > MAX_PROCS || pid < 1) {
+    if (pid > CONFIG_PROC_MAX || pid < 1) {
         return NULL;
     }
 
@@ -247,7 +245,7 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
 }
 
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
-    for (size_t i = 0; i < MAX_PROCS; i++) {
+    for (size_t i = 0; i < CONFIG_PROC_MAX; i++) {
         com_proc_t *candidate = Processes[i];
 
         if (candidate->parent_pid == proc->pid && !candidate->exited) {
@@ -312,7 +310,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     com_spinlock_acquire(&proc->signal_lock);
 
     com_spinlock_acquire(&proc->fd_lock);
-    for (int i = 0; i < COM_SYS_PROC_MAX_FDS; i++) {
+    for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != proc->fd[i].file) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
         }

@@ -36,8 +36,6 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <stdint.h>
 #include <sys/types.h>
 
-#define COM_SYS_PROC_MAX_FDS 96
-
 typedef struct com_proc_session {
     pid_t                       sid;
     com_vnode_t                *tty;
@@ -68,7 +66,7 @@ typedef struct com_proc {
     _Atomic(com_vnode_t *) cwd;
     com_spinlock_t         fd_lock;
     int                    next_fd;
-    com_filedesc_t         fd[COM_SYS_PROC_MAX_FDS];
+    com_filedesc_t         fd[CONFIG_OPEN_MAX];
 
     com_spinlock_t pages_lock;
     size_t         used_pages;

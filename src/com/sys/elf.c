@@ -96,7 +96,7 @@ static int load(uintptr_t             vaddr,
 
         void *phys_page  = com_mm_pmm_alloc();
         void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
-#ifndef COM_MM_PMM_ZERO_POLICY
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
         kmemset(kvirt_page, ARCH_PAGE_SIZE - misalign, 0);
 #endif
         arch_mmu_map(pt,

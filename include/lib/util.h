@@ -38,8 +38,19 @@
 #define KNANOS_PER_SEC 1000000000UL
 #define KFPS(fps)      (KNANOS_PER_SEC / (fps))
 
-#ifndef DISABLE_LOGGING
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
+#define KURGENT(...)                          \
+    com_io_log_acquire();                     \
+    com_io_log_puts("KERNEL URGENT:  ");      \
+    com_io_log_puts(__FILE__ ":");            \
+    com_io_log_puts(__func__);                \
+    com_io_log_puts(":" KSTR(__LINE__) ": "); \
+    kprintf(__VA_ARGS__);                     \
+    com_io_log_putc('\n');                    \
+    com_io_log_release();
+#endif
 
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_INFO
 #define KLOG(...)                             \
     com_io_log_acquire();                     \
     com_io_log_puts("[  log  ] ");            \
@@ -49,7 +60,11 @@
     kprintf(__VA_ARGS__);                     \
     com_io_log_putc('\n');                    \
     com_io_log_release();
+#else
+#define KLOG(...)
+#endif
 
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
 #define KDEBUG(...)                           \
     com_io_log_acquire();                     \
     com_io_log_puts("[ debug ] ");            \
@@ -60,12 +75,23 @@
     com_io_log_putc('\n');                    \
     com_io_log_release();
 #else
-#define KLOG(...)
 #define KDEBUG(...)
 #endif
 
-// NOTE: this does not release the lock because noone else should print
-// afterwards
+#if CONFIG_ASSERT_ACTION == CONST_ASSERT_REMOVE
+#define KASSERT(statement)
+#elif CONFIG_ASSERT_ACTION == CONST_ASSERT_EXPAND
+#define KASSERT(statement) (statement)
+#elif CONFIG_ASSERT_ACTION == CONST_ASSERT_SOFT
+#define KASSERT(statement)                                               \
+    if (KUNKLIKELY(!(statement))) {                                      \
+        com_io_log_acquire();                                            \
+        com_io_log_puts(__FILE__ ":");                                   \
+        com_io_log_puts(__func__);                                       \
+        com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
+        com_io_log_release();                                            \
+    }
+#elif CONFIG_ASSERT_ACTION == CONST_ASSERT_PANIC
 #define KASSERT(statement)                                               \
     if (KUNKLIKELY(!(statement))) {                                      \
         com_io_log_acquire();                                            \
@@ -74,13 +100,6 @@
         com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
         com_panic(NULL, NULL);                                           \
     }
-
-#define KURGENT(...)                          \
-    com_io_log_acquire();                     \
-    com_io_log_puts("KERNEL URGENT:  ");      \
-    com_io_log_puts(__FILE__ ":");            \
-    com_io_log_puts(__func__);                \
-    com_io_log_puts(":" KSTR(__LINE__) ": "); \
-    kprintf(__VA_ARGS__);                     \
-    com_io_log_putc('\n');                    \
-    com_io_log_release();
+#else
+#error "unsupported assert action, check config/config.h"
+#endif

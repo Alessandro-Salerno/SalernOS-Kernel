@@ -104,6 +104,10 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     if (POLL_SHOULD_ALLOC(nfds)) {
         polleds =
             (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(polleds_pages));
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
+#include <lib/mem.h>
+        kmemset(polleds, ARCH_PAGE_SIZE * polled_pages, 0);
+#endif
     }
 
     for (nfds_t i = 0; i < nfds; i++) {

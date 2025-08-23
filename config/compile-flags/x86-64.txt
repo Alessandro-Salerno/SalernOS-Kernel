@@ -1,6 +1,7 @@
 -Iinclude/ 
 -Iinclude/kernel/ 
 -Iinclude/kernel/platform/x86-64
+-include config/config.h
 -Wall 
 -Wextra 
 -std=gnu11 

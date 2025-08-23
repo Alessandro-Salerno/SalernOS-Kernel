@@ -33,26 +33,27 @@ LDFLAGS :=
 
 # Internal C flags that should not be changed by the user.
 override CFLAGS += \
-		-I include/ \
-		-I include/kernel/ \
-		-I include/kernel/platform/$(PLATFORM) \
-		-I include/vendor/ \
-    -Wall \
-    -Wextra \
-    -std=gnu11 \
-    -ffreestanding \
-    -fno-stack-protector \
-    -fno-stack-check \
-    -fno-lto \
-    -fno-PIC \
-    -m64 \
-    -march=x86-64 \
-    -mno-80387 \
-    -mno-mmx \
-    -mno-sse \
-    -mno-sse2 \
-    -mno-red-zone \
-    -mcmodel=kernel
+	-I include/ \
+	-I include/kernel/ \
+	-I include/kernel/platform/$(PLATFORM) \
+	-I include/vendor/ \
+	-include config/config.h \
+	-Wall \
+	-Wextra \
+	-std=gnu11 \
+	-ffreestanding \
+	-fno-stack-protector \
+	-fno-stack-check \
+	-fno-lto \
+	-fno-PIC \
+	-m64 \
+	-march=x86-64 \
+	-mno-80387 \
+	-mno-mmx \
+	-mno-sse \
+	-mno-sse2 \
+	-mno-red-zone \
+	-mcmodel=kernel
 
 # Internal C preprocessor flags that should not be changed by the user.
 override CPPFLAGS := \
@@ -95,7 +96,7 @@ bin/$(OUTPUT): GNUmakefile src/platform/$(PLATFORM)/linker.ld $(OBJ)
 -include $(HEADER_DEPS)
 
 # Compilation rules for *.c files.
-obj/src/%.c.o: src/%.c GNUmakefile
+obj/src/%.c.o: src/%.c GNUmakefile config/config.h
 	@echo [CC] $<
 	@mkdir -p "$$(dirname $@)"
 	@$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@

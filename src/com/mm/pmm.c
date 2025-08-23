@@ -120,8 +120,7 @@ void *com_mm_pmm_alloc(void) {
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
-#if defined(COM_MM_PMM_ZERO_POLICY) && \
-    COM_MM_PMM_ZERO_ON_ALLOC & COM_MM_PMM_ZERO_POLICY
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE, 0);
 #endif
     return ret;
@@ -154,8 +153,7 @@ void *com_mm_pmm_alloc_many(size_t pages) {
 
     com_spinlock_release(&Lock);
     KASSERT(NULL != ret);
-#if defined(COM_MM_PMM_ZERO_POLICY) && \
-    COM_MM_PMM_ZERO_ON_ALLOC & COM_MM_PMM_ZERO_POLICY
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE * pages, 0);
 #endif
     return ret;
@@ -168,8 +166,7 @@ void com_mm_pmm_free(void *page) {
 void com_mm_pmm_free_many(void *base, size_t pages) {
     com_spinlock_acquire(&Lock);
 
-#if defined(COM_MM_PMM_ZERO_POLICY) && \
-    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
     kmemset((void *)ARCH_PHYS_TO_HHDM(base), ARCH_PAGE_SIZE * pages, 0);
 #endif
 
@@ -228,8 +225,7 @@ void com_mm_pmm_init(void) {
             continue;
         }
 
-#if defined(COM_MM_PMM_ZERO_POLICY) && \
-    COM_MM_PMM_ZERO_ON_FREE & COM_MM_PMM_ZERO_POLICY
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
         kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
 #endif
 
