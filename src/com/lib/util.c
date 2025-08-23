@@ -17,30 +17,48 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
-#include <kernel/com/sys/syscall.h>
+#include <lib/printf.h>
+#include <lib/str.h>
+#include <lib/util.h>
+#include <stddef.h>
 
-// SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
-COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+void kinitlog(const char *category, const char *color) {
+    struct arch_cpu   *curr_cpu    = ARCH_CPU_GET();
+    struct com_thread *curr_thread = ARCH_CPU_GET_THREAD();
 
-    int           how  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
-    com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
+#if CONFIG_LOG_ALLOW_COLORS
+    kprintf("\033[0m%s[%s  ", color, category);
+#else
+    (void)color;
+    kprintf("[%s  ", category);
+#endif
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    com_syscall_ret_t ret     = COM_SYS_SYSCALL_BASE_OK();
-    int               sig_ret = com_sys_signal_set_mask(
-        &curr_proc->masked_signals, how, set, oset, &curr_proc->signal_lock);
-
-    if (0 != sig_ret) {
-        ret.value = -1;
-        ret.err   = sig_ret;
+    ssize_t cat_len = kstrlen(category);
+    ssize_t diff    = CONFIG_LOG_SEP_LEN - cat_len;
+    for (ssize_t i = 0; i < diff; i++) {
+        com_io_log_putc(' ');
     }
 
-    return ret;
+    if (NULL == curr_cpu) {
+        kprintf("**NOCPU**");
+        goto log;
+    }
+
+    kprintf("cpu=%d/", curr_cpu->id);
+
+    if (NULL == curr_thread) {
+        kprintf("KERNEL");
+        goto log;
+    }
+
+    kprintf("tid=%d/", curr_thread->tid);
+
+    if (NULL == curr_thread->proc) {
+        kprintf("KERNEL");
+        goto log;
+    }
+
+    kprintf("pid=%d", curr_thread->proc->pid);
+log:
+    kprintf("]\t");
 }

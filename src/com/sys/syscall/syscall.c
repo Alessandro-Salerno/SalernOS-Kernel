@@ -26,18 +26,20 @@
 
 #define MAX_SYSCALLS 512
 
-volatile com_intf_syscall_t Com_Sys_Syscall_Table[MAX_SYSCALLS] = {0};
+volatile com_syscall_t SyscallTable[MAX_SYSCALLS];
 
 // test_syscall(const char *s)
 static COM_SYS_SYSCALL(test_syscall) {
-#ifndef DISABLE_LOGGING
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     const char *s = COM_SYS_SYSCALL_ARG(const char *, 1);
 
     com_io_log_acquire();
+    kinitlog("USER", "\033[36m");
     com_io_log_puts(s);
+    com_io_log_putc('\n');
     com_io_log_release();
 #else
     COM_SYS_SYSCALL_UNUSED_START(0);
@@ -46,61 +48,456 @@ static COM_SYS_SYSCALL(test_syscall) {
     return COM_SYS_SYSCALL_OK(0);
 }
 
-void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler) {
+void com_sys_syscall_register(uintmax_t          number,
+                              const char        *name,
+                              com_intf_syscall_t handler,
+                              size_t             num_args,
+                              ...) {
     KASSERT(number < MAX_SYSCALLS);
-    KASSERT(NULL == Com_Sys_Syscall_Table[number]);
+    volatile com_syscall_t *syscall = &SyscallTable[number];
+    syscall->name                   = name;
+    syscall->handler                = handler;
+    syscall->num_args               = num_args;
 
-    KDEBUG("registering handler at %x with number %u (%x)",
-           handler,
-           number,
-           number);
-    Com_Sys_Syscall_Table[number] = handler;
+    if (0 == num_args) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, num_args);
+    for (size_t i = 0; i < num_args; i++) {
+        int         arg_type  = va_arg(args, int);
+        const char *arg_name  = va_arg(args, const char *);
+        syscall->arg_names[i] = arg_name;
+        syscall->arg_types[i] = arg_type;
+    }
+    va_end(args);
+}
+
+com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
+                                         arch_context_t    *ctx,
+                                         arch_syscall_arg_t arg1,
+                                         arch_syscall_arg_t arg2,
+                                         arch_syscall_arg_t arg3,
+                                         arch_syscall_arg_t arg4,
+                                         uintptr_t          invoke_ip) {
+    KASSERT(number < MAX_SYSCALLS);
+    volatile com_syscall_t *syscall = &SyscallTable[number];
+
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
+    com_io_log_acquire();
+    kinitlog("SYSCALL", "\033[33m");
+    kprintf("%s(", syscall->name);
+
+    arch_syscall_arg_t args[4] = {arg1, arg2, arg3, arg4};
+
+    for (size_t i = 0; i < syscall->num_args; i++) {
+        int         arg_type = syscall->arg_types[i];
+        const char *arg_name = syscall->arg_names[i];
+        kprintf("%s = ", arg_name);
+
+        switch (arg_type) {
+            case COM_SYS_SYSCALL_TYPE_INT:
+                kprintf("%d", (int)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_UINTMAX:
+                kprintf("%u", (uintmax_t)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_SIZET:
+                kprintf("%u", (size_t)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_PTR: {
+                if (NULL != (void *)args[i]) {
+                    kprintf("%x", (void *)args[i]);
+                } else {
+                    kprintf("NULL");
+                }
+                break;
+            }
+            case COM_SYS_SYSCALL_TYPE_STR:
+                kprintf("%s",
+                        (NULL != (void *)args[i]) ? (void *)args[i] : "NULL");
+                break;
+            case COM_SYS_SYSCALL_TYPE_FLAGS:
+                kprintf("%x", (int)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_LONGFLAGS:
+                kprintf("%x", (uintmax_t)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_OFFT:
+                kprintf("%d", (off_t)args[i]);
+                break;
+            case COM_SYS_SYSCALL_TYPE_UINT32:
+                kprintf("%u", (uint32_t)args[i]);
+                break;
+            default:
+                kprintf("?");
+                break;
+        }
+
+        if (i != syscall->num_args - 1) {
+            kprintf(", ");
+        }
+    }
+
+    kprintf(") at ip=%x\n", invoke_ip);
+    com_io_log_release();
+#else
+    (void)invoke_ip;
+#endif
+
+    return syscall->handler(ctx, arg1, arg2, arg3, arg4);
 }
 
 void com_sys_syscall_init(void) {
     KLOG("initializing common system calls");
-    com_sys_syscall_register(0x00, test_syscall);
-    com_sys_syscall_register(0x01, com_sys_syscall_write);
-    com_sys_syscall_register(0x02, com_sys_syscall_read);
-    com_sys_syscall_register(0x03, com_sys_syscall_execve);
-    com_sys_syscall_register(0x04, com_sys_syscall_fork);
-    com_sys_syscall_register(0x05, com_sys_syscall_sysinfo);
-    com_sys_syscall_register(0x06, com_sys_syscall_waitpid);
-    com_sys_syscall_register(0x07, com_sys_syscall_exit);
-    com_sys_syscall_register(0x08, com_sys_syscall_ioctl);
-    com_sys_syscall_register(0x09, com_sys_syscall_openat);
-    com_sys_syscall_register(0x0A, com_sys_syscall_mmap);
-    com_sys_syscall_register(0x0B, arch_syscall_set_tls);
-    com_sys_syscall_register(0x0C, com_sys_syscall_seek);
-    com_sys_syscall_register(0x0D, com_sys_syscall_isatty);
-    com_sys_syscall_register(0x0E, com_sys_syscall_fstatat);
-    com_sys_syscall_register(0x0F, com_sys_syscall_truncate);
-    com_sys_syscall_register(0x10, com_sys_syscall_pipe);
-    com_sys_syscall_register(0x11, com_sys_syscall_getpid);
-    com_sys_syscall_register(0x12, com_sys_syscall_clone);
-    com_sys_syscall_register(0x13, com_sys_syscall_exit_thread);
-    com_sys_syscall_register(0x14, com_sys_syscall_futex);
-    com_sys_syscall_register(0x15, com_sys_syscall_getppid);
-    com_sys_syscall_register(0x16, com_sys_syscall_getpgid);
-    com_sys_syscall_register(0x17, com_sys_syscall_getsid);
-    com_sys_syscall_register(0x18, com_sys_syscall_setpgid);
-    com_sys_syscall_register(0x19, com_sys_syscall_setsid);
-    com_sys_syscall_register(0x1A, com_sys_syscall_sigprocmask);
-    com_sys_syscall_register(0x1B, com_sys_syscall_sigpending);
-    com_sys_syscall_register(0x1C, com_sys_syscall_ssigthreadmask);
-    com_sys_syscall_register(0x1D, com_sys_syscall_sigaction);
-    com_sys_syscall_register(0x1E, com_sys_syscall_kill);
-    com_sys_syscall_register(0x1F, com_sys_syscall_kill_thread);
-    com_sys_syscall_register(0x20, com_sys_syscall_sigreturn);
-    com_sys_syscall_register(0x21, com_sys_syscall_dup3);
-    com_sys_syscall_register(0x22, com_sys_syscall_getcwd);
-    com_sys_syscall_register(0x23, com_sys_syscall_fcntl);
-    com_sys_syscall_register(0x24, com_sys_syscall_close);
-    com_sys_syscall_register(0x25, com_sys_syscall_readdir);
-    com_sys_syscall_register(0x26, com_sys_syscall_chdir);
-    com_sys_syscall_register(0x27, com_sys_syscall_clock_get);
-    com_sys_syscall_register(0x28, com_sys_syscall_faccessat);
-    com_sys_syscall_register(0x29, com_sys_syscall_poll);
+
+    com_sys_syscall_register(
+        0x00, "kprint", test_syscall, 1, COM_SYS_SYSCALL_TYPE_PTR, "message");
+
+    com_sys_syscall_register(0x01,
+                             "write",
+                             com_sys_syscall_write,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "buflen");
+
+    com_sys_syscall_register(0x02,
+                             "read",
+                             com_sys_syscall_read,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "buflen");
+
+    com_sys_syscall_register(0x03,
+                             "execve",
+                             com_sys_syscall_execve,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "argv",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "envp");
+
+    com_sys_syscall_register(0x04, "fork", com_sys_syscall_fork, 0);
+
+    com_sys_syscall_register(0x05,
+                             "sysinfo",
+                             com_sys_syscall_sysinfo,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "sysinfo_struct");
+
+    com_sys_syscall_register(0x06,
+                             "waitpid",
+                             com_sys_syscall_waitpid,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pid",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "status",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x07,
+                             "exit",
+                             com_sys_syscall_exit,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "ecode");
+
+    com_sys_syscall_register(0x08,
+                             "ioctl",
+                             com_sys_syscall_ioctl,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_LONGFLAGS,
+                             "op",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf");
+
+    com_sys_syscall_register(0x09,
+                             "openat",
+                             com_sys_syscall_openat,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x0A,
+                             "mmap",
+                             com_sys_syscall_mmap,
+                             4,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "hint",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "size",
+                             COM_SYS_SYSCALL_TYPE_LONGFLAGS,
+                             "flags",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd");
+
+    com_sys_syscall_register(0x0B,
+                             "set_tls",
+                             arch_syscall_set_tls,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "tls");
+
+    com_sys_syscall_register(0x0C,
+                             "seek",
+                             com_sys_syscall_seek,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_OFFT,
+                             "off",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "whence");
+
+    com_sys_syscall_register(0x0D,
+                             "isatty",
+                             com_sys_syscall_isatty,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd");
+
+    com_sys_syscall_register(0x0E,
+                             "fstatat",
+                             com_sys_syscall_fstatat,
+                             4,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x0F,
+                             "ftruncate",
+                             com_sys_syscall_truncate,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_OFFT,
+                             "size");
+
+    com_sys_syscall_register(0x10,
+                             "pipe",
+                             com_sys_syscall_pipe,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "fildes");
+
+    com_sys_syscall_register(0x11, "getpid", com_sys_syscall_getpid, 0);
+
+    com_sys_syscall_register(0x12,
+                             "clone",
+                             com_sys_syscall_clone,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "new_ip",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "new_sp");
+
+    com_sys_syscall_register(
+        0x13, "exit_thread", com_sys_syscall_exit_thread, 0);
+
+    com_sys_syscall_register(0x14,
+                             "futex",
+                             com_sys_syscall_futex,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "word_ptr",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "op",
+                             COM_SYS_SYSCALL_TYPE_UINT32,
+                             "value");
+
+    com_sys_syscall_register(0x15, "getppid", com_sys_syscall_getppid, 0);
+
+    com_sys_syscall_register(0x16,
+                             "getpgid",
+                             com_sys_syscall_getpgid,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pid");
+
+    com_sys_syscall_register(0x17,
+                             "getsid",
+                             com_sys_syscall_getsid,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pid");
+
+    com_sys_syscall_register(0x18,
+                             "setpgid",
+                             com_sys_syscall_setpgid,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pid",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pgid");
+
+    com_sys_syscall_register(0x19, "setsid", com_sys_syscall_setsid, 0);
+
+    com_sys_syscall_register(0x1A,
+                             "sigprocmask",
+                             com_sys_syscall_sigprocmask,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "how",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "set",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "oset");
+
+    com_sys_syscall_register(0x1B,
+                             "sigpending",
+                             com_sys_syscall_sigpending,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "set");
+
+    com_sys_syscall_register(0x1C,
+                             "sigthreadmask",
+                             com_sys_syscall_ssigthreadmask,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "how",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "set",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "oset");
+
+    com_sys_syscall_register(0x1D,
+                             "sigaction",
+                             com_sys_syscall_sigaction,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sig",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "act",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "oact");
+
+    com_sys_syscall_register(0x1E,
+                             "kill",
+                             com_sys_syscall_kill,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "pid",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sig");
+
+    com_sys_syscall_register(0x1F,
+                             "kill_thread",
+                             com_sys_syscall_kill_thread,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "tid",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sig");
+
+    com_sys_syscall_register(0x20, "sigreturn", com_sys_syscall_sigreturn, 0);
+
+    com_sys_syscall_register(0x21,
+                             "dup3",
+                             com_sys_syscall_dup3,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "old_fd",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "new_fd",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x22,
+                             "getcwd",
+                             com_sys_syscall_getcwd,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "buflen");
+
+    com_sys_syscall_register(0x23,
+                             "fcntl",
+                             com_sys_syscall_fcntl,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "op",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "arg1");
+
+    com_sys_syscall_register(0x24,
+                             "close",
+                             com_sys_syscall_close,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd");
+
+    com_sys_syscall_register(0x25,
+                             "readdir",
+                             com_sys_syscall_readdir,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "buflen");
+
+    com_sys_syscall_register(0x26,
+                             "chdir",
+                             com_sys_syscall_chdir,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path");
+
+    com_sys_syscall_register(0x27,
+                             "clock_get",
+                             com_sys_syscall_clock_get,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "clock",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "timespec");
+
+    com_sys_syscall_register(0x28,
+                             "faccessat",
+                             com_sys_syscall_faccessat,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path");
+
+    com_sys_syscall_register(0x29,
+                             "ppoll",
+                             com_sys_syscall_poll,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "fds",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "nfds",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "timespec");
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

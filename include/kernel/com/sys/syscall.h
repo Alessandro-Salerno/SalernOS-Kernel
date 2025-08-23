@@ -65,6 +65,16 @@
 #define COM_SYS_SYSCALL_BASE_OK()  {0, 0, false};
 #define COM_SYS_SYSCALL_BASE_ERR() {-1, 0, false}
 
+#define COM_SYS_SYSCALL_TYPE_INT       0
+#define COM_SYS_SYSCALL_TYPE_UINTMAX   1
+#define COM_SYS_SYSCALL_TYPE_SIZET     2
+#define COM_SYS_SYSCALL_TYPE_PTR       3
+#define COM_SYS_SYSCALL_TYPE_STR       4
+#define COM_SYS_SYSCALL_TYPE_FLAGS     5
+#define COM_SYS_SYSCALL_TYPE_LONGFLAGS 6
+#define COM_SYS_SYSCALL_TYPE_OFFT      7
+#define COM_SYS_SYSCALL_TYPE_UINT32    8
+
 typedef struct {
     uintmax_t value;
     uintmax_t err;
@@ -79,8 +89,27 @@ typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
                                                 arch_syscall_arg_t a3,
                                                 arch_syscall_arg_t a4);
 
-void com_sys_syscall_register(uintmax_t number, com_intf_syscall_t handler);
-void com_sys_syscall_init(void);
+typedef struct com_syscall {
+    com_intf_syscall_t handler;
+    size_t             num_args;
+    const char        *name;
+    const char        *arg_names[4];
+    int                arg_types[4];
+} com_syscall_t;
+
+void              com_sys_syscall_register(uintmax_t          number,
+                                           const char        *name,
+                                           com_intf_syscall_t handler,
+                                           size_t             num_args,
+                                           ...);
+com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
+                                         arch_context_t    *ctx,
+                                         arch_syscall_arg_t arg1,
+                                         arch_syscall_arg_t arg2,
+                                         arch_syscall_arg_t arg3,
+                                         arch_syscall_arg_t arg4,
+                                         uintptr_t          invoke_ip);
+void              com_sys_syscall_init(void);
 
 // SYSCALLS
 

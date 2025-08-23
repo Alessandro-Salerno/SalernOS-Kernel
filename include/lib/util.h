@@ -41,7 +41,7 @@
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
 #define KURGENT(...)                          \
     com_io_log_acquire();                     \
-    com_io_log_puts("KERNEL URGENT:  ");      \
+    kinitlog("URGENT", "\033[35m");           \
     com_io_log_puts(__FILE__ ":");            \
     com_io_log_puts(__func__);                \
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
@@ -53,7 +53,7 @@
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_INFO
 #define KLOG(...)                             \
     com_io_log_acquire();                     \
-    com_io_log_puts("[  log  ] ");            \
+    kinitlog("INFO", "\033[32m");             \
     com_io_log_puts(__FILE__ ":");            \
     com_io_log_puts(__func__);                \
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
@@ -67,7 +67,7 @@
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
 #define KDEBUG(...)                           \
     com_io_log_acquire();                     \
-    com_io_log_puts("[ debug ] ");            \
+    kinitlog("DEBUG", "");                    \
     com_io_log_puts(__FILE__ ":");            \
     com_io_log_puts(__func__);                \
     com_io_log_puts(":" KSTR(__LINE__) ": "); \
@@ -86,6 +86,7 @@
 #define KASSERT(statement)                                               \
     if (KUNKLIKELY(!(statement))) {                                      \
         com_io_log_acquire();                                            \
+        kinitlog("ASSERT", "");                                          \
         com_io_log_puts(__FILE__ ":");                                   \
         com_io_log_puts(__func__);                                       \
         com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
@@ -95,6 +96,7 @@
 #define KASSERT(statement)                                               \
     if (KUNKLIKELY(!(statement))) {                                      \
         com_io_log_acquire();                                            \
+        kinitlog("ASSERT", "");                                          \
         com_io_log_puts(__FILE__ ":");                                   \
         com_io_log_puts(__func__);                                       \
         com_io_log_puts(":" KSTR(__LINE__) ": " #statement " failed\n"); \
@@ -103,3 +105,5 @@
 #else
 #error "unsupported assert action, check config/config.h"
 #endif
+
+void kinitlog(const char *category, const char *color);

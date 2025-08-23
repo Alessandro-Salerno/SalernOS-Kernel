@@ -46,8 +46,10 @@
  *                                CONFIGURATION
  * ****************************************************************************/
 
-#define CONFIG_LOG_LEVEL     CONST_LOG_LEVEL_DEBUG /* Kernel log level */
-#define CONFIG_ASSERT_ACTION CONST_ASSERT_PANIC    /* Action taken by KASSERT */
-#define CONFIG_OPEN_MAX      96   /* Maximum number of FDs per process */
-#define CONFIG_PROC_MAX      1024 /* Maximum number of processes */
-#define CONFIG_PMM_ZERO      CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
+#define CONFIG_LOG_LEVEL        CONST_LOG_LEVEL_SYSCALL /* Kernel log level */
+#define CONFIG_LOG_ALLOW_COLORS 1 /* Allow colors in logging */
+#define CONFIG_LOG_SEP_LEN      7 /* Length of the separator spaces in logs */
+#define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
+#define CONFIG_OPEN_MAX         96   /* Maximum number of FDs per process */
+#define CONFIG_PROC_MAX         1024 /* Maximum number of processes */
+#define CONFIG_PMM_ZERO         CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
