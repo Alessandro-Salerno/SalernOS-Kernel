@@ -29,7 +29,6 @@
 __attribute__((noreturn)) void
 com_panic(arch_context_t *ctx, const char *fmt, ...) {
     ARCH_CPU_DISABLE_INTERRUPTS();
-    com_io_log_panic();
     kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());
 
     if (NULL != fmt) {

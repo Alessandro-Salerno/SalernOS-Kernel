@@ -40,7 +40,7 @@ struct com_poll_head;
 #define COM_FS_VFS_VNODE_RELEASE(node)                                   \
     if (NULL != (node) &&                                                \
         0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)) { \
-        KDEBUG("freeing vnode %x", (node));                              \
+        KDEBUG("freeing vnode %p", (node));                              \
         com_fs_vfs_close(node);                                          \
     }
 
@@ -51,19 +51,19 @@ typedef enum com_vnode_type {
 } com_vnode_type_t;
 
 typedef struct com_vfs {
-    struct com_vfs_ops      *ops;
-    struct com_fs_vfs_vnode *mountpoint;
-    struct com_fs_vfs_vnode *root;
-    void                    *extra;
+    struct com_vfs_ops *ops;
+    struct com_vnode   *mountpoint;
+    struct com_vnode   *root;
+    void               *extra;
 } com_vfs_t;
 
-typedef struct com_fs_vfs_vnode {
-    struct com_vfs              *mountpointof;
-    struct com_vfs              *vfs;
-    struct com_fs_vfs_vnode_ops *ops;
+typedef struct com_vnode {
+    struct com_vfs       *mountpointof;
+    struct com_vfs       *vfs;
+    struct com_vnode_ops *ops;
     struct {
-        struct com_fs_vfs_vnode *next;
-        struct com_fs_vfs_vnode *prev;
+        struct com_vnode *next;
+        struct com_vnode *prev;
     } vlink;
     com_vnode_type_t type;
     uintmax_t        num_ref;
@@ -71,7 +71,7 @@ typedef struct com_fs_vfs_vnode {
     void            *extra;
 } com_vnode_t;
 
-typedef struct com_fs_vfs_vnode_ops {
+typedef struct com_vnode_ops {
     int (*close)(com_vnode_t *vnode);
     int (*lookup)(com_vnode_t **out,
                   com_vnode_t  *dir,

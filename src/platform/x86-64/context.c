@@ -23,11 +23,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <lib/printf.h>
 
 void arch_context_print(arch_context_t *ctx) {
-    kprintf("\ncr2: %x  gs: %x\nrax: %x  fs: %x\nrbx: %x  es: "
-            "%x\nrcx: %x  ds: %x\nrdx: %x  cs: %x\n r8: %x  ss: "
-            "%x\n r9: %x r10: %x\nr11: %x r12: %x\nr13: %x "
-            "r14: %x\nr15: %x rdi: %x\nrsi: %x rbp: %x\nrip: "
-            "%x rsp: %x\nerr: %x rfl: %x\n\n",
+    kprintf("\ncr2: %p  gs: %p\nrax: %p  fs: %p\nrbx: %p  es: "
+            "%p\nrcx: %p  ds: %p\nrdx: %p  cs: %p\n r8: %p  ss: "
+            "%p\n r9: %p r10: %p\nr11: %p r12: %p\nr13: %p "
+            "r14: %p\nr15: %p rdi: %p\nrsi: %p rbp: %p\nrip: "
+            "%p rsp: %p\nerr: %p rfl: %p\n\n",
             ctx->cr2,
             ctx->gs,
             ctx->rax,
@@ -56,7 +56,7 @@ void arch_context_print(arch_context_t *ctx) {
             ctx->rflags);
 
     // kprintf("instruction at (%%rip):\n\t");
-    // kprintf("%x %x\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
+    // kprintf("%p %p\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
 }
 
 void arch_context_alloc_sigframe(com_sigframe_t **sframe,

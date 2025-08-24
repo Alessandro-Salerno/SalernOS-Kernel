@@ -67,10 +67,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             ((FD_CLOEXEC & proc->fd[i].flags) ||
              (O_CLOEXEC & proc->fd[i].file->flags))) {
             COM_FS_FILE_RELEASE(proc->fd[i].file);
-            KDEBUG("(pid=%d) closed fd %d because it has FD_CLOEXECL, ref=%d",
-                   proc->pid,
-                   i,
-                   (proc->fd[i].file) ? proc->fd[i].file->num_ref : 0);
             proc->fd[i] = (com_filedesc_t){0};
         }
     }

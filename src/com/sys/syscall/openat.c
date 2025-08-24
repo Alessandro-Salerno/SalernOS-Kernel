@@ -60,7 +60,6 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     }
 
     KASSERT(NULL != dir);
-    KDEBUG("openat for %s", path);
 
     int          vfs_err = 0;
     com_vnode_t *file_vn = NULL;
@@ -114,6 +113,7 @@ setup_fd:
     com_vnode_t *new_vn   = NULL;
     int          open_ret = com_fs_vfs_open(&new_vn, file_vn);
     if (0 != open_ret) {
+        KASSERT(false);
         COM_FS_VFS_VNODE_RELEASE(file_vn);
         ret = COM_SYS_SYSCALL_ERR(open_ret);
         goto end;
@@ -139,7 +139,7 @@ setup_fd:
     file->num_ref          = 1;
     file->off              = 0;
     ret.value              = fd;
-    KDEBUG("returning fd=%d (vn=%x) for %s", fd, file_vn, path);
+    KDEBUG("returning fd=%d (file=%p, vn=%p) for %s", fd, file, file_vn, path);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);

@@ -25,8 +25,6 @@
 #include <stdatomic.h>
 #include <vendor/tailq.h>
 
-#define TERM_FPS 60
-
 static _Atomic(com_term_t *) FallbackTerm = NULL;
 
 static void flush_buffer_nolock(com_term_t *term) {
@@ -57,7 +55,7 @@ static void flush_callout(com_callout_t *callout) {
     com_spinlock_release(&term->lock);
 
     if (should_resched) {
-        com_sys_callout_reschedule(callout, KFPS(TERM_FPS));
+        com_sys_callout_reschedule(callout, KFPS(CONFIG_TERM_FPS));
     }
 }
 
@@ -196,7 +194,7 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
     com_spinlock_release(&term->lock);
 
     if (state) {
-        com_sys_callout_add(flush_callout, term, KFPS(TERM_FPS));
+        com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
     }
 }
 
@@ -213,7 +211,7 @@ void com_io_term_enable(com_term_t *term) {
     com_spinlock_release(&term->lock);
 
     if (term->buffering.enabled) {
-        com_sys_callout_add(flush_callout, term, KFPS(TERM_FPS));
+        com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
     }
 }
 

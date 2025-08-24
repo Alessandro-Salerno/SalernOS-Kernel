@@ -62,7 +62,7 @@ static int kstrncmp(const char *str1, const char *str2, size_t max) {
 // VFS OPS
 
 int com_fs_dummyfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode) {
-    KDEBUG("running dummyfs vget for inode %x", inode);
+    KDEBUG("running dummyfs vget for inode %p", inode);
     (void)vfs;
     struct dummyfs_node *dn = inode;
     *out                    = dn->vnode;

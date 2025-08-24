@@ -185,7 +185,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
             case PT_LOAD:
                 KDEBUG(
                     "found PT_LOAD at offset %u with segment at offset %u and "
-                    "virt %x",
+                    "virt %p",
                     phdr_off,
                     phdr.off,
                     phdr.virt_addr);

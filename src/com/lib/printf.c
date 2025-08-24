@@ -29,28 +29,34 @@ void kvprintf(const char *fmt, va_list args) {
             case '%': {
                 switch (*(++ptr)) {
                     case 'u':
-                        com_io_log_puts((
+                        com_io_log_puts_nolock((
                             const char *)(kuitoa(va_arg(args, uint64_t), buf)));
                         break;
 
                     case 'p':
+                        com_io_log_puts_nolock("0x");
+                        com_io_log_puts_nolock(
+                            kxuitoa(va_arg(args, uint64_t), buf, true));
+                        break;
+
                     case 'x':
-                        com_io_log_puts("0x");
-                        com_io_log_puts(kxuitoa(va_arg(args, uint64_t), buf));
+                        com_io_log_puts_nolock(
+                            kxuitoa(va_arg(args, uint64_t), buf, false));
                         break;
 
                     case 'd':
                     case 'i':
-                        com_io_log_puts(
+                        com_io_log_puts_nolock(
                             (const char *)(kitoa(va_arg(args, int), buf)));
                         break;
 
                     case 'c':
-                        com_io_log_putc((char)(va_arg(args, signed)));
+                        com_io_log_putc_nolock((char)(va_arg(args, signed)));
                         break;
 
                     case 's':
-                        com_io_log_puts((const char *)(va_arg(args, char *)));
+                        com_io_log_puts_nolock(
+                            (const char *)(va_arg(args, char *)));
                         break;
 
                     case '.': {
@@ -58,7 +64,7 @@ void kvprintf(const char *fmt, va_list args) {
                             int         len = va_arg(args, int);
                             const char *s   = va_arg(args, const char *);
                             for (int i = 0; i < len; i++) {
-                                com_io_log_putc(s[i]);
+                                com_io_log_putc_nolock(s[i]);
                             }
                             ptr += 2;
                         }
@@ -69,7 +75,7 @@ void kvprintf(const char *fmt, va_list args) {
             }
 
             default:
-                com_io_log_putc(*ptr);
+                com_io_log_putc_nolock(*ptr);
                 break;
         }
     }

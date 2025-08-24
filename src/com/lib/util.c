@@ -36,7 +36,7 @@ void kinitlog(const char *category, const char *color) {
     ssize_t cat_len = kstrlen(category);
     ssize_t diff    = CONFIG_LOG_SEP_LEN - cat_len;
     for (ssize_t i = 0; i < diff; i++) {
-        com_io_log_putc(' ');
+        com_io_log_putc_nolock(' ');
     }
 
     if (NULL == curr_cpu) {

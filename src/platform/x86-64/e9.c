@@ -18,7 +18,10 @@
 
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/io.h>
+#include <stddef.h>
 
-void x86_64_e9_putc(char c) {
-    X86_64_IO_OUTB(X86_64_IO_PORT_E9, c);
+void x86_64_e9_putsn(const char *s, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        X86_64_IO_OUTB(0xE9, s[i]);
+    }
 }

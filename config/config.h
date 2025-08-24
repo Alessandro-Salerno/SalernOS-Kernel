@@ -29,7 +29,8 @@
 #define CONST_LOG_LEVEL_URGENT  1 /* Enable KURGENT */
 #define CONST_LOG_LEVEL_INFO    2 /* Enable KLOG */
 #define CONST_LOG_LEVEL_DEBUG   3 /* Enable KDEBUG */
-#define CONST_LOG_LEVEL_SYSCALL 4 /* Enable system call logging */
+#define CONST_LOG_LEVEL_USER    4 /* Enable kprint syscall */
+#define CONST_LOG_LEVEL_SYSCALL 5 /* Enable system call logging */
 
 // Assert action
 #define CONST_ASSERT_REMOVE 0 /* Remove all instances of KASSERT */
@@ -46,10 +47,15 @@
  *                                CONFIGURATION
  * ****************************************************************************/
 
-#define CONFIG_LOG_LEVEL        CONST_LOG_LEVEL_SYSCALL /* Kernel log level */
+#define CONFIG_LOG_LEVEL        CONST_LOG_LEVEL_USER /* Kernel log level */
 #define CONFIG_LOG_ALLOW_COLORS 1 /* Allow colors in logging */
 #define CONFIG_LOG_SEP_LEN      7 /* Length of the separator spaces in logs */
+#define CONFIG_LOG_USE_SERIAL   1 /* Use serial output for kernel logging */
+#define CONFIG_LOG_USE_VNODE    0 /* Also use a vnode for kernel logging */
 #define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
 #define CONFIG_OPEN_MAX         96   /* Maximum number of FDs per process */
 #define CONFIG_PROC_MAX         1024 /* Maximum number of processes */
+#define CONFIG_SYSCALL_MAX      512  /* Maximum number of syscall handlers */
 #define CONFIG_PMM_ZERO         CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
+#define CONFIG_TERM_FPS         60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC       1 /* Display kernel panic to fallback terminal */

@@ -263,7 +263,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
         sigaction->sa_action = SIG_DFL;
     }
 
-    KDEBUG("pid=%d has restorer at %x for signal %d",
+    KDEBUG("pid=%d has restorer at %p for signal %d",
            proc->pid,
            sigaction->sa_restorer,
            sig);

@@ -64,7 +64,11 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe) {
 
     fildes[0] = rfd;
     fildes[1] = wfd;
-    KDEBUG("returning fd %d, %d", rfd, wfd);
+    KDEBUG("returning fd=(%d, %d), read_vn=%p, write_vn=%p",
+           rfd,
+           wfd,
+           read,
+           write);
 
     return COM_SYS_SYSCALL_OK(0);
 }

@@ -24,36 +24,15 @@
 #include <kernel/platform/syscall.h>
 #include <stdint.h>
 
-#define MAX_SYSCALLS 512
-
-volatile com_syscall_t SyscallTable[MAX_SYSCALLS];
-
-// test_syscall(const char *s)
-static COM_SYS_SYSCALL(test_syscall) {
-#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
-
-    const char *s = COM_SYS_SYSCALL_ARG(const char *, 1);
-
-    com_io_log_acquire();
-    kinitlog("USER", "\033[36m");
-    com_io_log_puts(s);
-    com_io_log_putc('\n');
-    com_io_log_release();
-#else
-    COM_SYS_SYSCALL_UNUSED_START(0);
-#endif
-
-    return COM_SYS_SYSCALL_OK(0);
-}
+// NOTE: not static so others can call
+volatile com_syscall_t SyscallTable[CONFIG_SYSCALL_MAX];
 
 void com_sys_syscall_register(uintmax_t          number,
                               const char        *name,
                               com_intf_syscall_t handler,
                               size_t             num_args,
                               ...) {
-    KASSERT(number < MAX_SYSCALLS);
+    KASSERT(number < CONFIG_SYSCALL_MAX);
     volatile com_syscall_t *syscall = &SyscallTable[number];
     syscall->name                   = name;
     syscall->handler                = handler;
@@ -81,11 +60,11 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg3,
                                          arch_syscall_arg_t arg4,
                                          uintptr_t          invoke_ip) {
-    KASSERT(number < MAX_SYSCALLS);
+    KASSERT(number < CONFIG_SYSCALL_MAX);
     volatile com_syscall_t *syscall = &SyscallTable[number];
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
-    com_io_log_acquire();
+    com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
     kprintf("%s(", syscall->name);
 
@@ -108,21 +87,24 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                 break;
             case COM_SYS_SYSCALL_TYPE_PTR: {
                 if (NULL != (void *)args[i]) {
-                    kprintf("%x", (void *)args[i]);
+                    kprintf("%p", (void *)args[i]);
                 } else {
                     kprintf("NULL");
                 }
                 break;
             }
             case COM_SYS_SYSCALL_TYPE_STR:
-                kprintf("%s",
-                        (NULL != (void *)args[i]) ? (void *)args[i] : "NULL");
+                if (NULL != (void *)args[i]) {
+                    kprintf("\"%s\"", (void *)args[i]);
+                } else {
+                    kprintf("NULL");
+                }
                 break;
             case COM_SYS_SYSCALL_TYPE_FLAGS:
-                kprintf("%x", (int)args[i]);
+                kprintf("0x%x", (int)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_LONGFLAGS:
-                kprintf("%x", (uintmax_t)args[i]);
+                kprintf("0x%x", (uintmax_t)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_OFFT:
                 kprintf("%d", (off_t)args[i]);
@@ -140,8 +122,8 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
         }
     }
 
-    kprintf(") at ip=%x\n", invoke_ip);
-    com_io_log_release();
+    kprintf(") at %p\n", invoke_ip);
+    com_io_log_unlock();
 #else
     (void)invoke_ip;
 #endif
@@ -152,8 +134,12 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
 void com_sys_syscall_init(void) {
     KLOG("initializing common system calls");
 
-    com_sys_syscall_register(
-        0x00, "kprint", test_syscall, 1, COM_SYS_SYSCALL_TYPE_PTR, "message");
+    com_sys_syscall_register(0x00,
+                             "kprint",
+                             com_sys_syscall_kprint,
+                             1,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "message");
 
     com_sys_syscall_register(0x01,
                              "write",
@@ -283,6 +269,8 @@ void com_sys_syscall_init(void) {
                              "dir_fd",
                              COM_SYS_SYSCALL_TYPE_STR,
                              "path",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "statbuf",
                              COM_SYS_SYSCALL_TYPE_FLAGS,
                              "flags");
 

@@ -42,10 +42,10 @@ void com_spinlock_acquire(com_spinlock_t *lock) {
 
 void com_spinlock_release(com_spinlock_t *lock) {
     if (!(*lock)) {
-        KDEBUG("trying to unlock unlocked lock at %x",
+        KDEBUG("trying to unlock unlocked lock at %p",
                __builtin_return_address(0));
     } else if (1 != *lock) {
-        KDEBUG("lock %x (released at %x) has value %d",
+        KDEBUG("lock %p (released at %p) has value %d",
                lock,
                __builtin_return_address(0),
                *lock);
@@ -56,7 +56,7 @@ void com_spinlock_release(com_spinlock_t *lock) {
     if (NULL != curr_thread) {
         int oldval = curr_thread->lock_depth--;
         if (oldval == 0) {
-            KDEBUG("trying to unlock with depth 0 at %x",
+            KDEBUG("trying to unlock with depth 0 at %p",
                    __builtin_return_address(0));
         }
         KASSERT(oldval != 0);

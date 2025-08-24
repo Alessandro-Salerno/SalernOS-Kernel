@@ -295,7 +295,7 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
         return 0;
     }
 
-    KDEBUG("unsupported ioctl %x", op);
+    KDEBUG("unsupported ioctl %p", op);
     return ENOSYS;
 }
 
@@ -558,6 +558,7 @@ int com_io_tty_init_text(com_vnode_t **out,
     }
 
     tty_data->vnode = tty_dev;
+    KDEBUG("tty vn=%x");
 
     size_t rows, cols;
     com_io_term_get_size(term, &rows, &cols);

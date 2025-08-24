@@ -20,8 +20,6 @@
 
 #include <stdint.h>
 
-#define X86_64_IO_PORT_E9 0xE9
-
 #define X86_64_IO_OUTB(port, data) __hdr_x86_64_io_outb(port, data)
 #define X86_64_IO_INB(port)        __hdr_x86_64_io_inb(port)
 

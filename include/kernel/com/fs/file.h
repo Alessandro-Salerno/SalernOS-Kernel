@@ -35,7 +35,7 @@
             uintmax_t n =                                                 \
                 __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
             if (0 == n) {                                                 \
-                KDEBUG("freeing file %x", (file));                        \
+                KDEBUG("freeing file %p", (file));                        \
                 COM_FS_VFS_VNODE_RELEASE(file->vnode);                    \
                 com_mm_slab_free(file, sizeof(com_file_t));               \
                 file = NULL;                                              \

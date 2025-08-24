@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,7 +28,7 @@ void   kstrcpy(char *dst, const char *src);
 
 const char *kuitoa(uint64_t val, char *s);
 const char *kitoa(int64_t val, char *s);
-const char *kxuitoa(uint64_t val, char *s);
+const char *kxuitoa(uint64_t val, char *s, bool have_leading);
 void        kstrpathpenult(const char *s,
                            size_t      len,
                            size_t     *penult_len,

@@ -113,6 +113,7 @@ void              com_sys_syscall_init(void);
 
 // SYSCALLS
 
+COM_SYS_SYSCALL(com_sys_syscall_kprint);
 COM_SYS_SYSCALL(com_sys_syscall_write);
 COM_SYS_SYSCALL(com_sys_syscall_read);
 COM_SYS_SYSCALL(com_sys_syscall_execve);

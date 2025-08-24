@@ -33,7 +33,7 @@ static com_isr_t InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
 void com_sys_interrupt_register(uintmax_t      vec,
                                 com_intf_isr_t func,
                                 com_intf_eoi_t eoi) {
-    KDEBUG("registering handler at %x for vector %u (%x)", func, vec, vec);
+    KDEBUG("registering handler at %p for vector %u (%p)", func, vec, vec);
     com_isr_t *isr = &InterruptTable[vec];
     isr->func      = func;
     isr->eoi       = eoi;

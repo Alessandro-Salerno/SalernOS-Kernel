@@ -18,4 +18,6 @@
 
 #pragma once
 
-void x86_64_e9_putc(char c);
+#include <stddef.h>
+
+void x86_64_e9_putsn(const char *s, size_t n);

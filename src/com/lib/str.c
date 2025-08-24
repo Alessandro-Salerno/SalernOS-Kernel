@@ -110,7 +110,7 @@ const char *kitoa(int64_t val, char *s) {
     return s;
 }
 
-const char *kxuitoa(uint64_t val, char *s) {
+const char *kxuitoa(uint64_t val, char *s, bool have_leading) {
     uint64_t size_test = val;
     uint8_t  size      = 0;
     uint8_t  idx       = 0;
@@ -120,19 +120,23 @@ const char *kxuitoa(uint64_t val, char *s) {
         size++;
     }
 
-    uint64_t diff = 16 - size;
+    size_t print_size = size;
 
-    for (uint64_t i = 0; i < diff; i++) {
-        s[i] = '0';
+    if (have_leading) {
+        uint64_t diff = 16 - size;
+        print_size    = 15;
+        for (uint64_t i = 0; i < diff; i++) {
+            s[i] = '0';
+        }
     }
 
     while (idx < size) {
         uint8_t rem = val % 16;
         val /= 16;
         if (rem < 10) {
-            s[15 - idx] = rem + '0';
+            s[print_size - idx] = rem + '0';
         } else {
-            s[15 - idx] = rem - 10 + 'A';
+            s[print_size - idx] = rem - 10 + 'A';
         }
         idx++;
     }
@@ -140,11 +144,11 @@ const char *kxuitoa(uint64_t val, char *s) {
     uint8_t rem = val % 16;
     val /= 16;
     if (rem < 10) {
-        s[15 - idx] = rem + '0';
+        s[print_size - idx] = rem + '0';
     } else {
-        s[15 - idx] = rem - 10 + 'A';
+        s[print_size - idx] = rem - 10 + 'A';
     }
-    s[16] = 0;
+    s[print_size + 1] = 0;
 
     return s;
 }

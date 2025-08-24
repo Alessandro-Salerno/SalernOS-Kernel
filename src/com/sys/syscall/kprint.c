@@ -16,27 +16,26 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
-#include <kernel/com/panic.h>
-#include <lib/printf.h>
+#include <kernel/com/io/log.h>
+#include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
-#include <stddef.h>
 
-struct com_vnode;
-typedef void (*com_intf_log_t)(const char *s, size_t n);
+// SYSCALL: kprint(const char *message)
+COM_SYS_SYSCALL(com_sys_syscall_kprint) {
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_USER
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(2);
 
-void com_io_log_set_hook_nolock(com_intf_log_t hook);
-void com_io_log_putc_nolock(char c);
-void com_io_log_puts_nolock(const char *s);
-void com_io_log_putsn_nolock(const char *s, size_t n);
-void com_io_log_set_vnode_nolock(struct com_vnode *vnode);
+    const char *message = COM_SYS_SYSCALL_ARG(const char *, 1);
 
-void com_io_log_lock(void);
-void com_io_log_unlock(void);
+    com_io_log_lock();
+    kinitlog("USER", "\033[36m");
+    com_io_log_puts_nolock(message);
+    com_io_log_putc_nolock('\n');
+    com_io_log_unlock();
+#else
+    COM_SYS_SYSCALL_UNUSED_START(0);
+#endif
 
-void com_io_log_set_hook(com_intf_log_t hook);
-void com_io_log_putc(char c);
-void com_io_log_puts(const char *s);
-void com_io_log_putsn(const char *s, size_t n);
-void com_io_log_set_vnode(struct com_vnode *vnode);
+    return COM_SYS_SYSCALL_OK(0);
+}

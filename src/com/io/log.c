@@ -16,50 +16,90 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/spinlock.h>
+#include <lib/str.h>
 
-static com_spinlock_t LogLock    = COM_SPINLOCK_NEW();
-static bool           InPanic    = false;
-static bool           isPrinting = false;
+static com_spinlock_t LogLock = COM_SPINLOCK_NEW();
 
-static void dummy_hook(char c) {
-    (void)c;
+static struct {
+    com_vnode_t *vnode;
+    size_t       off;
+} SecondaryLog;
+
+static void dummy_hook(const char *s, size_t n) {
+    (void)s;
+    (void)n;
 }
 
-static volatile com_io_log_hook_t Hook = dummy_hook;
+static volatile com_intf_log_t LogHook = dummy_hook;
 
-void com_io_log_set_hook(com_io_log_hook_t hook) {
+void com_io_log_set_hook_nolock(com_intf_log_t hook) {
     if (NULL == hook) {
-        Hook = dummy_hook;
+        LogHook = dummy_hook;
         return;
     }
 
-    Hook = hook;
+    LogHook = hook;
 }
 
-void com_io_log_putc(char c) {
-    Hook(c);
+void com_io_log_putc_nolock(char c) {
+    com_io_log_putsn_nolock(&c, 1);
 }
 
-void com_io_log_puts(const char *s) {
-    isPrinting = true;
-    for (; 0 != *s; s++) {
-        com_io_log_putc(*s);
+void com_io_log_puts_nolock(const char *s) {
+    com_io_log_putsn_nolock(s, kstrlen(s));
+}
+
+void com_io_log_putsn_nolock(const char *s, size_t n) {
+    LogHook(s, n);
+
+    if (NULL != SecondaryLog.vnode) {
+        com_fs_vfs_write(
+            NULL, SecondaryLog.vnode, (void *)s, n, SecondaryLog.off, 0);
+        SecondaryLog.off += n;
     }
-    isPrinting = false;
 }
 
-void com_io_log_acquire(void) {
-    while (InPanic);
+void com_io_log_lock(void) {
     com_spinlock_acquire(&LogLock);
 }
 
-void com_io_log_release(void) {
-    while (InPanic);
+void com_io_log_unlock(void) {
     com_spinlock_release(&LogLock);
 }
 
-void com_io_log_panic(void) {
-    InPanic = true;
+void com_io_log_set_vnode_nolock(struct com_vnode *vnode) {
+    SecondaryLog.vnode = vnode;
+}
+
+void com_io_log_set_hook(com_intf_log_t hook) {
+    com_io_log_lock();
+    com_io_log_set_hook_nolock(hook);
+    com_io_log_unlock();
+}
+
+void com_io_log_putc(char c) {
+    com_io_log_lock();
+    com_io_log_putc_nolock(c);
+    com_io_log_unlock();
+}
+
+void com_io_log_puts(const char *s) {
+    com_io_log_lock();
+    com_io_log_puts_nolock(s);
+    com_io_log_unlock();
+}
+
+void com_io_log_putsn(const char *s, size_t n) {
+    com_io_log_lock();
+    com_io_log_putsn_nolock(s, n);
+    com_io_log_unlock();
+}
+
+void com_io_log_set_vnode(struct com_vnode *vnode) {
+    com_io_log_lock();
+    com_io_log_set_vnode_nolock(vnode);
+    com_io_log_unlock();
 }

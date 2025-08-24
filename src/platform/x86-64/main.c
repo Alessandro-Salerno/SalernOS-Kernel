@@ -223,11 +223,10 @@ void kernel_entry(void) {
     X86_64_IO_OUTB(0xA1, 0b11111111);
     com_sys_interrupt_register(0x21, kbd, kbd_eoi);
 
-#ifndef X86_64_NO_E9_LOG
-    com_io_log_set_hook(x86_64_e9_putc);
-#else
-    com_io_log_set_hook(com_io_fbterm_putc);
+#if CONFIG_LOG_USE_SERIAL
+    com_io_log_set_hook_nolock(x86_64_e9_putsn);
 #endif
+
     com_mm_pmm_init();
     arch_mmu_init();
     KDEBUG("sizeof(com_proc_t) = %d", sizeof(com_proc_t));
@@ -255,6 +254,23 @@ void kernel_entry(void) {
     com_fs_tmpfs_mkdir(
         &tmpfs_mountpoint, rootfs->root, "tmp", kstrlen("tmp"), 0);
     com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
+
+    com_vnode_t *procfs_mountpoint = NULL;
+    com_vfs_t   *procfs            = NULL;
+    com_fs_tmpfs_mkdir(
+        &procfs_mountpoint, rootfs->root, "proc", kstrlen("proc"), 0);
+    com_fs_tmpfs_mount(&procfs, procfs_mountpoint);
+
+    com_vnode_t *proc_kernel = NULL;
+    com_fs_tmpfs_mkdir(
+        &proc_kernel, procfs->root, "kernel", kstrlen("kernel"), 0);
+
+#if CONFIG_LOG_USE_VNODE
+#warning "log to vnode is experimental!"
+    com_vnode_t *kernel_log = NULL;
+    com_fs_tmpfs_create(&kernel_log, proc_kernel, "log", kstrlen("log"), 0);
+    com_io_log_set_vnode(kernel_log);
+#endif
 
     arch_file_t *initrd = arch_info_get_initrd();
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);

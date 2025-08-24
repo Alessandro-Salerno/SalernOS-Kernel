@@ -214,7 +214,7 @@ void com_mm_pmm_init(void) {
         MemSize += entry->length;
         uintptr_t seg_top = entry->base + entry->length;
 
-        KDEBUG("segment: base=%x top=%x usable=%u length=%u",
+        KDEBUG("segment: base=%p top=%p usable=%u length=%u",
                entry->base,
                seg_top,
                ARCH_MEMMAP_IS_USABLE(entry),
@@ -235,7 +235,7 @@ void com_mm_pmm_init(void) {
         }
     }
 
-    KDEBUG("searched all segments, found highest address at %x", highest_addr);
+    KDEBUG("searched all segments, found highest address at %p", highest_addr);
 
     // Compute the actual size of the bitmap
     uintptr_t highest_pgindex = highest_addr / ARCH_PAGE_SIZE;
@@ -250,7 +250,7 @@ void com_mm_pmm_init(void) {
 
         if (ARCH_MEMMAP_IS_USABLE(entry) && entry->length >= bmp_sz) {
             uintptr_t transbase = ARCH_PHYS_TO_HHDM(entry->base);
-            KDEBUG("bitmap: base=%x size=%u segment=%u", transbase, bmp_sz, i);
+            KDEBUG("bitmap: base=%p size=%u segment=%u", transbase, bmp_sz, i);
             PageBitmap.buffer = (uint8_t *)transbase;
             PageBitmap.size   = bmp_sz;
 
