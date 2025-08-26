@@ -17,13 +17,52 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <asm/ioctls.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
+
+#define FDIOCTL_OK(n)                              \
+    (struct fdioctl_ret) {                         \
+        .ret = COM_SYS_SYSCALL_OK(n), .done = true \
+    }
+#define FDIOCTL_ERR(errno)                              \
+    (struct fdioctl_ret) {                              \
+        .ret = COM_SYS_SYSCALL_ERR(errno), .done = true \
+    }
+#define FDIOCTL_NOP()      \
+    (struct fdioctl_ret) { \
+        .done = false      \
+    }
+
+struct fdioctl_ret {
+    com_syscall_ret_t ret;
+    bool              done;
+};
+
+// For ioctls that some unholy creature decided should be ioctls and not fcntls
+static struct fdioctl_ret
+// TODO: fix race condition with fcntl, fdioctl and close on filde descriptor
+// falgs: these operations should not jsut be done while holding the fd, they
+// should be atomic
+fd_ioctl(int fd, uintmax_t op, void *buf, com_filedesc_t *fildesc) {
+    if (FIOCLEX == op) {
+        fildesc->flags |= FD_CLOEXEC;
+        return FDIOCTL_OK(0);
+    }
+
+    if (FIONREAD == op) {
+        KASSERT(false);
+        return FDIOCTL_OK(0);
+    }
+
+    return FDIOCTL_NOP();
+}
 
 // SYSCALL: ioctl(int fd, int op, void *buf)
 COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
@@ -34,16 +73,21 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     uintmax_t op  = COM_SYS_SYSCALL_ARG(uintmax_t, 2);
     void     *buf = COM_SYS_SYSCALL_ARG(void *, 3);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
+    com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    com_filedesc_t   *fildesc   = com_sys_proc_get_fildesc(curr_proc, fd);
 
-    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t *file = com_sys_proc_get_file(curr, fd);
-
-    if (NULL == file) {
+    if (NULL == fildesc) {
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
+    struct fdioctl_ret fdioctl_ret = fd_ioctl(fd, op, buf, fildesc);
+    if (fdioctl_ret.done) {
+        return fdioctl_ret.ret;
+    }
+
+    KASSERT(NULL != fildesc->file);
+    int vfs_op = com_fs_vfs_ioctl(fildesc->file->vnode, op, buf);
 
     if (0 != vfs_op) {
         ret = COM_SYS_SYSCALL_ERR(vfs_op);
@@ -51,6 +95,6 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     }
 
 end:
-    COM_FS_FILE_RELEASE(file);
+    COM_FS_FILE_RELEASE(fildesc->file);
     return ret;
 }

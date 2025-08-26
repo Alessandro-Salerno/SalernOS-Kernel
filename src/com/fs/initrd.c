@@ -78,14 +78,13 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
         // If the first byte of the header is zero, than either the file has no
         // name or we've reached the last two blocks (end of file) that are
         // filled with zeros
-        if (0 == *(uint8_t *)hdr) {
+        if (0 == hdr->name[0]) {
             break;
         }
 
         size_t file_size = 0;
 
-        // These two are not supported
-        if (GNUTAR_LONG_NAME == hdr->type || GNUTAR_LONG_LINK == hdr->type) {
+        if (GNUTAR_LONG_LINK == hdr->type) {
             goto skip;
         }
 
@@ -93,7 +92,15 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
         char  *file_path     = hdr->name;
         size_t file_path_len = 100;
 
-        if (0 == file_path[99]) {
+        if (GNUTAR_LONG_NAME == hdr->type) {
+            file_path     = (char *)((char *)tar + i + 512);
+            file_path_len = file_size;
+            i += 512;
+            i += (file_size + 512) & ~511UL;
+            hdr       = (void *)((uint8_t *)tar + i);
+            file_size = oct_atoi(hdr->size, 11);
+            KDEBUG("tar long name %.*s", file_path_len, file_path);
+        } else if (0 == file_path[99]) {
             file_path_len = kstrlen(file_path);
         }
 
@@ -116,7 +123,7 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
         // length of the ACTUAL name of the file (not the path)
         size_t file_name_len = file_path_len;
 
-        // kmemchr returns NULL only if the character is not found, thus this
+        // kmemrchr returns NULL only if the character is not found, thus this
         // can be read as: "if this is not a directory"
         if (NULL != path_end) {
             size_t sl_len = path_end - file_path;
