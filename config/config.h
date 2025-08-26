@@ -17,7 +17,6 @@
 *************************************************************************/
 
 // This file is used to ocnfigure the kernel at compile time
-// clang-format off
 
 #pragma once
 
@@ -25,13 +24,16 @@
  *                                  CONSTANTS
  * ****************************************************************************/
 
-// Log levels
-#define CONST_LOG_LEVEL_OFF     0 /* Disable all logging */
-#define CONST_LOG_LEVEL_URGENT  1 /* Enable KURGENT */
-#define CONST_LOG_LEVEL_INFO    2 /* Enable KLOG */
-#define CONST_LOG_LEVEL_DEBUG   3 /* Enable KDEBUG */
-#define CONST_LOG_LEVEL_USER    4 /* Enable kprint syscall */
-#define CONST_LOG_LEVEL_SYSCALL 5 /* Enable system call logging */
+// Log levels (absolute, use == in #if)
+#define CONST_LOG_LEVEL_OFF 0 /* Disable all logging */
+#define CONST_LOG_LEVEL_TTY 1 /* Logs the foregrund tty output */
+
+// Log levels (relative, use >= in #if)
+#define CONST_LOG_LEVEL_URGENT  2 /* Enable KURGENT */
+#define CONST_LOG_LEVEL_INFO    3 /* Enable KLOG */
+#define CONST_LOG_LEVEL_DEBUG   4 /* Enable KDEBUG */
+#define CONST_LOG_LEVEL_USER    5 /* Enable kprint syscall */
+#define CONST_LOG_LEVEL_SYSCALL 6 /* Enable system call logging */
 
 // Syscall log modes
 #define CONST_LOG_SYSCALL_BEFORE 0 /* Log syscalls before jumping to them */
@@ -57,13 +59,12 @@
 #define CONFIG_LOG_SEP_LEN      7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL   1 /* Use serial output for kernel logging */
 #define CONFIG_LOG_USE_VNODE    0 /* Also use a vnode for kernel logging */
-#define CONFIG_LOG_SYSCALL_MODE CONST_LOG_SYSCALL_AFTER /* When log syscall */
-#define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
-#define CONFIG_OPEN_MAX         96   /* Maximum number of FDs per process */
-#define CONFIG_PROC_MAX         1024 /* Maximum number of processes */
-#define CONFIG_SYSCALL_MAX      512  /* Maximum number of syscall handlers */
-#define CONFIG_PMM_ZERO         CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
-#define CONFIG_TERM_FPS         60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC       1 /* Display kernel panic to fallback terminal */
-
-// clang-format on
+#define CONFIG_LOG_SYSCALL_MODE CONST_LOG_SYSCALL_BEFORE /* When log syscall \
+                                                          */
+#define CONFIG_ASSERT_ACTION CONST_ASSERT_PANIC /* Action taken by KASSERT */
+#define CONFIG_OPEN_MAX      96   /* Maximum number of FDs per process */
+#define CONFIG_PROC_MAX      1024 /* Maximum number of processes */
+#define CONFIG_SYSCALL_MAX   512  /* Maximum number of syscall handlers */
+#define CONFIG_PMM_ZERO      CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
+#define CONFIG_TERM_FPS      60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC    1  /* Display kernel panic to fallback terminal */

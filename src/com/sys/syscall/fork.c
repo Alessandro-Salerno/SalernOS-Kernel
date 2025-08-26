@@ -36,6 +36,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// SYSCALL: fork()
 COM_SYS_SYSCALL(com_sys_syscall_fork) {
     COM_SYS_SYSCALL_UNUSED_START(1);
 

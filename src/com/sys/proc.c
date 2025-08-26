@@ -141,7 +141,7 @@ int com_sys_proc_next_fd(com_proc_t *proc) {
     return ret;
 }
 
-com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd) {
+com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd) {
     if (NULL == proc) {
         return NULL;
     }
@@ -150,14 +150,18 @@ com_filedesc_t *com_sys_proc_get_fildesc(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    com_spinlock_acquire(&proc->fd_lock);
     com_filedesc_t *fildesc = &proc->fd[fd];
-    COM_FS_FILE_HOLD(fildesc->file);
-    com_spinlock_release(&proc->fd_lock);
     return fildesc;
 }
 
 com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
+    com_spinlock_acquire(&proc->fd_lock);
+    com_file_t *file = com_sys_proc_get_file_nolock(proc, fd);
+    com_spinlock_release(&proc->fd_lock);
+    return file;
+}
+
+com_file_t *com_sys_proc_get_file_nolock(com_proc_t *proc, int fd) {
     if (NULL == proc) {
         return NULL;
     }
@@ -166,10 +170,8 @@ com_file_t *com_sys_proc_get_file(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    com_spinlock_acquire(&proc->fd_lock);
     com_file_t *file = proc->fd[fd].file;
     COM_FS_FILE_HOLD(file);
-    com_spinlock_release(&proc->fd_lock);
     return file;
 }
 

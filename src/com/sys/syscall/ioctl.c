@@ -47,21 +47,25 @@ struct fdioctl_ret {
 
 // For ioctls that some unholy creature decided should be ioctls and not fcntls
 static struct fdioctl_ret
-// TODO: fix race condition with fcntl, fdioctl and close on filde descriptor
-// falgs: these operations should not jsut be done while holding the fd, they
-// should be atomic
-fd_ioctl(int fd, uintmax_t op, void *buf, com_filedesc_t *fildesc) {
+fd_ioctl(int fd, uintmax_t op, void *buf, com_proc_t *proc) {
+    (void)buf; // temporary probably
+    com_spinlock_acquire(&proc->fd_lock);
+    com_filedesc_t *fildesc = com_sys_proc_get_fildesc_nolock(proc, fd);
+    if (NULL == fildesc) {
+        return FDIOCTL_ERR(EBADF);
+    }
+
+    struct fdioctl_ret ret = FDIOCTL_NOP();
+
     if (FIOCLEX == op) {
         fildesc->flags |= FD_CLOEXEC;
-        return FDIOCTL_OK(0);
+        ret = FDIOCTL_OK(0);
+    } else if (FIONREAD == op) {
+        ret = FDIOCTL_OK(0);
     }
 
-    if (FIONREAD == op) {
-        KASSERT(false);
-        return FDIOCTL_OK(0);
-    }
-
-    return FDIOCTL_NOP();
+    com_spinlock_release(&proc->fd_lock);
+    return ret;
 }
 
 // SYSCALL: ioctl(int fd, int op, void *buf)
@@ -75,19 +79,19 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
 
     com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_filedesc_t   *fildesc   = com_sys_proc_get_fildesc(curr_proc, fd);
 
-    if (NULL == fildesc) {
-        return COM_SYS_SYSCALL_ERR(EBADF);
-    }
-
-    struct fdioctl_ret fdioctl_ret = fd_ioctl(fd, op, buf, fildesc);
+    struct fdioctl_ret fdioctl_ret = fd_ioctl(fd, op, buf, curr_proc);
     if (fdioctl_ret.done) {
         return fdioctl_ret.ret;
     }
 
-    KASSERT(NULL != fildesc->file);
-    int vfs_op = com_fs_vfs_ioctl(fildesc->file->vnode, op, buf);
+    com_file_t *file = com_sys_proc_get_file(curr_proc, fd);
+    if (NULL == file) {
+        ret = COM_SYS_SYSCALL_ERR(EBADF);
+        goto end;
+    }
+
+    int vfs_op = com_fs_vfs_ioctl(file->vnode, op, buf);
 
     if (0 != vfs_op) {
         ret = COM_SYS_SYSCALL_ERR(vfs_op);
@@ -95,6 +99,6 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     }
 
 end:
-    COM_FS_FILE_RELEASE(fildesc->file);
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

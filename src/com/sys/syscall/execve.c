@@ -62,6 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
 
+    com_spinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != proc->fd[i].file &&
             ((FD_CLOEXEC & proc->fd[i].flags) ||
@@ -70,6 +71,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->fd[i] = (com_filedesc_t){0};
         }
     }
+    com_spinlock_release(&proc->fd_lock);
 
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i] &&

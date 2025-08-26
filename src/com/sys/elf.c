@@ -16,8 +16,6 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#define DISABLE_LOGGING
-
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <kernel/com/fs/vfs.h>

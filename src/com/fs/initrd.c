@@ -99,7 +99,6 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
             i += (file_size + 512) & ~511UL;
             hdr       = (void *)((uint8_t *)tar + i);
             file_size = oct_atoi(hdr->size, 11);
-            KDEBUG("tar long name %.*s", file_path_len, file_path);
         } else if (0 == file_path[99]) {
             file_path_len = kstrlen(file_path);
         }

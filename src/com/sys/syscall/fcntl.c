@@ -31,21 +31,18 @@
 
 static com_syscall_ret_t
 fcntl_dup(com_proc_t *curr_proc, int fd, int op, int arg1) {
-    com_spinlock_acquire(&curr_proc->fd_lock);
     int new_fd = com_sys_proc_duplicate_file_nolock(curr_proc, arg1, fd);
 
     if (new_fd < 0) {
-        com_spinlock_release(&curr_proc->fd_lock);
         return COM_SYS_SYSCALL_ERR(-new_fd);
     }
 
     if (F_DUPFD_CLOEXEC == op) {
-        com_filedesc_t *fildesc = com_sys_proc_get_fildesc(curr_proc, new_fd);
+        com_filedesc_t *fildesc =
+            com_sys_proc_get_fildesc_nolock(curr_proc, new_fd);
         fildesc->flags |= FD_CLOEXEC;
-        COM_FS_FILE_RELEASE(fildesc->file);
     }
 
-    com_spinlock_release(&curr_proc->fd_lock);
     return COM_SYS_SYSCALL_OK(new_fd);
 }
 
@@ -61,13 +58,15 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret    = COM_SYS_SYSCALL_BASE_OK();
-    com_filedesc_t   *fildes = com_sys_proc_get_fildesc(curr_proc, fd);
-    com_file_t       *file   = com_sys_proc_get_file(curr_proc, fd);
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+
+    com_spinlock_acquire(&curr_proc->fd_lock);
+    com_filedesc_t *fildes = com_sys_proc_get_fildesc_nolock(curr_proc, fd);
+    com_file_t     *file   = com_sys_proc_get_file_nolock(curr_proc, fd);
 
     if (NULL == file || NULL == fildes) {
-        KDEBUG("%d is not a valid fd, arg1=%d", fd, arg1);
-        return COM_SYS_SYSCALL_ERR(EBADF);
+        ret = COM_SYS_SYSCALL_ERR(EBADF);
+        goto end;
     }
 
     if (F_GETFL == op) {
@@ -94,8 +93,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
     ret = COM_SYS_SYSCALL_ERR(ENOSYS);
 
 end:
-    // NOTE: these are the same, but they're also held twice above
     COM_FS_FILE_RELEASE(file);
-    COM_FS_FILE_RELEASE(fildes->file);
+    com_spinlock_release(&curr_proc->fd_lock);
     return ret;
 }

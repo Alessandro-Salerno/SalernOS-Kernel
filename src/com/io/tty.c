@@ -46,8 +46,6 @@
 
 #define CONTROL_DEL 127
 
-// #define TTY_HOST_OUTPUT
-
 static size_t NextttyNum = 0;
 
 // DEV OPS
@@ -88,7 +86,7 @@ static int tty_write(size_t   *bytes_written,
     com_text_tty_t *tty = &tty_data->tty.text;
 
     com_io_term_putsn(tty->term, buf, buflen);
-#if defined(DISABLE_LOGGING) && defined(TTY_HOST_OUTPUT)
+#if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
     kprintf("%.*s", (int)buflen, buf);
 #endif
     *bytes_written = buflen;
@@ -98,26 +96,10 @@ static int tty_write(size_t   *bytes_written,
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_tty_t *tty_data = devdata;
     KASSERT(COM_TTY_TEXT == tty_data->type);
-    com_text_tty_t *tty        = &tty_data->tty.text;
-    tcflag_t        prev_lflag = tty->backend.termios.c_lflag;
+    com_text_tty_t *tty = &tty_data->tty.text;
 
-    int ret =
-        com_io_tty_text_backend_ioctl(&tty->backend, tty_data->vnode, op, buf);
-
-    if (prev_lflag == tty->backend.termios.c_lflag) {
-        return ret;
-    }
-
-    // Ensure that canonical mode is always buffered and raw mode isn't so to
-    // reduce latency in raw mode and minimize useless overhead in canonical
-    // mode
-    if (ICANON & tty->backend.termios.c_lflag) {
-        com_io_term_set_buffering(tty->term, true);
-    } else {
-        com_io_term_set_buffering(tty->term, false);
-    }
-
-    return ret;
+    return com_io_tty_text_backend_ioctl(
+        &tty->backend, tty_data->vnode, op, buf);
 }
 
 // NOTE: returns 0 because it returns the value of errno

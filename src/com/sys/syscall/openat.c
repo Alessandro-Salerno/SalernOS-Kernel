@@ -113,7 +113,6 @@ setup_fd:
     com_vnode_t *new_vn   = NULL;
     int          open_ret = com_fs_vfs_open(&new_vn, file_vn);
     if (0 != open_ret) {
-        KASSERT(false);
         COM_FS_VFS_VNODE_RELEASE(file_vn);
         ret = COM_SYS_SYSCALL_ERR(open_ret);
         goto end;
