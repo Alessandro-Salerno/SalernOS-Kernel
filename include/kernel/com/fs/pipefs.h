@@ -33,6 +33,5 @@ int com_fs_pipefs_write(size_t      *bytes_written,
                         uintmax_t    off,
                         uintmax_t    flags);
 int com_fs_pipefs_close(com_vnode_t *vnode);
-int com_fs_pipefs_isatty(com_vnode_t *node);
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);

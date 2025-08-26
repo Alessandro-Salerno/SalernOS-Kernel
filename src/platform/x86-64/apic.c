@@ -36,14 +36,14 @@
 #define BSP_APIC_ADDR (void *)0xfee00000
 
 typedef enum {
-    LAPIC_EOI        = 0xb0,
-    LAPIC_SIVR       = 0xf0,
-    LAPIC_ICR_LOW    = 0x300,
-    LAPIC_ICR_HIGH   = 0x310,
-    LAPIC_LVT_TIMER  = 0x320,
-    LAPIC_DIV_CONF   = 0x3e0,
-    LAPIC_INIT_COUNT = 0x380,
-    LAPIC_CURR_COUNT = 0x390,
+    E_LAPIC_REG_EOI        = 0xb0,
+    E_LAPIC_REG_SIVR       = 0xf0,
+    E_LAPIC_REG_ICR_LOW    = 0x300,
+    E_LAPIC_REG_ICR_HIGH   = 0x310,
+    E_LAPIC_REG_LVT_TIMER  = 0x320,
+    E_LAPIC_REG_DIV_CONF   = 0x3e0,
+    E_LAPIC_REG_INIT_COUNT = 0x380,
+    E_LAPIC_REG_CURR_COUNT = 0x390,
 } lapic_reg_t;
 
 static uint64_t TicksPerSec;
@@ -65,12 +65,12 @@ static uint16_t pit_read(void) {
 
 void x86_64_lapic_eoi(com_isr_t *isr) {
     (void)isr;
-    lapic_write(LAPIC_EOI, 0);
+    lapic_write(E_LAPIC_REG_EOI, 0);
 }
 
 static void calibrate(void) {
-    lapic_write(LAPIC_LVT_TIMER, 1UL << 16);
-    lapic_write(LAPIC_DIV_CONF, 0);
+    lapic_write(E_LAPIC_REG_LVT_TIMER, 1UL << 16);
+    lapic_write(E_LAPIC_REG_DIV_CONF, 0);
 
     X86_64_IO_OUTB(0x43, 0x34);
     X86_64_IO_OUTB(0x40, 0xff);
@@ -80,7 +80,7 @@ static void calibrate(void) {
     uint16_t start    = 0xffff - pit_read();
     uint16_t meas_pit = start;
 
-    lapic_write(LAPIC_INIT_COUNT, 0xffffffff);
+    lapic_write(E_LAPIC_REG_INIT_COUNT, 0xffffffff);
 
     while (true) {
         meas_pit = 0xffff - pit_read();
@@ -90,13 +90,13 @@ static void calibrate(void) {
         }
     }
 
-    uint64_t meas_lapic = 0xffffffff - lapic_read(LAPIC_CURR_COUNT);
+    uint64_t meas_lapic = 0xffffffff - lapic_read(E_LAPIC_REG_CURR_COUNT);
     TicksPerSec         = (meas_lapic * 1193182UL) / meas_pit;
 }
 
 static void periodic(uint64_t ns, size_t interrupt) {
-    lapic_write(LAPIC_LVT_TIMER, interrupt | 0x20000);
-    lapic_write(LAPIC_INIT_COUNT,
+    lapic_write(E_LAPIC_REG_LVT_TIMER, interrupt | 0x20000);
+    lapic_write(E_LAPIC_REG_INIT_COUNT,
                 ((ns * TicksPerSec) + 1000000000UL - 1) / 1000000000UL);
 }
 
@@ -111,32 +111,32 @@ void x86_64_lapic_bsp_init(void) {
 }
 
 void x86_64_lapic_init(void) {
-    lapic_write(LAPIC_SIVR, (1UL << 8) | 0xff);
-    lapic_write(LAPIC_LVT_TIMER, X86_64_LAPIC_TIMER_INTERRUPT);
-    lapic_write(LAPIC_DIV_CONF, 0);
+    lapic_write(E_LAPIC_REG_SIVR, (1UL << 8) | 0xff);
+    lapic_write(E_LAPIC_REG_LVT_TIMER, X86_64_LAPIC_TIMER_INTERRUPT);
+    lapic_write(E_LAPIC_REG_DIV_CONF, 0);
     periodic(ARCH_TIMER_NS, X86_64_LAPIC_TIMER_INTERRUPT);
 }
 
 void x86_64_lapic_selfipi(void) {
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
-    lapic_write(LAPIC_ICR_LOW,
+    while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
+    lapic_write(E_LAPIC_REG_ICR_LOW,
                 X86_64_LAPIC_SELF_IPI_INTERRUPT | LAPIC_ICR_DEST_SELF |
                     LAPIC_ICR_ASSERT | LAPIC_ICR_EDGE);
-    lapic_write(LAPIC_ICR_HIGH, 0);
+    lapic_write(E_LAPIC_REG_ICR_HIGH, 0);
 }
 
 void x86_64_lapic_send_ipi(uint8_t apic_id, uint8_t vector) {
     // Wait until the previous IPI has been sent
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
+    while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
 
     // Set the target APIC ID in the high ICR register
-    lapic_write(LAPIC_ICR_HIGH, ((uint32_t)apic_id) << 24);
+    lapic_write(E_LAPIC_REG_ICR_HIGH, ((uint32_t)apic_id) << 24);
 
     // Construct the IPI command in the low ICR register
-    lapic_write(LAPIC_ICR_LOW,
+    lapic_write(E_LAPIC_REG_ICR_LOW,
                 vector | LAPIC_ICR_ASSERT |
                     LAPIC_ICR_EDGE); // Fixed delivery mode by default (000)
 
     // Wait for the IPI to be delivered
-    while (lapic_read(LAPIC_ICR_LOW) & 0x1000);
+    while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
 }

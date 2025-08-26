@@ -87,7 +87,7 @@ static int createat(struct tmpfs_dir_entry **outent,
                     size_t                   namelen,
                     uintmax_t                attr) {
     (void)attr;
-    KASSERT(COM_VNODE_TYPE_DIR == dir->type);
+    KASSERT(E_COM_VNODE_TYPE_DIR == dir->type);
 
     struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
     tn_new->lock              = COM_SPINLOCK_NEW();
@@ -145,14 +145,14 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
     tn_root->dirent     = NULL;
     tn_root->dir.parent = NULL;
     vn_root->isroot     = true;
-    vn_root->type       = COM_VNODE_TYPE_DIR;
+    vn_root->type       = E_COM_VNODE_TYPE_DIR;
 
     tmpfs->root       = vn_root;
     tmpfs->mountpoint = mountpoint;
     tmpfs->ops        = &TmpfsOps;
 
     if (NULL != mountpoint) {
-        KASSERT(COM_VNODE_TYPE_DIR == mountpoint->type);
+        KASSERT(E_COM_VNODE_TYPE_DIR == mountpoint->type);
         mountpoint->mountpointof = tmpfs;
     }
 
@@ -178,7 +178,7 @@ int com_fs_tmpfs_create(com_vnode_t **out,
         struct tmpfs_node *tn = (*out)->extra;
         tn->file.size         = 0;
         tn->file.data         = com_fs_pagecache_new();
-        (*out)->type          = COM_VNODE_TYPE_FILE;
+        (*out)->type          = E_COM_VNODE_TYPE_FILE;
     }
 
     if (NULL != dirent) {
@@ -208,7 +208,7 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
 
     tn->dir.parent = parent_data;
     TAILQ_INIT(&tn->dir.entries);
-    (*out)->type = COM_VNODE_TYPE_DIR;
+    (*out)->type = E_COM_VNODE_TYPE_DIR;
 
     com_spinlock_acquire(&parent_data->lock);
     TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
@@ -221,7 +221,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        len) {
-    KASSERT(COM_VNODE_TYPE_DIR == dir->type);
+    KASSERT(E_COM_VNODE_TYPE_DIR == dir->type);
     struct tmpfs_node *dir_data = dir->extra;
     int                ret      = 0;
 
@@ -263,7 +263,7 @@ int com_fs_tmpfs_read(void        *buf,
                       uintmax_t    off,
                       uintmax_t    flags) {
     (void)flags;
-    if (COM_VNODE_TYPE_DIR == node->type) {
+    if (E_COM_VNODE_TYPE_DIR == node->type) {
         return EISDIR;
     }
 
@@ -329,7 +329,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
                        uintmax_t    off,
                        uintmax_t    flags) {
     (void)flags;
-    if (COM_VNODE_TYPE_DIR == node->type) {
+    if (E_COM_VNODE_TYPE_DIR == node->type) {
         return EISDIR;
     }
 
@@ -385,10 +385,10 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     out->st_mode =
         01777; // TODO: this may cause issues (ke says it makes xorg "happy")
 
-    if (COM_VNODE_TYPE_FILE == node->type) {
+    if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;
         out->st_size = file->file.size;
-    } else if (COM_VNODE_TYPE_DIR == node->type) {
+    } else if (E_COM_VNODE_TYPE_DIR == node->type) {
         out->st_mode |= S_IFDIR;
     } else {
         return ENOSYS;
@@ -399,7 +399,7 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
 }
 
 int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
-    if (COM_VNODE_TYPE_DIR == node->type) {
+    if (E_COM_VNODE_TYPE_DIR == node->type) {
         return EISDIR;
     }
 
@@ -416,7 +416,7 @@ int com_fs_tmpfs_readdir(void        *buf,
                          size_t      *bytes_read,
                          com_vnode_t *dir,
                          uintmax_t    off) {
-    if (COM_VNODE_TYPE_DIR != dir->type) {
+    if (E_COM_VNODE_TYPE_DIR != dir->type) {
         return 0;
     }
 
@@ -489,11 +489,11 @@ int com_fs_tmpfs_readdir(void        *buf,
 
     if (NULL == cur->tnode->vnode) {
         dirent->type = DT_UNKNOWN;
-    } else if (COM_VNODE_TYPE_DIR == cur->tnode->vnode->type) {
+    } else if (E_COM_VNODE_TYPE_DIR == cur->tnode->vnode->type) {
         dirent->type = DT_DIR;
-    } else if (COM_VNODE_TYPE_FILE == cur->tnode->vnode->type) {
+    } else if (E_COM_VNODE_TYPE_FILE == cur->tnode->vnode->type) {
         dirent->type = DT_REG;
-    } else if (COM_VNODE_TYPE_LINK == cur->tnode->vnode->type) {
+    } else if (E_COM_VNODE_TYPE_LINK == cur->tnode->vnode->type) {
         dirent->type = DT_LNK;
     } else {
         dirent->type = DT_UNKNOWN;

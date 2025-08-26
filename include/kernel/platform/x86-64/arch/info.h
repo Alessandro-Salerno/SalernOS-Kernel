@@ -38,7 +38,7 @@
      LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
      LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
-#define ARCH_TIMER_NS (16UL * 1000UL * 1000UL)
+#define ARCH_TIMER_NS (8UL * 1000UL * 1000UL)
 #define ARCH_SCHED_NS (64UL * 1000UL * 1000UL)
 
 // This type must contain the following fields:

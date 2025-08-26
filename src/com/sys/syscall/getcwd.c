@@ -71,8 +71,8 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
         }
 
         kmemcpy(&buf[place_idx], name.name, name.namelen);
-        if (COM_VFS_PATH_SEP != buf[place_idx]) { // avoid //usr caes
-            buf[place_idx - 1] = COM_VFS_PATH_SEP;
+        if ('/' != buf[place_idx]) { // avoid //usr caes
+            buf[place_idx - 1] = '/';
             place_idx -= 2; // currently, it points to the first letter of the
                             // current name, thus -1 is the /, -2 is the last
                             // slot for the previous name

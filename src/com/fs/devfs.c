@@ -23,9 +23,6 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/slab.h>
 
-// TODO: implement devfs with vlink by first implementing masks in vlink
-// right now I can't use vlink because forwarding is arbitrarly decided by vfs.c
-
 struct devfs_dev {
     com_vnode_t   *vnode;
     com_dev_ops_t *devops;

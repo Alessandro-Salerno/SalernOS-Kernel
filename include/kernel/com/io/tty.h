@@ -38,7 +38,10 @@
 #define COM_IO_TTY_MOD_RALT   64UL
 #define COM_IO_TTY_MOD_FKEY   128UL
 
-typedef enum com_tty_type { COM_TTY_TEXT, COM_TTY_FRAMEBUFFER } com_tty_type_t;
+typedef enum com_tty_type {
+    E_COM_TTY_TYPE_TEXT,
+    E_COM_TTY_TYPE_FRAMEBUFFER
+} com_tty_type_t;
 
 // This is shared by both PTY and TTY
 typedef struct com_text_tty_backend {

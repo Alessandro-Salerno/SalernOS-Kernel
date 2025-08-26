@@ -28,6 +28,7 @@
 // NOTE: not static so others can call
 volatile com_syscall_t SyscallTable[CONFIG_SYSCALL_MAX];
 
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
 static void log_syscall(volatile com_syscall_t *syscall,
                         arch_syscall_arg_t      args[]) {
     kprintf("%s(", syscall->name);
@@ -95,6 +96,7 @@ static void log_syscall(volatile com_syscall_t *syscall,
 
     kprintf(")");
 }
+#endif
 
 void com_sys_syscall_register(uintmax_t          number,
                               const char        *name,
@@ -144,6 +146,8 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     (void)invoke_ip;
 #define DO_SYSCALL_LOG_AFTER
 #endif
+#else
+    (void)invoke_ip;
 #endif
 
     com_syscall_ret_t ret = syscall->handler(ctx, arg1, arg2, arg3, arg4);

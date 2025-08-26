@@ -46,18 +46,9 @@ struct pipefs_node {
     com_vnode_t            *write_end;
 };
 
-static int pipe_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
-    (void)node;
-    (void)op;
-    (void)buf;
-    return ENOSYS;
-}
-
-static com_vnode_ops_t PipefsNodeOps = {.read   = com_fs_pipefs_read,
-                                        .write  = com_fs_pipefs_write,
-                                        .close  = com_fs_pipefs_close,
-                                        .isatty = com_fs_pipefs_isatty,
-                                        .ioctl  = pipe_ioctl};
+static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
+                                        .write = com_fs_pipefs_write,
+                                        .close = com_fs_pipefs_close};
 
 int com_fs_pipefs_read(void        *buf,
                        size_t       buflen,
@@ -192,11 +183,6 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
     return 0;
 }
 
-int com_fs_pipefs_isatty(com_vnode_t *node) {
-    (void)node;
-    return ENOTTY;
-}
-
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
     TAILQ_INIT(&pipe->readers);
@@ -210,7 +196,7 @@ void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     r->extra        = pipe;
     r->mountpointof = NULL;
     r->ops          = &PipefsNodeOps;
-    r->vfs          = NULL; // TODO: vlink stuff
+    r->vfs          = NULL;
     r->num_ref      = 1;
     pipe->read_end  = r;
 
@@ -218,7 +204,7 @@ void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     w->extra        = pipe;
     w->mountpointof = NULL;
     w->ops          = &PipefsNodeOps;
-    w->vfs          = NULL; // TODO: vlink stuff
+    w->vfs          = NULL;
     w->num_ref      = 1;
     pipe->write_end = w;
 

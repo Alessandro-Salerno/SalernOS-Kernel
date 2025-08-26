@@ -26,10 +26,9 @@
 #include <sys/stat.h>
 #include <vendor/tailq.h>
 
-// TODO: Invent something so this is not an issue
+// NOTE: Forward declaration, definition in <kernel/com/fs/poll.h>
+// It doesn't like it if I include it here
 struct com_poll_head;
-
-#define COM_VFS_PATH_SEP '/'
 
 #define COM_VFS_CREAT_ATTR_GHOST 1
 
@@ -45,9 +44,13 @@ struct com_poll_head;
     }
 
 typedef enum com_vnode_type {
-    COM_VNODE_TYPE_FILE,
-    COM_VNODE_TYPE_DIR,
-    COM_VNODE_TYPE_LINK
+    E_COM_VNODE_TYPE_FILE,
+    E_COM_VNODE_TYPE_DIR,
+    E_COM_VNODE_TYPE_LINK,
+    E_COM_VNODE_TYPE_CHARDEV,
+    E_COM_VNODE_TYPE_FIFO,
+    E_COM_VNODE_TYPE_SOCKET,
+    E_COM_VNODE_TYPE_BLOCKDEV
 } com_vnode_type_t;
 
 typedef struct com_vfs {
@@ -61,14 +64,10 @@ typedef struct com_vnode {
     struct com_vfs       *mountpointof;
     struct com_vfs       *vfs;
     struct com_vnode_ops *ops;
-    struct {
-        struct com_vnode *next;
-        struct com_vnode *prev;
-    } vlink;
-    com_vnode_type_t type;
-    uintmax_t        num_ref;
-    bool             isroot;
-    void            *extra;
+    com_vnode_type_t      type;
+    uintmax_t             num_ref;
+    bool                  isroot;
+    void                 *extra;
 } com_vnode_t;
 
 typedef struct com_vnode_ops {
@@ -138,8 +137,6 @@ typedef struct com_vnctl_name {
     const char *name;
     size_t      namelen;
 } com_vnctl_name_t;
-
-void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink);
 
 int com_fs_vfs_close(com_vnode_t *vnode);
 int com_fs_vfs_lookup(com_vnode_t **out,

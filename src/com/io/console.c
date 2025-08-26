@@ -36,7 +36,7 @@ static void switch_tty(int new_fg) {
     __atomic_store_n(&ForegroundTtyIdx, new_fg, __ATOMIC_SEQ_CST);
 
     if (NULL != fg_tty) {
-        if (COM_TTY_TEXT == fg_tty->type) {
+        if (E_COM_TTY_TYPE_TEXT == fg_tty->type) {
             com_io_term_disable(fg_tty->tty.text.term);
         }
     }
@@ -44,7 +44,7 @@ static void switch_tty(int new_fg) {
     com_tty_t *new_tty = Ttys[new_fg];
 
     if (NULL != new_tty) {
-        if (COM_TTY_TEXT == new_tty->type) {
+        if (E_COM_TTY_TYPE_TEXT == new_tty->type) {
             com_io_term_enable(new_tty->tty.text.term);
         }
     }

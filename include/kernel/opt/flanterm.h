@@ -27,4 +27,4 @@ void              *opt_flanterm_init(arch_framebuffer_t *fb,
                                      uint32_t            bg_color,
                                      size_t              scale_x,
                                      size_t              scale_y);
-com_term_backend_t opt_flanterm_new_context();
+com_term_backend_t opt_flanterm_new_context(void);

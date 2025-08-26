@@ -24,33 +24,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#define GET_VLINK_CHILD(vn)          \
-    while (NULL != vn->vlink.next) { \
-        vn = vn->vlink.next;         \
-    }
-
 #define SKIP_SEPARATORS(path, end)                     \
-    while (path != end && COM_VFS_PATH_SEP == *path) { \
+    while (path != end && '/' == *path) { \
         path++;                                        \
     }
 
-void com_fs_vfs_vlink_set(com_vnode_t *parent, com_vnode_t *vlink) {
-    if (NULL != parent) {
-        if (NULL != parent->vlink.next) {
-            parent->vlink.next->vlink.prev = NULL;
-        }
-
-        parent->vlink.next = vlink;
-    }
-
-    if (NULL != vlink) {
-        vlink->vlink.prev = parent;
-    }
-}
-
 int com_fs_vfs_close(com_vnode_t *vnode) {
-    GET_VLINK_CHILD(vnode);
-
     if (NULL == vnode->ops->close) {
         return ENOSYS;
     }
@@ -66,7 +45,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
     com_vnode_t *ret     = cwd;
     const char  *pathend = path + pathlen;
 
-    if (0 < pathlen && COM_VFS_PATH_SEP == path[0]) {
+    if (0 < pathlen && '/' == path[0]) {
         path++;
         ret = root;
     } else if (NULL == cwd) {
@@ -79,7 +58,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
     const char *section_end = NULL;
     bool        end_reached = false;
     while (path < pathend && !end_reached) {
-        section_end = kmemchr(path, COM_VFS_PATH_SEP, pathend - path);
+        section_end = kmemchr(path, '/', pathend - path);
         end_reached = NULL == section_end;
 
         if (end_reached) {
@@ -97,7 +76,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
         }
 
         if (!dot) {
-            if (COM_VNODE_TYPE_DIR != ret->type) {
+            if (E_COM_VNODE_TYPE_DIR != ret->type) {
                 COM_FS_VFS_VNODE_RELEASE(ret);
                 *out = NULL;
                 return ENOTDIR;
@@ -169,19 +148,7 @@ int com_fs_vfs_link(com_vnode_t *dir,
         return ENOSYS;
     }
 
-    if (0 == src->ops->link(dir, dstname, dstnamelen, src)) {
-        com_vnode_t *link = NULL;
-
-        if (0 == dir->ops->lookup(&link, dir, dstname, dstnamelen) &&
-            NULL != link) {
-            link->vlink.prev = src->vlink.prev;
-            link->vlink.next = src->vlink.next;
-            COM_FS_VFS_VNODE_RELEASE(link);
-            return 0;
-        }
-    }
-
-    return ENOENT;
+    return src->ops->link(dir, dstname, dstnamelen, src);
 }
 
 int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen) {
@@ -198,8 +165,6 @@ int com_fs_vfs_read(void        *buf,
                     com_vnode_t *node,
                     uintmax_t    off,
                     uintmax_t    flags) {
-    GET_VLINK_CHILD(node);
-
     if (NULL == node->ops->read) {
         return ENOSYS;
     }
@@ -219,8 +184,6 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags) {
-    GET_VLINK_CHILD(node);
-
     if (NULL == node->ops->write) {
         return ENOSYS;
     }
@@ -255,8 +218,6 @@ int com_fs_vfs_readdir(void        *buf,
 }
 
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
-    GET_VLINK_CHILD(node);
-
     if (NULL == node->ops->ioctl) {
         return ENOSYS;
     }
@@ -265,8 +226,6 @@ int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
 }
 
 int com_fs_vfs_isatty(com_vnode_t *node) {
-    GET_VLINK_CHILD(node);
-
     if (NULL == node->ops->isatty) {
         return ENOSYS;
     }
@@ -279,7 +238,6 @@ int com_fs_vfs_stat(struct stat *out, com_vnode_t *node) {
         return ENOSYS;
     }
 
-    // TODO: use vlink, but needs to me masked
     kmemset(out, sizeof(struct stat), 0);
     return node->ops->stat(out, node);
 }

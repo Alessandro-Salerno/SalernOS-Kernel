@@ -231,6 +231,8 @@ static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
         struct winsize *ws = (void *)buf;
         ws->ws_col         = pty->backend.cols;
         ws->ws_row         = pty->backend.rows;
+        ws->ws_ypixel      = 0;
+        ws->ws_xpixel      = 0;
         return 0;
     }
 

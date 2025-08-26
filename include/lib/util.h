@@ -18,8 +18,6 @@
 
 #pragma once
 
-// #define DISABLE_LOGGING
-
 #include <kernel/com/io/log.h>
 
 #define KSTR_HELPER(x) #x
@@ -31,9 +29,9 @@
 #define KMIN(x, y) (((x) < (y)) ? (x) : (y))
 #define KMAX(x, y) (((x) > (y)) ? (x) : (y))
 
-#define USER_TEXT __attribute__((section(".user_text")))
-#define USER_DATA __attribute__((section(".user_data")))
-#define USED      __attribute__((used))
+#define KUSER_TEXT __attribute__((section(".user_text")))
+#define KUSER_DATA __attribute__((section(".user_data")))
+#define KUSED      __attribute__((used))
 
 #define KNANOS_PER_SEC 1000000000UL
 #define KFPS(fps)      (KNANOS_PER_SEC / (fps))

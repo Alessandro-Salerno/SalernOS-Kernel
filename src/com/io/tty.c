@@ -59,7 +59,7 @@ static int tty_read(void     *buf,
     (void)off;
 
     com_tty_t *tty_data = devdata;
-    KASSERT(COM_TTY_TEXT == tty_data->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
     return kringbuffer_read(buf,
@@ -82,7 +82,7 @@ static int tty_write(size_t   *bytes_written,
     (void)flags;
 
     com_tty_t *tty_data = devdata;
-    KASSERT(COM_TTY_TEXT == tty_data->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
     com_io_term_putsn(tty->term, buf, buflen);
@@ -95,7 +95,7 @@ static int tty_write(size_t   *bytes_written,
 
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_tty_t *tty_data = devdata;
-    KASSERT(COM_TTY_TEXT == tty_data->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
     return com_io_tty_text_backend_ioctl(
@@ -123,7 +123,7 @@ static int tty_stat(struct stat *out, void *devdata) {
 
 static int tty_poll_head(com_poll_head_t **out, void *devdata) {
     com_tty_t *tty_data = devdata;
-    KASSERT(COM_TTY_TEXT == tty_data->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
     *out                = &tty->backend.slave_ph;
     return 0;
@@ -132,7 +132,7 @@ static int tty_poll_head(com_poll_head_t **out, void *devdata) {
 static int tty_poll(short *revents, void *devdata, short events) {
     (void)events;
     com_tty_t *tty_data = devdata;
-    KASSERT(COM_TTY_TEXT == tty_data->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
     short           out = POLLOUT;
 
@@ -158,7 +158,7 @@ static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
     bool is_del       = false;
 
-    KASSERT(COM_TTY_TEXT == self->type);
+    KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
     com_text_tty_t *tty = &self->tty.text;
 
     if (CONTROL_DEL == c) {
@@ -222,6 +222,8 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
         struct winsize *ws = buf;
         ws->ws_row         = tty_backend->rows;
         ws->ws_col         = tty_backend->cols;
+        ws->ws_ypixel      = 0;
+        ws->ws_xpixel      = 0;
         return 0;
     }
 
@@ -517,7 +519,7 @@ int com_io_tty_init_text(com_vnode_t **out,
     KLOG("initializing text tty %u", tty_num);
 
     com_tty_t *tty_data = com_mm_slab_alloc(sizeof(com_tty_t));
-    tty_data->type      = COM_TTY_TEXT;
+    tty_data->type      = E_COM_TTY_TYPE_TEXT;
     tty_data->kbd_in    = text_tty_kbd_in;
     tty_data->num       = tty_num;
     com_text_tty_t *tty = &tty_data->tty.text;

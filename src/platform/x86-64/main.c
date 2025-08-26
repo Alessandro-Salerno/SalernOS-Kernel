@@ -86,7 +86,7 @@ static char asciitableShifted[] = {
     0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
     '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
 
-USED void kbd(com_isr_t *isr, arch_context_t *ctx) {
+KUSED void kbd(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
     static uint8_t   prev_code = 0;
@@ -173,12 +173,12 @@ end:
     prev_code = code;
 }
 
-USED void kbd_eoi(com_isr_t *isr) {
+KUSED void kbd_eoi(com_isr_t *isr) {
     (void)isr;
     X86_64_IO_OUTB(0x20, 0x20);
 }
 
-USED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
+KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();

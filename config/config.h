@@ -59,8 +59,9 @@
 #define CONFIG_LOG_SEP_LEN      7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL   1 /* Use serial output for kernel logging */
 #define CONFIG_LOG_USE_VNODE    0 /* Also use a vnode for kernel logging */
-#define CONFIG_LOG_SYSCALL_MODE CONST_LOG_SYSCALL_BEFORE /* When log syscall \
-                                                          */
+#define CONFIG_LOG_SYSCALL_MODE                                     \
+    CONST_LOG_SYSCALL_BEFORE                    /* When log syscall \
+                                                 */
 #define CONFIG_ASSERT_ACTION CONST_ASSERT_PANIC /* Action taken by KASSERT */
 #define CONFIG_OPEN_MAX      96   /* Maximum number of FDs per process */
 #define CONFIG_PROC_MAX      1024 /* Maximum number of processes */

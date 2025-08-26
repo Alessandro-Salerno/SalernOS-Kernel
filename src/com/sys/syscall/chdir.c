@@ -45,7 +45,7 @@ COM_SYS_SYSCALL(com_sys_syscall_chdir) {
         return COM_SYS_SYSCALL_ERR(lk_ret);
     }
 
-    if (COM_VNODE_TYPE_DIR != new_cwd->type) {
+    if (E_COM_VNODE_TYPE_DIR != new_cwd->type) {
         COM_FS_VFS_VNODE_RELEASE(new_cwd);
         return COM_SYS_SYSCALL_ERR(ENOTDIR);
     }

@@ -45,7 +45,6 @@ flanterm_backend_set_size(void *termdata, size_t rows, size_t cols) {
     (void)termdata;
     (void)rows;
     (void)cols;
-    // TODO: maybe do something with scaling?
 }
 
 static void flanterm_backend_flush(void *termdata) {
@@ -114,7 +113,7 @@ void *opt_flanterm_init(arch_framebuffer_t *fb,
     return ret;
 }
 
-com_term_backend_t opt_flanterm_new_context() {
+com_term_backend_t opt_flanterm_new_context(void) {
     static com_term_backend_ops_t ops = {.init     = flanterm_backend_init,
                                          .putsn    = flanterm_backend_putsn,
                                          .get_size = flanterm_backend_get_size,

@@ -120,7 +120,7 @@ setup_fd:
 
     // If the open call has spawned a new vnode (as is the case, for example,
     // for /dev/ptmx)
-    if (new_vn != file_vn) {
+    if (new_vn != file_vn && NULL != new_vn) {
         COM_FS_VFS_VNODE_RELEASE(file_vn);
         file_vn = new_vn;
     }
