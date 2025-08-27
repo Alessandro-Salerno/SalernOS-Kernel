@@ -25,75 +25,31 @@
 #include <stdint.h>
 #include <strings.h>
 
-#define INDEXMASK (COM_FS_PAGECACHE_LAYER_SIZE - 1)
-
-static inline void split_index(uint64_t index, uint64_t indices[], size_t len) {
-    for (size_t i = 0; i < len; i++) {
-        indices[i] = (index >> (9 * (len - i - 1))) & INDEXMASK;
-    }
-}
+// This is all temporary while I rewrite VFS
 
 bool com_fs_pagecache_get(uintptr_t       *out,
                           com_pagecache_t *root,
                           uint64_t         index) {
-    uint64_t indices[4] = {0};
-    split_index(index, indices, 4);
-
-    for (size_t i = 0; i < 3; i++) {
-        root = root->inner.next[indices[i]];
-
-        if (NULL == root) {
-            return false;
-        }
-    }
-
-    uintptr_t data = root->leaf.data[indices[3]];
-
-    if ((uintptr_t)NULL == data) {
+    void *out_void;
+    if (0 != kradixtree_get_nolock(&out_void, root, index)) {
         return false;
     }
-
-    *out = data;
+    *out = (uintptr_t)out_void;
     return true;
 }
 
 void com_fs_pagecache_default(uintptr_t       *out,
                               com_pagecache_t *root,
                               uint64_t         index) {
-    uint64_t indices[4] = {0};
-    split_index(index, indices, 4);
-
-    for (size_t i = 0; i < 3; i++) {
-        com_pagecache_t *tmp = root->inner.next[indices[i]];
-
-        if (NULL == tmp) {
-            void *page = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-            kmemset(page, ARCH_PAGE_SIZE, 0);
-            tmp = root->inner.next[indices[i]] = page;
-        }
-
-        root = tmp;
+    if (com_fs_pagecache_get(out, root, index)) {
+        return;
     }
 
-    uintptr_t data = root->leaf.data[indices[3]];
-
-    if ((uintptr_t)NULL == data) {
-        void *page = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
-        kmemset(page, ARCH_PAGE_SIZE, 0);
-        data = root->leaf.data[indices[3]] = (uintptr_t)page;
-    }
-
-    *out = data;
+    void *data = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_zero());
+    kradixtree_put_nolock(root, index, data);
+    *out = (uintptr_t)data;
 }
 
 com_pagecache_t *com_fs_pagecache_new(void) {
-    void *phys = com_mm_pmm_alloc();
-
-    if (NULL == phys) {
-        return NULL;
-    }
-
-    com_pagecache_t *root = (void *)ARCH_PHYS_TO_HHDM(phys);
-    kmemset(root, ARCH_PAGE_SIZE, 0);
-    return root;
+    return kradixtree_new(4);
 }

@@ -24,9 +24,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#define SKIP_SEPARATORS(path, end)                     \
+#define SKIP_SEPARATORS(path, end)        \
     while (path != end && '/' == *path) { \
-        path++;                                        \
+        path++;                           \
     }
 
 int com_fs_vfs_close(com_vnode_t *vnode) {
@@ -45,7 +45,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
     com_vnode_t *ret     = cwd;
     const char  *pathend = path + pathlen;
 
-    if (0 < pathlen && '/' == path[0]) {
+    if (pathlen > 0 && '/' == path[0]) {
         path++;
         ret = root;
     } else if (NULL == cwd) {
@@ -86,11 +86,7 @@ int com_fs_vfs_lookup(com_vnode_t **out,
             ret              = NULL;
             int fsret = dir->ops->lookup(&ret, dir, path, section_end - path);
 
-            if (NULL == ret) {
-                COM_FS_VFS_VNODE_RELEASE(dir);
-                *out = NULL;
-                return ENOENT;
-            } else if (0 != fsret) {
+            if (0 != fsret) {
                 COM_FS_VFS_VNODE_RELEASE(dir);
                 *out = NULL;
                 return fsret;
@@ -125,7 +121,7 @@ int com_fs_vfs_create(com_vnode_t **out,
         return ENOSYS;
     }
 
-    return dir->ops->create(out, dir, name, namelen, attr);
+    return dir->ops->create(out, dir, name, namelen, attr, 0);
 }
 
 int com_fs_vfs_mkdir(com_vnode_t **out,
@@ -137,7 +133,7 @@ int com_fs_vfs_mkdir(com_vnode_t **out,
         return ENOSYS;
     }
 
-    return parent->ops->mkdir(out, parent, name, namelen, attr);
+    return parent->ops->mkdir(out, parent, name, namelen, attr, 0);
 }
 
 int com_fs_vfs_link(com_vnode_t *dir,
@@ -197,12 +193,12 @@ int com_fs_vfs_write(size_t      *bytes_written,
     return node->ops->write(bytes_written, node, buf, buflen, off, flags);
 }
 
-int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link) {
-    if (NULL == link->ops->resolve) {
+int com_fs_vfs_readlink(const char **path, size_t *pathlen, com_vnode_t *link) {
+    if (NULL == link->ops->readlink) {
         return ENOSYS;
     }
 
-    return link->ops->resolve(path, pathlen, link);
+    return link->ops->readlink(path, pathlen, link);
 }
 
 int com_fs_vfs_readdir(void        *buf,

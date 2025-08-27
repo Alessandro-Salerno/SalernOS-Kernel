@@ -159,6 +159,22 @@ void *com_mm_pmm_alloc_many(size_t pages) {
     return ret;
 }
 
+void *com_mm_pmm_alloc_zero(void) {
+    void *ret = com_mm_pmm_alloc();
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
+    kmemset(ret, ARCH_PAGE_SIZE, 0);
+#endif
+    return ret;
+}
+
+void *com_mm_pmm_alloc_many_zero(size_t pages) {
+    void *ret = com_mm_pmm_alloc_many(pages);
+#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
+    kmemset(ret, ARCH_PAGE_SIZE * pages, 0);
+#endif
+    return ret;
+}
+
 void com_mm_pmm_free(void *page) {
     com_mm_pmm_free_many(page, 1);
 }

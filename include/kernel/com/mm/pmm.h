@@ -23,6 +23,8 @@
 
 void *com_mm_pmm_alloc(void);
 void *com_mm_pmm_alloc_many(size_t pages);
+void *com_mm_pmm_alloc_zero(void);
+void *com_mm_pmm_alloc_many_zero(size_t pages);
 void  com_mm_pmm_free(void *page);
 void  com_mm_pmm_free_many(void *base, size_t pages);
 void  com_mm_pmm_get_info(uintmax_t *used_mem,

@@ -125,6 +125,12 @@ setup_fd:
         file_vn = new_vn;
     }
 
+    if ((O_DIRECTORY & flags) && E_COM_VNODE_TYPE_DIR != file_vn->type) {
+        COM_FS_VFS_VNODE_RELEASE(file_vn);
+        ret = COM_SYS_SYSCALL_ERR(ENOTDIR);
+        goto end;
+    }
+
     int fd = com_sys_proc_next_fd(curr_proc);
     if (-1 == fd) {
         ret.err = EMFILE;

@@ -541,6 +541,7 @@ int com_io_tty_init_text(com_vnode_t **out,
         goto end;
     }
 
+    tty_dev->type   = E_COM_VNODE_TYPE_CHARDEV;
     tty_data->vnode = tty_dev;
     KDEBUG("tty vn=%x");
 

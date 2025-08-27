@@ -460,7 +460,7 @@ static com_dev_ops_t CloneDevOps = {.open = ptmx_open, .stat = ptmx_stat};
 int com_io_pty_init(void) {
     KLOG("initializing pty subsytem");
 
-    int ret = com_fs_devfs_mkdir(&PtsDir, NULL, "pts", 3, 0);
+    int ret = com_fs_devfs_mkdir(&PtsDir, NULL, "pts", 3, 0, 0);
     if (0 != ret) {
         goto end;
     }

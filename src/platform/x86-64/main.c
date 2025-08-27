@@ -252,23 +252,23 @@ void kernel_entry(void) {
     com_vnode_t *tmpfs_mountpoint = NULL;
     com_vfs_t   *tmpfs            = NULL;
     com_fs_tmpfs_mkdir(
-        &tmpfs_mountpoint, rootfs->root, "tmp", kstrlen("tmp"), 0);
+        &tmpfs_mountpoint, rootfs->root, "tmp", kstrlen("tmp"), 0, 0);
     com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
 
     com_vnode_t *procfs_mountpoint = NULL;
     com_vfs_t   *procfs            = NULL;
     com_fs_tmpfs_mkdir(
-        &procfs_mountpoint, rootfs->root, "proc", kstrlen("proc"), 0);
+        &procfs_mountpoint, rootfs->root, "proc", kstrlen("proc"), 0, 0);
     com_fs_tmpfs_mount(&procfs, procfs_mountpoint);
 
     com_vnode_t *proc_kernel = NULL;
     com_fs_tmpfs_mkdir(
-        &proc_kernel, procfs->root, "kernel", kstrlen("kernel"), 0);
+        &proc_kernel, procfs->root, "kernel", kstrlen("kernel"), 0, 0);
 
 #if CONFIG_LOG_USE_VNODE
 #warning "log to vnode is experimental!"
     com_vnode_t *kernel_log = NULL;
-    com_fs_tmpfs_create(&kernel_log, proc_kernel, "log", kstrlen("log"), 0);
+    com_fs_tmpfs_create(&kernel_log, proc_kernel, "log", kstrlen("log"), 0, 0);
     com_io_log_set_vnode(kernel_log);
 #endif
 

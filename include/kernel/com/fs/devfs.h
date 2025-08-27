@@ -49,12 +49,14 @@ int com_fs_devfs_create(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
-                        uintmax_t     attr);
+                        uintmax_t     attr,
+                        uintmax_t     fsattr);
 int com_fs_devfs_mkdir(com_vnode_t **out,
                        com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
-                       uintmax_t     attr);
+                       uintmax_t     attr,
+                       uintmax_t     fsattr);
 int com_fs_devfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,

@@ -30,8 +30,6 @@
 // It doesn't like it if I include it here
 struct com_poll_head;
 
-#define COM_VFS_CREAT_ATTR_GHOST 1
-
 #define COM_FS_VFS_VNCTL_GETNAME 1
 
 #define COM_FS_VFS_VNODE_HOLD(node) \
@@ -80,12 +78,14 @@ typedef struct com_vnode_ops {
                   com_vnode_t  *dir,
                   const char   *name,
                   size_t        namelen,
-                  uintmax_t     attr);
+                  uintmax_t     attr,
+                  uintmax_t     fsattr);
     int (*mkdir)(com_vnode_t **out,
                  com_vnode_t  *parent,
                  const char   *name,
                  size_t        namelen,
-                 uintmax_t     attr);
+                 uintmax_t     attr,
+                 uintmax_t     fsattr);
     int (*link)(com_vnode_t *dir,
                 const char  *dstname,
                 size_t       dstnamelen,
@@ -103,7 +103,7 @@ typedef struct com_vnode_ops {
                  size_t       buflen,
                  uintmax_t    off,
                  uintmax_t    flags);
-    int (*resolve)(const char **path, size_t *pathlen, com_vnode_t *link);
+    int (*readlink)(const char **path, size_t *pathlen, com_vnode_t *link);
     int (*readdir)(void        *buf,
                    size_t       buflen,
                    size_t      *bytes_read,
@@ -171,7 +171,7 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags);
-int com_fs_vfs_resolve(const char **path, size_t *pathlen, com_vnode_t *link);
+int com_fs_vfs_readlink(const char **path, size_t *pathlen, com_vnode_t *link);
 int com_fs_vfs_readdir(void        *buf,
                        size_t       buflen,
                        size_t      *bytes_read,

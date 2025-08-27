@@ -73,7 +73,6 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .lookup   = com_fs_tmpfs_lookup,
                                        .read     = com_fs_tmpfs_read,
                                        .write    = com_fs_tmpfs_write,
-                                       .isatty   = com_fs_tmpfs_isatty,
                                        .stat     = com_fs_tmpfs_stat,
                                        .truncate = com_fs_tmpfs_truncate,
                                        .readdir  = com_fs_tmpfs_readdir,
@@ -85,7 +84,8 @@ static int createat(struct tmpfs_dir_entry **outent,
                     com_vnode_t             *dir,
                     const char              *name,
                     size_t                   namelen,
-                    uintmax_t                attr) {
+                    uintmax_t                attr,
+                    uintmax_t                fsattr) {
     (void)attr;
     KASSERT(E_COM_VNODE_TYPE_DIR == dir->type);
 
@@ -94,7 +94,7 @@ static int createat(struct tmpfs_dir_entry **outent,
     tn_new->num_links         = 1;
 
     struct tmpfs_dir_entry *dirent = NULL;
-    if (!(COM_FS_TMPFS_NO_DIRENT & attr)) {
+    if (!(COM_FS_TMPFS_ATTR_NO_DIRENT & fsattr)) {
         dirent = com_mm_slab_alloc(sizeof(struct tmpfs_dir_entry) + namelen);
         dirent->tnode   = tn_new;
         dirent->namelen = namelen;
@@ -166,15 +166,16 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
-                        uintmax_t     attr) {
+                        uintmax_t     attr,
+                        uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
-    int inner = createat(&dirent, out, dir, name, namelen, attr);
+    int inner = createat(&dirent, out, dir, name, namelen, attr, fsattr);
 
     if (0 != inner) {
         return inner;
     }
 
-    if (!(COM_VFS_CREAT_ATTR_GHOST & attr)) {
+    if (!(COM_FS_TMPFS_ATTR_GHOST & fsattr)) {
         struct tmpfs_node *tn = (*out)->extra;
         tn->file.size         = 0;
         tn->file.data         = com_fs_pagecache_new();
@@ -195,9 +196,10 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
-                       uintmax_t     attr) {
+                       uintmax_t     attr,
+                       uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
-    int inner = createat(&dirent, out, parent, name, namelen, attr);
+    int inner = createat(&dirent, out, parent, name, namelen, attr, fsattr);
 
     if (0 != inner) {
         return inner;
@@ -359,8 +361,6 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
             end = off + buflen;
         }
 
-        // TODO: this is probably correct, but if something goes wrong, check
-        // the mod
         kmemcpy((uint8_t *)page + (cur % ARCH_PAGE_SIZE),
                 (uint8_t *)buf + cur - off,
                 end - cur);
@@ -406,7 +406,6 @@ int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
     struct tmpfs_node *file = node->extra;
     com_spinlock_acquire(&file->lock);
     file->file.size = size;
-    // TODO: evict from page cache
     com_spinlock_release(&file->lock);
     return 0;
 }
@@ -417,7 +416,7 @@ int com_fs_tmpfs_readdir(void        *buf,
                          com_vnode_t *dir,
                          uintmax_t    off) {
     if (E_COM_VNODE_TYPE_DIR != dir->type) {
-        return 0;
+        return ENOTDIR;
     }
 
     if (0 == buflen) {
@@ -495,6 +494,14 @@ int com_fs_tmpfs_readdir(void        *buf,
         dirent->type = DT_REG;
     } else if (E_COM_VNODE_TYPE_LINK == cur->tnode->vnode->type) {
         dirent->type = DT_LNK;
+    } else if (E_COM_VNODE_TYPE_CHARDEV == cur->tnode->vnode->type) {
+        dirent->type = DT_CHR;
+    } else if (E_COM_VNODE_TYPE_FIFO == cur->tnode->vnode->type) {
+        dirent->type = DT_FIFO;
+    } else if (E_COM_VNODE_TYPE_SOCKET == cur->tnode->vnode->type) {
+        dirent->type = DT_SOCK;
+    } else if (E_COM_VNODE_TYPE_BLOCKDEV == cur->tnode->vnode->type) {
+        dirent->type = DT_BLK;
     } else {
         dirent->type = DT_UNKNOWN;
     }

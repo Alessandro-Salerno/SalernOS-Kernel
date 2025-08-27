@@ -20,7 +20,8 @@
 
 #include <kernel/com/fs/vfs.h>
 
-#define COM_FS_TMPFS_NO_DIRENT (1UL << 16)
+#define COM_FS_TMPFS_ATTR_GHOST     1
+#define COM_FS_TMPFS_ATTR_NO_DIRENT (1 << 1)
 
 // VFS OPS
 
@@ -33,12 +34,14 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
-                        uintmax_t     attr);
+                        uintmax_t     attr,
+                        uintmax_t     fsattr);
 int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        com_vnode_t  *parent,
                        const char   *name,
                        size_t        namelen,
-                       uintmax_t     attr);
+                       uintmax_t     attr,
+                       uintmax_t     fsattr);
 int com_fs_tmpfs_lookup(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
@@ -55,7 +58,6 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
                        size_t       buflen,
                        uintmax_t    off,
                        uintmax_t    flags);
-int com_fs_tmpfs_isatty(com_vnode_t *node);
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size);
 int com_fs_tmpfs_readdir(void        *buf,
