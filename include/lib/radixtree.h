@@ -33,9 +33,9 @@
     ((sizeof(uintmax_t) * CHAR_BIT - __builtin_clzll(UINTMAX_MAX)) / \
      KRADIXTREE_INDEX_BITS)
 
-#define KRADIXTREE_INIT(rxtreeptr, num_layers)    \
-    KASSERT(num_layers <= KRADIXTREE_MAX_LAYERS); \
-    (rxtreeptr)->num_layers = num_layers;         \
+#define KRADIXTREE_INIT(rxtreeptr, layers)        \
+    KASSERT(layers <= KRADIXTREE_MAX_LAYERS);     \
+    (rxtreeptr)->num_layers = layers;             \
     (rxtreeptr)->lock       = COM_SPINLOCK_NEW(); \
     (rxtreeptr)->back       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_zero())
 
@@ -66,3 +66,5 @@ int           kradixtree_get(void **out, kradixtree_t *rxtree, uintmax_t index);
 int kradixtree_get_nolock(void **out, kradixtree_t *rxtree, uintmax_t index);
 int kradixtree_put(kradixtree_t *rxtree, uintmax_t index, void *data);
 int kradixtree_put_nolock(kradixtree_t *rxtree, uintmax_t index, void *data);
+int kradixtree_remove(kradixtree_t *rxtree, uintmax_t index);
+int kradixtree_remove_nolock(kradixtree_t *rxtree, uintmax_t index);

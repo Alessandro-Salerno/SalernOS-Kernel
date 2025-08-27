@@ -298,16 +298,19 @@ void kernel_entry(void) {
         com_io_console_add_tty(tty_data);
     }
 
+    com_sys_proc_init();
     com_io_pty_init();
 
-    char *const   argv[] = {"/boot/init", NULL};
-    char *const   envp[] = {NULL};
+    char *const   argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};
+    char *const   envp[] = {CONFIG_INIT_ENV};
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, rootfs->root, rootfs->root);
-    com_thread_t *thread = com_sys_thread_new(proc, NULL, 0, NULL);
-    KASSERT(
-        0 ==
-        com_sys_elf64_prepare_proc(
-            &proc->page_table, "/boot/init", argv, envp, proc, &thread->ctx));
+    com_thread_t *thread  = com_sys_thread_new(proc, NULL, 0, NULL);
+    int           elf_ret = com_sys_elf64_prepare_proc(
+        &proc->page_table, CONFIG_INIT_PATH, argv, envp, proc, &thread->ctx);
+
+    if (0 != elf_ret) {
+        com_panic(NULL, "unable to start init program at %s", CONFIG_INIT_PATH);
+    }
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
     stdfile->vnode      = main_tty_dev;

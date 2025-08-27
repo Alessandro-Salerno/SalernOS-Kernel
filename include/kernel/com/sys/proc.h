@@ -128,3 +128,4 @@ int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group);
 com_proc_group_t   *com_sys_proc_get_group_by_pgid(pid_t pgid);
 com_proc_session_t *com_sys_proc_new_session_nolock(com_proc_t  *leader,
                                                     com_vnode_t *tty);
+void                com_sys_proc_init(void);

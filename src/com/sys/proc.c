@@ -27,20 +27,17 @@
 #include <kernel/platform/mmu.h>
 #include <lib/hashmap.h>
 #include <lib/mem.h>
+#include <lib/radixtree.h>
 #include <lib/util.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static com_spinlock_t PidLock                    = COM_SPINLOCK_NEW();
-static com_spinlock_t GlobalProcLock             = COM_SPINLOCK_NEW();
-static com_proc_t    *Processes[CONFIG_PROC_MAX] = {0};
-static pid_t          NextPid                    = 1;
-
-static khashmap_t     ProcGroupMap;
-static com_spinlock_t ProcGroupLock = COM_SPINLOCK_NEW();
-static bool           ProcGroupInit = false;
+static com_spinlock_t GlobalProcLock = COM_SPINLOCK_NEW();
+static kradixtree_t   Processes;
+static pid_t          NextPid = 1;
+static kradixtree_t   ProcGroupMap;
 
 static void proc_update_fd_hint(com_proc_t *proc) {
     // Best case: there's a file after the hint
@@ -82,12 +79,11 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->threads_lock = COM_SPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);
 
-    // TODO: use atomic operations (faster)
-    com_spinlock_acquire(&PidLock);
+    com_spinlock_acquire(&Processes.lock);
     KASSERT(NextPid <= CONFIG_PROC_MAX);
-    proc->pid                = NextPid++;
-    Processes[proc->pid - 1] = proc;
-    com_spinlock_release(&PidLock);
+    proc->pid = NextPid++;
+    kradixtree_put_nolock(&Processes, proc->pid - 1, proc);
+    com_spinlock_release(&Processes.lock);
 
     proc->fd_lock = COM_SPINLOCK_NEW();
     proc->next_fd = 0;
@@ -113,7 +109,8 @@ void com_sys_proc_destroy(com_proc_t *proc) {
     if (NULL != parent) {
         __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
-    Processes[proc->pid - 1] = NULL;
+    // TODO: Operation is unlocked now because PID recycling is not supported
+    kradixtree_remove_nolock(&Processes, proc->pid - 1);
     com_spinlock_acquire(&proc->pg_lock);
     if (NULL != proc->proc_group) {
         TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
@@ -243,14 +240,18 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
         return NULL;
     }
 
-    return Processes[pid - 1];
+    com_proc_t *ret = NULL;
+    kradixtree_get_nolock((void *)&ret, &Processes, pid - 1);
+    return ret;
 }
 
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
     for (size_t i = 0; i < CONFIG_PROC_MAX; i++) {
-        com_proc_t *candidate = Processes[i];
+        com_proc_t *candidate = NULL;
+        kradixtree_get_nolock((void *)&candidate, &Processes, i);
 
-        if (candidate->parent_pid == proc->pid && !candidate->exited) {
+        if (NULL != candidate && candidate->parent_pid == proc->pid &&
+            !candidate->exited) {
             return candidate;
         }
     }
@@ -371,12 +372,7 @@ void com_sys_proc_terminate(com_proc_t *proc, int ecode) {
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
                                          com_proc_session_t *session) {
-    com_spinlock_acquire(&ProcGroupLock);
-    if (!ProcGroupInit) {
-        KHASHMAP_INIT(&ProcGroupMap);
-        ProcGroupInit = true;
-    }
-
+    com_spinlock_acquire(&ProcGroupMap.lock);
     com_proc_group_t *group = com_mm_slab_alloc(sizeof(com_proc_group_t));
     group->procs_lock       = COM_SPINLOCK_NEW();
     group->pgid             = leader->pid;
@@ -387,9 +383,9 @@ com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
         group->session = leader->proc_group->session;
     }
 
-    KASSERT(0 == KHASHMAP_PUT(&ProcGroupMap, &group->pgid, group));
+    KASSERT(0 == kradixtree_put_nolock(&ProcGroupMap, group->pgid, group));
     KDEBUG("created pgid=%d", group->pgid);
-    com_spinlock_release(&ProcGroupLock);
+    com_spinlock_release(&ProcGroupMap.lock);
     return group;
 }
 
@@ -424,12 +420,12 @@ int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group) {
 }
 
 com_proc_group_t *com_sys_proc_get_group_by_pgid(pid_t pgid) {
-    com_spinlock_acquire(&ProcGroupLock);
+    com_spinlock_acquire(&ProcGroupMap.lock);
     com_proc_group_t *group;
-    if (0 != KHASHMAP_GET(&group, &ProcGroupMap, &pgid)) {
+    if (0 != kradixtree_get_nolock((void **)&group, &ProcGroupMap, pgid)) {
         group = NULL;
     }
-    com_spinlock_release(&ProcGroupLock);
+    com_spinlock_release(&ProcGroupMap.lock);
     return group;
 }
 
@@ -455,4 +451,12 @@ com_proc_session_t *com_sys_proc_new_session_nolock(com_proc_t  *leader,
 
     KDEBUG("pid=%d is now leader of session sid=%d", leader->pid, session->sid);
     return session;
+}
+
+void com_sys_proc_init(void) {
+    // 2 layers of radix tree are sufficient to hold like 260K processes on a
+    // 64-bit system, so they should be enough. More layers may break
+    // compatibility and cause lookup overhead
+    KRADIXTREE_INIT(&Processes, 2);
+    KRADIXTREE_INIT(&ProcGroupMap, 2);
 }

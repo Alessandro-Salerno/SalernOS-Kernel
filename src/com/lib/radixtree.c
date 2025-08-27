@@ -99,3 +99,28 @@ int kradixtree_put_nolock(kradixtree_t *rxtree, uintmax_t index, void *data) {
     root->leaves[indices[last_layer]] = data;
     return 0;
 }
+
+int kradixtree_remove(kradixtree_t *rxtree, uintmax_t index) {
+    com_spinlock_acquire(&rxtree->lock);
+    int ret = kradixtree_remove_nolock(rxtree, index);
+    com_spinlock_release(&rxtree->lock);
+    return ret;
+}
+
+int kradixtree_remove_nolock(kradixtree_t *rxtree, uintmax_t index) {
+    uintmax_t indices[KRADIXTREE_MAX_LAYERS] = {0};
+    split_index(indices, index, rxtree->num_layers);
+    kradixtree_back_t *root       = rxtree->back;
+    size_t             last_layer = rxtree->num_layers - 1;
+
+    for (size_t i = 0; i < last_layer; i++) {
+        root = root->branches[indices[i]];
+        if (NULL == root) {
+            return ENOENT;
+        }
+    }
+
+    KASSERT(NULL != root->leaves[indices[last_layer]]);
+    root->leaves[indices[last_layer]] = NULL;
+    return 0;
+}
