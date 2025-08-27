@@ -24,13 +24,13 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stddef.h>
@@ -45,8 +45,8 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     com_thread_t *cur_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc       = cur_thread->proc;
 
-    com_spinlock_acquire(&proc->fd_lock);
-    com_spinlock_acquire(&proc->pages_lock);
+    kspinlock_acquire(&proc->fd_lock);
+    kspinlock_acquire(&proc->pages_lock);
 
     arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
 
@@ -74,10 +74,10 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     ARCH_CONTEXT_FORK(new_thread, *ctx);
 
     __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
-    com_spinlock_release(&proc->fd_lock);
-    com_spinlock_release(&proc->pages_lock);
+    kspinlock_release(&proc->fd_lock);
+    kspinlock_release(&proc->pages_lock);
 
-    com_spinlock_acquire(&proc->signal_lock);
+    kspinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i]) {
             com_sigaction_t *sa    = com_mm_slab_alloc(sizeof(com_sigaction_t));
@@ -85,7 +85,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
             new_proc->sigaction[i] = sa;
         }
     }
-    com_spinlock_release(&proc->signal_lock);
+    kspinlock_release(&proc->signal_lock);
 
     new_thread->runnable = false;
     com_sys_thread_ready(new_thread);

@@ -21,19 +21,19 @@
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
 #include <lib/hashmap.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
 static khashmap_t              ZombieProcMap;
-static com_spinlock_t          ZombieProcLock = COM_SPINLOCK_NEW();
+static kspinlock_t             ZombieProcLock = KSPINLOCK_NEW();
 static struct com_thread_tailq ZombieThreadQueue;
 
 static void sched_idle(void) {
@@ -52,10 +52,10 @@ static inline void *read_cr3(void) {
 
 static void sched_reaper_thread(void) {
     while (true) {
-        com_spinlock_acquire(&ZombieProcLock);
+        kspinlock_acquire(&ZombieProcLock);
         for (com_thread_t *zombie;
              NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue));) {
-            com_spinlock_acquire(&zombie->sched_lock);
+            kspinlock_acquire(&zombie->sched_lock);
             ARCH_CPU_GET_THREAD()->lock_depth--;
             com_proc_t *proc = zombie->proc;
             TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
@@ -64,7 +64,7 @@ static void sched_reaper_thread(void) {
                 KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
             }
         }
-        com_spinlock_release(&ZombieProcLock);
+        kspinlock_release(&ZombieProcLock);
         KHASHMAP_FOREACH(&ZombieProcMap) {
             com_proc_t *proc = entry->value;
 
@@ -80,13 +80,13 @@ static void sched_reaper_thread(void) {
 
 void com_sys_sched_yield_nolock(void) {
     arch_cpu_t *cpu = ARCH_CPU_GET();
-    com_spinlock_acquire(&cpu->runqueue_lock);
+    kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
     KASSERT(curr->sched_lock);
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
-        com_spinlock_release(&cpu->runqueue_lock);
+        kspinlock_release(&cpu->runqueue_lock);
         return;
     }
 
@@ -95,14 +95,14 @@ void com_sys_sched_yield_nolock(void) {
     // holding here
     bool zombie_acquired = false;
     if (curr->exited) {
-        com_spinlock_acquire(&ZombieProcLock);
+        kspinlock_acquire(&ZombieProcLock);
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
         zombie_acquired = true;
     }
     while (NULL != next &&
            (next->exited || (NULL != next->proc && next->proc->exited))) {
         if (!zombie_acquired) {
-            com_spinlock_acquire(&ZombieProcLock);
+            kspinlock_acquire(&ZombieProcLock);
             zombie_acquired = true;
         }
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
@@ -110,7 +110,7 @@ void com_sys_sched_yield_nolock(void) {
         next = TAILQ_FIRST(&cpu->sched_queue);
     }
     if (zombie_acquired) {
-        com_spinlock_release(&ZombieProcLock);
+        kspinlock_release(&ZombieProcLock);
     }
 
     if (NULL != curr->proc) {
@@ -119,8 +119,8 @@ void com_sys_sched_yield_nolock(void) {
 
     if (NULL == next) {
         if (curr->runnable) {
-            com_spinlock_release(&cpu->runqueue_lock);
-            com_spinlock_release(&curr->sched_lock);
+            kspinlock_release(&cpu->runqueue_lock);
+            kspinlock_release(&curr->sched_lock);
             return;
         }
 
@@ -136,7 +136,7 @@ void com_sys_sched_yield_nolock(void) {
         TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
     }
 
-    com_spinlock_release(&cpu->runqueue_lock);
+    kspinlock_release(&cpu->runqueue_lock);
 
     arch_mmu_pagetable_t *prev_pt = NULL;
     arch_mmu_pagetable_t *next_pt = NULL;
@@ -187,7 +187,7 @@ void com_sys_sched_yield_nolock(void) {
 }
 
 void com_sys_sched_yield(void) {
-    com_spinlock_acquire(&ARCH_CPU_GET_THREAD()->sched_lock);
+    kspinlock_acquire(&ARCH_CPU_GET_THREAD()->sched_lock);
     com_sys_sched_yield_nolock();
     // lock released elsewhere
 }
@@ -199,9 +199,9 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 }
 
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
-                        com_spinlock_t          *cond) {
+                        kspinlock_t             *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    com_spinlock_acquire(&curr->sched_lock);
+    kspinlock_acquire(&curr->sched_lock);
 
     // curr->cpu is nulled and curr is removed from runqueue in sched, no need
     // to do it here. In fact, this has caused issues, specifically with
@@ -212,55 +212,55 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
     curr->runnable     = false;
     TAILQ_INSERT_TAIL(waiting_on, curr, threads);
 
-    com_spinlock_release(cond);
+    kspinlock_release(cond);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
-    com_spinlock_acquire(cond);
+    kspinlock_acquire(cond);
 }
 
 void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     arch_cpu_t   *currcpu     = ARCH_CPU_GET();
     com_thread_t *next        = TAILQ_FIRST(waiters);
-    com_spinlock_acquire(&curr_thread->sched_lock);
+    kspinlock_acquire(&curr_thread->sched_lock);
 
     if (NULL != next) {
-        com_spinlock_acquire(&next->sched_lock);
+        kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         TAILQ_REMOVE_HEAD(waiters, threads);
-        com_spinlock_acquire(&currcpu->runqueue_lock);
+        kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
         next->runnable     = true;
         next->waiting_on   = NULL;
         next->waiting_cond = NULL;
-        com_spinlock_release(&currcpu->runqueue_lock);
-        com_spinlock_release(&next->sched_lock);
+        kspinlock_release(&currcpu->runqueue_lock);
+        kspinlock_release(&next->sched_lock);
     }
 
-    com_spinlock_release(&curr_thread->sched_lock);
+    kspinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     arch_cpu_t   *currcpu     = ARCH_CPU_GET();
-    com_spinlock_acquire(&curr_thread->sched_lock);
+    kspinlock_acquire(&curr_thread->sched_lock);
 
     for (com_thread_t *next; NULL != (next = TAILQ_FIRST(waiters));) {
-        com_spinlock_acquire(&next->sched_lock);
+        kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         TAILQ_REMOVE_HEAD(waiters, threads);
-        com_spinlock_acquire(&currcpu->runqueue_lock);
+        kspinlock_acquire(&currcpu->runqueue_lock);
         next->cpu = currcpu;
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
         next->runnable     = true;
         next->waiting_on   = NULL;
         next->waiting_cond = NULL;
-        com_spinlock_release(&currcpu->runqueue_lock);
-        com_spinlock_release(&next->sched_lock);
+        kspinlock_release(&currcpu->runqueue_lock);
+        kspinlock_release(&next->sched_lock);
     }
 
-    com_spinlock_release(&curr_thread->sched_lock);
+    kspinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
@@ -268,19 +268,19 @@ void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
     if (NULL != thread->waiting_on) {
         KASSERT(NULL == thread->cpu);
         TAILQ_REMOVE(thread->waiting_on, thread, threads);
-        com_spinlock_acquire(&currcpu->runqueue_lock);
+        kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, thread, threads);
         thread->runnable     = true;
         thread->waiting_on   = NULL;
         thread->waiting_cond = NULL;
-        com_spinlock_release(&currcpu->runqueue_lock);
+        kspinlock_release(&currcpu->runqueue_lock);
     }
 }
 
 void com_sys_sched_notify_thread(com_thread_t *thread) {
-    com_spinlock_acquire(&thread->sched_lock);
+    kspinlock_acquire(&thread->sched_lock);
     com_sys_sched_notify_thread_nolock(thread);
-    com_spinlock_release(&thread->sched_lock);
+    kspinlock_release(&thread->sched_lock);
 }
 
 void com_sys_sched_init(void) {

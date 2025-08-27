@@ -27,9 +27,9 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
-#include <kernel/com/sys/signal.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/spinlock.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -40,14 +40,14 @@ typedef struct com_proc_session {
     pid_t                       sid;
     com_vnode_t                *tty;
     struct com_proc_group_tailq proc_groups;
-    com_spinlock_t              pg_lock;
+    kspinlock_t                 pg_lock;
 } com_proc_session_t;
 
 typedef struct com_proc_group {
     pid_t                 pgid;
     com_proc_session_t   *session;
     struct com_proc_tailq procs;
-    com_spinlock_t        procs_lock;
+    kspinlock_t           procs_lock;
     TAILQ_ENTRY(com_proc_group) proc_groups;
 } com_proc_group_t;
 
@@ -55,7 +55,7 @@ typedef struct com_proc {
     pid_t pid;
     pid_t parent_pid;
     bool  exited;
-    int   stop_signal; // COM_SYS_SIGNAL_NONE if not stopped, signal number
+    int   stop_signal; // COM_IPC_SIGNAL_NONE if not stopped, signal number
                        // otherwise
     bool                  stop_notified;
     int                   exit_status;
@@ -64,25 +64,25 @@ typedef struct com_proc {
 
     com_vnode_t           *root;
     _Atomic(com_vnode_t *) cwd;
-    com_spinlock_t         fd_lock;
+    kspinlock_t            fd_lock;
     int                    next_fd;
     com_filedesc_t         fd[CONFIG_OPEN_MAX];
 
-    com_spinlock_t pages_lock;
-    size_t         used_pages;
+    kspinlock_t pages_lock;
+    size_t      used_pages;
 
     struct com_thread_tailq notifications;
 
-    com_spinlock_t          threads_lock;
+    kspinlock_t             threads_lock;
     struct com_thread_tailq threads;
     size_t                  num_ref;
 
-    com_spinlock_t    pg_lock;
+    kspinlock_t       pg_lock;
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
     bool did_execve;
 
-    com_spinlock_t        signal_lock;
+    kspinlock_t           signal_lock;
     struct com_sigaction *sigaction[NSIG];
     com_sigmask_t         pending_signals;
     com_sigmask_t         masked_signals;

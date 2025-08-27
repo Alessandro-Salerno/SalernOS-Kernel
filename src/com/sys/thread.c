@@ -22,12 +22,12 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <lib/spinlock.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -41,7 +41,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->exited       = false;
     thread->ctx          = ctx;
     thread->lock_depth   = 1;
-    thread->sched_lock   = COM_SPINLOCK_NEW();
+    thread->sched_lock   = KSPINLOCK_NEW();
     thread->kernel_stack =
         (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) + ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
@@ -50,8 +50,8 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->waiting_on   = NULL;
     thread->waiting_cond = NULL;
 
-    COM_SYS_SIGNAL_SIGMASK_INIT(&thread->pending_signals);
-    COM_SYS_SIGNAL_SIGMASK_INIT(&thread->masked_signals);
+    COM_IPC_SIGNAL_SIGMASK_INIT(&thread->pending_signals);
+    COM_IPC_SIGNAL_SIGMASK_INIT(&thread->masked_signals);
 
     if (NULL != proc) {
         com_sys_proc_add_thread(proc, thread);
@@ -77,9 +77,9 @@ com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
 }
 
 void com_sys_thread_exit(com_thread_t *thread) {
-    com_spinlock_acquire(&thread->sched_lock);
+    kspinlock_acquire(&thread->sched_lock);
     com_sys_thread_exit_nolock(thread);
-    com_spinlock_release(&thread->sched_lock);
+    kspinlock_release(&thread->sched_lock);
 }
 
 void com_sys_thread_exit_nolock(com_thread_t *thread) {
@@ -102,19 +102,19 @@ void com_sys_thread_destroy(com_thread_t *thread) {
 
 void com_sys_thread_ready_nolock(com_thread_t *thread) {
     arch_cpu_t *curr_cpu = x86_64_smp_get_random();
-    com_spinlock_acquire(&curr_cpu->runqueue_lock);
+    kspinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
     thread->runnable     = true;
     thread->waiting_on   = NULL;
     thread->waiting_cond = NULL;
-    com_spinlock_release(&curr_cpu->runqueue_lock);
+    kspinlock_release(&curr_cpu->runqueue_lock);
     KDEBUG("thread with tid=%u is now runnable on cpu %u",
            thread->tid,
            curr_cpu->id);
 }
 
 void com_sys_thread_ready(com_thread_t *thread) {
-    com_spinlock_acquire(&thread->sched_lock);
+    kspinlock_acquire(&thread->sched_lock);
     com_sys_thread_ready_nolock(thread);
-    com_spinlock_release(&thread->sched_lock);
+    kspinlock_release(&thread->sched_lock);
 }

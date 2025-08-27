@@ -23,11 +23,11 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stddef.h>
@@ -44,16 +44,16 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     com_thread_t *thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc   = thread->proc;
-    com_spinlock_acquire(&proc->signal_lock);
-    com_spinlock_acquire(&thread->sched_lock);
+    kspinlock_acquire(&proc->signal_lock);
+    kspinlock_acquire(&thread->sched_lock);
 
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status =
         com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
 
     if (0 != status) {
-        com_spinlock_release(&proc->signal_lock);
-        com_spinlock_release(&thread->sched_lock);
+        kspinlock_release(&proc->signal_lock);
+        kspinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
 
@@ -62,7 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     arch_mmu_destroy_table(proc->page_table);
     proc->page_table = new_pt;
 
-    com_spinlock_acquire(&proc->fd_lock);
+    kspinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != proc->fd[i].file &&
             ((FD_CLOEXEC & proc->fd[i].flags) ||
@@ -71,7 +71,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->fd[i] = (com_filedesc_t){0};
         }
     }
-    com_spinlock_release(&proc->fd_lock);
+    kspinlock_release(&proc->fd_lock);
 
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i] &&
@@ -85,8 +85,8 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     proc->did_execve = true;
-    com_spinlock_release(&thread->sched_lock);
-    com_spinlock_release(&proc->signal_lock);
+    kspinlock_release(&thread->sched_lock);
+    kspinlock_release(&proc->signal_lock);
 
     return COM_SYS_SYSCALL_OK(0);
 }

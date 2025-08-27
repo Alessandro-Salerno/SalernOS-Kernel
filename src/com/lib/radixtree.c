@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
 #include <lib/radixtree.h>
+#include <lib/spinlock.h>
 
 static inline void
 split_index(uintmax_t indices[], uintmax_t index, size_t num_layers) {
@@ -43,9 +43,9 @@ int kradixtree_free(kradixtree_t *rxtree) {
 }
 
 int kradixtree_get(void **out, kradixtree_t *rxtree, uintmax_t index) {
-    com_spinlock_acquire(&rxtree->lock);
+    kspinlock_acquire(&rxtree->lock);
     int ret = kradixtree_get_nolock(out, rxtree, index);
-    com_spinlock_release(&rxtree->lock);
+    kspinlock_release(&rxtree->lock);
     return ret;
 }
 
@@ -72,9 +72,9 @@ int kradixtree_get_nolock(void **out, kradixtree_t *rxtree, uintmax_t index) {
 }
 
 int kradixtree_put(kradixtree_t *rxtree, uintmax_t index, void *data) {
-    com_spinlock_acquire(&rxtree->lock);
+    kspinlock_acquire(&rxtree->lock);
     int ret = kradixtree_put_nolock(rxtree, index, data);
-    com_spinlock_release(&rxtree->lock);
+    kspinlock_release(&rxtree->lock);
     return ret;
 }
 
@@ -101,9 +101,9 @@ int kradixtree_put_nolock(kradixtree_t *rxtree, uintmax_t index, void *data) {
 }
 
 int kradixtree_remove(kradixtree_t *rxtree, uintmax_t index) {
-    com_spinlock_acquire(&rxtree->lock);
+    kspinlock_acquire(&rxtree->lock);
     int ret = kradixtree_remove_nolock(rxtree, index);
-    com_spinlock_release(&rxtree->lock);
+    kspinlock_release(&rxtree->lock);
     return ret;
 }
 

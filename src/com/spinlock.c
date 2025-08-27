@@ -18,11 +18,11 @@
 
 #include <arch/cpu.h>
 #include <kernel/com/io/log.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/spinlock.h>
 
-void com_spinlock_acquire(com_spinlock_t *lock) {
+void kspinlock_acquire(kspinlock_t *lock) {
     ARCH_CPU_DISABLE_INTERRUPTS();
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
@@ -40,7 +40,7 @@ void com_spinlock_acquire(com_spinlock_t *lock) {
     }
 }
 
-void com_spinlock_release(com_spinlock_t *lock) {
+void kspinlock_release(kspinlock_t *lock) {
     if (!(*lock)) {
         KDEBUG("trying to unlock unlocked lock at %p",
                __builtin_return_address(0));
@@ -66,7 +66,7 @@ void com_spinlock_release(com_spinlock_t *lock) {
     }
 }
 
-void com_spinlock_fake_release() {
+void kspinlock_fake_release() {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
         int oldval = curr_thread->lock_depth--;

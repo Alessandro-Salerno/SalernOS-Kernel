@@ -36,7 +36,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
     }
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_spinlock_acquire(&curr_proc->signal_lock);
+    kspinlock_acquire(&curr_proc->signal_lock);
 
     if (NULL != oact) {
         if (NULL != curr_proc->sigaction[sig]) {
@@ -58,6 +58,6 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
         curr_proc->sigaction[sig] = new_act;
     }
 
-    com_spinlock_release(&curr_proc->signal_lock);
+    kspinlock_release(&curr_proc->signal_lock);
     return COM_SYS_SYSCALL_OK(0);
 }

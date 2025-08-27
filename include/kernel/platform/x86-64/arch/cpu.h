@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
@@ -26,6 +25,7 @@
 #include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <lib/spinlock.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -59,7 +59,7 @@ typedef struct arch_cpu {
 
     arch_mmu_pagetable_t *root_page_table;
 
-    com_spinlock_t           runqueue_lock;
+    kspinlock_t              runqueue_lock;
     struct com_thread_tailq  sched_queue;
     struct com_callout_queue callout;
     struct com_thread       *idle_thread;

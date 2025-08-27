@@ -17,8 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 
 // SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
@@ -34,7 +34,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_syscall_ret_t ret     = COM_SYS_SYSCALL_BASE_OK();
-    int               sig_ret = com_sys_signal_set_mask(
+    int               sig_ret = com_ipc_signal_set_mask(
         &curr_proc->masked_signals, how, set, oset, &curr_proc->signal_lock);
 
     if (0 != sig_ret) {

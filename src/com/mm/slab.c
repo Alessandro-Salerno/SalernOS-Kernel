@@ -19,8 +19,8 @@
 #include <arch/info.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -31,8 +31,8 @@ typedef struct {
     uintptr_t next;
 } slab_t;
 
-static slab_t         Slabs[NUM_SLABS] = {0};
-static com_spinlock_t Lock             = COM_SPINLOCK_NEW();
+static slab_t      Slabs[NUM_SLABS] = {0};
+static kspinlock_t Lock             = KSPINLOCK_NEW();
 
 static void init(slab_t *s, size_t entry_size) {
     entry_size     = (entry_size + 15) & ~15UL;
@@ -57,13 +57,13 @@ void *com_mm_slab_alloc(size_t size) {
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];
 
-    com_spinlock_acquire(&Lock);
+    kspinlock_acquire(&Lock);
     if (0 == s->next) {
         init(s, size);
     }
     uintptr_t *old_next = (uintptr_t *)s->next;
     s->next             = *old_next;
-    com_spinlock_release(&Lock);
+    kspinlock_release(&Lock);
 
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF || \
     CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
@@ -83,14 +83,14 @@ void com_mm_slab_free(void *ptr, size_t size) {
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];
 
-    com_spinlock_acquire(&Lock);
+    kspinlock_acquire(&Lock);
     uintptr_t *new_head = ptr;
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
     kmemset(new_head, size, 0);
 #endif
     *new_head = s->next;
     s->next   = (uintptr_t)new_head;
-    com_spinlock_release(&Lock);
+    kspinlock_release(&Lock);
 
     // TODO: free slab page if needed
 }

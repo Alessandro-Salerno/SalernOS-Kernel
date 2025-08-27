@@ -29,13 +29,13 @@
 #include <kernel/com/io/pty.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/opt/flanterm.h>
@@ -183,7 +183,7 @@ KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL == curr_thread) {
-        com_panic(ctx, "cpu exception (page fault)");
+        com_sys_panic(ctx, "cpu exception (page fault)");
     }
     com_proc_t *curr_proc = curr_thread->proc;
 
@@ -199,9 +199,9 @@ KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
                              curr_proc->fd[2].file->off,
                              0);
         }
-        com_sys_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
+        com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
     } else {
-        com_panic(ctx, "cpu exception (page fault)");
+        com_sys_panic(ctx, "cpu exception (page fault)");
     }
 }
 
@@ -209,7 +209,7 @@ void kernel_entry(void) {
     ARCH_CPU_SET(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
     TAILQ_INIT(&BaseCpu.callout.queue);
-    BaseCpu.runqueue_lock = COM_SPINLOCK_NEW();
+    BaseCpu.runqueue_lock = KSPINLOCK_NEW();
 
     X86_64_IO_OUTB(0x20, 0x11);
     X86_64_IO_OUTB(0xa0, 0x11);
@@ -309,7 +309,8 @@ void kernel_entry(void) {
         &proc->page_table, CONFIG_INIT_PATH, argv, envp, proc, &thread->ctx);
 
     if (0 != elf_ret) {
-        com_panic(NULL, "unable to start init program at %s", CONFIG_INIT_PATH);
+        com_sys_panic(
+            NULL, "unable to start init program at %s", CONFIG_INIT_PATH);
     }
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));

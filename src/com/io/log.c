@@ -18,10 +18,10 @@
 
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
-#include <kernel/com/spinlock.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 
-static com_spinlock_t LogLock = COM_SPINLOCK_NEW();
+static kspinlock_t LogLock = KSPINLOCK_NEW();
 
 static struct {
     com_vnode_t *vnode;
@@ -63,11 +63,11 @@ void com_io_log_putsn_nolock(const char *s, size_t n) {
 }
 
 void com_io_log_lock(void) {
-    com_spinlock_acquire(&LogLock);
+    kspinlock_acquire(&LogLock);
 }
 
 void com_io_log_unlock(void) {
-    com_spinlock_release(&LogLock);
+    kspinlock_release(&LogLock);
 }
 
 void com_io_log_set_vnode_nolock(struct com_vnode *vnode) {

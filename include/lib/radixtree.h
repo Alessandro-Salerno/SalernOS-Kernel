@@ -19,7 +19,7 @@
 #pragma once
 
 #include <arch/info.h>
-#include <kernel/com/spinlock.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <limits.h>
 #include <stddef.h>
@@ -33,10 +33,10 @@
     ((sizeof(uintmax_t) * CHAR_BIT - __builtin_clzll(UINTMAX_MAX)) / \
      KRADIXTREE_INDEX_BITS)
 
-#define KRADIXTREE_INIT(rxtreeptr, layers)        \
-    KASSERT(layers <= KRADIXTREE_MAX_LAYERS);     \
-    (rxtreeptr)->num_layers = layers;             \
-    (rxtreeptr)->lock       = COM_SPINLOCK_NEW(); \
+#define KRADIXTREE_INIT(rxtreeptr, layers)     \
+    KASSERT(layers <= KRADIXTREE_MAX_LAYERS);  \
+    (rxtreeptr)->num_layers = layers;          \
+    (rxtreeptr)->lock       = KSPINLOCK_NEW(); \
     (rxtreeptr)->back       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_zero())
 
 // TODO: implement this
@@ -57,7 +57,7 @@ typedef union kradixtree_back {
 typedef struct kradixtree {
     size_t             num_layers;
     kradixtree_back_t *back;
-    com_spinlock_t     lock;
+    kspinlock_t        lock;
 } kradixtree_t;
 
 kradixtree_t *kradixtree_new(size_t num_layers);

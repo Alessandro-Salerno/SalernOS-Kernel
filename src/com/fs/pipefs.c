@@ -21,13 +21,13 @@
 #include <errno.h>
 #include <kernel/com/fs/pipefs.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -39,7 +39,7 @@ struct pipefs_node {
     uint8_t                *buf;
     size_t                  read;
     size_t                  write;
-    com_spinlock_t          lock;
+    kspinlock_t             lock;
     struct com_thread_tailq readers;
     struct com_thread_tailq writers;
     com_vnode_t            *read_end;
@@ -60,7 +60,7 @@ int com_fs_pipefs_read(void        *buf,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    com_spinlock_acquire(&pipe->lock);
+    kspinlock_acquire(&pipe->lock);
 
     size_t read_count = 0;
     int    ret        = 0;
@@ -69,7 +69,7 @@ int com_fs_pipefs_read(void        *buf,
         while (pipe->write == pipe->read && NULL != pipe->write_end) {
             com_sys_sched_wait(&pipe->readers, &pipe->lock);
 
-            if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+            if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == read_count) {
                     ret = EINTR;
                 }
@@ -102,7 +102,7 @@ int com_fs_pipefs_read(void        *buf,
     }
 
 end:
-    com_spinlock_release(&pipe->lock);
+    kspinlock_release(&pipe->lock);
     *bytes_read = read_count;
     return ret;
 }
@@ -117,7 +117,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    com_spinlock_acquire(&pipe->lock);
+    kspinlock_acquire(&pipe->lock);
 
     size_t req_space   = buflen;
     size_t write_count = 0;
@@ -134,7 +134,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
 
         while (av_space < req_space) {
             com_sys_sched_wait(&pipe->writers, &pipe->lock);
-            if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+            if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == write_count) {
                     ret = EINTR;
                 }
@@ -162,14 +162,14 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     }
 
 end:
-    com_spinlock_release(&pipe->lock);
+    kspinlock_release(&pipe->lock);
     *bytes_written = write_count;
     return ret;
 }
 
 int com_fs_pipefs_close(com_vnode_t *vnode) {
     struct pipefs_node *pipe = vnode->extra;
-    com_spinlock_acquire(&pipe->lock);
+    kspinlock_acquire(&pipe->lock);
 
     if (vnode == pipe->read_end) {
         pipe->read_end = NULL;
@@ -179,7 +179,7 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
         com_sys_sched_notify(&pipe->readers);
     }
 
-    com_spinlock_release(&pipe->lock);
+    kspinlock_release(&pipe->lock);
     return 0;
 }
 
@@ -189,7 +189,7 @@ void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     TAILQ_INIT(&pipe->writers);
     pipe->read  = 0;
     pipe->write = 0;
-    pipe->lock  = COM_SPINLOCK_NEW();
+    pipe->lock  = KSPINLOCK_NEW();
     pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
     com_vnode_t *r  = com_mm_slab_alloc(sizeof(com_vnode_t));

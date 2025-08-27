@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/interrupt.h>
+#include <lib/spinlock.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -41,7 +41,7 @@ typedef struct com_callout_queue {
     uintmax_t                ns;
     uintmax_t                next_preempt;
     struct com_callout_tailq queue;
-    com_spinlock_t           lock;
+    kspinlock_t              lock;
 } com_callout_queue_t;
 
 uintmax_t com_sys_callout_get_time(void);

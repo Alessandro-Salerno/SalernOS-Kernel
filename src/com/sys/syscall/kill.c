@@ -18,8 +18,8 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 
 // SYSCALL: kill(pid_t pid, int sig)
@@ -48,9 +48,9 @@ COM_SYS_SYSCALL(com_sys_syscall_kill) {
     }
 
     if (pid > 0) {
-        ret.err = com_sys_signal_send_to_proc(pid, sig, curr_proc);
+        ret.err = com_ipc_signal_send_to_proc(pid, sig, curr_proc);
     } else {
-        ret.err = com_sys_signal_send_to_proc_group(-pid, sig, curr_proc);
+        ret.err = com_ipc_signal_send_to_proc_group(-pid, sig, curr_proc);
     }
 
 skip_send:

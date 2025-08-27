@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 **********************************************************************/
 
 #include <arch/context.h>
-#include <kernel/com/sys/signal.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/platform/x86-64/context.h>
 #include <lib/printf.h>
 

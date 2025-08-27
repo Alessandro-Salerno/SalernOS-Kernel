@@ -156,7 +156,7 @@ static com_pty_t *pty_alloc(void) {
 
     // poll initialization
     LIST_INIT(&pty->master_ph.polled_list);
-    pty->master_ph.lock = COM_SPINLOCK_NEW();
+    pty->master_ph.lock = KSPINLOCK_NEW();
     return pty;
 }
 
@@ -165,14 +165,14 @@ static com_pty_t *pty_alloc(void) {
 static void ptm_poll_callback(void *arg) {
     com_pty_t *pty = arg;
 
-    com_spinlock_acquire(&pty->master_ph.lock);
+    kspinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
-        com_spinlock_acquire(&polled->poller->lock);
+        kspinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify(&polled->poller->waiters);
-        com_spinlock_release(&polled->poller->lock);
+        kspinlock_release(&polled->poller->lock);
     }
-    com_spinlock_release(&pty->master_ph.lock);
+    kspinlock_release(&pty->master_ph.lock);
 }
 
 static int ptm_read(void     *buf,
@@ -343,10 +343,10 @@ static int pts_close(void *devdata) {
     com_pty_t       *pty       = pty_slave->pty;
 
     if (0 == __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST)) {
-        com_spinlock_acquire(&pty->master_rb.lock);
+        kspinlock_acquire(&pty->master_rb.lock);
         com_sys_sched_notify_all(&pty->master_rb.read.queue);
         com_sys_sched_notify_all(&pty->master_rb.write.queue);
-        com_spinlock_release(&pty->master_rb.lock);
+        kspinlock_release(&pty->master_rb.lock);
         ptm_poll_callback(pty);
     }
 

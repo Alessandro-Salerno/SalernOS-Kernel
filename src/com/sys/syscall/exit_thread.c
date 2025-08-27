@@ -21,10 +21,10 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -36,8 +36,8 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
-    com_spinlock_acquire(&curr_thread->proc->threads_lock);
-    com_spinlock_acquire(&curr_thread->sched_lock);
+    kspinlock_acquire(&curr_thread->proc->threads_lock);
+    kspinlock_acquire(&curr_thread->sched_lock);
 
     KASSERT(curr_thread->runnable);
     com_sys_thread_exit_nolock(curr_thread);
@@ -51,8 +51,8 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
         com_sys_proc_exit(curr_thread->proc, 0);
     }
 
-    com_spinlock_release(&curr_thread->sched_lock);
-    com_spinlock_release(&curr_thread->proc->threads_lock);
+    kspinlock_release(&curr_thread->sched_lock);
+    kspinlock_release(&curr_thread->proc->threads_lock);
     com_sys_sched_yield();
 
     __builtin_unreachable();

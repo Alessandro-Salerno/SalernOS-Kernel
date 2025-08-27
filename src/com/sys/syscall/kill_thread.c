@@ -18,8 +18,8 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 
 // SYSCALL: kill_thread(pid_t tid, int sig)
@@ -38,7 +38,7 @@ COM_SYS_SYSCALL(com_sys_syscall_kill_thread) {
         goto skip_send;
     }
 
-    com_spinlock_acquire(&curr_proc->threads_lock);
+    kspinlock_acquire(&curr_proc->threads_lock);
     com_thread_t *t, *_;
     bool          found = false;
     TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
@@ -48,11 +48,11 @@ COM_SYS_SYSCALL(com_sys_syscall_kill_thread) {
         }
     }
     if (found) {
-        ret.err = com_sys_signal_send_to_thread(t, sig, curr_proc);
+        ret.err = com_ipc_signal_send_to_thread(t, sig, curr_proc);
     } else {
         ret.err = ESRCH;
     }
-    com_spinlock_release(&curr_proc->threads_lock);
+    kspinlock_release(&curr_proc->threads_lock);
 
 skip_send:
     if (0 != ret.err) {

@@ -17,8 +17,8 @@
 *************************************************************************/
 
 #include <errno.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <lib/mem.h>
 #include <lib/ringbuffer.h>
 #include <lib/util.h>
@@ -70,8 +70,8 @@ static int write_blocking(kringbuffer_t *rb,
         while (0 == space) {
             com_sys_sched_wait(&rb->write.queue, &rb->lock);
 
-            int sig = com_sys_signal_check();
-            if (COM_SYS_SIGNAL_NONE != sig) {
+            int sig = com_ipc_signal_check();
+            if (COM_IPC_SIGNAL_NONE != sig) {
                 if (0 == bytes_written) {
                     *buflen = 0;
                     return EINTR;
@@ -179,10 +179,10 @@ int kringbuffer_write(size_t        *bytes_written,
                       void (*callback)(void *),
                       void *cb_arg,
                       void *hu_arg) {
-    com_spinlock_acquire(&rb->lock);
+    kspinlock_acquire(&rb->lock);
     int ret = kringbuffer_write_nolock(
         bytes_written, rb, buf, buflen, blocking, callback, cb_arg, hu_arg);
-    com_spinlock_release(&rb->lock);
+    kspinlock_release(&rb->lock);
     return ret;
 }
 
@@ -219,8 +219,8 @@ int kringbuffer_read_nolock(void          *dst,
             break;
         }
 
-        int sig = com_sys_signal_check();
-        if (COM_SYS_SIGNAL_NONE != sig) {
+        int sig = com_ipc_signal_check();
+        if (COM_IPC_SIGNAL_NONE != sig) {
             nbytes = 0;
             ret    = EINTR;
             goto end;
@@ -268,9 +268,9 @@ int kringbuffer_read(void          *dst,
                      void (*callback)(void *),
                      void *cb_arg,
                      void *hu_arg) {
-    com_spinlock_acquire(&rb->lock);
+    kspinlock_acquire(&rb->lock);
     int ret = kringbuffer_read_nolock(
         dst, bytes_read, rb, nbytes, blocking, callback, cb_arg, hu_arg);
-    com_spinlock_release(&rb->lock);
+    kspinlock_release(&rb->lock);
     return ret;
 }

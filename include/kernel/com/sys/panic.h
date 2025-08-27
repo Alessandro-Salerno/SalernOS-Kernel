@@ -21,4 +21,4 @@
 #include <arch/context.h>
 
 __attribute__((noreturn)) void
-com_panic(arch_context_t *ctx, const char *fmt, ...);
+com_sys_panic(arch_context_t *ctx, const char *fmt, ...);

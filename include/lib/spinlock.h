@@ -16,35 +16,14 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
-#include <arch/cpu.h>
-#include <kernel/com/io/log.h>
-#include <kernel/com/panic.h>
-#include <kernel/com/sys/interrupt.h>
-#include <kernel/platform/context.h>
-#include <lib/printf.h>
-#include <stdarg.h>
-#include <stddef.h>
+#pragma once
 
-__attribute__((noreturn)) void
-com_panic(arch_context_t *ctx, const char *fmt, ...) {
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());
+#include <stdbool.h>
 
-    if (NULL != fmt) {
-        va_list args;
-        va_start(args, fmt);
-        kvprintf(fmt, args);
-        va_end(args);
-        kprintf("\n");
-    }
+typedef int kspinlock_t;
 
-    if (NULL != ctx) {
-        arch_context_print(ctx);
-    }
+#define KSPINLOCK_NEW() 0
 
-    while (1) {
-        ARCH_CPU_DISABLE_INTERRUPTS();
-        ARCH_CPU_HALT();
-    }
-}
+void kspinlock_acquire(kspinlock_t *lock);
+void kspinlock_release(kspinlock_t *lock);
+void kspinlock_fake_release();

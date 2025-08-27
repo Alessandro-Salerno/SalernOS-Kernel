@@ -33,10 +33,10 @@ COM_SYS_SYSCALL(com_sys_syscall_getsid) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     if (0 == pid) {
-        com_spinlock_acquire(&curr_proc->pg_lock);
+        kspinlock_acquire(&curr_proc->pg_lock);
         KASSERT(NULL != curr_proc->proc_group);
         pid_t sid = curr_proc->proc_group->session->sid;
-        com_spinlock_release(&curr_proc->pg_lock);
+        kspinlock_release(&curr_proc->pg_lock);
         return COM_SYS_SYSCALL_OK(sid);
     }
 
@@ -55,8 +55,8 @@ COM_SYS_SYSCALL(com_sys_syscall_getsid) {
     KASSERT(NULL != curr_proc->proc_group);
     KASSERT(NULL != proc->proc_group);
 
-    com_spinlock_acquire(&curr_proc->pg_lock);
-    com_spinlock_acquire(&proc->pg_lock);
+    kspinlock_acquire(&curr_proc->pg_lock);
+    kspinlock_acquire(&proc->pg_lock);
 
     if (proc->proc_group->session->sid != curr_proc->proc_group->session->sid) {
         ret.err = EPERM;
@@ -66,7 +66,7 @@ COM_SYS_SYSCALL(com_sys_syscall_getsid) {
     ret.value = proc->proc_group->session->sid;
 
 end:
-    com_spinlock_release(&proc->pg_lock);
-    com_spinlock_release(&curr_proc->pg_lock);
+    kspinlock_release(&proc->pg_lock);
+    kspinlock_release(&curr_proc->pg_lock);
     return ret;
 }

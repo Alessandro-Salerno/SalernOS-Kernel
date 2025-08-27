@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <kernel/com/panic.h>
+#include <kernel/com/sys/panic.h>
 #include <lib/printf.h>
 #include <lib/util.h>
 #include <stddef.h>

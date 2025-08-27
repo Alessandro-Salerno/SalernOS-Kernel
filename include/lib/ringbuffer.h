@@ -19,8 +19,8 @@
 #pragma once
 
 #include <arch/info.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -29,19 +29,19 @@
 #define KRINGBUFFER_OP_READ  0
 #define KRINGBUFFER_OP_WRITE 1
 
-#define KRINGBUFFER_INIT(rb_ptr)                    \
-    (rb_ptr)->lock            = COM_SPINLOCK_NEW(); \
-    (rb_ptr)->write.index     = 0;                  \
-    (rb_ptr)->read.index      = 0;                  \
-    (rb_ptr)->is_eof          = false;              \
-    (rb_ptr)->check_hangup    = NULL;               \
-    (rb_ptr)->fallback_hu_arg = NULL;               \
-    TAILQ_INIT(&(rb_ptr)->write.queue);             \
+#define KRINGBUFFER_INIT(rb_ptr)                 \
+    (rb_ptr)->lock            = KSPINLOCK_NEW(); \
+    (rb_ptr)->write.index     = 0;               \
+    (rb_ptr)->read.index      = 0;               \
+    (rb_ptr)->is_eof          = false;           \
+    (rb_ptr)->check_hangup    = NULL;            \
+    (rb_ptr)->fallback_hu_arg = NULL;            \
+    TAILQ_INIT(&(rb_ptr)->write.queue);          \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
 typedef struct kringbuffer {
-    uint8_t        buffer[KRINGBUFFER_SIZE];
-    com_spinlock_t lock;
+    uint8_t     buffer[KRINGBUFFER_SIZE];
+    kspinlock_t lock;
     struct {
         struct com_thread_tailq queue;
         size_t                  index;

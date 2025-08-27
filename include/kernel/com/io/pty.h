@@ -22,9 +22,9 @@
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/tty.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ringbuffer.h>
+#include <lib/spinlock.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>

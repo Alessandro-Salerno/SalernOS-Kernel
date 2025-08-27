@@ -21,9 +21,9 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -47,7 +47,7 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
 
     // TODO: handle errors (no seek on pipes etc, no seek out of bounds)
 
-    com_spinlock_acquire(&file->off_lock);
+    kspinlock_acquire(&file->off_lock);
     off_t new_off = file->off;
     switch (whence) {
         case SEEK_SET:
@@ -72,7 +72,7 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
     ret.value = new_off;
 cleanup:
     KASSERT(NULL != file);
-    com_spinlock_release(&file->off_lock);
+    kspinlock_release(&file->off_lock);
     COM_FS_FILE_RELEASE(file);
     return ret;
 }

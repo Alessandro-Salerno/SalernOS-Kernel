@@ -19,7 +19,6 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/apic.h>
@@ -28,6 +27,7 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <vendor/limine.h>
@@ -47,7 +47,7 @@ static uint8_t TemporaryStack[512 * MAX_CPUS];
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     ARCH_CPU_DISABLE_INTERRUPTS();
     arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
-    cpu->runqueue_lock = COM_SPINLOCK_NEW();
+    cpu->runqueue_lock = KSPINLOCK_NEW();
     ARCH_CPU_SET(cpu);
     KDEBUG("initializing cpu %u", cpu->id);
 
@@ -131,12 +131,12 @@ void x86_64_smp_init(void) {
 }
 
 arch_cpu_t *x86_64_smp_get_random(void) {
-    static com_spinlock_t lock = COM_SPINLOCK_NEW();
-    static int            i    = 0;
-    com_spinlock_acquire(&lock);
+    static kspinlock_t lock = KSPINLOCK_NEW();
+    static int         i    = 0;
+    kspinlock_acquire(&lock);
     arch_cpu_t *ret = &Cpus[i % NumCpus];
     i               = (i + 1) % NumCpus;
-    com_spinlock_release(&lock);
+    kspinlock_release(&lock);
     return ret;
 }
 

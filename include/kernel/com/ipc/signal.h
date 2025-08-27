@@ -25,15 +25,15 @@
 
 // NOTE: These must be used in a thread-safe manner, i.e. while holding the
 // process'es signal_lock, since they're no longer atomic
-#define COM_SYS_SIGNAL_SIGMASK_INIT(maskptr) *(maskptr) = 0UL;
-#define COM_SYS_SIGNAL_SIGMASK_SET(maskptr, sig) \
+#define COM_IPC_SIGNAL_SIGMASK_INIT(maskptr) *(maskptr) = 0UL;
+#define COM_IPC_SIGNAL_SIGMASK_SET(maskptr, sig) \
     (*(maskptr) |= 1UL << ((sig) - 1))
-#define COM_SYS_SIGNAL_SIGMASK_UNSET(maskptr, sig) \
+#define COM_IPC_SIGNAL_SIGMASK_UNSET(maskptr, sig) \
     (*(maskptr) &= ~(1UL << ((sig) - 1)))
-#define COM_SYS_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
+#define COM_IPC_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
     (*(maskptr) & (1UL << ((sig) - 1)))
 
-#define COM_SYS_SIGNAL_NONE (-1)
+#define COM_IPC_SIGNAL_NONE (-1)
 
 typedef struct {
     unsigned long sig[1024 / (8 * sizeof(long))];
@@ -70,23 +70,23 @@ typedef struct com_sigframe {
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 
-void com_sys_signal_sigset_emptY(com_sigset_t *set);
-int  com_sys_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
-int  com_sys_signal_send_to_proc_group(pid_t            pgid,
+void com_ipc_signal_sigset_emptY(com_sigset_t *set);
+int  com_ipc_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
+int  com_ipc_signal_send_to_proc_group(pid_t            pgid,
                                        int              sig,
                                        struct com_proc *sender);
-int  com_sys_signal_send_to_thread(struct com_thread *thread,
+int  com_ipc_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);
-void com_sys_signal_dispatch(arch_context_t *ctx, struct com_thread *thread);
-int  com_sys_signal_set_mask_nolock(com_sigmask_t *mask,
+void com_ipc_signal_dispatch(arch_context_t *ctx, struct com_thread *thread);
+int  com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,
                                     int            how,
                                     com_sigset_t  *set,
                                     com_sigset_t  *oset);
-int  com_sys_signal_set_mask(com_sigmask_t  *mask,
-                             int             how,
-                             com_sigset_t   *set,
-                             com_sigset_t   *oset,
-                             com_spinlock_t *signal_lock);
-int  com_sys_signal_check_nolock(void);
-int  com_sys_signal_check(void);
+int  com_ipc_signal_set_mask(com_sigmask_t *mask,
+                             int            how,
+                             com_sigset_t  *set,
+                             com_sigset_t  *oset,
+                             kspinlock_t   *signal_lock);
+int  com_ipc_signal_check_nolock(void);
+int  com_ipc_signal_check(void);

@@ -20,9 +20,9 @@
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 
 // SYSCALL: read(int fd, void *buf, size_t buflen)
 COM_SYS_SYSCALL(com_sys_syscall_read) {
@@ -52,9 +52,9 @@ COM_SYS_SYSCALL(com_sys_syscall_read) {
         goto cleanup;
     }
 
-    com_spinlock_acquire(&file->off_lock);
+    kspinlock_acquire(&file->off_lock);
     file->off += bytes_read;
-    com_spinlock_release(&file->off_lock);
+    kspinlock_release(&file->off_lock);
 
     ret.value = bytes_read;
 cleanup:

@@ -21,9 +21,9 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -60,7 +60,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 
-    com_spinlock_acquire(&curr_proc->fd_lock);
+    kspinlock_acquire(&curr_proc->fd_lock);
     com_filedesc_t *fildes = com_sys_proc_get_fildesc_nolock(curr_proc, fd);
     com_file_t     *file   = com_sys_proc_get_file_nolock(curr_proc, fd);
 
@@ -94,6 +94,6 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
 
 end:
     COM_FS_FILE_RELEASE(file);
-    com_spinlock_release(&curr_proc->fd_lock);
+    kspinlock_release(&curr_proc->fd_lock);
     return ret;
 }

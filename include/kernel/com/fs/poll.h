@@ -19,13 +19,13 @@
 #pragma once
 
 #include <kernel/com/fs/file.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/spinlock.h>
 #include <vendor/tailq.h>
 
 typedef struct com_poller {
     struct com_thread_tailq waiters;
-    com_spinlock_t          lock;
+    kspinlock_t             lock;
 } com_poller_t;
 
 typedef struct com_polled {
@@ -36,5 +36,5 @@ typedef struct com_polled {
 
 typedef struct com_poll_head {
     LIST_HEAD(, com_polled) polled_list;
-    com_spinlock_t lock;
+    kspinlock_t lock;
 } com_poll_head_t;

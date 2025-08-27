@@ -24,8 +24,8 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
@@ -46,7 +46,7 @@ struct tmpfs_node {
     struct tmpfs_dir_entry *dirent;
 
     // TODO: turn this into a mutex
-    com_spinlock_t lock;
+    kspinlock_t lock;
 
     union {
         struct {
@@ -90,7 +90,7 @@ static int createat(struct tmpfs_dir_entry **outent,
     KASSERT(E_COM_VNODE_TYPE_DIR == dir->type);
 
     struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
-    tn_new->lock              = COM_SPINLOCK_NEW();
+    tn_new->lock              = KSPINLOCK_NEW();
     tn_new->num_links         = 1;
 
     struct tmpfs_dir_entry *dirent = NULL;
@@ -139,7 +139,7 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
     struct tmpfs_node *tn_root = com_mm_slab_alloc(sizeof(struct tmpfs_node));
     com_vnode_t       *vn_root = NULL;
 
-    tn_root->lock = COM_SPINLOCK_NEW();
+    tn_root->lock = KSPINLOCK_NEW();
     TAILQ_INIT(&tn_root->dir.entries);
     com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
     tn_root->dirent     = NULL;
@@ -184,9 +184,9 @@ int com_fs_tmpfs_create(com_vnode_t **out,
 
     if (NULL != dirent) {
         struct tmpfs_node *parent = dir->extra;
-        com_spinlock_acquire(&parent->lock);
+        kspinlock_acquire(&parent->lock);
         TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
-        com_spinlock_release(&parent->lock);
+        kspinlock_release(&parent->lock);
     }
 
     return 0;
@@ -212,9 +212,9 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
     TAILQ_INIT(&tn->dir.entries);
     (*out)->type = E_COM_VNODE_TYPE_DIR;
 
-    com_spinlock_acquire(&parent_data->lock);
+    kspinlock_acquire(&parent_data->lock);
     TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
-    com_spinlock_release(&parent_data->lock);
+    kspinlock_release(&parent_data->lock);
 
     return 0;
 }
@@ -238,7 +238,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
         return 0;
     }
 
-    com_spinlock_acquire(&dir_data->lock);
+    kspinlock_acquire(&dir_data->lock);
 
     struct tmpfs_dir_entry *entry, *_;
     TAILQ_FOREACH_SAFE(entry, &dir_data->dir.entries, entries, _) {
@@ -253,7 +253,7 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
     ret  = ENOENT;
 
 cleanup:
-    com_spinlock_release(&dir_data->lock);
+    kspinlock_release(&dir_data->lock);
     return ret;
 }
 
@@ -289,7 +289,7 @@ int com_fs_tmpfs_read(void        *buf,
     }
 
     size_t read_count = 0;
-    com_spinlock_acquire(&file->lock);
+    kspinlock_acquire(&file->lock);
 
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
@@ -318,7 +318,7 @@ int com_fs_tmpfs_read(void        *buf,
         cur = end;
     }
 
-    com_spinlock_release(&file->lock);
+    kspinlock_release(&file->lock);
     *bytes_read = read_count;
     return 0;
 }
@@ -341,7 +341,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 
     struct tmpfs_node *file        = node->extra;
     size_t             write_count = 0;
-    com_spinlock_acquire(&file->lock);
+    kspinlock_acquire(&file->lock);
 
     if (off + buflen > file->file.size) {
         file->file.size = off + buflen;
@@ -368,7 +368,7 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
         cur = end;
     }
 
-    com_spinlock_release(&file->lock);
+    kspinlock_release(&file->lock);
     *bytes_written = write_count;
     return 0;
 }
@@ -404,9 +404,9 @@ int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
     }
 
     struct tmpfs_node *file = node->extra;
-    com_spinlock_acquire(&file->lock);
+    kspinlock_acquire(&file->lock);
     file->file.size = size;
-    com_spinlock_release(&file->lock);
+    kspinlock_release(&file->lock);
     return 0;
 }
 
@@ -458,7 +458,7 @@ int com_fs_tmpfs_readdir(void        *buf,
 
     int ret = 0;
 
-    com_spinlock_acquire(&node->lock);
+    kspinlock_acquire(&node->lock);
 
     struct tmpfs_dir_entry *cur = TAILQ_FIRST(&node->dir.entries);
     for (uintmax_t i = 0; i < off - 2 && NULL != cur; i++) {
@@ -507,7 +507,7 @@ int com_fs_tmpfs_readdir(void        *buf,
     }
 
 end:
-    com_spinlock_release(&node->lock);
+    kspinlock_release(&node->lock);
     return ret;
 }
 
@@ -515,7 +515,7 @@ int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf) {
     int ret = ENOTSUP;
 
     struct tmpfs_node *tnode = node->extra;
-    com_spinlock_acquire(&tnode->lock);
+    kspinlock_acquire(&tnode->lock);
 
     if (COM_FS_VFS_VNCTL_GETNAME == op) {
         struct tmpfs_dir_entry *dirent  = tnode->dirent;
@@ -530,7 +530,7 @@ int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf) {
         ret = 0;
     }
 
-    com_spinlock_release(&tnode->lock);
+    kspinlock_release(&tnode->lock);
     return ret;
 }
 

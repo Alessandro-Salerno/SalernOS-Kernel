@@ -17,8 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 
 // SYSCALL: sigpending(sigset_t *set)
@@ -31,10 +31,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_sys_signal_sigset_emptY(sigset);
-    com_spinlock_acquire(&curr_proc->signal_lock);
+    com_ipc_signal_sigset_emptY(sigset);
+    kspinlock_acquire(&curr_proc->signal_lock);
     sigset->sig[0] = curr_thread->pending_signals;
-    com_spinlock_release(&curr_proc->signal_lock);
+    kspinlock_release(&curr_proc->signal_lock);
 
     return COM_SYS_SYSCALL_OK(0);
 }

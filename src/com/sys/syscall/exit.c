@@ -18,12 +18,12 @@
 
 #include <arch/cpu.h>
 #include <arch/mmu.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
 

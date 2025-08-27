@@ -18,9 +18,9 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
 #include <stdatomic.h>
@@ -47,7 +47,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
             return ret;
         }
 
-        if (COM_SYS_SIGNAL_NONE != towait->stop_signal) {
+        if (COM_IPC_SIGNAL_NONE != towait->stop_signal) {
             if (towait->stop_notified) {
                 // KASSERT(WNOHANG & flags);
                 return 0;
@@ -64,7 +64,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
 
         com_sys_proc_wait(curr_proc);
 
-        if (COM_SYS_SIGNAL_NONE != com_sys_signal_check()) {
+        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
             return -EINTR;
         }
     }

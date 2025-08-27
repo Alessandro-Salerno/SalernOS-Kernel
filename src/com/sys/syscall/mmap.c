@@ -21,10 +21,10 @@
 #include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
 #include <sys/mman.h>

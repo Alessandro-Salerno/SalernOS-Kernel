@@ -24,9 +24,9 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 
 #include <arch/context.h>
 #include <arch/cpu.h>
-#include <kernel/com/spinlock.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
+#include <lib/spinlock.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -34,7 +34,7 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 typedef struct com_thread {
     arch_context_t       ctx;
     arch_context_extra_t xctx;
-    com_spinlock_t       sched_lock;
+    kspinlock_t          sched_lock;
     struct com_proc     *proc;
     struct arch_cpu     *cpu;
     bool                 runnable;
@@ -46,7 +46,7 @@ typedef struct com_thread {
     pid_t tid;
 
     struct com_thread_tailq *waiting_on;
-    com_spinlock_t          *waiting_cond;
+    kspinlock_t             *waiting_cond;
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;

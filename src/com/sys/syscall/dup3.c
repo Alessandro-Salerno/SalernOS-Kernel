@@ -21,9 +21,9 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -42,13 +42,13 @@ COM_SYS_SYSCALL(com_sys_syscall_dup3) {
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t       *curr_proc   = curr_thread->proc;
 
-    com_spinlock_acquire(&curr_proc->fd_lock);
+    kspinlock_acquire(&curr_proc->fd_lock);
     com_sys_proc_close_file_nolock(curr_proc, new_fd);
     int dup_ret = com_sys_proc_duplicate_file_nolock(curr_proc, new_fd, old_fd);
     if (dup_ret < 0) {
         ret = COM_SYS_SYSCALL_ERR(-dup_ret);
     }
 
-    com_spinlock_release(&curr_proc->fd_lock);
+    kspinlock_release(&curr_proc->fd_lock);
     return ret;
 }

@@ -17,8 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
 
@@ -35,8 +35,8 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-    com_spinlock_acquire(&curr_proc->signal_lock);
-    int sig_ret = com_sys_signal_set_mask_nolock(
+    kspinlock_acquire(&curr_proc->signal_lock);
+    int sig_ret = com_ipc_signal_set_mask_nolock(
         &curr_thread->masked_signals, how, set, oset);
 
     if (0 != sig_ret) {
@@ -61,6 +61,6 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
     curr_proc->pending_signals &=
         ~new_pending; // ensures that this is only done once
 
-    com_spinlock_release(&curr_proc->signal_lock);
+    kspinlock_release(&curr_proc->signal_lock);
     return ret;
 }

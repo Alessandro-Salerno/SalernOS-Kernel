@@ -39,7 +39,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
 
     com_proc_t *proc = curr_proc;
     KASSERT(NULL != proc);
-    com_spinlock_acquire(&proc->pg_lock);
+    kspinlock_acquire(&proc->pg_lock);
     KASSERT(NULL != proc->proc_group);
 
     if (0 == pgid) {
@@ -58,9 +58,9 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     }
 
     if (0 != pid) {
-        com_spinlock_release(&proc->pg_lock);
+        kspinlock_release(&proc->pg_lock);
         proc = com_sys_proc_get_by_pid(pid);
-        com_spinlock_acquire(&proc->pg_lock);
+        kspinlock_acquire(&proc->pg_lock);
 
         if (NULL == proc || (proc->pid != curr_proc->pid &&
                              proc->parent_pid != curr_proc->pid)) {
@@ -87,6 +87,6 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     ret.value = 0;
 
 end:
-    com_spinlock_release(&proc->pg_lock);
+    kspinlock_release(&proc->pg_lock);
     return ret;
 }

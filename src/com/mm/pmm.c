@@ -19,11 +19,11 @@
 #include <arch/info.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/panic.h>
-#include <kernel/com/spinlock.h>
+#include <kernel/com/sys/panic.h>
 #include <kernel/platform/info.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
 
@@ -42,7 +42,7 @@ static uintmax_t ReservedMem = 0;
 static uintmax_t UsedMem     = 0;
 
 // TODO: turn this into a mutex
-static com_spinlock_t Lock = COM_SPINLOCK_NEW();
+static kspinlock_t Lock = KSPINLOCK_NEW();
 
 static bool bmp_get(bmp_t *bmp, uintmax_t idx) {
     uintmax_t byte_idx    = idx / 8;
@@ -101,7 +101,7 @@ void unreserve_pages(void *address, uint64_t pagecount) {
 }
 
 void *com_mm_pmm_alloc(void) {
-    com_spinlock_acquire(&Lock);
+    kspinlock_acquire(&Lock);
     void *ret = NULL;
 
     for (uintmax_t i = PageBitmap.index / 8; i < PageBitmap.size; i++) {
@@ -118,7 +118,7 @@ void *com_mm_pmm_alloc(void) {
         }
     }
 
-    com_spinlock_release(&Lock);
+    kspinlock_release(&Lock);
     KASSERT(NULL != ret);
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE, 0);
@@ -127,7 +127,7 @@ void *com_mm_pmm_alloc(void) {
 }
 
 void *com_mm_pmm_alloc_many(size_t pages) {
-    com_spinlock_acquire(&Lock);
+    kspinlock_acquire(&Lock);
     void  *ret       = NULL;
     size_t num_found = 0;
     bool   was_free  = false;
@@ -151,7 +151,7 @@ void *com_mm_pmm_alloc_many(size_t pages) {
         was_free = is_free;
     }
 
-    com_spinlock_release(&Lock);
+    kspinlock_release(&Lock);
     KASSERT(NULL != ret);
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
     kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE * pages, 0);
@@ -180,7 +180,7 @@ void com_mm_pmm_free(void *page) {
 }
 
 void com_mm_pmm_free_many(void *base, size_t pages) {
-    com_spinlock_acquire(&Lock);
+    kspinlock_acquire(&Lock);
 
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
     kmemset((void *)ARCH_PHYS_TO_HHDM(base), ARCH_PAGE_SIZE * pages, 0);
@@ -191,7 +191,7 @@ void com_mm_pmm_free_many(void *base, size_t pages) {
         unreserve_page(page, &UsedMem);
     }
 
-    com_spinlock_release(&Lock);
+    kspinlock_release(&Lock);
 }
 
 void com_mm_pmm_get_info(uintmax_t *used_mem,

@@ -22,9 +22,9 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 
 #define FDIOCTL_OK(n)                              \
@@ -49,7 +49,7 @@ struct fdioctl_ret {
 static struct fdioctl_ret
 fd_ioctl(int fd, uintmax_t op, void *buf, com_proc_t *proc) {
     (void)buf; // temporary probably
-    com_spinlock_acquire(&proc->fd_lock);
+    kspinlock_acquire(&proc->fd_lock);
     com_filedesc_t *fildesc = com_sys_proc_get_fildesc_nolock(proc, fd);
     if (NULL == fildesc) {
         return FDIOCTL_ERR(EBADF);
@@ -64,7 +64,7 @@ fd_ioctl(int fd, uintmax_t op, void *buf, com_proc_t *proc) {
         ret = FDIOCTL_OK(0);
     }
 
-    com_spinlock_release(&proc->fd_lock);
+    kspinlock_release(&proc->fd_lock);
     return ret;
 }
 

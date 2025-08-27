@@ -100,7 +100,7 @@
         com_io_log_puts_nolock(__func__);                         \
         com_io_log_puts_nolock(":" KSTR(__LINE__) ": " #statement \
                                                   " failed\n");   \
-        com_panic(NULL, NULL);                                    \
+        com_sys_panic(NULL, NULL);                                \
     }
 #else
 #error "unsupported assert action, check config/config.h"

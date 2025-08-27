@@ -21,9 +21,9 @@
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/term.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ringbuffer.h>
+#include <lib/spinlock.h>
 #include <stdint.h>
 #include <termios.h>
 

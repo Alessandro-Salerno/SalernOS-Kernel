@@ -23,13 +23,13 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <poll.h>
@@ -58,10 +58,10 @@ static void poll_timeout(com_callout_t *callout) {
         return;
     }
 
-    com_spinlock_acquire(&data->poller->lock);
+    kspinlock_acquire(&data->poller->lock);
     data->expired = true;
     com_sys_sched_notify_all(&data->poller->waiters);
-    com_spinlock_release(&data->poller->lock);
+    kspinlock_release(&data->poller->lock);
     // here the struct is not freed because the function will use it, and it
     // will be responsible for cleaning up the memory
 }
@@ -92,9 +92,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
                 timeout->tv_sec * KNANOS_PER_SEC + timeout->tv_nsec;
             timeout_arg = com_mm_slab_alloc(sizeof(struct poll_timeout_arg));
             timeout_arg->poller = &poller;
-            com_spinlock_acquire(&poller.lock);
+            kspinlock_acquire(&poller.lock);
             com_sys_callout_add(poll_timeout, timeout_arg, delay_ns);
-            com_spinlock_release(&poller.lock);
+            kspinlock_release(&poller.lock);
         }
     }
 
@@ -134,14 +134,14 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         polled->file = file;
 
         if (do_wait) {
-            com_spinlock_acquire(&poll_head->lock);
+            kspinlock_acquire(&poll_head->lock);
             LIST_INSERT_HEAD(&poll_head->polled_list, polled, polled_list);
-            com_spinlock_release(&poll_head->lock);
+            kspinlock_release(&poll_head->lock);
         }
     }
 
     int count = 0;
-    int sig   = COM_SYS_SIGNAL_NONE;
+    int sig   = COM_IPC_SIGNAL_NONE;
 
     while (0 == count) {
         for (nfds_t i = 0; i < nfds; i++) {
@@ -165,11 +165,11 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             break;
         }
 
-        com_spinlock_acquire(&poller.lock);
+        kspinlock_acquire(&poller.lock);
 
         // If timeout expired before we got here
         if (NULL != timeout_arg && timeout_arg->expired) {
-            com_spinlock_release(&poller.lock);
+            kspinlock_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
             break;
         }
@@ -178,15 +178,15 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
         // If we were notified by the callout
         if (NULL != timeout_arg && timeout_arg->expired) {
-            com_spinlock_release(&poller.lock);
+            kspinlock_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
             break;
         }
 
-        com_spinlock_release(&poller.lock);
-        sig = com_sys_signal_check();
+        kspinlock_release(&poller.lock);
+        sig = com_ipc_signal_check();
 
-        if (COM_SYS_SIGNAL_NONE != sig) {
+        if (COM_IPC_SIGNAL_NONE != sig) {
             break;
         }
     }
@@ -200,9 +200,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         com_poll_head_t *poll_head;
         if (do_wait && NULL != polled->file &&
             0 == com_fs_vfs_poll_head(&poll_head, polled->file->vnode)) {
-            com_spinlock_acquire(&poll_head->lock);
+            kspinlock_acquire(&poll_head->lock);
             LIST_REMOVE(polled, polled_list);
-            com_spinlock_release(&poll_head->lock);
+            kspinlock_release(&poll_head->lock);
         }
 
         COM_FS_FILE_RELEASE(polled->file);
@@ -220,7 +220,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         atomic_store(&timeout_arg->invalidated, true);
     }
 
-    if (COM_SYS_SIGNAL_NONE != sig) {
+    if (COM_IPC_SIGNAL_NONE != sig) {
         return COM_SYS_SYSCALL_ERR(EINTR);
     }
 

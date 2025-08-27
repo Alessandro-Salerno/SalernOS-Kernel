@@ -28,11 +28,11 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ctype.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <poll.h>
@@ -286,14 +286,14 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
 void com_io_tty_text_backend_poll_callback(void *data) {
     com_text_tty_backend_t *backend = data;
 
-    com_spinlock_acquire(&backend->slave_ph.lock);
+    kspinlock_acquire(&backend->slave_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &backend->slave_ph.polled_list, polled_list, _) {
-        com_spinlock_acquire(&polled->poller->lock);
+        kspinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify_all(&polled->poller->waiters);
-        com_spinlock_release(&polled->poller->lock);
+        kspinlock_release(&polled->poller->lock);
     }
-    com_spinlock_release(&backend->slave_ph.lock);
+    kspinlock_release(&backend->slave_ph.lock);
 }
 
 // CREDIT: vloxei64/ke
@@ -304,7 +304,7 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                             void                   *passthrough) {
     bool handled   = false;
     bool line_done = false;
-    int  sig       = COM_SYS_SIGNAL_NONE;
+    int  sig       = COM_IPC_SIGNAL_NONE;
     int  ret       = 0;
 
     if (ISIG & tty_backend->termios.c_lflag) {
@@ -429,8 +429,8 @@ end:
     }
 
 sighandler:
-    if (COM_SYS_SIGNAL_NONE != sig) {
-        com_sys_signal_send_to_proc_group(tty_backend->fg_pgid, sig, NULL);
+    if (COM_IPC_SIGNAL_NONE != sig) {
+        com_ipc_signal_send_to_proc_group(tty_backend->fg_pgid, sig, NULL);
     }
 
     return ret;
@@ -479,7 +479,7 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
     kmemset(backend, sizeof(com_text_tty_backend_t), 0);
     KRINGBUFFER_INIT(&backend->slave_rb);
     LIST_INIT(&backend->slave_ph.polled_list);
-    backend->slave_ph.lock = COM_SPINLOCK_NEW();
+    backend->slave_ph.lock = KSPINLOCK_NEW();
     backend->echo          = echo;
 
     backend->rows = rows;

@@ -21,12 +21,12 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <lib/hashmap.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <limits.h>
 #include <stdatomic.h>
@@ -41,9 +41,9 @@ struct futex {
 };
 
 // TODO: use per-futex locks
-static com_spinlock_t FutexLock = COM_SPINLOCK_NEW();
-static khashmap_t     FutexMap;
-static bool           FutexInit = false;
+static kspinlock_t FutexLock = KSPINLOCK_NEW();
+static khashmap_t  FutexMap;
+static bool        FutexInit = false;
 
 // SYSCALL: futex(uint32_t *word_ptr, int op, uint32_t val)
 COM_SYS_SYSCALL(com_sys_syscall_futex) {
@@ -59,7 +59,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     uintptr_t         phys =
         (uintptr_t)arch_mmu_get_physical(curr_proc->page_table, word_ptr);
 
-    com_spinlock_acquire(&FutexLock);
+    kspinlock_acquire(&FutexLock);
 
     if (!FutexInit) {
         KHASHMAP_INIT(&FutexMap);
@@ -120,6 +120,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     }
 
 end:
-    com_spinlock_release(&FutexLock);
+    kspinlock_release(&FutexLock);
     return ret;
 }

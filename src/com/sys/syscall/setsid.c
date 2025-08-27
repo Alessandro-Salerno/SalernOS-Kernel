@@ -27,7 +27,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setsid) {
     COM_SYS_SYSCALL_UNUSED_START(0);
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_spinlock_acquire(&curr_proc->pg_lock);
+    kspinlock_acquire(&curr_proc->pg_lock);
     KASSERT(NULL != curr_proc->proc_group);
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
@@ -41,6 +41,6 @@ COM_SYS_SYSCALL(com_sys_syscall_setsid) {
     ret.value = curr_proc->proc_group->pgid;
 
 end:
-    com_spinlock_release(&curr_proc->pg_lock);
+    kspinlock_release(&curr_proc->pg_lock);
     return ret;
 }

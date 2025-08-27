@@ -50,9 +50,9 @@ static void enqueue_callout(com_callout_queue_t *cpu_callout,
 
 uintmax_t com_sys_callout_get_time(void) {
     com_callout_queue_t *callout = &ARCH_CPU_GET()->callout;
-    com_spinlock_acquire(&callout->lock);
+    kspinlock_acquire(&callout->lock);
     uintmax_t time = callout->ns;
-    com_spinlock_release(&callout->lock);
+    kspinlock_release(&callout->lock);
     return time;
 }
 
@@ -60,7 +60,7 @@ void com_sys_callout_run(void) {
     arch_cpu_t          *curr_cpu    = ARCH_CPU_GET();
     com_callout_queue_t *cpu_callout = &curr_cpu->callout;
 
-    com_spinlock_acquire(&cpu_callout->lock);
+    kspinlock_acquire(&cpu_callout->lock);
     cpu_callout->ns += ARCH_TIMER_NS;
 
     while (true) {
@@ -73,9 +73,9 @@ void com_sys_callout_run(void) {
         TAILQ_REMOVE_HEAD(&cpu_callout->queue, queue);
         callout->reuse = false;
 
-        com_spinlock_release(&cpu_callout->lock);
+        kspinlock_release(&cpu_callout->lock);
         callout->handler(callout);
-        com_spinlock_acquire(&cpu_callout->lock);
+        kspinlock_acquire(&cpu_callout->lock);
 
         if (!callout->reuse) {
             com_mm_slab_free(callout, sizeof(com_callout_t));
@@ -88,7 +88,7 @@ void com_sys_callout_run(void) {
         cpu_callout->next_preempt += ARCH_SCHED_NS;
     }
 
-    com_spinlock_release(&cpu_callout->lock);
+    kspinlock_release(&cpu_callout->lock);
 
     if (resched) {
         com_sys_sched_yield();
@@ -106,9 +106,9 @@ void com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns) {
     callout->reuse                   = true;
     callout->ns                      = ns;
 
-    com_spinlock_acquire(&cpu_callout->lock);
+    kspinlock_acquire(&cpu_callout->lock);
     enqueue_callout(cpu_callout, callout);
-    com_spinlock_release(&cpu_callout->lock);
+    kspinlock_release(&cpu_callout->lock);
 }
 
 void com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay) {
@@ -126,9 +126,9 @@ void com_sys_callout_add_at(com_callout_intf_t handler,
     new->ns            = ns;
     new->reuse         = false;
 
-    com_spinlock_acquire(&cpu_callout->lock);
+    kspinlock_acquire(&cpu_callout->lock);
     enqueue_callout(cpu_callout, new);
-    com_spinlock_release(&cpu_callout->lock);
+    kspinlock_release(&cpu_callout->lock);
 }
 
 void com_sys_callout_add(com_callout_intf_t handler,

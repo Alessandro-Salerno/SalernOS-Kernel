@@ -19,7 +19,7 @@
 #pragma once
 
 #include <arch/context.h>
-#include <kernel/com/sys/signal.h>
+#include <kernel/com/ipc/signal.h>
 
 void arch_context_print(arch_context_t *ctx);
 void arch_context_trampoline(arch_context_t *ctx);

@@ -73,7 +73,7 @@ override LDFLAGS += \
     -z max-page-size=0x1000 \
     -T src/platform/$(PLATFORM)/linker.ld
 
-override CFILES = $(call rwildcard, src/com, *c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
+override CFILES = $(call rwildcard, src/com, *.c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
 override ASFILES = $(call rwildcard, src/platform/$(PLATFORM), *.S)
 override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
 

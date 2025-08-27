@@ -18,8 +18,8 @@
 
 #include <arch/context.h>
 #include <errno.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/signal.h>
 #include <kernel/platform/context.h>
 #include <lib/mem.h>
 #include <lib/util.h>
@@ -74,23 +74,23 @@ static const int SignalProperties[] = {
 };
 
 static int send_to_thread(com_thread_t *thread, int sig) {
-    COM_SYS_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
+    COM_IPC_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
     KDEBUG("sending signal %d to tid=%d", sig, thread->tid);
 
-    if (COM_SYS_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
+    if (COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
         return TKILL_STATUS_MASKED;
     }
 
-    if (COM_SYS_SIGNAL_NONE != thread->proc->stop_signal && SIGCONT != sig) {
+    if (COM_IPC_SIGNAL_NONE != thread->proc->stop_signal && SIGCONT != sig) {
         return TKILL_STATUS_BAD;
     }
 
-    com_spinlock_acquire(&thread->sched_lock);
+    kspinlock_acquire(&thread->sched_lock);
     if (NULL != thread->waiting_on) {
-        com_spinlock_t *wait_cond = thread->waiting_cond;
-        com_spinlock_acquire(wait_cond);
+        kspinlock_t *wait_cond = thread->waiting_cond;
+        kspinlock_acquire(wait_cond);
         com_sys_sched_notify_thread_nolock(thread);
-        com_spinlock_release(wait_cond);
+        kspinlock_release(wait_cond);
     } else if (!thread->runnable) {
         com_sys_thread_ready_nolock(thread);
     }
@@ -99,15 +99,15 @@ static int send_to_thread(com_thread_t *thread, int sig) {
         ARCH_CPU_SEND_IPI(thread->cpu);
     }
 
-    com_spinlock_release(&thread->sched_lock);
+    kspinlock_release(&thread->sched_lock);
     return 0;
 }
 
-void com_sys_signal_sigset_emptY(com_sigset_t *set) {
+void com_ipc_signal_sigset_emptY(com_sigset_t *set) {
     kmemset(set, sizeof(com_sigset_t), 0);
 }
 
-int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
+int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
     (void)sender;
     // TODO: should I check permission to send the signal?
 
@@ -122,13 +122,13 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
         return ESRCH;
     }
 
-    com_spinlock_acquire(&proc->signal_lock);
+    kspinlock_acquire(&proc->signal_lock);
     if (proc->exited) {
-        com_spinlock_release(&proc->signal_lock);
+        kspinlock_release(&proc->signal_lock);
         return ESRCH;
     }
 
-    com_spinlock_acquire(&proc->threads_lock);
+    kspinlock_acquire(&proc->threads_lock);
     com_thread_t *t, *_;
     bool          found = false;
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
@@ -139,16 +139,16 @@ int com_sys_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
     }
 
     if (!found) {
-        COM_SYS_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
+        COM_IPC_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
     }
 
-    com_spinlock_release(&proc->threads_lock);
-    com_spinlock_release(&proc->signal_lock);
+    kspinlock_release(&proc->threads_lock);
+    kspinlock_release(&proc->signal_lock);
 
     return 0;
 }
 
-int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
+int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
     if (!IS_VALID_SIGNAL(sig)) {
         return EINVAL;
     }
@@ -161,36 +161,36 @@ int com_sys_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
         return ESRCH;
     }
 
-    com_spinlock_acquire(&group->procs_lock);
+    kspinlock_acquire(&group->procs_lock);
     com_proc_t *p, *_;
     TAILQ_FOREACH_SAFE(p, &group->procs, procs, _) {
-        com_sys_signal_send_to_proc(p->pid, sig, sender);
+        com_ipc_signal_send_to_proc(p->pid, sig, sender);
     }
-    com_spinlock_release(&group->procs_lock);
+    kspinlock_release(&group->procs_lock);
 
     return 0;
 }
 
-int com_sys_signal_send_to_thread(struct com_thread *thread,
+int com_ipc_signal_send_to_thread(struct com_thread *thread,
                                   int                sig,
                                   com_proc_t        *sender) {
     (void)sender;
     // TODO: (same as for proc) actually check that this can be done (sender
     // check)
-    com_spinlock_acquire(&thread->proc->signal_lock);
+    kspinlock_acquire(&thread->proc->signal_lock);
     int ret = send_to_thread(thread, sig);
-    com_spinlock_release(&thread->proc->signal_lock);
+    kspinlock_release(&thread->proc->signal_lock);
     if (TKILL_STATUS_MASKED == ret) {
         return 0;
     }
     return ret;
 }
 
-void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
+void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     com_proc_t *proc = thread->proc;
 
-    com_spinlock_acquire(&proc->signal_lock);
-    int sig = com_sys_signal_check_nolock();
+    kspinlock_acquire(&proc->signal_lock);
+    int sig = com_ipc_signal_check_nolock();
 
     if (-1 == sig) {
         goto end;
@@ -198,8 +198,8 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
 
     KDEBUG("tid=%d received signal %d", thread->tid, sig);
 
-    COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
-    // COM_SYS_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
+    COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+    // COM_IPC_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
 
     com_sigaction_t *sigaction = proc->sigaction[sig];
 
@@ -208,7 +208,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KDEBUG("killing pid=%d because it received a deadly signal %d",
                    proc->pid,
                    sig);
-            com_spinlock_release(&proc->signal_lock);
+            kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
             com_sys_proc_terminate(proc, sig);
@@ -221,18 +221,18 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KASSERT(false);
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
-            com_spinlock_release(&proc->signal_lock);
+            kspinlock_release(&proc->signal_lock);
             com_sys_proc_stop(proc, sig);
-            com_spinlock_acquire(&thread->sched_lock);
+            kspinlock_acquire(&thread->sched_lock);
             thread->runnable = false;
             com_sys_sched_yield_nolock();
 
             // After execution resumes
             // Execution gets beck here after the process receives a SIGCONT, as
             // can be seen in send_to_thread
-            COM_SYS_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
+            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
             com_sys_proc_acquire_glock();
-            proc->stop_signal   = COM_SYS_SIGNAL_NONE;
+            proc->stop_signal   = COM_IPC_SIGNAL_NONE;
             proc->stop_notified = false;
             com_sys_proc_release_glock();
             return;
@@ -256,7 +256,7 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
     if (!(SA_NODEFER & sigaction->sa_flags)) {
-        COM_SYS_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
+        COM_IPC_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
     }
 
     if (SA_RESETHAND & sigaction->sa_flags) {
@@ -272,10 +272,10 @@ void com_sys_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
         sframe, ctx, stack, sigaction->sa_action, sig);
 
 end:
-    com_spinlock_release(&proc->signal_lock);
+    kspinlock_release(&proc->signal_lock);
 }
 
-int com_sys_signal_set_mask_nolock(com_sigmask_t *mask,
+int com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,
                                    int            how,
                                    com_sigset_t  *set,
                                    com_sigset_t  *oset) {
@@ -301,25 +301,25 @@ int com_sys_signal_set_mask_nolock(com_sigmask_t *mask,
 
 noset:
     if (NULL != oset) {
-        com_sys_signal_sigset_emptY(oset);
+        com_ipc_signal_sigset_emptY(oset);
         oset->sig[0] = old_mask;
     }
 
     return 0;
 }
 
-int com_sys_signal_set_mask(com_sigmask_t  *mask,
-                            int             how,
-                            com_sigset_t   *set,
-                            com_sigset_t   *oset,
-                            com_spinlock_t *signal_lock) {
-    com_spinlock_acquire(signal_lock);
-    int ret = com_sys_signal_set_mask_nolock(mask, how, set, oset);
-    com_spinlock_release(signal_lock);
+int com_ipc_signal_set_mask(com_sigmask_t *mask,
+                            int            how,
+                            com_sigset_t  *set,
+                            com_sigset_t  *oset,
+                            kspinlock_t   *signal_lock) {
+    kspinlock_acquire(signal_lock);
+    int ret = com_ipc_signal_set_mask_nolock(mask, how, set, oset);
+    kspinlock_release(signal_lock);
     return ret;
 }
 
-int com_sys_signal_check_nolock(void) {
+int com_ipc_signal_check_nolock(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
@@ -335,13 +335,13 @@ int com_sys_signal_check_nolock(void) {
     return sig;
 }
 
-int com_sys_signal_check(void) {
+int com_ipc_signal_check(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_spinlock_acquire(&curr_proc->signal_lock);
-    int ret = com_sys_signal_check_nolock();
-    com_spinlock_release(&curr_proc->signal_lock);
+    kspinlock_acquire(&curr_proc->signal_lock);
+    int ret = com_ipc_signal_check_nolock();
+    kspinlock_release(&curr_proc->signal_lock);
 
     return ret;
 }

@@ -33,11 +33,11 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     if (0 == pid) {
-        com_spinlock_acquire(&curr_proc->pg_lock);
+        kspinlock_acquire(&curr_proc->pg_lock);
         KASSERT(NULL != curr_proc->proc_group);
         pid_t pgid = curr_proc->proc_group->pgid;
         KDEBUG("pid=%d has pgid=%d", curr_proc->pid, pgid)
-        com_spinlock_release(&curr_proc->pg_lock);
+        kspinlock_release(&curr_proc->pg_lock);
         return COM_SYS_SYSCALL_OK(pgid);
     }
 
@@ -56,9 +56,9 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
     KASSERT(NULL != curr_proc->proc_group);
     KASSERT(NULL != proc->proc_group);
 
-    com_spinlock_acquire(&curr_proc->pg_lock);
+    kspinlock_acquire(&curr_proc->pg_lock);
     if (proc != curr_proc) {
-        com_spinlock_acquire(&proc->pg_lock);
+        kspinlock_acquire(&proc->pg_lock);
     }
 
     if (proc->proc_group->session->sid != curr_proc->proc_group->session->sid) {
@@ -70,8 +70,8 @@ COM_SYS_SYSCALL(com_sys_syscall_getpgid) {
 
 end:
     if (proc != curr_proc) {
-        com_spinlock_release(&proc->pg_lock);
+        kspinlock_release(&proc->pg_lock);
     }
-    com_spinlock_release(&curr_proc->pg_lock);
+    kspinlock_release(&curr_proc->pg_lock);
     return ret;
 }

@@ -20,9 +20,9 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/io/log.h>
-#include <kernel/com/panic.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/interrupt.h>
-#include <kernel/com/sys/signal.h>
+#include <kernel/com/sys/panic.h>
 #include <lib/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -49,7 +49,7 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     com_isr_t *isr = &InterruptTable[vec];
 
     if (NULL == isr) {
-        com_panic(ctx, "isr not set for interrupt vector %u", vec);
+        com_sys_panic(ctx, "isr not set for interrupt vector %u", vec);
     }
 
     if (NULL != isr->eoi) {
@@ -64,7 +64,7 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
 
     if (ARCH_CONTEXT_ISUSER(ctx)) {
-        com_sys_signal_dispatch(ctx, curr_thread);
+        com_ipc_signal_dispatch(ctx, curr_thread);
     }
 
     if (NULL != curr_thread) {

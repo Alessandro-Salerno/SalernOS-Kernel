@@ -18,9 +18,9 @@
 
 #include <kernel/com/io/term.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/sched.h>
+#include <lib/spinlock.h>
 #include <lib/str.h>
 #include <stdatomic.h>
 #include <vendor/tailq.h>
@@ -49,10 +49,10 @@ static void refresh_term_nolock(com_term_t *term) {
 
 static void flush_callout(com_callout_t *callout) {
     com_term_t *term = callout->arg;
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
     flush_buffer_nolock(term);
     bool should_resched = term->buffering.enabled && term->enabled;
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 
     if (should_resched) {
         com_sys_callout_reschedule(callout, KFPS(CONFIG_TERM_FPS));
@@ -62,7 +62,7 @@ static void flush_callout(com_callout_t *callout) {
 com_term_t *com_io_term_new(com_term_backend_t backend) {
     com_term_t *ret        = com_mm_slab_alloc(sizeof(com_term_t));
     ret->backend           = backend;
-    ret->lock              = COM_SPINLOCK_NEW();
+    ret->lock              = KSPINLOCK_NEW();
     ret->enabled           = true;
     ret->buffering.enabled = false;
     TAILQ_INIT(&ret->buffering.waiters);
@@ -74,7 +74,7 @@ com_term_t *com_io_term_new(com_term_backend_t backend) {
 
 com_term_t *com_io_term_clone(com_term_t *parent) {
     com_term_t *ret        = com_mm_slab_alloc(sizeof(com_term_t));
-    ret->lock              = COM_SPINLOCK_NEW();
+    ret->lock              = KSPINLOCK_NEW();
     ret->buffering.enabled = false;
     TAILQ_INIT(&ret->buffering.waiters);
 
@@ -82,9 +82,9 @@ com_term_t *com_io_term_clone(com_term_t *parent) {
         ret->enabled      = parent->enabled;
         ret->backend.ops  = parent->backend.ops;
         ret->backend.data = ret->backend.ops->init();
-        com_spinlock_acquire(&parent->lock);
+        kspinlock_acquire(&parent->lock);
         bool buffering = parent->buffering.enabled;
-        com_spinlock_release(&parent->lock);
+        kspinlock_release(&parent->lock);
         com_io_term_set_buffering(ret, buffering);
     }
 
@@ -108,7 +108,7 @@ void com_io_term_putsn(com_term_t *term, const char *s, size_t n) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
 
     if (term->buffering.enabled) {
         while (term->buffering.index + n >= COM_IO_TERM_BUFSZ) {
@@ -120,7 +120,7 @@ void com_io_term_putsn(com_term_t *term, const char *s, size_t n) {
         term->backend.ops->putsn(term->backend.data, s, n);
     }
 
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 }
 
 void com_io_term_get_size(com_term_t *term, size_t *rows, size_t *cols) {
@@ -158,14 +158,14 @@ void com_io_term_flush(com_term_t *term) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
 
     if (term->buffering.enabled) {
         flush_buffer_nolock(term);
     }
 
     term->backend.ops->flush(term->backend.data);
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 }
 
 void com_io_term_set_buffering(com_term_t *term, bool state) {
@@ -177,10 +177,10 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
 
     if (state == term->buffering.enabled) {
-        com_spinlock_release(&term->lock);
+        kspinlock_release(&term->lock);
         return;
     }
 
@@ -191,7 +191,7 @@ void com_io_term_set_buffering(com_term_t *term, bool state) {
     term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
     term->buffering.enabled = state;
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 
     if (state) {
         com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
@@ -203,12 +203,12 @@ void com_io_term_enable(com_term_t *term) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
     term->backend.ops->enable(term->backend.data);
     term->enabled = true;
 
     refresh_term_nolock(term);
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 
     if (term->buffering.enabled) {
         com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
@@ -220,10 +220,10 @@ void com_io_term_disable(com_term_t *term) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
     term->enabled = false;
     term->backend.ops->disable(term->backend.data);
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 }
 
 void com_io_term_refresh(com_term_t *term) {
@@ -235,9 +235,9 @@ void com_io_term_refresh(com_term_t *term) {
         return;
     }
 
-    com_spinlock_acquire(&term->lock);
+    kspinlock_acquire(&term->lock);
     refresh_term_nolock(term);
-    com_spinlock_release(&term->lock);
+    kspinlock_release(&term->lock);
 }
 
 void com_io_term_set_fallback(com_term_t *fallback_term) {

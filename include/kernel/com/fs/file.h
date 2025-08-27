@@ -20,7 +20,7 @@
 
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
-#include <kernel/com/spinlock.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
 
@@ -44,9 +44,9 @@
     })
 
 typedef struct com_file {
-    com_spinlock_t off_lock;
-    uintmax_t      off;
-    uintmax_t      flags;
+    kspinlock_t off_lock;
+    uintmax_t   off;
+    uintmax_t   flags;
     uintmax_t num_ref; // this is used because multiple file descripts may point
                        // to the same file (e.g., if stdout and stderr and the
                        // same) or if the process was forked

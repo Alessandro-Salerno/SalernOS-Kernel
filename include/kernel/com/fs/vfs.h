@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <kernel/com/spinlock.h>
+#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdbool.h>
 #include <stddef.h>

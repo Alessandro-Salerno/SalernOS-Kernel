@@ -18,8 +18,8 @@
 
 #include <arch/context.h>
 #include <kernel/com/io/log.h>
-#include <kernel/com/panic.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/panic.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <stdint.h>
 
@@ -65,10 +65,10 @@ static char *Exceptions[] = {"division by 0",
 
 static void generic_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
     if (isr->vec < 19) {
-        com_panic(ctx, "cpu exception (%s)", Exceptions[isr->vec]);
+        com_sys_panic(ctx, "cpu exception (%s)", Exceptions[isr->vec]);
     }
 
-    com_panic(ctx, "cpu exception (unknown)");
+    com_sys_panic(ctx, "cpu exception (unknown)");
 }
 
 void x86_64_idt_init() {
