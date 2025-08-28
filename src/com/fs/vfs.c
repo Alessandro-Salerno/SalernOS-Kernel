@@ -123,32 +123,80 @@ int com_fs_vfs_lookup(com_vnode_t **out,
                       com_vnode_t  *root,
                       com_vnode_t  *cwd,
                       bool          follow_symlinks) {
-    for (size_t i = 0; i < CONFIG_SYMLINK_MAX; i++) {
-        com_vnode_t *curr = NULL;
-        int          ret  = vfs_lookup1(&curr, &cwd, path, pathlen, root, cwd);
+    com_vnode_t *curr = NULL;
+    com_vnode_t *prev = NULL;
 
+    for (size_t i = 0;; i++) {
+        // Here prev == curr
+        // Here (curr = prev) is held (Nth iteration) or NULL (first iteration)
+        KASSERT(prev == curr);
+        if (CONFIG_SYMLINK_MAX == i) {
+            COM_FS_VFS_VNODE_RELEASE(prev);
+            *out = NULL;
+            return ELOOP;
+        }
+
+        int ret = vfs_lookup1(&curr, &cwd, path, pathlen, root, cwd);
         if (0 != ret) {
             *out = NULL;
             return ret;
         }
 
-        // TODO: always follow intermediate symlinks
-        if (follow_symlinks && E_COM_VNODE_TYPE_LINK == curr->type) {
-            ret = com_fs_vfs_readlink(&path, &pathlen, curr);
-            COM_FS_VFS_VNODE_RELEASE(curr);
-            if (0 != ret) {
-                *out = NULL;
-                return ret;
-            }
-            continue;
+        // Here prev != curr
+        // Here curr is always held
+        // Here prev is either held (Nth iteration) or NULL (first iteration)
+        KASSERT(prev != curr);
+        if (E_COM_VNODE_TYPE_LINK != curr->type) {
+            break;
         }
 
+        // Here curr != NULL
+        // Here prev != curr
+        // Control reaches here only if curr is a symlink
+        KASSERT(prev != curr);
+        ret = com_fs_vfs_readlink(&path, &pathlen, curr);
+        if (0 != ret) {
+            COM_FS_VFS_VNODE_RELEASE(prev);
+            COM_FS_VFS_VNODE_RELEASE(curr);
+            *out = NULL;
+            return ret;
+        }
+
+        // Here prev is either held (Nth iteration) or NULL (first iteration)
+        // Here curr is always held
+        COM_FS_VFS_VNODE_RELEASE(prev);
+        // Here prev is no longer held
+        prev = curr;
+        // Here prev = curr, thus prev is a symlink and is held
+    }
+
+    // Here curr != NULL because we can only get here with the break, which also
+    // implies taht curr is not a symlink
+    // Here prev != curr because we can only get here with the break
+    // Here prev is either held (Nth iteration) or NULL (first iteration)
+    KASSERT(E_COM_VNODE_TYPE_LINK != curr->type);
+
+    if (NULL == prev) {
+        // Here we know the loop only ran once, so there was no symlink involved
         *out = curr;
         return 0;
     }
 
-    *out = NULL;
-    return ELOOP;
+    // Control only reaches here if the previous if branch wasn't taken, so here
+    // we know that prev != NULL and is a symlink
+    KASSERT(E_COM_VNODE_TYPE_LINK == prev->type);
+
+    if (follow_symlinks) {
+        COM_FS_VFS_VNODE_RELEASE(prev);
+        *out = curr;
+        return 0;
+    }
+
+    // Control only reaches here if the previous if branch wasn't taken, so here
+    // we know that the caller didn't want to follow the last symlink
+    COM_FS_VFS_VNODE_RELEASE(curr);
+    *out = prev;
+    return 0;
 }
 
 int com_fs_vfs_create(com_vnode_t **out,
