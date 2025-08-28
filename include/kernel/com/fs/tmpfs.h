@@ -58,6 +58,14 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
                        size_t       buflen,
                        uintmax_t    off,
                        uintmax_t    flags);
+int com_fs_tmpfs_symlink(com_vnode_t *dir,
+                         const char  *linkname,
+                         size_t       linknamelen,
+                         const char  *path,
+                         size_t       pathlen);
+int com_fs_tmpfs_readlink(const char **path,
+                          size_t      *pathlen,
+                          com_vnode_t *link);
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size);
 int com_fs_tmpfs_readdir(void        *buf,

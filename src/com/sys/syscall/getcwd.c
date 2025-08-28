@@ -86,7 +86,8 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
         }
 
         com_vnode_t *old_parent = parent;
-        err = com_fs_vfs_lookup(&parent, "..", 2, curr_proc->root, curr_cwd);
+        err                     = com_fs_vfs_lookup(
+            &parent, "..", 2, curr_proc->root, curr_cwd, true);
 
         if (0 == err) {
             // here we release the old parent.

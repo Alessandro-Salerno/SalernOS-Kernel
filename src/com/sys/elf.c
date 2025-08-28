@@ -129,7 +129,8 @@ int com_sys_elf64_load(com_elf_data_t       *out,
                        uintptr_t             virt_off,
                        arch_mmu_pagetable_t *pt) {
     com_vnode_t *elf_file = NULL;
-    int ret = com_fs_vfs_lookup(&elf_file, exec_path, exec_path_len, root, cwd);
+    int          ret =
+        com_fs_vfs_lookup(&elf_file, exec_path, exec_path_len, root, cwd, true);
     if (0 != ret) {
         return ret;
     }

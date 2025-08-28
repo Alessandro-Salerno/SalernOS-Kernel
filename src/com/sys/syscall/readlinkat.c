@@ -16,7 +16,6 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#define _GNU_SOURCE
 #include <arch/cpu.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -29,25 +28,24 @@
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include <stdio.h>
 
-// SYSCALL: fstatat(int dir_fd, const char *path, struct stat *buf, int flags)
-COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
+// SYSCALL: readlinkat(int dir, const char *path, char *buf, size_t buflen)
+COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
 
-    int          dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    const char  *path   = COM_SYS_SYSCALL_ARG(void *, 2);
-    struct stat *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
-    int          flags  = COM_SYS_SYSCALL_ARG(int, 4);
+    int         dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
+    const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
+    char       *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
+    size_t      buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
-    com_vnode_t *dir       = NULL;
-    com_file_t  *dir_file  = NULL;
-    bool         do_lookup = false;
+    com_vnode_t *dir      = NULL;
+    com_file_t  *dir_file = NULL;
+    size_t       pathlen  = kstrlen(path);
 
     if (AT_FDCWD == dir_fd) {
         dir = atomic_load(&curr_proc->cwd);
@@ -56,46 +54,42 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
         if (NULL != dir_file) {
             dir = dir_file->vnode;
         } else {
-            ret.err = EBADF;
+            ret = COM_SYS_SYSCALL_ERR(EBADF);
             goto end;
         }
     }
 
     KASSERT(NULL != dir);
-
-    do_lookup            = !((AT_EMPTY_PATH & flags) && 0 == kstrlen(path));
-    int          vfs_err = 0;
-    com_vnode_t *target  = dir;
-
-    if (do_lookup) {
-        vfs_err = com_fs_vfs_lookup(&target,
-                                    path,
-                                    kstrlen(path),
-                                    curr_proc->root,
-                                    dir,
-                                    (AT_SYMLINK_FOLLOW & flags) |
-                                        !(AT_SYMLINK_NOFOLLOW & flags));
-    }
+    com_vnode_t *target = NULL;
+    int          vfs_err =
+        com_fs_vfs_lookup(&target, path, pathlen, curr_proc->root, dir, false);
 
     if (0 != vfs_err) {
-        do_lookup = false;
-        ret.err   = vfs_err;
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;
     }
 
-    vfs_err = com_fs_vfs_stat(buf, target);
+    if (E_COM_VNODE_TYPE_LINK != target->type) {
+        ret = COM_SYS_SYSCALL_ERR(EINVAL);
+        goto end;
+    }
+
+    const char *link    = NULL;
+    size_t      linklen = 0;
+    vfs_err             = com_fs_vfs_readlink(&link, &linklen, target);
 
     if (vfs_err) {
-        ret.err = vfs_err;
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;
     }
 
-    ret.value = 0;
+    size_t user_linklen = KMIN(linklen, buflen);
+    kmemcpy(buf, link, user_linklen);
+
+    ret = COM_SYS_SYSCALL_OK(user_linklen);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);
-    if (do_lookup) {
-        COM_FS_VFS_VNODE_RELEASE(target);
-    }
+    COM_FS_VFS_VNODE_RELEASE(target);
     return ret;
 }

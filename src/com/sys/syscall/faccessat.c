@@ -61,8 +61,11 @@ COM_SYS_SYSCALL(com_sys_syscall_faccessat) {
     KASSERT(NULL != dir);
 
     com_vnode_t *file_vn = NULL;
-    int          vfs_err =
-        com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir);
+    // POSIX says to always follow symlinks here, but Linux 5.8 apparently has
+    // an faccessat2() that lets you disable this, so maybe some programs expect
+    // it?
+    int vfs_err =
+        com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir, true);
 
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);

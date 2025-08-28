@@ -29,19 +29,12 @@
         path++;                           \
     }
 
-int com_fs_vfs_close(com_vnode_t *vnode) {
-    if (NULL == vnode->ops->close) {
-        return ENOSYS;
-    }
-
-    return vnode->ops->close(vnode);
-}
-
-int com_fs_vfs_lookup(com_vnode_t **out,
-                      const char   *path,
-                      size_t        pathlen,
-                      com_vnode_t  *root,
-                      com_vnode_t  *cwd) {
+static int vfs_lookup1(com_vnode_t **out,
+                       com_vnode_t **old_dir,
+                       const char   *path,
+                       size_t        pathlen,
+                       com_vnode_t  *root,
+                       com_vnode_t  *cwd) {
     com_vnode_t *ret     = cwd;
     const char  *pathend = path + pathlen;
 
@@ -102,7 +95,11 @@ int com_fs_vfs_lookup(com_vnode_t **out,
                 COM_FS_VFS_VNODE_HOLD(ret);
             }
 
-            // TODO: handle case in which ret is symlink
+            if (E_COM_VNODE_TYPE_LINK == ret->type) {
+                *out     = ret;
+                *old_dir = dir;
+                return 0;
+            }
         }
 
         path = section_end + 1;
@@ -110,6 +107,48 @@ int com_fs_vfs_lookup(com_vnode_t **out,
 
     *out = ret;
     return 0;
+}
+
+int com_fs_vfs_close(com_vnode_t *vnode) {
+    if (NULL == vnode->ops->close) {
+        return ENOSYS;
+    }
+
+    return vnode->ops->close(vnode);
+}
+
+int com_fs_vfs_lookup(com_vnode_t **out,
+                      const char   *path,
+                      size_t        pathlen,
+                      com_vnode_t  *root,
+                      com_vnode_t  *cwd,
+                      bool          follow_symlinks) {
+    for (size_t i = 0; i < CONFIG_SYMLINK_MAX; i++) {
+        com_vnode_t *curr = NULL;
+        int          ret  = vfs_lookup1(&curr, &cwd, path, pathlen, root, cwd);
+
+        if (0 != ret) {
+            *out = NULL;
+            return ret;
+        }
+
+        // TODO: always follow intermediate symlinks
+        if (follow_symlinks && E_COM_VNODE_TYPE_LINK == curr->type) {
+            ret = com_fs_vfs_readlink(&path, &pathlen, curr);
+            COM_FS_VFS_VNODE_RELEASE(curr);
+            if (0 != ret) {
+                *out = NULL;
+                return ret;
+            }
+            continue;
+        }
+
+        *out = curr;
+        return 0;
+    }
+
+    *out = NULL;
+    return ELOOP;
 }
 
 int com_fs_vfs_create(com_vnode_t **out,
@@ -191,6 +230,18 @@ int com_fs_vfs_write(size_t      *bytes_written,
 
     *bytes_written = 0;
     return node->ops->write(bytes_written, node, buf, buflen, off, flags);
+}
+
+int com_fs_vfs_symlink(com_vnode_t *dir,
+                       const char  *linkname,
+                       size_t       linknamelen,
+                       const char  *path,
+                       size_t       pathlen) {
+    if (NULL == dir->ops->symlink) {
+        return ENOSYS;
+    }
+
+    return dir->ops->symlink(dir, linkname, linknamelen, path, pathlen);
 }
 
 int com_fs_vfs_readlink(const char **path, size_t *pathlen, com_vnode_t *link) {

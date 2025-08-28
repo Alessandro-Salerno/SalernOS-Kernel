@@ -23,6 +23,7 @@
 #include <lib/str.h>
 #include <stdint.h>
 
+#define GNUTAR_SYMLINK   '2'
 #define GNUTAR_LONG_NAME 'L'
 #define GNUTAR_LONG_LINK 'K'
 #define GNUTAR_DIR       '5'
@@ -36,6 +37,7 @@ struct tar_header {
     char unused[12]; // mtime
     char unused2[8]; // checksum
     char type;
+    char linkname[100];
 };
 
 static uintmax_t oct_atoi(const char *s, size_t len) {
@@ -123,10 +125,10 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
         size_t file_name_len = file_path_len;
 
         // kmemrchr returns NULL only if the character is not found, thus this
-        // can be read as: "if this is not a directory"
+        // can be read as: "if this is a directory"
         if (NULL != path_end) {
             size_t sl_len = path_end - file_path;
-            com_fs_vfs_lookup(&dir, file_path, sl_len, root, root);
+            com_fs_vfs_lookup(&dir, file_path, sl_len, root, root, true);
             KASSERT(NULL != dir);
             file_name_off = sl_len + 1;
             file_name_len = file_path_len - sl_len - 1;
@@ -137,8 +139,17 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
             file_name_len--;
         }
 
-        com_vnode_t *file = NULL;
-        create_node(&file, file_path + file_name_off, file_name_len, dir, hdr);
+        if (GNUTAR_SYMLINK == hdr->type) {
+            com_fs_vfs_symlink(dir,
+                               file_path + file_name_off,
+                               file_name_len,
+                               hdr->linkname,
+                               kstrlen(hdr->linkname));
+        } else {
+            com_vnode_t *file = NULL;
+            create_node(
+                &file, file_path + file_name_off, file_name_len, dir, hdr);
+        }
 
         if (dir != root) {
             COM_FS_VFS_VNODE_RELEASE(dir);

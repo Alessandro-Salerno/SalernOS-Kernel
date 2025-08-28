@@ -69,8 +69,12 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     if (O_CREAT & flags) {
         KDEBUG("got into O_CREAT");
         com_vnode_t *existant = NULL;
-        vfs_err =
-            com_fs_vfs_lookup(&existant, path, pathlen, curr_proc->root, dir);
+        vfs_err               = com_fs_vfs_lookup(&existant,
+                                    path,
+                                    pathlen,
+                                    curr_proc->root,
+                                    dir,
+                                    !(O_NOFOLLOW & flags));
 
         if ((O_EXCL & flags) && 0 == vfs_err) {
             COM_FS_VFS_VNODE_RELEASE(existant);
@@ -87,8 +91,12 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
         size_t penult_len, end_idx, end_len;
         kstrpathpenult(path, pathlen, &penult_len, &end_idx, &end_len);
 
-        vfs_err =
-            com_fs_vfs_lookup(&dir, path, penult_len, curr_proc->root, dir);
+        vfs_err = com_fs_vfs_lookup(&dir,
+                                    path,
+                                    penult_len,
+                                    curr_proc->root,
+                                    dir,
+                                    !(O_NOFOLLOW & flags));
 
         if (0 != vfs_err) {
             ret.err = vfs_err;
@@ -101,7 +109,8 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     }
 
     // if no O_CREAT
-    vfs_err = com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir);
+    vfs_err =
+        com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir, true);
     if (0 != vfs_err) {
         ret.err = vfs_err;
         goto end;

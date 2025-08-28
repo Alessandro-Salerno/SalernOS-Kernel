@@ -518,5 +518,18 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "timespec");
 
+    com_sys_syscall_register(0x2A,
+                             "readlinkat",
+                             com_sys_syscall_readlinkat,
+                             4,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "buf",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "buflen");
+
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

@@ -73,6 +73,8 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .lookup   = com_fs_tmpfs_lookup,
                                        .read     = com_fs_tmpfs_read,
                                        .write    = com_fs_tmpfs_write,
+                                       .symlink  = com_fs_tmpfs_symlink,
+                                       .readlink = com_fs_tmpfs_readlink,
                                        .stat     = com_fs_tmpfs_stat,
                                        .truncate = com_fs_tmpfs_truncate,
                                        .readdir  = com_fs_tmpfs_readdir,
@@ -373,9 +375,39 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
     return 0;
 }
 
-int com_fs_tmpfs_isatty(com_vnode_t *node) {
-    (void)node;
-    return ENOTTY;
+int com_fs_tmpfs_symlink(com_vnode_t *dir,
+                         const char  *linkname,
+                         size_t       linknamelen,
+                         const char  *path,
+                         size_t       pathlen) {
+    struct tmpfs_dir_entry *dirent;
+    com_vnode_t            *vn;
+    createat(&dirent, &vn, dir, linkname, linknamelen, 0, 0);
+    struct tmpfs_node *tn = vn->extra;
+    vn->type              = E_COM_VNODE_TYPE_LINK;
+
+    char *path_copy = com_mm_slab_alloc(pathlen);
+    kmemcpy(path_copy, path, pathlen);
+    tn->link.path = path_copy;
+    tn->link.len  = pathlen;
+
+    struct tmpfs_node *parent = dir->extra;
+    kspinlock_acquire(&parent->lock);
+    TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
+    kspinlock_release(&parent->lock);
+
+    return 0;
+}
+
+int com_fs_tmpfs_readlink(const char **path,
+                          size_t      *pathlen,
+                          com_vnode_t *link) {
+    struct tmpfs_node *tn = link->extra;
+    KASSERT(E_COM_VNODE_TYPE_LINK == link->type);
+    *path    = tn->link.path;
+    *pathlen = tn->link.len;
+    KDEBUG("readlink: %.*s", *pathlen, *path);
+    return 0;
 }
 
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
@@ -390,11 +422,12 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
         out->st_size = file->file.size;
     } else if (E_COM_VNODE_TYPE_DIR == node->type) {
         out->st_mode |= S_IFDIR;
+    } else if (E_COM_VNODE_TYPE_LINK == node->type) {
+        out->st_mode |= S_IFLNK;
     } else {
         return ENOSYS;
     }
 
-    // TODO: links
     return 0;
 }
 

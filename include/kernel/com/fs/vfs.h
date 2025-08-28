@@ -103,6 +103,11 @@ typedef struct com_vnode_ops {
                  size_t       buflen,
                  uintmax_t    off,
                  uintmax_t    flags);
+    int (*symlink)(com_vnode_t *dir,
+                   const char  *linkname,
+                   size_t       linknamelen,
+                   const char  *path,
+                   size_t       pathlen);
     int (*readlink)(const char **path, size_t *pathlen, com_vnode_t *link);
     int (*readdir)(void        *buf,
                    size_t       buflen,
@@ -143,7 +148,8 @@ int com_fs_vfs_lookup(com_vnode_t **out,
                       const char   *path,
                       size_t        pathlen,
                       com_vnode_t  *root,
-                      com_vnode_t  *cwd);
+                      com_vnode_t  *cwd,
+                      bool          follow_symlinks);
 int com_fs_vfs_create(com_vnode_t **out,
                       com_vnode_t  *dir,
                       const char   *name,
@@ -171,6 +177,11 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags);
+int com_fs_vfs_symlink(com_vnode_t *dir,
+                       const char  *linkname,
+                       size_t       linknamelen,
+                       const char  *path,
+                       size_t       pathlen);
 int com_fs_vfs_readlink(const char **path, size_t *pathlen, com_vnode_t *link);
 int com_fs_vfs_readdir(void        *buf,
                        size_t       buflen,
