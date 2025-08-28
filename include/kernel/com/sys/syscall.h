@@ -155,3 +155,5 @@ COM_SYS_SYSCALL(com_sys_syscall_clock_get);
 COM_SYS_SYSCALL(com_sys_syscall_faccessat);
 COM_SYS_SYSCALL(com_sys_syscall_poll);
 COM_SYS_SYSCALL(com_sys_syscall_readlinkat);
+COM_SYS_SYSCALL(com_sys_syscall_symlinkat);
+COM_SYS_SYSCALL(com_sys_syscall_unlinkat);

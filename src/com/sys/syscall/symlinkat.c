@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -29,14 +28,14 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-// SYSCALL: readlinkat(int dir, const char *path, char *buf, size_t buflen)
-COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
+// SYSCALL: symlinkat(const char *path1, int dir_fd, const char *path2)
+COM_SYS_SYSCALL(com_sys_syscall_symlinkat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(4);
 
-    int         dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
-    char       *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
-    size_t      buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
+    const char *path1  = COM_SYS_SYSCALL_ARG(void *, 1);
+    int         dir_fd = COM_SYS_SYSCALL_ARG(int, 2);
+    const char *path2  = COM_SYS_SYSCALL_ARG(void *, 3);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
@@ -45,7 +44,6 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
 
     com_vnode_t *dir      = NULL;
     com_file_t  *dir_file = NULL;
-    size_t       pathlen  = kstrlen(path);
 
     int dir_ret =
         com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
@@ -54,36 +52,16 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
         goto end;
     }
 
-    com_vnode_t *target = NULL;
-    int          vfs_err =
-        com_fs_vfs_lookup(&target, path, pathlen, curr_proc->root, dir, false);
-
+    int vfs_err =
+        com_fs_vfs_symlink(dir, path2, kstrlen(path2), path1, kstrlen(path1));
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;
     }
 
-    if (E_COM_VNODE_TYPE_LINK != target->type) {
-        ret = COM_SYS_SYSCALL_ERR(EINVAL);
-        goto end;
-    }
-
-    const char *link    = NULL;
-    size_t      linklen = 0;
-    vfs_err             = com_fs_vfs_readlink(&link, &linklen, target);
-
-    if (vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
-        goto end;
-    }
-
-    size_t user_linklen = KMIN(linklen, buflen);
-    kmemcpy(buf, link, user_linklen);
-
-    ret = COM_SYS_SYSCALL_OK(user_linklen);
+    ret = COM_SYS_SYSCALL_OK(0);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);
-    COM_FS_VFS_VNODE_RELEASE(target);
     return ret;
 }

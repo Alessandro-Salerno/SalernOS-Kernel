@@ -29,31 +29,45 @@
         path++;                           \
     }
 
+// out is the oujtput vnode, and is always set (NULL on errors, valid vnode
+// otherwise) out_dir is the directory containing out, which is set only if out
+// is a symlink, otherwise it's undefined. out_subpath and out_subpathlen are
+// always updated. If out is a symlink, they will point to the sybpath to
+// explore after resolving the symlink (if the symlink points to a directory),
+// they're NULL and 0 respectivelly otherwise
 static int vfs_lookup1(com_vnode_t **out,
-                       com_vnode_t **old_dir,
+                       com_vnode_t **out_dir,
+                       const char  **out_subpath,
+                       size_t       *out_subpathlen,
                        const char   *path,
                        size_t        pathlen,
                        com_vnode_t  *root,
                        com_vnode_t  *cwd) {
-    com_vnode_t *ret     = cwd;
-    const char  *pathend = path + pathlen;
+    com_vnode_t *ret_vn         = cwd;
+    int          ret            = 0;
+    const char  *ret_subpath    = NULL;
+    size_t       ret_subpathlen = 0;
+    const char  *pathend        = path + pathlen;
 
     if (pathlen > 0 && '/' == path[0]) {
         path++;
-        ret = root;
+        ret_vn = root;
     } else if (NULL == cwd) {
         return EINVAL;
     }
 
-    SKIP_SEPARATORS(path, pathend);
-    COM_FS_VFS_VNODE_HOLD(ret);
+    COM_FS_VFS_VNODE_HOLD(ret_vn);
 
     const char *section_end = NULL;
     bool        end_reached = false;
     while (path < pathend && !end_reached) {
+        SKIP_SEPARATORS(path, pathend);
+        if (path == pathend) {
+            break;
+        }
+
         section_end = kmemchr(path, '/', pathend - path);
         end_reached = NULL == section_end;
-
         if (end_reached) {
             section_end = pathend;
         }
@@ -61,52 +75,97 @@ static int vfs_lookup1(com_vnode_t **out,
         bool dot    = 1 == section_end - path && 0 == kmemcmp(path, ".", 1);
         bool dotdot = 2 == section_end - path && 0 == kmemcmp(path, "..", 2);
 
-        while (dotdot && ret->isroot && NULL != ret->vfs->mountpoint) {
-            com_vnode_t *old = ret;
-            ret              = ret->vfs->mountpoint;
+        while (dotdot && ret_vn->isroot && NULL != ret_vn->vfs->mountpoint) {
+            com_vnode_t *old = ret_vn;
+            ret_vn           = ret_vn->vfs->mountpoint;
             COM_FS_VFS_VNODE_RELEASE(old);
-            COM_FS_VFS_VNODE_HOLD(ret);
+            COM_FS_VFS_VNODE_HOLD(ret_vn);
         }
 
         if (!dot) {
-            if (E_COM_VNODE_TYPE_DIR != ret->type) {
-                COM_FS_VFS_VNODE_RELEASE(ret);
-                *out = NULL;
-                return ENOTDIR;
+            if (E_COM_VNODE_TYPE_DIR != ret_vn->type) {
+                COM_FS_VFS_VNODE_RELEASE(ret_vn);
+                ret_vn = NULL;
+                ret    = ENOTDIR;
+                break;
             }
 
-            com_vnode_t *dir = ret;
-            ret              = NULL;
-            int fsret = dir->ops->lookup(&ret, dir, path, section_end - path);
-
-            if (0 != fsret) {
+            com_vnode_t *dir = ret_vn;
+            ret_vn           = NULL;
+            ret = dir->ops->lookup(&ret_vn, dir, path, section_end - path);
+            if (0 != ret) {
                 COM_FS_VFS_VNODE_RELEASE(dir);
-                *out = NULL;
-                return fsret;
+                ret_vn = NULL;
+                break;
             }
 
-            while (NULL != ret->mountpointof) {
-                if (dir != ret) {
+            while (NULL != ret_vn->mountpointof) {
+                if (dir != ret_vn) {
                     COM_FS_VFS_VNODE_RELEASE(dir);
                 }
 
-                dir = ret;
-                ret = ret->mountpointof->root;
-                COM_FS_VFS_VNODE_HOLD(ret);
+                dir    = ret_vn;
+                ret_vn = ret_vn->mountpointof->root;
+                COM_FS_VFS_VNODE_HOLD(ret_vn);
             }
 
-            if (E_COM_VNODE_TYPE_LINK == ret->type) {
-                *out     = ret;
-                *old_dir = dir;
-                return 0;
+            if (E_COM_VNODE_TYPE_LINK == ret_vn->type) {
+                *out_dir = dir;
+                if (NULL != section_end && !end_reached) {
+                    ret_subpath    = section_end;
+                    ret_subpathlen = pathend - section_end;
+                }
+                break;
             }
         }
 
         path = section_end + 1;
     }
 
-    *out = ret;
-    return 0;
+    if (NULL != out_subpath) {
+        *out_subpath = ret_subpath;
+    }
+    if (NULL != out_subpathlen) {
+        *out_subpathlen = ret_subpathlen;
+    }
+
+    *out = ret_vn;
+    return ret;
+}
+
+static int vfs_lookup2(com_vnode_t **out,
+                       com_vnode_t  *root,
+                       com_vnode_t  *cwd,
+                       com_vnode_t  *link) {
+    const char *path    = NULL;
+    size_t      pathlen = 0;
+
+    for (size_t i = 0; i < CONFIG_SYMLINK_MAX; i++) {
+        if (E_COM_VNODE_TYPE_LINK != link->type) {
+            *out = link;
+            return 0;
+        }
+
+        int ret = com_fs_vfs_readlink(&path, &pathlen, link);
+        // Release the vnode as soon as possible: this ensures that, regardlless
+        // of whether the operations fails or succeeds, the caller can expect
+        // link to be released if it is a symlink
+        COM_FS_VFS_VNODE_RELEASE(link);
+        if (0 != ret) {
+            *out = NULL;
+            return ret;
+        }
+
+        ret = vfs_lookup1(&link, &cwd, NULL, NULL, path, pathlen, root, cwd);
+        if (0 != ret) {
+            *out = NULL;
+            return ret;
+        }
+    }
+
+    *out = NULL;
+    COM_FS_VFS_VNODE_RELEASE(link);
+    return ELOOP;
 }
 
 int com_fs_vfs_close(com_vnode_t *vnode) {
@@ -117,86 +176,60 @@ int com_fs_vfs_close(com_vnode_t *vnode) {
     return vnode->ops->close(vnode);
 }
 
+// NOTE: Maybe engineered, but works and I coun't come up with a simpler way
 int com_fs_vfs_lookup(com_vnode_t **out,
                       const char   *path,
                       size_t        pathlen,
                       com_vnode_t  *root,
                       com_vnode_t  *cwd,
                       bool          follow_symlinks) {
-    com_vnode_t *curr = NULL;
-    com_vnode_t *prev = NULL;
+    com_vnode_t *tmp_out = NULL;
+    int          ret     = 0;
 
-    for (size_t i = 0;; i++) {
-        // Here prev == curr
-        // Here (curr = prev) is held (Nth iteration) or NULL (first iteration)
-        KASSERT(prev == curr);
-        if (CONFIG_SYMLINK_MAX == i) {
-            COM_FS_VFS_VNODE_RELEASE(prev);
-            *out = NULL;
-            return ELOOP;
-        }
-
-        int ret = vfs_lookup1(&curr, &cwd, path, pathlen, root, cwd);
+    do {
+        // vfs_lookup1 shall be called at least once per lookup (thus do-while)
+        // If it fails or gets to the end of the path, the loop wil exit
+        // (explained below)
+        com_vnode_t *symlink_dir;
+        ret = vfs_lookup1(
+            &tmp_out, &symlink_dir, &path, &pathlen, path, pathlen, root, cwd);
         if (0 != ret) {
             *out = NULL;
-            return ret;
+            goto end;
         }
 
-        // Here prev != curr
-        // Here curr is always held
-        // Here prev is either held (Nth iteration) or NULL (first iteration)
-        KASSERT(prev != curr);
-        if (E_COM_VNODE_TYPE_LINK != curr->type) {
-            break;
+        // Control reaches here if vfs_lookup1 is successful, the we know that
+        // (NULL == path) => (0 == pathlen)
+        // So if NULL != path, then vfs_lookup1 has returned preemptively due to
+        // it meeting a symlink. However, if NULL == path, the state of
+        // tmp_out->type is unknown: it could be a normal node or a symlink,
+        // either way the end of the path has been reached so either:
+        // 1. It is a symlink that needs resolution given the value of
+        // follow_symlinks
+        // 2. tmp_out->type and/or follow_symlinks impose not to resolve it
+        // Given the implication above, the loop will exit automatically if
+        // needed
+        if (NULL != path ||
+            (E_COM_VNODE_TYPE_LINK == tmp_out->type && follow_symlinks)) {
+            ret = vfs_lookup2(&tmp_out, root, symlink_dir, tmp_out);
+            if (0 != ret) {
+                *out = NULL;
+                goto end;
+            }
+
+            // If the symlink was the last component of the path, then this is
+            // just going to be discarded. However, if it was an intermediate
+            // component, we should start the new lookup using it as the working
+            // directory and using the previous subpath as the path. We also set
+            // root = tmp_out to avoid issues with paths that have multiple /
+            cwd  = tmp_out;
+            root = tmp_out;
         }
+    } while (pathlen > 0);
 
-        // Here curr != NULL
-        // Here prev != curr
-        // Control reaches here only if curr is a symlink
-        KASSERT(prev != curr);
-        ret = com_fs_vfs_readlink(&path, &pathlen, curr);
-        if (0 != ret) {
-            COM_FS_VFS_VNODE_RELEASE(prev);
-            COM_FS_VFS_VNODE_RELEASE(curr);
-            *out = NULL;
-            return ret;
-        }
-
-        // Here prev is either held (Nth iteration) or NULL (first iteration)
-        // Here curr is always held
-        COM_FS_VFS_VNODE_RELEASE(prev);
-        // Here prev is no longer held
-        prev = curr;
-        // Here prev = curr, thus prev is a symlink and is held
-    }
-
-    // Here curr != NULL because we can only get here with the break, which also
-    // implies taht curr is not a symlink
-    // Here prev != curr because we can only get here with the break
-    // Here prev is either held (Nth iteration) or NULL (first iteration)
-    KASSERT(E_COM_VNODE_TYPE_LINK != curr->type);
-
-    if (NULL == prev) {
-        // Here we know the loop only ran once, so there was no symlink involved
-        *out = curr;
-        return 0;
-    }
-
-    // Control only reaches here if the previous if branch wasn't taken, so here
-    // we know that prev != NULL and is a symlink
-    KASSERT(E_COM_VNODE_TYPE_LINK == prev->type);
-
-    if (follow_symlinks) {
-        COM_FS_VFS_VNODE_RELEASE(prev);
-        *out = curr;
-        return 0;
-    }
-
-    // Control only reaches here if the previous if branch wasn't taken, so here
-    // we know that the caller didn't want to follow the last symlink
-    COM_FS_VFS_VNODE_RELEASE(curr);
-    *out = prev;
-    return 0;
+    *out = tmp_out;
+end:
+    return ret;
 }
 
 int com_fs_vfs_create(com_vnode_t **out,
@@ -234,12 +267,15 @@ int com_fs_vfs_link(com_vnode_t *dir,
     return src->ops->link(dir, dstname, dstnamelen, src);
 }
 
-int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen) {
+int com_fs_vfs_unlink(com_vnode_t *dir,
+                      const char  *name,
+                      size_t       namelen,
+                      int          flags) {
     if (NULL == dir->ops->unlink) {
         return ENOSYS;
     }
 
-    return dir->ops->unlink(dir, name, namelen);
+    return dir->ops->unlink(dir, name, namelen, flags);
 }
 
 int com_fs_vfs_read(void        *buf,

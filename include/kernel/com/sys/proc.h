@@ -103,6 +103,10 @@ int             com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
 int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
 int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd);
 int com_sys_proc_close_file(com_proc_t *proc, int fd);
+int com_sys_proc_get_directory(com_file_t  **dir_file,
+                               com_vnode_t **dir,
+                               com_proc_t   *proc,
+                               int           dir_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
 void        com_sys_proc_acquire_glock(void);

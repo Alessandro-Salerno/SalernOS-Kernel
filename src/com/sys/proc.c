@@ -19,6 +19,7 @@
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
@@ -30,6 +31,7 @@
 #include <lib/radixtree.h>
 #include <lib/util.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
@@ -233,6 +235,29 @@ int com_sys_proc_close_file(com_proc_t *proc, int fd) {
     int ret = com_sys_proc_close_file_nolock(proc, fd);
     kspinlock_release(&proc->fd_lock);
     return ret;
+}
+
+int com_sys_proc_get_directory(com_file_t  **dir_file,
+                               com_vnode_t **dir,
+                               com_proc_t   *proc,
+                               int           dir_fd) {
+    com_file_t  *tmp_dir_file = NULL;
+    com_vnode_t *tmp_dir      = NULL;
+
+    if (AT_FDCWD == dir_fd) {
+        tmp_dir = atomic_load(&proc->cwd);
+    } else {
+        tmp_dir_file = com_sys_proc_get_file(proc, dir_fd);
+        if (NULL != tmp_dir_file) {
+            tmp_dir = tmp_dir_file->vnode;
+        } else {
+            return EBADF;
+        }
+    }
+
+    *dir_file = tmp_dir_file;
+    *dir      = tmp_dir;
+    return 0;
 }
 
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {

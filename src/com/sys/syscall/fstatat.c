@@ -49,19 +49,12 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     com_file_t  *dir_file  = NULL;
     bool         do_lookup = false;
 
-    if (AT_FDCWD == dir_fd) {
-        dir = atomic_load(&curr_proc->cwd);
-    } else {
-        dir_file = com_sys_proc_get_file(curr_proc, dir_fd);
-        if (NULL != dir_file) {
-            dir = dir_file->vnode;
-        } else {
-            ret.err = EBADF;
-            goto end;
-        }
+    int dir_ret =
+        com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
+    if (0 != dir_ret) {
+        ret = COM_SYS_SYSCALL_ERR(dir_ret);
+        goto end;
     }
-
-    KASSERT(NULL != dir);
 
     do_lookup            = !((AT_EMPTY_PATH & flags) && 0 == kstrlen(path));
     int          vfs_err = 0;

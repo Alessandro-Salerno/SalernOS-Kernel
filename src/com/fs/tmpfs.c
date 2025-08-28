@@ -19,6 +19,7 @@
 #include <arch/info.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/pagecache.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
@@ -75,6 +76,7 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .write    = com_fs_tmpfs_write,
                                        .symlink  = com_fs_tmpfs_symlink,
                                        .readlink = com_fs_tmpfs_readlink,
+                                       .unlink   = com_fs_tmpfs_unlink,
                                        .stat     = com_fs_tmpfs_stat,
                                        .truncate = com_fs_tmpfs_truncate,
                                        .readdir  = com_fs_tmpfs_readdir,
@@ -408,6 +410,44 @@ int com_fs_tmpfs_readlink(const char **path,
     *pathlen = tn->link.len;
     KDEBUG("readlink: %.*s", *pathlen, *path);
     return 0;
+}
+
+int com_fs_tmpfs_unlink(com_vnode_t *dir,
+                        const char  *name,
+                        size_t       namelen,
+                        int          flags) {
+    struct tmpfs_node *parent_tn = dir->extra;
+    com_vnode_t       *to_unlink = NULL;
+    int ret = com_fs_tmpfs_lookup(&to_unlink, dir, name, namelen);
+    if (0 != ret) {
+        goto end;
+    }
+
+    struct tmpfs_node *to_unlink_tn = to_unlink->extra;
+
+    if (E_COM_VNODE_TYPE_DIR == to_unlink->type) {
+        if (!(AT_REMOVEDIR & flags)) {
+            ret = EISDIR;
+            goto end;
+        }
+        kspinlock_acquire(&to_unlink_tn->lock);
+        if (!TAILQ_EMPTY(&to_unlink_tn->dir.entries)) {
+            kspinlock_release(&to_unlink_tn->lock);
+            ret = ENOTEMPTY;
+            goto end;
+        }
+        kspinlock_release(&to_unlink_tn->lock);
+    }
+
+    kspinlock_acquire(&parent_tn->lock);
+    TAILQ_REMOVE(&parent_tn->dir.entries, to_unlink_tn->dirent, entries);
+    kspinlock_release(&parent_tn->lock);
+    COM_FS_VFS_VNODE_RELEASE(to_unlink);
+
+end:
+    // vnodes returned from lookup are always held, so must release it
+    COM_FS_VFS_VNODE_RELEASE(to_unlink);
+    return ret;
 }
 
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {

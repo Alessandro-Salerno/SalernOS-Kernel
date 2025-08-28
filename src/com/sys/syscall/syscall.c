@@ -531,5 +531,27 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "buflen");
 
+    com_sys_syscall_register(0x2B,
+                             "symlinkat",
+                             com_sys_syscall_symlinkat,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "filepath",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "symlink");
+
+    com_sys_syscall_register(0x2C,
+                             "unlinkat",
+                             com_sys_syscall_unlinkat,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

@@ -47,19 +47,12 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     com_file_t  *dir_file = NULL;
     size_t       pathlen  = kstrlen(path);
 
-    if (AT_FDCWD == dir_fd) {
-        dir = atomic_load(&curr_proc->cwd);
-    } else {
-        dir_file = com_sys_proc_get_file(curr_proc, dir_fd);
-        if (NULL != dir_file) {
-            dir = dir_file->vnode;
-        } else {
-            ret.err = EBADF;
-            goto end;
-        }
+    int dir_ret =
+        com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
+    if (0 != dir_ret) {
+        ret = COM_SYS_SYSCALL_ERR(dir_ret);
+        goto end;
     }
-
-    KASSERT(NULL != dir);
 
     int          vfs_err = 0;
     com_vnode_t *file_vn = NULL;
@@ -67,7 +60,6 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     // TODO: race condition here. File could be deleted or created while we look
     // it up
     if (O_CREAT & flags) {
-        KDEBUG("got into O_CREAT");
         com_vnode_t *existant = NULL;
         vfs_err               = com_fs_vfs_lookup(&existant,
                                     path,
@@ -83,6 +75,7 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
         }
 
         if (NULL != existant) {
+            KASSERT(0 == vfs_err);
             file_vn = existant;
             goto setup_fd;
         }
@@ -99,10 +92,11 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
                                     !(O_NOFOLLOW & flags));
 
         if (0 != vfs_err) {
-            ret.err = vfs_err;
+            ret = COM_SYS_SYSCALL_ERR(vfs_err);
             goto end;
         }
 
+        KASSERT(NULL != dir);
         com_fs_vfs_create(&file_vn, dir, &path[end_idx], end_len, 0);
         COM_FS_VFS_VNODE_RELEASE(dir);
         goto setup_fd;
@@ -112,7 +106,7 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
     vfs_err =
         com_fs_vfs_lookup(&file_vn, path, pathlen, curr_proc->root, dir, true);
     if (0 != vfs_err) {
-        ret.err = vfs_err;
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;
     }
 

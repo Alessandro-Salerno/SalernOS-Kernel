@@ -90,7 +90,10 @@ typedef struct com_vnode_ops {
                 const char  *dstname,
                 size_t       dstnamelen,
                 com_vnode_t *src);
-    int (*unlink)(com_vnode_t *dir, const char *name, size_t namelen);
+    int (*unlink)(com_vnode_t *dir,
+                  const char  *name,
+                  size_t       namelen,
+                  int          flags);
     int (*read)(void        *buf,
                 size_t       buflen,
                 size_t      *bytes_read,
@@ -164,7 +167,10 @@ int com_fs_vfs_link(com_vnode_t *dir,
                     const char  *dstname,
                     size_t       dstnamelen,
                     com_vnode_t *src);
-int com_fs_vfs_unlink(com_vnode_t *dir, const char *name, size_t namelen);
+int com_fs_vfs_unlink(com_vnode_t *dir,
+                      const char  *name,
+                      size_t       namelen,
+                      int          flags);
 int com_fs_vfs_read(void        *buf,
                     size_t       buflen,
                     size_t      *bytes_read,
