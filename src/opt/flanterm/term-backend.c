@@ -109,6 +109,7 @@ void *opt_flanterm_init(arch_framebuffer_t *fb,
                                                     scale_x,
                                                     scale_y,
                                                     0);
+    flanterm_set_oob_output(ret, 0);
     flanterm_backend_disable(ret);
     return ret;
 }

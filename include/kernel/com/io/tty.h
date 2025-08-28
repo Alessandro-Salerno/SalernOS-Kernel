@@ -88,6 +88,12 @@ int  com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
                                    com_vnode_t            *tty_vn,
                                    uintmax_t               op,
                                    void                   *buf);
+int  com_io_tty_text_backend_echo(size_t                 *bytes_written,
+                                  com_text_tty_backend_t *tty_backend,
+                                  const char             *buf,
+                                  size_t                  buflen,
+                                  bool                    blocking,
+                                  void                   *passthrough);
 void com_io_tty_text_backend_poll_callback(void *data);
 int  com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
                              char                    c,
@@ -99,7 +105,6 @@ int  com_io_tty_process_chars(size_t                 *bytes_processed,
                               size_t                  buflen,
                               bool                    blocking,
                               void                   *passthrough);
-void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod);
 void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                   size_t                  rows,
                                   size_t                  cols,
@@ -108,7 +113,10 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                               size_t      buflen,
                                               bool        blocking,
                                               void       *passthrough));
+
+void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod);
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);
-int  com_io_tty_devtty_init(com_vnode_t **devtty);
+
+int com_io_tty_devtty_init(com_vnode_t **devtty);

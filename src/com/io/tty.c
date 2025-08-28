@@ -48,6 +48,67 @@
 
 static size_t NextttyNum = 0;
 
+// SUPPORT FUNCTIONS
+
+static int text_tty_echo(size_t     *bytes_written,
+                         const char *buf,
+                         size_t      buflen,
+                         bool        blocking,
+                         void       *passthrough) {
+    (void)blocking;
+
+    com_text_tty_t *tty = passthrough;
+    com_io_term_putsn(tty->term, buf, buflen);
+#if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
+    kprintf("%.*s", (int)buflen, buf);
+#endif
+    *bytes_written = buflen;
+    return 0;
+}
+
+static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
+    bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
+    bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
+    bool is_del       = false;
+
+    KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
+    com_text_tty_t *tty = &self->tty.text;
+
+    if (CONTROL_DEL == c) {
+        is_del = true;
+    }
+
+    if ('\b' == c) {
+        c = CONTROL_DEL;
+    }
+
+    if (is_arrow || is_del) {
+        char   escape[4] = "\e[";
+        size_t len       = 2;
+
+        if (is_arrow) {
+            escape[2] = c;
+            len++;
+        } else {
+            escape[2] = '3';
+            escape[3] = '~';
+            len += 2;
+        }
+
+        com_io_tty_process_chars(NULL, &tty->backend, escape, len, false, tty);
+        return;
+    }
+
+    if (is_ctrl_held) {
+        if (KISLOWER(c)) {
+            c -= 32;
+        }
+        c -= 64;
+    }
+
+    com_io_tty_process_char(&tty->backend, c, false, tty);
+}
+
 // DEV OPS
 
 static int tty_read(void     *buf,
@@ -85,12 +146,8 @@ static int tty_write(size_t   *bytes_written,
     KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    com_io_term_putsn(tty->term, buf, buflen);
-#if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
-    kprintf("%.*s", (int)buflen, buf);
-#endif
-    *bytes_written = buflen;
-    return 0;
+    return com_io_tty_text_backend_echo(
+        bytes_written, &tty->backend, buf, buflen, true, tty);
 }
 
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
@@ -153,63 +210,7 @@ static com_dev_ops_t TextTtyDevOps = {.read      = tty_read,
                                       .poll_head = tty_poll_head,
                                       .poll      = tty_poll};
 
-static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
-    bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
-    bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
-    bool is_del       = false;
-
-    KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
-    com_text_tty_t *tty = &self->tty.text;
-
-    if (CONTROL_DEL == c) {
-        is_del = true;
-    }
-
-    if ('\b' == c) {
-        c = CONTROL_DEL;
-    }
-
-    if (is_arrow || is_del) {
-        char   escape[4] = "\e[";
-        size_t len       = 2;
-
-        if (is_arrow) {
-            escape[2] = c;
-            len++;
-        } else {
-            escape[2] = '3';
-            escape[3] = '~';
-            len += 2;
-        }
-
-        com_io_tty_process_chars(NULL, &tty->backend, escape, len, false, tty);
-        return;
-    }
-
-    if (is_ctrl_held) {
-        if (KISLOWER(c)) {
-            c -= 32;
-        }
-        c -= 64;
-    }
-
-    com_io_tty_process_char(&tty->backend, c, false, tty);
-}
-
-static int text_tty_echo(size_t     *bytes_written,
-                         const char *buf,
-                         size_t      buflen,
-                         bool        blocking,
-                         void       *passthrough) {
-    (void)blocking;
-
-    com_text_tty_t *tty = passthrough;
-    com_io_term_putsn(tty->term, buf, buflen);
-    if (NULL != bytes_written) {
-        *bytes_written = buflen;
-    }
-    return 0;
-}
+// TEXT TTY BACKEND INTERFACE
 
 int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
                                   com_vnode_t            *tty_vn,
@@ -283,6 +284,56 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
     return ENOSYS;
 }
 
+int com_io_tty_text_backend_echo(size_t                 *bytes_written,
+                                 com_text_tty_backend_t *tty_backend,
+                                 const char             *buf,
+                                 size_t                  buflen,
+                                 bool                    blocking,
+                                 void                   *passthrough) {
+
+    size_t utmp;
+    if (NULL == bytes_written) {
+        bytes_written = &utmp;
+    }
+
+    if ((OPOST | ONLCR) & tty_backend->termios.c_oflag) {
+        size_t count = 0;
+        int    e     = 0;
+
+        while (buflen > 0) {
+            char *first_nl = kmemchr(buf, '\n', buflen);
+            if (NULL == first_nl) {
+                goto no_newline;
+            }
+
+            char  *echo_buf = (void *)buf;
+            size_t bw       = 0;
+            size_t echo_len = first_nl - buf;
+
+            e = tty_backend->echo(
+                &bw, echo_buf, echo_len, blocking, passthrough);
+            count += bw + 1;
+            if (0 != e) {
+                break;
+            }
+
+            e = tty_backend->echo(&bw, "\r\n", 2, blocking, passthrough);
+            if (0 != e) {
+                break;
+            }
+
+            buf += echo_len + 1;
+            buflen -= echo_len + 1;
+        }
+
+        *bytes_written = count;
+        return e;
+    }
+
+no_newline:
+    return tty_backend->echo(bytes_written, buf, buflen, blocking, passthrough);
+}
+
 void com_io_tty_text_backend_poll_callback(void *data) {
     com_text_tty_backend_t *backend = data;
 
@@ -309,13 +360,15 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
     if (ISIG & tty_backend->termios.c_lflag) {
         if (tty_backend->termios.c_cc[VINTR] == c) {
-            ret     = tty_backend->echo(NULL, "^C", 2, blocking, passthrough);
+            ret = com_io_tty_text_backend_echo(
+                NULL, tty_backend, "^C", 2, blocking, passthrough);
             sig     = SIGINT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
-            ret = tty_backend->echo(NULL, "^\\\\", 3, blocking, passthrough);
-            sig = SIGQUIT;
+            ret = com_io_tty_text_backend_echo(
+                NULL, tty_backend, "^\\\\", 3, blocking, passthrough);
+            sig     = SIGQUIT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VSUSP] == c) {
@@ -372,8 +425,8 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     if (tty_backend->termios.c_cc[VERASE] == c) {
         if (tty_backend->canon.index > 0) {
             if (ECHOE & tty_backend->termios.c_lflag) {
-                ret =
-                    tty_backend->echo(NULL, "\b \b", 3, blocking, passthrough);
+                ret = com_io_tty_text_backend_echo(
+                    NULL, tty_backend, "\b \b", 3, blocking, passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -393,8 +446,8 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
             tty_backend->canon.index--;
             if (ECHOKE & tty_backend->termios.c_lflag) {
-                ret =
-                    tty_backend->echo(NULL, "\b \b", 3, blocking, passthrough);
+                ret = com_io_tty_text_backend_echo(
+                    NULL, tty_backend, "\b \b", 3, blocking, passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -408,7 +461,8 @@ end:
     if (!handled) {
         tty_backend->canon.buffer[tty_backend->canon.index++] = c;
         if (ECHO & tty_backend->termios.c_lflag) {
-            ret = tty_backend->echo(NULL, &c, 1, blocking, passthrough);
+            ret = com_io_tty_text_backend_echo(
+                NULL, tty_backend, &c, 1, blocking, passthrough);
             if (0 != ret) {
                 goto sighandler;
             }
@@ -464,10 +518,6 @@ int com_io_tty_process_chars(size_t                 *bytes_processed,
     return ret;
 }
 
-void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod) {
-    tty->kbd_in(tty, c, mod);
-}
-
 void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                   size_t                  rows,
                                   size_t                  cols,
@@ -510,6 +560,12 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 #else
     backend->termios.ibaud = backend->termios.obaud = TTYDEF_SPEED;
 #endif
+}
+
+// KERNEL TTY INTERFACE
+
+void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod) {
+    tty->kbd_in(tty, c, mod);
 }
 
 int com_io_tty_init_text(com_vnode_t **out,
