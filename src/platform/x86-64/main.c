@@ -210,6 +210,8 @@ void kernel_entry(void) {
     TAILQ_INIT(&BaseCpu.sched_queue);
     TAILQ_INIT(&BaseCpu.callout.queue);
     BaseCpu.runqueue_lock = KSPINLOCK_NEW();
+    BaseCpu.callout.lock  = KSPINLOCK_NEW();
+    com_sys_callout_set_bsp_nolock(&BaseCpu.callout);
 
     X86_64_IO_OUTB(0x20, 0x11);
     X86_64_IO_OUTB(0xa0, 0x11);

@@ -44,6 +44,10 @@ __attribute__((
 static int     Sentinel;
 static uint8_t TemporaryStack[512 * MAX_CPUS];
 
+static arch_cpu_t *Cpus;
+static size_t      NumCpus;
+static uintmax_t   InitTime;
+
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     ARCH_CPU_DISABLE_INTERRUPTS();
     arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
@@ -66,8 +70,9 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
 
     arch_mmu_switch_default();
 
-    x86_64_lapic_init();
     TAILQ_INIT(&cpu->callout.queue);
+    cpu->callout.ns = InitTime;
+    x86_64_lapic_init();
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {
@@ -85,9 +90,6 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
         asm("hlt");
     }
 }
-
-arch_cpu_t *Cpus;
-size_t      NumCpus;
 
 void x86_64_smp_init(void) {
     KLOG("initializng smp");
@@ -109,6 +111,10 @@ void x86_64_smp_init(void) {
            MAX_CPUS,
            avail_cpus);
 
+    arch_cpu_t *caller_cpu = ARCH_CPU_GET();
+    kspinlock_acquire(&caller_cpu->callout.lock);
+    InitTime = caller_cpu->callout.ns;
+
     for (size_t i = 0; i < avail_cpus; i++) {
         struct limine_smp_info *info = smp->cpus[i];
         arch_cpu_t             *cpu  = &cpus[i];
@@ -118,6 +124,7 @@ void x86_64_smp_init(void) {
 
         if (info->lapic_id == smp->bsp_lapic_id) {
             common_cpu_init(info);
+            com_sys_callout_set_bsp_nolock(&cpu->callout);
             continue;
         }
 
@@ -128,6 +135,8 @@ void x86_64_smp_init(void) {
             asm("pause");
         }
     }
+
+    kspinlock_release(&caller_cpu->callout.lock);
 }
 
 arch_cpu_t *x86_64_smp_get_random(void) {

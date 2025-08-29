@@ -55,3 +55,4 @@ void      com_sys_callout_add_at(com_callout_intf_t handler,
 void      com_sys_callout_add(com_callout_intf_t handler,
                               void              *arg,
                               uintmax_t          delay);
+void      com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue);

@@ -267,15 +267,12 @@ int com_fs_vfs_link(com_vnode_t *dir,
     return src->ops->link(dir, dstname, dstnamelen, src);
 }
 
-int com_fs_vfs_unlink(com_vnode_t *dir,
-                      const char  *name,
-                      size_t       namelen,
-                      int          flags) {
-    if (NULL == dir->ops->unlink) {
+int com_fs_vfs_unlink(com_vnode_t *node, int flags) {
+    if (NULL == node->ops->unlink) {
         return ENOSYS;
     }
 
-    return dir->ops->unlink(dir, name, namelen, flags);
+    return node->ops->unlink(node, flags);
 }
 
 int com_fs_vfs_read(void        *buf,

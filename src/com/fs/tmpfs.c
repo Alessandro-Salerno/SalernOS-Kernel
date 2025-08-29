@@ -45,6 +45,7 @@ struct tmpfs_node {
     com_vnode_t            *vnode;
     size_t                  num_links;
     struct tmpfs_dir_entry *dirent;
+    struct tmpfs_node      *parent;
 
     // TODO: turn this into a mutex
     kspinlock_t lock;
@@ -52,7 +53,6 @@ struct tmpfs_node {
     union {
         struct {
             struct tmpfs_dir_entries entries;
-            struct tmpfs_node       *parent;
         } dir;
         struct {
             size_t           size;
@@ -146,10 +146,10 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
     tn_root->lock = KSPINLOCK_NEW();
     TAILQ_INIT(&tn_root->dir.entries);
     com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
-    tn_root->dirent     = NULL;
-    tn_root->dir.parent = NULL;
-    vn_root->isroot     = true;
-    vn_root->type       = E_COM_VNODE_TYPE_DIR;
+    tn_root->dirent = NULL;
+    tn_root->parent = NULL;
+    vn_root->isroot = true;
+    vn_root->type   = E_COM_VNODE_TYPE_DIR;
 
     tmpfs->root       = vn_root;
     tmpfs->mountpoint = mountpoint;
@@ -174,22 +174,23 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int inner = createat(&dirent, out, dir, name, namelen, attr, fsattr);
-
     if (0 != inner) {
         return inner;
     }
 
+    struct tmpfs_node *tn = (*out)->extra;
+
     if (!(COM_FS_TMPFS_ATTR_GHOST & fsattr)) {
-        struct tmpfs_node *tn = (*out)->extra;
-        tn->file.size         = 0;
-        tn->file.data         = com_fs_pagecache_new();
-        (*out)->type          = E_COM_VNODE_TYPE_FILE;
+        tn->file.size = 0;
+        tn->file.data = com_fs_pagecache_new();
+        (*out)->type  = E_COM_VNODE_TYPE_FILE;
     }
 
     if (NULL != dirent) {
         struct tmpfs_node *parent = dir->extra;
         kspinlock_acquire(&parent->lock);
         TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
+        tn->parent = parent;
         kspinlock_release(&parent->lock);
     }
 
@@ -204,7 +205,6 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int inner = createat(&dirent, out, parent, name, namelen, attr, fsattr);
-
     if (0 != inner) {
         return inner;
     }
@@ -212,7 +212,7 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
     struct tmpfs_node *tn          = (*out)->extra;
     struct tmpfs_node *parent_data = parent->extra;
 
-    tn->dir.parent = parent_data;
+    tn->parent = parent_data;
     TAILQ_INIT(&tn->dir.entries);
     (*out)->type = E_COM_VNODE_TYPE_DIR;
 
@@ -232,8 +232,8 @@ int com_fs_tmpfs_lookup(com_vnode_t **out,
     int                ret      = 0;
 
     if (2 == len && 0 == kmemcmp(name, "..", 2)) {
-        if (NULL != dir_data->dir.parent) {
-            *out = dir_data->dir.parent->vnode;
+        if (NULL != dir_data->parent) {
+            *out = dir_data->parent->vnode;
             COM_FS_VFS_VNODE_HOLD((*out));
             return 0;
         }
@@ -396,6 +396,7 @@ int com_fs_tmpfs_symlink(com_vnode_t *dir,
     struct tmpfs_node *parent = dir->extra;
     kspinlock_acquire(&parent->lock);
     TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
+    tn->parent = parent;
     kspinlock_release(&parent->lock);
 
     return 0;
@@ -412,20 +413,12 @@ int com_fs_tmpfs_readlink(const char **path,
     return 0;
 }
 
-int com_fs_tmpfs_unlink(com_vnode_t *dir,
-                        const char  *name,
-                        size_t       namelen,
-                        int          flags) {
-    struct tmpfs_node *parent_tn = dir->extra;
-    com_vnode_t       *to_unlink = NULL;
-    int ret = com_fs_tmpfs_lookup(&to_unlink, dir, name, namelen);
-    if (0 != ret) {
-        goto end;
-    }
+int com_fs_tmpfs_unlink(com_vnode_t *node, int flags) {
+    struct tmpfs_node *to_unlink_tn = node->extra;
+    struct tmpfs_node *parent_tn    = to_unlink_tn->parent;
+    int                ret          = 0;
 
-    struct tmpfs_node *to_unlink_tn = to_unlink->extra;
-
-    if (E_COM_VNODE_TYPE_DIR == to_unlink->type) {
+    if (E_COM_VNODE_TYPE_DIR == node->type) {
         if (!(AT_REMOVEDIR & flags)) {
             ret = EISDIR;
             goto end;
@@ -439,14 +432,14 @@ int com_fs_tmpfs_unlink(com_vnode_t *dir,
         kspinlock_release(&to_unlink_tn->lock);
     }
 
-    kspinlock_acquire(&parent_tn->lock);
-    TAILQ_REMOVE(&parent_tn->dir.entries, to_unlink_tn->dirent, entries);
-    kspinlock_release(&parent_tn->lock);
-    COM_FS_VFS_VNODE_RELEASE(to_unlink);
+    if (NULL != parent_tn) {
+        kspinlock_acquire(&parent_tn->lock);
+        TAILQ_REMOVE(&parent_tn->dir.entries, to_unlink_tn->dirent, entries);
+        kspinlock_release(&parent_tn->lock);
+        COM_FS_VFS_VNODE_RELEASE(node);
+    }
 
 end:
-    // vnodes returned from lookup are always held, so must release it
-    COM_FS_VFS_VNODE_RELEASE(to_unlink);
     return ret;
 }
 
@@ -521,7 +514,7 @@ int com_fs_tmpfs_readdir(void        *buf,
         }
 
         dirent->reclen = sizeof(com_dirent_t) + sizeof("..");
-        dirent->ino    = (ino_t)node->dir.parent;
+        dirent->ino    = (ino_t)node->parent;
         dirent->off    = 1;
         dirent->type   = DT_DIR;
         kmemcpy(dirent->name, "..", sizeof(".."));

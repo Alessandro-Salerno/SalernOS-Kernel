@@ -42,8 +42,9 @@ COM_SYS_SYSCALL(com_sys_syscall_unlinkat) {
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
+    com_vnode_t *dir       = NULL;
+    com_file_t  *dir_file  = NULL;
+    com_vnode_t *to_unlink = NULL;
 
     int dir_ret =
         com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
@@ -52,7 +53,14 @@ COM_SYS_SYSCALL(com_sys_syscall_unlinkat) {
         goto end;
     }
 
-    int vfs_err = com_fs_vfs_unlink(dir, path, kstrlen(path), flags);
+    int vfs_err = com_fs_vfs_lookup(
+        &to_unlink, path, kstrlen(path), curr_proc->root, dir, false);
+    if (0 != vfs_err) {
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+        goto end;
+    }
+
+    vfs_err = com_fs_vfs_unlink(to_unlink, flags);
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;
@@ -62,5 +70,7 @@ COM_SYS_SYSCALL(com_sys_syscall_unlinkat) {
 
 end:
     COM_FS_FILE_RELEASE(dir_file);
+    // Need to release after lookup
+    COM_FS_VFS_VNODE_RELEASE(to_unlink);
     return ret;
 }

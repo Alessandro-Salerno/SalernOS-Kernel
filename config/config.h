@@ -50,6 +50,10 @@
 #define CONST_PMM_ZERO_ON_FREE  1 /* Pages are zeroed on boot and on free */
 #define CONST_PMM_ZERO_OFF      2 /* Pages are not zeroed by PMM */
 
+// Callout modes
+#define CONST_CALLOUT_ONLY_BSP 0
+#define CONST_CALLOUT_PER_CPU  1
+
 /*******************************************************************************
  *                                CONFIGURATION
  * ****************************************************************************/
@@ -71,3 +75,4 @@
 #define CONFIG_INIT_PATH        "/boot/init" /* Path to init executable */
 #define CONFIG_INIT_ARGV        NULL         /* Init program argv */
 #define CONFIG_INIT_ENV         NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE     CONST_CALLOUT_ONLY_BSP

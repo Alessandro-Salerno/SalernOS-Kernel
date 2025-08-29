@@ -26,6 +26,16 @@
 // CREDIT: vloxei64/ke
 // CREDIT: FreeBSD
 
+#if CONFIG_CALLOUT_MODE == CONST_CALLOUT_PER_CPU
+#define GET_CALLOUT() (&ARCH_CPU_GET()->callout)
+#elif CONFIG_CALLOUT_MODE == CONST_CALLOUT_ONLY_BSP
+#define GET_CALLOUT() (BspCallout)
+#else
+#error "unknown callout mode"
+#endif
+
+static com_callout_queue_t *BspCallout;
+
 static void enqueue_callout(com_callout_queue_t *cpu_callout,
                             com_callout_t       *callout) {
     // Add callout to the queue so that it is ordered
@@ -49,7 +59,7 @@ static void enqueue_callout(com_callout_queue_t *cpu_callout,
 }
 
 uintmax_t com_sys_callout_get_time(void) {
-    com_callout_queue_t *callout = &ARCH_CPU_GET()->callout;
+    com_callout_queue_t *callout = GET_CALLOUT();
     kspinlock_acquire(&callout->lock);
     uintmax_t time = callout->ns;
     kspinlock_release(&callout->lock);
@@ -64,6 +74,12 @@ void com_sys_callout_run(void) {
     cpu_callout->ns += ARCH_TIMER_NS;
 
     while (true) {
+#if CONFIG_CALLOUT_MODE == CONST_CALLOUT_ONLY_BSP
+        if (cpu_callout != BspCallout) {
+            break;
+        }
+#endif
+
         com_callout_t *callout = TAILQ_FIRST(&cpu_callout->queue);
 
         if (NULL == callout || callout->ns > cpu_callout->ns) {
@@ -102,7 +118,7 @@ void com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx) {
 }
 
 void com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns) {
-    com_callout_queue_t *cpu_callout = &ARCH_CPU_GET()->callout;
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
     callout->reuse                   = true;
     callout->ns                      = ns;
 
@@ -111,14 +127,20 @@ void com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns) {
     kspinlock_release(&cpu_callout->lock);
 }
 
+// NOTE: repeated code for locking reasons
 void com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay) {
-    com_sys_callout_reschedule_at(callout, ARCH_CPU_GET()->callout.ns + delay);
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
+    kspinlock_acquire(&cpu_callout->lock);
+    callout->reuse = true;
+    callout->ns    = cpu_callout->ns + delay;
+    enqueue_callout(cpu_callout, callout);
+    kspinlock_release(&cpu_callout->lock);
 }
 
 void com_sys_callout_add_at(com_callout_intf_t handler,
                             void              *arg,
                             uintmax_t          ns) {
-    com_callout_queue_t *cpu_callout = &ARCH_CPU_GET()->callout;
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
 
     com_callout_t *new = com_mm_slab_alloc(sizeof(com_callout_t));
     new->handler       = handler;
@@ -131,8 +153,23 @@ void com_sys_callout_add_at(com_callout_intf_t handler,
     kspinlock_release(&cpu_callout->lock);
 }
 
+// NOTE: repeated code for locking reasons
 void com_sys_callout_add(com_callout_intf_t handler,
                          void              *arg,
                          uintmax_t          delay) {
-    com_sys_callout_add_at(handler, arg, ARCH_CPU_GET()->callout.ns + delay);
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
+
+    kspinlock_acquire(&cpu_callout->lock);
+    com_callout_t *new = com_mm_slab_alloc(sizeof(com_callout_t));
+    new->handler       = handler;
+    new->arg           = arg;
+    new->ns            = cpu_callout->ns + delay;
+    new->reuse         = false;
+
+    enqueue_callout(cpu_callout, new);
+    kspinlock_release(&cpu_callout->lock);
+}
+
+void com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue) {
+    BspCallout = bsp_queue;
 }
