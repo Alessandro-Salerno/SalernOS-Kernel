@@ -281,13 +281,20 @@ int com_fs_vfs_read(void        *buf,
                     com_vnode_t *node,
                     uintmax_t    off,
                     uintmax_t    flags) {
-    if (NULL == node->ops->read) {
-        return ENOSYS;
-    }
-
     size_t dump = 0;
     if (NULL == bytes_read) {
         bytes_read = &dump;
+    }
+
+    if (NULL == node->ops->read) {
+        if (NULL != node->ops->readv) {
+            struct iovec iov = {.iov_base = buf, .iov_len = buflen};
+            kioviter_t   iter;
+            kioviter_init(&iter, &iov, 1);
+            return node->ops->readv(&iter, bytes_read, node, off, flags);
+        }
+
+        return ENOSYS;
     }
 
     *bytes_read = 0;
@@ -300,17 +307,98 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags) {
-    if (NULL == node->ops->write) {
-        return ENOSYS;
-    }
-
     size_t dump = 0;
     if (NULL == bytes_written) {
         bytes_written = &dump;
     }
 
+    if (NULL == node->ops->write) {
+        if (NULL != node->ops->writev) {
+            struct iovec iov = {.iov_base = buf, .iov_len = buflen};
+            kioviter_t   iter;
+            kioviter_init(&iter, &iov, 1);
+            return node->ops->writev(bytes_written, node, &iter, off, flags);
+        }
+
+        return ENOSYS;
+    }
+
     *bytes_written = 0;
     return node->ops->write(bytes_written, node, buf, buflen, off, flags);
+}
+
+int com_fs_vfs_readv(kioviter_t  *ioviter,
+                     size_t      *bytes_read,
+                     com_vnode_t *node,
+                     uintmax_t    off,
+                     uintmax_t    flags) {
+    size_t dump = 0;
+    if (NULL == bytes_read) {
+        bytes_read = &dump;
+    }
+
+    if (NULL != node->ops->readv) {
+        return node->ops->readv(ioviter, bytes_read, node, off, flags);
+    }
+
+    // If the node does not support iovec, try to stub it with sequential
+    // accesses
+    if (NULL == node->ops->read) {
+        return ENOSYS;
+    }
+
+    struct iovec *iov;
+    int           ret      = 0;
+    size_t        tot_read = 0;
+
+    for (size_t iov_off = off;
+         NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
+        size_t curr_read = 0;
+        ret              = com_fs_vfs_read(
+            iov->iov_base, iov->iov_len, &curr_read, node, iov_off, flags);
+        iov_off += curr_read;
+        tot_read += curr_read;
+    }
+
+    *bytes_read = tot_read;
+    return ret;
+}
+
+int com_fs_vfs_writev(size_t      *bytes_written,
+                      com_vnode_t *node,
+                      kioviter_t  *ioviter,
+                      uintmax_t    off,
+                      uintmax_t    flags) {
+    size_t dump = 0;
+    if (NULL == bytes_written) {
+        bytes_written = &dump;
+    }
+
+    if (NULL != node->ops->writev) {
+        return node->ops->writev(bytes_written, node, ioviter, off, flags);
+    }
+
+    // If the node does not support iovec, try to stub it with sequential
+    // accesses
+    if (NULL == node->ops->write) {
+        return ENOSYS;
+    }
+
+    struct iovec *iov;
+    int           ret       = 0;
+    size_t        tot_write = 0;
+
+    for (size_t iov_off = off;
+         NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
+        size_t curr_write = 0;
+        ret               = node->ops->write(
+            &curr_write, node, iov->iov_base, iov->iov_len, iov_off, flags);
+        iov_off += curr_write;
+        tot_write += curr_write;
+    }
+
+    *bytes_written = tot_write;
+    return ret;
 }
 
 int com_fs_vfs_symlink(com_vnode_t *dir,

@@ -1,3 +1,4 @@
+
 /*************************************************************************
 | SalernOS Kernel                                                        |
 | Copyright (C) 2021 - 2025 Alessandro Salerno                           |
@@ -16,48 +17,21 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <errno.h>
-#include <kernel/com/fs/file.h>
-#include <kernel/com/fs/vfs.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
-#include <lib/spinlock.h>
+#pragma once
 
-// SYSCALL: write(int fd, void *buf, size_t buflen)
-COM_SYS_SYSCALL(com_sys_syscall_write) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/uio.h>
 
-    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
-    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
-    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+typedef struct kioviter {
+    struct iovec *first_iov;
+    int           iovcnt;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    struct iovec *curr_iov;
+    uintmax_t     curr_off;
 
-    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t *file = com_sys_proc_get_file(curr, fd);
+    uintmax_t total_off;
+    size_t    total_size;
+} kioviter_t;
 
-    if (NULL == file) {
-        ret.err = EBADF;
-        return ret;
-    }
-
-    size_t bytes_written = 0;
-    int    vfs_op        = com_fs_vfs_write(
-        &bytes_written, file->vnode, buf, buflen, file->off, file->flags);
-
-    if (0 != vfs_op) {
-        ret.err = vfs_op;
-        goto cleanup;
-    }
-
-    kspinlock_acquire(&file->off_lock);
-    file->off += bytes_written;
-    kspinlock_release(&file->off_lock);
-
-    ret.value = bytes_written;
-cleanup:
-    COM_FS_FILE_RELEASE(file);
-    return ret;
-}
+void kioviter_init(kioviter_t *ioviter, struct iovec *iov, int iovcnt);

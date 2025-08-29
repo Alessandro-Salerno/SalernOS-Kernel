@@ -38,6 +38,9 @@
      LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
      LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
+#define ARCH_PAGE_ROUND(addr) \
+    ((uintptr_t)(addr) & ~((uintptr_t)ARCH_PAGE_SIZE - 1))
+
 #define ARCH_TIMER_NS (8UL * 1000UL * 1000UL)
 #define ARCH_SCHED_NS (64UL * 1000UL * 1000UL)
 

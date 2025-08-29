@@ -22,41 +22,45 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/ioviter.h>
 #include <lib/spinlock.h>
+#include <sys/uio.h>
 
-// SYSCALL: read(int fd, void *buf, size_t buflen)
-COM_SYS_SYSCALL(com_sys_syscall_read) {
+// SYSCALL: writev(int fd, struct iovec *iov, int iovcnt)
+COM_SYS_SYSCALL(com_sys_syscall_writev) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
-    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
-    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
-    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+    int           fd     = COM_SYS_SYSCALL_ARG(int, 1);
+    struct iovec *iov    = COM_SYS_SYSCALL_ARG(void *, 2);
+    int           iovcnt = COM_SYS_SYSCALL_ARG(int, 3);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 
     com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     com_file_t *file = com_sys_proc_get_file(curr, fd);
 
     if (NULL == file) {
-        ret.err = EBADF;
+        ret = COM_SYS_SYSCALL_ERR(EBADF);
         return ret;
     }
 
-    size_t bytes_read = 0;
-    int    vfs_op     = com_fs_vfs_read(
-        buf, buflen, &bytes_read, file->vnode, file->off, file->flags);
+    kioviter_t ioviter;
+    kioviter_init(&ioviter, iov, iovcnt);
+    size_t bytes_written = 0;
+    int    vfs_op        = com_fs_vfs_writev(
+        &bytes_written, file->vnode, &ioviter, file->off, file->flags);
 
     if (0 != vfs_op) {
-        ret.err = vfs_op;
+        ret = COM_SYS_SYSCALL_ERR(vfs_op);
         goto cleanup;
     }
 
     kspinlock_acquire(&file->off_lock);
-    file->off += bytes_read;
+    file->off += bytes_written;
     kspinlock_release(&file->off_lock);
 
-    ret.value = bytes_read;
+    ret = COM_SYS_SYSCALL_OK(bytes_written);
 cleanup:
     COM_FS_FILE_RELEASE(file);
     return ret;

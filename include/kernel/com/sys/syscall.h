@@ -114,8 +114,8 @@ void              com_sys_syscall_init(void);
 // SYSCALLS
 
 COM_SYS_SYSCALL(com_sys_syscall_kprint);
-COM_SYS_SYSCALL(com_sys_syscall_write);
-COM_SYS_SYSCALL(com_sys_syscall_read);
+COM_SYS_SYSCALL(com_sys_syscall_writev);
+COM_SYS_SYSCALL(com_sys_syscall_readv);
 COM_SYS_SYSCALL(com_sys_syscall_execve);
 COM_SYS_SYSCALL(com_sys_syscall_fork);
 COM_SYS_SYSCALL(com_sys_syscall_sysinfo);

@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <lib/ioviter.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdbool.h>
@@ -103,6 +104,16 @@ typedef struct com_vnode_ops {
                  size_t       buflen,
                  uintmax_t    off,
                  uintmax_t    flags);
+    int (*readv)(kioviter_t  *ioviter,
+                 size_t      *bytes_read,
+                 com_vnode_t *node,
+                 uintmax_t    off,
+                 uintmax_t    flags);
+    int (*writev)(size_t      *bytes_written,
+                  com_vnode_t *node,
+                  kioviter_t  *ioviter,
+                  uintmax_t    off,
+                  uintmax_t    flags);
     int (*symlink)(com_vnode_t *dir,
                    const char  *linkname,
                    size_t       linknamelen,
@@ -177,6 +188,16 @@ int com_fs_vfs_write(size_t      *bytes_written,
                      size_t       buflen,
                      uintmax_t    off,
                      uintmax_t    flags);
+int com_fs_vfs_readv(kioviter_t  *ioviter,
+                     size_t      *bytes_read,
+                     com_vnode_t *node,
+                     uintmax_t    off,
+                     uintmax_t    flags);
+int com_fs_vfs_writev(size_t      *bytes_written,
+                      com_vnode_t *node,
+                      kioviter_t  *ioviter,
+                      uintmax_t    off,
+                      uintmax_t    flags);
 int com_fs_vfs_symlink(com_vnode_t *dir,
                        const char  *linkname,
                        size_t       linknamelen,

@@ -173,26 +173,26 @@ void com_sys_syscall_init(void) {
                              "message");
 
     com_sys_syscall_register(0x01,
-                             "write",
-                             com_sys_syscall_write,
+                             "writev",
+                             com_sys_syscall_writev,
                              3,
                              COM_SYS_SYSCALL_TYPE_INT,
                              "fd",
                              COM_SYS_SYSCALL_TYPE_PTR,
-                             "buf",
-                             COM_SYS_SYSCALL_TYPE_SIZET,
-                             "buflen");
+                             "iov",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "iovcnt");
 
     com_sys_syscall_register(0x02,
-                             "read",
-                             com_sys_syscall_read,
+                             "readv",
+                             com_sys_syscall_readv,
                              3,
                              COM_SYS_SYSCALL_TYPE_INT,
                              "fd",
                              COM_SYS_SYSCALL_TYPE_PTR,
-                             "buf",
-                             COM_SYS_SYSCALL_TYPE_SIZET,
-                             "buflen");
+                             "iov",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "iovcnt");
 
     com_sys_syscall_register(0x03,
                              "execve",
