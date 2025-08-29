@@ -102,12 +102,8 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     com_polled_t *polleds                          = stack_polleds;
     size_t polleds_pages = nfds * sizeof(com_polled_t) / ARCH_PAGE_SIZE + 1;
     if (POLL_SHOULD_ALLOC(nfds)) {
-        polleds =
-            (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(polleds_pages));
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
-#include <lib/mem.h>
-        kmemset(polleds, ARCH_PAGE_SIZE * polled_pages, 0);
-#endif
+        polleds = (void *)ARCH_PHYS_TO_HHDM(
+            com_mm_pmm_alloc_many_zero(polleds_pages));
     }
 
     for (nfds_t i = 0; i < nfds; i++) {
@@ -171,6 +167,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         if (NULL != timeout_arg && timeout_arg->expired) {
             kspinlock_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
+            timeout_arg = NULL; // do not invalidate freed memory
             break;
         }
 
@@ -180,6 +177,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         if (NULL != timeout_arg && timeout_arg->expired) {
             kspinlock_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
+            timeout_arg = NULL; // do not invalidate freed memory
             break;
         }
 
