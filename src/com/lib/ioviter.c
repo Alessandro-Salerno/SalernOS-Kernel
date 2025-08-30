@@ -159,6 +159,7 @@ int kioviter_memset(kioviter_t *ioviter, uint8_t value, size_t len) {
 
 int kioviter_read_to_ringbuffer(size_t        *bytes_written,
                                 kringbuffer_t *rb,
+                                size_t         atomic_size,
                                 bool           blocking,
                                 void (*callback)(void *),
                                 void       *cb_arg,
@@ -166,14 +167,22 @@ int kioviter_read_to_ringbuffer(size_t        *bytes_written,
                                 kioviter_t *ioviter,
                                 size_t      nbytes) {
     kspinlock_acquire(&rb->lock);
-    int ret = kioviter_read_to_ringbuffer_nolock(
-        bytes_written, rb, blocking, callback, cb_arg, hu_arg, ioviter, nbytes);
+    int ret = kioviter_read_to_ringbuffer_nolock(bytes_written,
+                                                 rb,
+                                                 atomic_size,
+                                                 blocking,
+                                                 callback,
+                                                 cb_arg,
+                                                 hu_arg,
+                                                 ioviter,
+                                                 nbytes);
     kspinlock_release(&rb->lock);
     return ret;
 }
 
 int kioviter_read_to_ringbuffer_nolock(size_t        *bytes_read,
                                        kringbuffer_t *rb,
+                                       size_t         atomic_size,
                                        bool           blocking,
                                        void (*callback)(void *),
                                        void       *cb_arg,
@@ -195,6 +204,7 @@ int kioviter_read_to_ringbuffer_nolock(size_t        *bytes_read,
                                        ioviter->curr_iov->iov_base +
                                            ioviter->curr_off,
                                        copy_size,
+                                       atomic_size,
                                        blocking,
                                        callback,
                                        cb_arg,
@@ -223,13 +233,21 @@ int kioviter_write_from_ringbuffer(kioviter_t    *ioviter,
                                    size_t         nbytes,
                                    size_t        *bytes_written,
                                    kringbuffer_t *rb,
+                                   size_t         atomic_size,
                                    bool           blocking,
                                    void (*callback)(void *),
                                    void *cb_arg,
                                    void *hu_arg) {
     kspinlock_acquire(&rb->lock);
-    int ret = kioviter_write_from_ringbuffer_nolock(
-        ioviter, nbytes, bytes_written, rb, blocking, callback, cb_arg, hu_arg);
+    int ret = kioviter_write_from_ringbuffer_nolock(ioviter,
+                                                    nbytes,
+                                                    bytes_written,
+                                                    rb,
+                                                    atomic_size,
+                                                    blocking,
+                                                    callback,
+                                                    cb_arg,
+                                                    hu_arg);
     kspinlock_release(&rb->lock);
     return ret;
 }
@@ -238,6 +256,7 @@ int kioviter_write_from_ringbuffer_nolock(kioviter_t    *ioviter,
                                           size_t         nbytes,
                                           size_t        *bytes_written,
                                           kringbuffer_t *rb,
+                                          size_t         atomic_size,
                                           bool           blocking,
                                           void (*callback)(void *),
                                           void *cb_arg,
@@ -257,6 +276,7 @@ int kioviter_write_from_ringbuffer_nolock(kioviter_t    *ioviter,
                                       &curr_count,
                                       rb,
                                       copy_size,
+                                      atomic_size,
                                       blocking,
                                       callback,
                                       cb_arg,

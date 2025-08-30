@@ -152,7 +152,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
-    uint64_t  new   = (uint64_t)com_mm_pmm_alloc();
+    uint64_t new    = (uint64_t)com_mm_pmm_alloc();
     uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
 
     if (level == 0) {
@@ -284,10 +284,15 @@ void arch_mmu_init(void) {
                    entry->base,
                    entry->base + entry->length);
 
+            arch_mmu_flags_t other_flags = 0;
+            if (ARCH_MMU_IS_FRAMEBUFFER(entry)) {
+                other_flags |= ARCH_MMU_FLAGS_WC;
+            }
+
             for (uintmax_t i = 0; i < entry->length; i += ARCH_PAGE_SIZE) {
                 uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                                    ARCH_MMU_FLAGS_NOEXEC;
+                                    ARCH_MMU_FLAGS_NOEXEC | other_flags;
                 KASSERT(add_page(
                     (arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
@@ -339,33 +344,6 @@ void arch_mmu_init(void) {
                          (uint64_t *)i,
                          ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
                              ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
-                         0));
-    }
-
-    KDEBUG("mapping user text section (virtual: %p -> %p)",
-           _USER_TEXT_START,
-           _USER_TEXT_END);
-    for (uintptr_t i = (uintptr_t)_USER_TEXT_START;
-         i < (uintptr_t)_USER_TEXT_END;
-         i += ARCH_PAGE_SIZE) {
-        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                         (uint64_t *)i,
-                         ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                             ARCH_MMU_FLAGS_USER,
-                         0));
-    }
-
-    KDEBUG("mapping user data section (virtual: %p -> %p)",
-           _USER_DATA_START,
-           _USER_DATA_END);
-    for (uintptr_t i = (uintptr_t)_USER_DATA_START;
-         i < (uintptr_t)_USER_DATA_END;
-         i += ARCH_PAGE_SIZE) {
-        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                         (uint64_t *)i,
-                         ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                             ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |
-                             ARCH_MMU_FLAGS_USER,
                          0));
     }
 

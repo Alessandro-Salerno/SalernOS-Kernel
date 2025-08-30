@@ -36,6 +36,9 @@
 #define KNANOS_PER_SEC 1000000000UL
 #define KFPS(fps)      (KNANOS_PER_SEC / (fps))
 
+// NOTE: only works if multiple is a power of 2
+#define KMOD_FAST(value, multiple) ((value) & ((multiple) - 1))
+
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
 #define KURGENT(...)                                 \
     com_io_log_lock();                               \

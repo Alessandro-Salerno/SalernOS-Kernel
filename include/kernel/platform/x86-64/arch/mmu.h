@@ -37,6 +37,7 @@
 #define ARCH_MMU_FLAGS_WB 0
 #define ARCH_MMU_FLAGS_WT (1 << 3)
 #define ARCH_MMU_FLAGS_UC (1 << 4)
+#define ARCH_MMU_FLAGS_WC ((1 << 7) | ARCH_MMU_FLAGS_WT)
 
 typedef uint64_t arch_mmu_pagetable_t;
 typedef uint64_t arch_mmu_flags_t;

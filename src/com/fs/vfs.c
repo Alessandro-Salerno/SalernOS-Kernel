@@ -354,7 +354,7 @@ int com_fs_vfs_readv(kioviter_t  *ioviter,
     for (size_t iov_off = off;
          NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
         size_t curr_read = 0;
-        ret              = com_fs_vfs_read(
+        ret              = node->ops->read(
             iov->iov_base, iov->iov_len, &curr_read, node, iov_off, flags);
         iov_off += curr_read;
         tot_read += curr_read;

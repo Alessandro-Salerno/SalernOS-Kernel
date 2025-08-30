@@ -57,6 +57,7 @@ static int check_hangup(size_t        *new_nbytes,
 static int write_blocking(kringbuffer_t *rb,
                           void          *buf,
                           size_t        *buflen,
+                          size_t         atomic_size,
                           void (*callback)(void *),
                           void *cb_arg,
                           void *hu_arg) {
@@ -65,9 +66,7 @@ static int write_blocking(kringbuffer_t *rb,
 
     while (to_write > 0) {
         CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
-        size_t space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
-
-        while (0 == space) {
+        while (KRINGBUFFER_AVAIL_WRITE(rb) < atomic_size) {
             com_sys_sched_wait(&rb->write.queue, &rb->lock);
 
             int sig = com_ipc_signal_check();
@@ -82,14 +81,14 @@ static int write_blocking(kringbuffer_t *rb,
             }
 
             CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
-            space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
         }
 
-        size_t can_write =
-            KMIN(to_write, space); // Available space (till end + wrap around)
-        size_t idxoff = rb->write.index % KRINGBUFFER_SIZE;
-        size_t left   = KRINGBUFFER_SIZE -
-                      idxoff; // Positions left till th end of the array
+        size_t can_write = KMIN(
+            to_write, KRINGBUFFER_AVAIL_WRITE(rb)); // Available space (till
+                                                    // end + wrap around)
+        size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
+        // Positions left till th end of the array
+        size_t left = rb->buffer_size - idxoff;
 
         kmemcpy(&rb->buffer[idxoff], buf, KMIN(can_write, left));
         if (can_write > left) {
@@ -119,17 +118,22 @@ static int write_blocking(kringbuffer_t *rb,
 static int write_nonblocking(kringbuffer_t *rb,
                              void          *buf,
                              size_t        *buflen,
+                             size_t         atomic_size,
                              void (*callback)(void *),
                              void *cb_arg,
                              void *hu_arg) {
     CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
 
-    size_t space = KRINGBUFFER_SIZE - (rb->write.index - rb->read.index);
-
+    size_t space     = KRINGBUFFER_AVAIL_WRITE(rb);
     size_t can_write = KMIN(*buflen, space);
-    size_t idxoff    = rb->write.index % KRINGBUFFER_SIZE;
-    size_t left =
-        KRINGBUFFER_SIZE - idxoff; // Positions left till th end of the array
+
+    if (can_write < atomic_size) {
+        return EAGAIN;
+    }
+
+    size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
+    // Positions left till th end of the array
+    size_t left = rb->buffer_size - idxoff;
 
     kmemcpy(&rb->buffer[idxoff], buf, KMIN(can_write, left));
     if (can_write > left) {
@@ -152,16 +156,20 @@ int kringbuffer_write_nolock(size_t        *bytes_written,
                              kringbuffer_t *rb,
                              void          *buf,
                              size_t         buflen,
+                             size_t         atomic_size,
                              bool           blocking,
                              void (*callback)(void *),
                              void *cb_arg,
                              void *hu_arg) {
     int ret;
+    KASSERT(atomic_size < rb->buffer_size);
 
     if (blocking) {
-        ret = write_blocking(rb, buf, &buflen, callback, cb_arg, hu_arg);
+        ret = write_blocking(
+            rb, buf, &buflen, atomic_size, callback, cb_arg, hu_arg);
     } else {
-        ret = write_nonblocking(rb, buf, &buflen, callback, cb_arg, hu_arg);
+        ret = write_nonblocking(
+            rb, buf, &buflen, atomic_size, callback, cb_arg, hu_arg);
     }
 
     if (NULL != bytes_written) {
@@ -175,13 +183,21 @@ int kringbuffer_write(size_t        *bytes_written,
                       kringbuffer_t *rb,
                       void          *buf,
                       size_t         buflen,
+                      size_t         atomic_size,
                       bool           blocking,
                       void (*callback)(void *),
                       void *cb_arg,
                       void *hu_arg) {
     kspinlock_acquire(&rb->lock);
-    int ret = kringbuffer_write_nolock(
-        bytes_written, rb, buf, buflen, blocking, callback, cb_arg, hu_arg);
+    int ret = kringbuffer_write_nolock(bytes_written,
+                                       rb,
+                                       buf,
+                                       buflen,
+                                       atomic_size,
+                                       blocking,
+                                       callback,
+                                       cb_arg,
+                                       hu_arg);
     kspinlock_release(&rb->lock);
     return ret;
 }
@@ -198,14 +214,16 @@ int kringbuffer_read_nolock(void          *dst,
                             size_t        *bytes_read,
                             kringbuffer_t *rb,
                             size_t         nbytes,
+                            size_t         atomic_size,
                             bool           blocking,
                             void (*callback)(void *),
                             void *cb_arg,
                             void *hu_arg) {
     CHECK_HANGUP_GENERIC(&nbytes, nbytes, rb, KRINGBUFFER_OP_READ, hu_arg);
     int ret = 0;
+    KASSERT(atomic_size < rb->buffer_size);
 
-    while (rb->write.index == rb->read.index && !rb->is_eof) {
+    while (KRINGBUFFER_AVAIL_READ(rb) < atomic_size && !rb->is_eof) {
         if (!blocking) {
             ret    = EAGAIN;
             nbytes = 0;
@@ -233,10 +251,10 @@ int kringbuffer_read_nolock(void          *dst,
         goto end;
     }
 
-    size_t space    = rb->write.index - rb->read.index;
+    size_t space    = KRINGBUFFER_AVAIL_READ(rb);
     size_t can_read = KMIN(nbytes, space);
-    size_t idxoff   = rb->read.index % KRINGBUFFER_SIZE;
-    size_t left     = KRINGBUFFER_SIZE - idxoff;
+    size_t idxoff   = KMOD_FAST(rb->read.index, rb->buffer_size);
+    size_t left     = rb->buffer_size - idxoff;
 
     kmemcpy(dst, &rb->buffer[idxoff], KMIN(can_read, left));
     if (can_read > left) {
@@ -264,13 +282,21 @@ int kringbuffer_read(void          *dst,
                      size_t        *bytes_read,
                      kringbuffer_t *rb,
                      size_t         nbytes,
+                     size_t         atomic_size,
                      bool           blocking,
                      void (*callback)(void *),
                      void *cb_arg,
                      void *hu_arg) {
     kspinlock_acquire(&rb->lock);
-    int ret = kringbuffer_read_nolock(
-        dst, bytes_read, rb, nbytes, blocking, callback, cb_arg, hu_arg);
+    int ret = kringbuffer_read_nolock(dst,
+                                      bytes_read,
+                                      rb,
+                                      nbytes,
+                                      atomic_size,
+                                      blocking,
+                                      callback,
+                                      cb_arg,
+                                      hu_arg);
     kspinlock_release(&rb->lock);
     return ret;
 }

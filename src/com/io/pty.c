@@ -82,6 +82,7 @@ static int pty_echo(size_t     *bytes_written,
                              &pty->master_rb,
                              (void *)buf,
                              buflen,
+                             KRINGBUFFER_NOATOMIC,
                              blocking,
                              ptm_poll_callback,
                              pty,
@@ -134,6 +135,7 @@ static int ptm_read(void     *buf,
                             bytes_read,
                             &pty->master_rb,
                             buflen,
+                            KRINGBUFFER_NOATOMIC,
                             !(O_NONBLOCK & flags),
                             ptm_poll_callback,
                             pty,
@@ -220,9 +222,7 @@ static int ptm_poll(short *revents, void *devdata, short events) {
     if (pty->master_rb.write.index != pty->master_rb.read.index) {
         out |= POLLIN;
     }
-    if (KRINGBUFFER_SIZE -
-            (pty->master_rb.write.index - pty->master_rb.read.index) >
-        0) {
+    if (KRINGBUFFER_AVAIL_WRITE(&pty->master_rb) > 0) {
         out |= POLLOUT;
     }
 
@@ -253,6 +253,7 @@ static int pts_read(void     *buf,
                             bytes_read,
                             &pty->backend.slave_rb,
                             buflen,
+                            KRINGBUFFER_NOATOMIC,
                             !(O_NONBLOCK & flags),
                             com_io_tty_text_backend_poll_callback,
                             &pty->backend,
@@ -327,9 +328,7 @@ static int pts_poll(short *revents, void *devdata, short events) {
     if (pty->backend.slave_rb.write.index != pty->backend.slave_rb.read.index) {
         out |= POLLIN;
     }
-    if (KRINGBUFFER_SIZE - (pty->backend.slave_rb.write.index -
-                            pty->backend.slave_rb.read.index) >
-        0) {
+    if (KRINGBUFFER_AVAIL_WRITE(&pty->backend.slave_rb) > 0) {
         out |= POLLOUT;
     }
 
