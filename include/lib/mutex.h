@@ -16,34 +16,25 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/ipc/signal.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
+#pragma once
 
-// SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
-COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+#include <kernel/com/sys/thread.h>
+#include <lib/spinlock.h>
+#include <stddef.h>
+#include <vendor/tailq.h>
 
-    int           how  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
-    com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
+#define KMUTEX_INIT(mutexptr)             \
+    (mutexptr)->lock   = KSPINLOCK_NEW(); \
+    (mutexptr)->owner  = NULL;            \
+    (mutexptr)->locked = false;           \
+    TAILQ_INIT(&(mutexptr)->waiters)
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+typedef struct kmutex {
+    kspinlock_t             lock;
+    bool                    locked;
+    struct com_thread      *owner;
+    struct com_thread_tailq waiters;
+} kmutex_t;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-    int sig_ret           = com_ipc_signal_set_mask(&curr_proc->masked_signals,
-                                          how,
-                                          set,
-                                          oset,
-                                          &curr_proc->signal_lock);
-
-    if (0 != sig_ret) {
-        ret.value = -1;
-        ret.err   = sig_ret;
-    }
-
-    return ret;
-}
+void kmutex_acquire(kmutex_t *mutex);
+void kmutex_release(kmutex_t *mutex);

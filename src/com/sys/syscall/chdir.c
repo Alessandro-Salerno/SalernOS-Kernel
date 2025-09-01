@@ -38,8 +38,12 @@ COM_SYS_SYSCALL(com_sys_syscall_chdir) {
 
     com_vnode_t *old_cwd = atomic_load(&curr_proc->cwd);
     com_vnode_t *new_cwd = NULL;
-    int          lk_ret  = com_fs_vfs_lookup(
-        &new_cwd, path, kstrlen(path), curr_proc->root, old_cwd, true);
+    int          lk_ret  = com_fs_vfs_lookup(&new_cwd,
+                                   path,
+                                   kstrlen(path),
+                                   curr_proc->root,
+                                   old_cwd,
+                                   true);
 
     if (0 != lk_ret || NULL == new_cwd) {
         return COM_SYS_SYSCALL_ERR(lk_ret);

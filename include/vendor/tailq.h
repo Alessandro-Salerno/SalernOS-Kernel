@@ -422,18 +422,18 @@ struct qm_trace {
         TRASHIT(*oldnext);                                   \
     } while (0)
 
-#define STAILQ_REMOVE_AFTER(head, elm, field)                          \
-    do {                                                               \
-        if ((STAILQ_NEXT(elm, field) =                                 \
-                 STAILQ_NEXT(STAILQ_NEXT(elm, field), field)) == NULL) \
-            (head)->stqh_last = &STAILQ_NEXT((elm), field);            \
+#define STAILQ_REMOVE_AFTER(head, elm, field)                               \
+    do {                                                                    \
+        if ((STAILQ_NEXT(elm, field) = STAILQ_NEXT(STAILQ_NEXT(elm, field), \
+                                                   field)) == NULL)         \
+            (head)->stqh_last = &STAILQ_NEXT((elm), field);                 \
     } while (0)
 
-#define STAILQ_REMOVE_HEAD(head, field)                             \
-    do {                                                            \
-        if ((STAILQ_FIRST((head)) =                                 \
-                 STAILQ_NEXT(STAILQ_FIRST((head)), field)) == NULL) \
-            (head)->stqh_last = &STAILQ_FIRST((head));              \
+#define STAILQ_REMOVE_HEAD(head, field)                               \
+    do {                                                              \
+        if ((STAILQ_FIRST((head)) = STAILQ_NEXT(STAILQ_FIRST((head)), \
+                                                field)) == NULL)      \
+            (head)->stqh_last = &STAILQ_FIRST((head));                \
     } while (0)
 
 #define STAILQ_SWAP(head1, head2, type)                       \
@@ -573,8 +573,8 @@ struct qm_trace {
     do {                                                                     \
         QMD_LIST_CHECK_NEXT(listelm, field);                                 \
         if ((LIST_NEXT((elm), field) = LIST_NEXT((listelm), field)) != NULL) \
-            LIST_NEXT((listelm), field)->field.le_prev =                     \
-                &LIST_NEXT((elm), field);                                    \
+            LIST_NEXT((listelm), field)->field.le_prev = &LIST_NEXT((elm),   \
+                                                                    field);  \
         LIST_NEXT((listelm), field) = (elm);                                 \
         (elm)->field.le_prev        = &LIST_NEXT((listelm), field);          \
     } while (0)
@@ -602,8 +602,9 @@ struct qm_trace {
 #define LIST_PREV(elm, head, type, field)        \
     ((elm)->field.le_prev == &LIST_FIRST((head)) \
          ? NULL                                  \
-         : __containerof(                        \
-               (elm)->field.le_prev, QUEUE_TYPEOF(type), field.le_next))
+         : __containerof((elm)->field.le_prev,   \
+                         QUEUE_TYPEOF(type),     \
+                         field.le_next))
 
 #define LIST_REMOVE_HEAD(head, field) LIST_REMOVE(LIST_FIRST(head), field)
 
@@ -803,8 +804,8 @@ struct qm_trace {
     do {                                                                       \
         QMD_TAILQ_CHECK_NEXT(listelm, field);                                  \
         if ((TAILQ_NEXT((elm), field) = TAILQ_NEXT((listelm), field)) != NULL) \
-            TAILQ_NEXT((elm), field)->field.tqe_prev =                         \
-                &TAILQ_NEXT((elm), field);                                     \
+            TAILQ_NEXT((elm), field)->field.tqe_prev = &TAILQ_NEXT((elm),      \
+                                                                   field);     \
         else {                                                                 \
             (head)->tqh_last = &TAILQ_NEXT((elm), field);                      \
             QMD_TRACE_HEAD(head);                                              \
@@ -874,8 +875,9 @@ struct qm_trace {
 #define TAILQ_PREV_FAST(elm, head, type, field)  \
     ((elm)->field.tqe_prev == &(head)->tqh_first \
          ? NULL                                  \
-         : __containerof(                        \
-               (elm)->field.tqe_prev, QUEUE_TYPEOF(type), field.tqe_next))
+         : __containerof((elm)->field.tqe_prev,  \
+                         QUEUE_TYPEOF(type),     \
+                         field.tqe_next))
 
 #define TAILQ_REMOVE_HEAD(head, field) \
     TAILQ_REMOVE(head, TAILQ_FIRST(head), field)
@@ -898,23 +900,23 @@ struct qm_trace {
         QMD_TRACE_ELEM(&(elm)->field);                                        \
     } while (0)
 
-#define TAILQ_REPLACE(head, elm, elm2, field)                 \
-    do {                                                      \
-        QMD_SAVELINK(oldnext, (elm)->field.tqe_next);         \
-        QMD_SAVELINK(oldprev, (elm)->field.tqe_prev);         \
-        QMD_TAILQ_CHECK_NEXT(elm, field);                     \
-        QMD_TAILQ_CHECK_PREV(elm, field);                     \
-        TAILQ_NEXT((elm2), field) = TAILQ_NEXT((elm), field); \
-        if (TAILQ_NEXT((elm2), field) != TAILQ_END(head))     \
-            TAILQ_NEXT((elm2), field)->field.tqe_prev =       \
-                &(elm2)->field.tqe_next;                      \
-        else                                                  \
-            (head)->tqh_last = &(elm2)->field.tqe_next;       \
-        (elm2)->field.tqe_prev  = (elm)->field.tqe_prev;      \
-        *(elm2)->field.tqe_prev = (elm2);                     \
-        TRASHIT(*oldnext);                                    \
-        TRASHIT(*oldprev);                                    \
-        QMD_TRACE_ELEM(&(elm)->field);                        \
+#define TAILQ_REPLACE(head, elm, elm2, field)                                  \
+    do {                                                                       \
+        QMD_SAVELINK(oldnext, (elm)->field.tqe_next);                          \
+        QMD_SAVELINK(oldprev, (elm)->field.tqe_prev);                          \
+        QMD_TAILQ_CHECK_NEXT(elm, field);                                      \
+        QMD_TAILQ_CHECK_PREV(elm, field);                                      \
+        TAILQ_NEXT((elm2), field) = TAILQ_NEXT((elm), field);                  \
+        if (TAILQ_NEXT((elm2), field) != TAILQ_END(head))                      \
+            TAILQ_NEXT((elm2), field)->field.tqe_prev = &(elm2)                \
+                                                             ->field.tqe_next; \
+        else                                                                   \
+            (head)->tqh_last = &(elm2)->field.tqe_next;                        \
+        (elm2)->field.tqe_prev  = (elm)->field.tqe_prev;                       \
+        *(elm2)->field.tqe_prev = (elm2);                                      \
+        TRASHIT(*oldnext);                                                     \
+        TRASHIT(*oldprev);                                                     \
+        QMD_TRACE_ELEM(&(elm)->field);                                         \
     } while (0)
 
 #define TAILQ_SWAP(head1, head2, type, field)                 \

@@ -45,8 +45,11 @@ COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
     kmemset(sysinfo->gpu, 64, 0);
     kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.4 (indev)");
 
-    com_mm_pmm_get_info(
-        &sysinfo->used_mem, NULL, NULL, &sysinfo->sys_mem, NULL);
+    com_mm_pmm_get_info(&sysinfo->used_mem,
+                        NULL,
+                        NULL,
+                        &sysinfo->sys_mem,
+                        NULL);
 
     return COM_SYS_SYSCALL_OK(0);
 }

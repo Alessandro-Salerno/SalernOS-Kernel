@@ -31,8 +31,8 @@ static void switch_tty(int new_fg) {
         return;
     }
 
-    com_tty_t *fg_tty =
-        Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
+    com_tty_t
+        *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
     __atomic_store_n(&ForegroundTtyIdx, new_fg, __ATOMIC_SEQ_CST);
 
     if (NULL != fg_tty) {
@@ -61,8 +61,8 @@ void com_io_console_kbd_in(char c, uintmax_t mod) {
         return;
     }
 
-    com_tty_t *fg_tty =
-        Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
+    com_tty_t
+        *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
 
     if (NULL != fg_tty) {
         com_io_tty_kbd_in(fg_tty, c, mod);

@@ -17,43 +17,44 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <kernel/com/io/log.h>
 #include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/syscall.h>
-#include <kernel/platform/syscall.h>
-#include <kernel/platform/x86-64/msr.h>
+#include <lib/mutex.h>
+#include <lib/util.h>
 
-void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
-    (void)isr;
+// CREDIT: vloxei64/ke
+// TODO: why doesn't this work at boot time?
 
-    ARCH_CPU_GET_THREAD()->lock_depth = 0;
-    ARCH_CPU_ENABLE_INTERRUPTS();
-    com_syscall_ret_t ret = com_sys_syscall_invoke(ctx->rax,
-                                                   ctx,
-                                                   ctx->rdi,
-                                                   ctx->rsi,
-                                                   ctx->rdx,
-                                                   ctx->rcx,
-                                                   ctx->rip);
+void kmutex_acquire(kmutex_t *mutex) {
+#if CONFIG_MUTEX_MODE == CONST_MUTEX_SPINLOCK
+    kspinlock_acquire(&mutex->lock);
+#elif CONFIG_MUTEX_MODE == CONST_MUTEX_REAL
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
-    if (!ret.discarded) {
-        ctx->rax = ret.value;
-        ctx->rdx = ret.err;
+    kspinlock_acquire(&mutex->lock);
+    while (mutex->locked) {
+        com_sys_sched_wait(&mutex->waiters, &mutex->lock);
     }
 
-    KASSERT(0 == ARCH_CPU_GET_THREAD()->lock_depth);
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    ARCH_CPU_GET_THREAD()->lock_depth = 1;
+    mutex->locked = true;
+    mutex->owner  = curr_thread;
+    kspinlock_release(&mutex->lock);
+#endif
 }
 
-COM_SYS_SYSCALL(arch_syscall_set_tls) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
+void kmutex_release(kmutex_t *mutex) {
+#if CONFIG_MUTEX_MODE == CONST_MUTEX_SPINLOCK
+    kspinlock_release(&mutex->lock);
+#elif CONFIG_MUTEX_MODE == CONST_MUTEX_REAL
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
-    uintptr_t ptr = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
-
-    ARCH_CPU_GET_THREAD()->xctx.fsbase = ptr;
-    X86_64_MSR_WRITE(X86_64_MSR_FSBASE, ptr);
-
-    return COM_SYS_SYSCALL_OK(0);
+    kspinlock_acquire(&mutex->lock);
+    KASSERT(mutex->locked);
+    mutex->locked = false;
+    mutex->owner  = NULL;
+    com_sys_sched_notify(&mutex->waiters);
+    kspinlock_release(&mutex->lock);
+    com_sys_sched_yield();
+#endif
 }

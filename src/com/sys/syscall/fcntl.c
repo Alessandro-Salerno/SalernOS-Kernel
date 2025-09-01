@@ -38,8 +38,8 @@ fcntl_dup(com_proc_t *curr_proc, int fd, int op, int arg1) {
     }
 
     if (F_DUPFD_CLOEXEC == op) {
-        com_filedesc_t *fildesc =
-            com_sys_proc_get_fildesc_nolock(curr_proc, new_fd);
+        com_filedesc_t *fildesc = com_sys_proc_get_fildesc_nolock(curr_proc,
+                                                                  new_fd);
         fildesc->flags |= FD_CLOEXEC;
     }
 

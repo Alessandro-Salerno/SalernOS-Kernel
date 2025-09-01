@@ -47,16 +47,22 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     com_file_t  *dir_file = NULL;
     size_t       pathlen  = kstrlen(path);
 
-    int dir_ret =
-        com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
+    int dir_ret = com_sys_proc_get_directory(&dir_file,
+                                             &dir,
+                                             curr_proc,
+                                             dir_fd);
     if (0 != dir_ret) {
         ret = COM_SYS_SYSCALL_ERR(dir_ret);
         goto end;
     }
 
-    com_vnode_t *target = NULL;
-    int          vfs_err =
-        com_fs_vfs_lookup(&target, path, pathlen, curr_proc->root, dir, false);
+    com_vnode_t *target  = NULL;
+    int          vfs_err = com_fs_vfs_lookup(&target,
+                                    path,
+                                    pathlen,
+                                    curr_proc->root,
+                                    dir,
+                                    false);
 
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);

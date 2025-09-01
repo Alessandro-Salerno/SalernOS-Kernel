@@ -48,8 +48,11 @@ COM_SYS_SYSCALL(com_sys_syscall_readv) {
     kioviter_t ioviter;
     kioviter_init(&ioviter, iov, iovcnt);
     size_t bytes_read = 0;
-    int    vfs_op     = com_fs_vfs_readv(
-        &ioviter, &bytes_read, file->vnode, file->off, file->flags);
+    int    vfs_op     = com_fs_vfs_readv(&ioviter,
+                                  &bytes_read,
+                                  file->vnode,
+                                  file->off,
+                                  file->flags);
 
     if (0 != vfs_op) {
         ret = COM_SYS_SYSCALL_ERR(vfs_op);

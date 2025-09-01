@@ -15,6 +15,7 @@ AlignConsecutiveShortCaseStatements:
   AcrossComments: true
   AlignCaseColons: false
 AllowShortFunctionsOnASingleLine: 'false'
+AllowShortEnumsOnASingleLine: false
 IndentWidth: '4'
 SpaceBeforeParens: ControlStatements
 SpacesInCStyleCastParentheses: 'false'
@@ -34,4 +35,6 @@ BinPackArguments: false
 BinPackParameters: false
 ExperimentalAutoDetectBinPacking: false
 AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+PenaltyBreakAssignment: 1000
 ...

@@ -41,7 +41,6 @@ static uintmax_t FreeMem     = 0;
 static uintmax_t ReservedMem = 0;
 static uintmax_t UsedMem     = 0;
 
-// TODO: turn this into a mutex
 static kspinlock_t Lock = KSPINLOCK_NEW();
 
 static bool bmp_get(bmp_t *bmp, uintmax_t idx) {
@@ -257,8 +256,9 @@ void com_mm_pmm_init(void) {
     uintptr_t highest_pgindex = highest_addr / ARCH_PAGE_SIZE;
     size_t    bmp_sz          = highest_pgindex / 8 + 1;
 
-    KDEBUG(
-        "memory is %u pages, bitmap needs %u bytes", highest_pgindex, bmp_sz);
+    KDEBUG("memory is %u pages, bitmap needs %u bytes",
+           highest_pgindex,
+           bmp_sz);
 
     // Find a segment that fits the bitmap and allocate it there
     for (uintmax_t i = 0; i < memmap->entry_count; i++) {

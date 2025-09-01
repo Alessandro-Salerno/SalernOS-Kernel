@@ -147,8 +147,11 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
                                kstrlen(hdr->linkname));
         } else {
             com_vnode_t *file = NULL;
-            create_node(
-                &file, file_path + file_name_off, file_name_len, dir, hdr);
+            create_node(&file,
+                        file_path + file_name_off,
+                        file_name_len,
+                        dir,
+                        hdr);
         }
 
         if (dir != root) {

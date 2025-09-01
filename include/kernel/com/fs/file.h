@@ -29,18 +29,19 @@
         __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST); \
     }
 
-#define COM_FS_FILE_RELEASE(file)                                         \
-    ({                                                                    \
-        if (NULL != file && NULL != file->vnode) {                        \
-            uintmax_t n =                                                 \
-                __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_SEQ_CST); \
-            if (0 == n) {                                                 \
-                KDEBUG("freeing file %p", (file));                        \
-                COM_FS_VFS_VNODE_RELEASE(file->vnode);                    \
-                com_mm_slab_free(file, sizeof(com_file_t));               \
-                file = NULL;                                              \
-            }                                                             \
-        }                                                                 \
+#define COM_FS_FILE_RELEASE(file)                               \
+    ({                                                          \
+        if (NULL != file && NULL != file->vnode) {              \
+            uintmax_t n = __atomic_add_fetch(&file->num_ref,    \
+                                             -1,                \
+                                             __ATOMIC_SEQ_CST); \
+            if (0 == n) {                                       \
+                KDEBUG("freeing file %p", (file));              \
+                COM_FS_VFS_VNODE_RELEASE(file->vnode);          \
+                com_mm_slab_free(file, sizeof(com_file_t));     \
+                file = NULL;                                    \
+            }                                                   \
+        }                                                       \
     })
 
 typedef struct com_file {

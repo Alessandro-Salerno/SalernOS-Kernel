@@ -54,8 +54,8 @@
         arch_context_t *new_context = (void *)new_thread->ctx.rsp;           \
         *new_context                = (orig_ctx); /* copy the old context */ \
         new_thread->ctx.rsp -= 8;                                            \
-        *(uint64_t *)new_thread->ctx.rsp =                                   \
-            (uint64_t)arch_context_fork_trampoline;                          \
+        *(uint64_t *)new_thread->ctx.rsp = (uint64_t)                        \
+            arch_context_fork_trampoline;                                    \
         new_context->rax = 0;                                                \
         new_context->rdx = 0;                                                \
     }
@@ -67,8 +67,8 @@
         arch_context_t *new_context = (void *)new_thread->ctx.rsp;  \
         *new_context                = (arch_context_t){0};          \
         new_thread->ctx.rsp -= 8;                                   \
-        *(uint64_t *)new_thread->ctx.rsp =                          \
-            (uint64_t)arch_context_fork_trampoline;                 \
+        *(uint64_t *)new_thread->ctx.rsp = (uint64_t)               \
+            arch_context_fork_trampoline;                           \
         ARCH_CONTEXT_THREAD_SET((*new_context), new_sp, 0, new_ip); \
     }
 
@@ -98,11 +98,12 @@
         (xctx).gsbase = 0;                                 \
     }
 
-#define ARCH_CONTEXT_FORK_EXTRA(child_xctx, parent_xctx)                     \
-    {                                                                        \
-        kmemcpy(                                                             \
-            (child_xctx).fpu, (parent_xctx).fpu, sizeof((parent_xctx).fpu)); \
-        (child_xctx).fsbase = (parent_xctx).fsbase;                          \
+#define ARCH_CONTEXT_FORK_EXTRA(child_xctx, parent_xctx) \
+    {                                                    \
+        kmemcpy((child_xctx).fpu,                        \
+                (parent_xctx).fpu,                       \
+                sizeof((parent_xctx).fpu));              \
+        (child_xctx).fsbase = (parent_xctx).fsbase;      \
     }
 
 typedef struct {

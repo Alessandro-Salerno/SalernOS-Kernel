@@ -16,34 +16,32 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/ipc/signal.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
+#pragma once
 
-// SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
-COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+#include <kernel/com/fs/vfs.h>
+#include <kernel/com/ipc/socket/socket.h>
 
-    int           how  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
-    com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
+typedef struct com_socket_vnode {
+    com_vnode_t   vnode;
+    com_socket_t *socket;
+} com_socket_vnode_t;
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+int com_fs_sockfs_readv(kioviter_t  *ioviter,
+                        size_t      *bytes_read,
+                        com_vnode_t *node,
+                        uintmax_t    off,
+                        uintmax_t    flags);
+int com_fs_sockfs_writev(size_t      *bytes_written,
+                         com_vnode_t *node,
+                         kioviter_t  *ioviter,
+                         uintmax_t    off,
+                         uintmax_t    flags);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-    int sig_ret           = com_ipc_signal_set_mask(&curr_proc->masked_signals,
-                                          how,
-                                          set,
-                                          oset,
-                                          &curr_proc->signal_lock);
+int com_fs_sockfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
+int com_fs_sockfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
+int com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events);
+int com_fs_sockfs_close(com_vnode_t *node);
 
-    if (0 != sig_ret) {
-        ret.value = -1;
-        ret.err   = sig_ret;
-    }
+// OTHER FUNCTIONS
 
-    return ret;
-}
+com_vnode_t *com_fs_sockfs_new(void);

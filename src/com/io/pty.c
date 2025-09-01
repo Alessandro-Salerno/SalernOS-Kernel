@@ -151,8 +151,12 @@ static int ptm_write(size_t   *bytes_written,
     (void)off;
     (void)flags;
     com_pty_t *pty = devdata;
-    return com_io_tty_process_chars(
-        bytes_written, &pty->backend, buf, buflen, true, pty);
+    return com_io_tty_process_chars(bytes_written,
+                                    &pty->backend,
+                                    buf,
+                                    buflen,
+                                    true,
+                                    pty);
 }
 
 // NOTE: this is different from ioctl on a tty or pts because ptms are not
@@ -270,16 +274,22 @@ static int pts_write(size_t   *bytes_written,
     (void)flags;
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
-    return com_io_tty_text_backend_echo(
-        bytes_written, &pty->backend, buf, buflen, true, pty);
+    return com_io_tty_text_backend_echo(bytes_written,
+                                        &pty->backend,
+                                        buf,
+                                        buflen,
+                                        true,
+                                        pty);
 }
 
 static int pts_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
 
-    return com_io_tty_text_backend_ioctl(
-        &pty->backend, pty_slave->vnode, op, buf);
+    return com_io_tty_text_backend_ioctl(&pty->backend,
+                                         pty_slave->vnode,
+                                         op,
+                                         buf);
 }
 
 static int pts_isatty(void *devdata) {
@@ -342,8 +352,9 @@ static int pts_open(com_vnode_t **out, void *devdata) {
     __atomic_add_fetch(&pty->num_slaves, 1, __ATOMIC_SEQ_CST);
     pty_slave->pty = pty;
 
-    int ret = com_fs_devfs_register_anonymous(
-        &pty_slave->vnode, &PtsDevOps, pty_slave);
+    int ret = com_fs_devfs_register_anonymous(&pty_slave->vnode,
+                                              &PtsDevOps,
+                                              pty_slave);
     if (0 != ret) {
         com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
         __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST);
@@ -375,8 +386,12 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
 
     // This *ONLY* creates the pts device, it does NOT open it
     com_vnode_t *slave_vn;
-    int          ret = com_fs_devfs_register(
-        &slave_vn, PtsDir, pts_name, kstrlen(pts_name), &PtsDevOps, pty);
+    int          ret = com_fs_devfs_register(&slave_vn,
+                                    PtsDir,
+                                    pts_name,
+                                    kstrlen(pts_name),
+                                    &PtsDevOps,
+                                    pty);
     if (0 != ret) {
         goto end;
     }

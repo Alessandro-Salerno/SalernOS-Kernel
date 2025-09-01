@@ -147,8 +147,12 @@ static int tty_write(size_t   *bytes_written,
     KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    return com_io_tty_text_backend_echo(
-        bytes_written, &tty->backend, buf, buflen, true, tty);
+    return com_io_tty_text_backend_echo(bytes_written,
+                                        &tty->backend,
+                                        buf,
+                                        buflen,
+                                        true,
+                                        tty);
 }
 
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
@@ -156,8 +160,10 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
     com_text_tty_t *tty = &tty_data->tty.text;
 
-    return com_io_tty_text_backend_ioctl(
-        &tty->backend, tty_data->vnode, op, buf);
+    return com_io_tty_text_backend_ioctl(&tty->backend,
+                                         tty_data->vnode,
+                                         op,
+                                         buf);
 }
 
 // NOTE: returns 0 because it returns the value of errno
@@ -311,8 +317,11 @@ int com_io_tty_text_backend_echo(size_t                 *bytes_written,
             size_t bw       = 0;
             size_t echo_len = first_nl - buf;
 
-            e = tty_backend->echo(
-                &bw, echo_buf, echo_len, blocking, passthrough);
+            e = tty_backend->echo(&bw,
+                                  echo_buf,
+                                  echo_len,
+                                  blocking,
+                                  passthrough);
             count += bw + 1;
             if (0 != e) {
                 break;
@@ -361,14 +370,22 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
     if (ISIG & tty_backend->termios.c_lflag) {
         if (tty_backend->termios.c_cc[VINTR] == c) {
-            ret = com_io_tty_text_backend_echo(
-                NULL, tty_backend, "^C", 2, blocking, passthrough);
+            ret     = com_io_tty_text_backend_echo(NULL,
+                                               tty_backend,
+                                               "^C",
+                                               2,
+                                               blocking,
+                                               passthrough);
             sig     = SIGINT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
-            ret = com_io_tty_text_backend_echo(
-                NULL, tty_backend, "^\\\\", 3, blocking, passthrough);
+            ret     = com_io_tty_text_backend_echo(NULL,
+                                               tty_backend,
+                                               "^\\\\",
+                                               3,
+                                               blocking,
+                                               passthrough);
             sig     = SIGQUIT;
             handled = true;
         }
@@ -427,8 +444,12 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     if (tty_backend->termios.c_cc[VERASE] == c) {
         if (tty_backend->canon.index > 0) {
             if (ECHOE & tty_backend->termios.c_lflag) {
-                ret = com_io_tty_text_backend_echo(
-                    NULL, tty_backend, "\b \b", 3, blocking, passthrough);
+                ret = com_io_tty_text_backend_echo(NULL,
+                                                   tty_backend,
+                                                   "\b \b",
+                                                   3,
+                                                   blocking,
+                                                   passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -448,8 +469,12 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
             tty_backend->canon.index--;
             if (ECHOKE & tty_backend->termios.c_lflag) {
-                ret = com_io_tty_text_backend_echo(
-                    NULL, tty_backend, "\b \b", 3, blocking, passthrough);
+                ret = com_io_tty_text_backend_echo(NULL,
+                                                   tty_backend,
+                                                   "\b \b",
+                                                   3,
+                                                   blocking,
+                                                   passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -463,8 +488,12 @@ end:
     if (!handled) {
         tty_backend->canon.buffer[tty_backend->canon.index++] = c;
         if (ECHO & tty_backend->termios.c_lflag) {
-            ret = com_io_tty_text_backend_echo(
-                NULL, tty_backend, &c, 1, blocking, passthrough);
+            ret = com_io_tty_text_backend_echo(NULL,
+                                               tty_backend,
+                                               &c,
+                                               1,
+                                               blocking,
+                                               passthrough);
             if (0 != ret) {
                 goto sighandler;
             }
@@ -502,8 +531,10 @@ int com_io_tty_process_chars(size_t                 *bytes_processed,
     int    ret = 0;
     size_t i   = 0;
     for (; i < buflen; i++) {
-        ret =
-            com_io_tty_process_char(tty_backend, buf[i], blocking, passthrough);
+        ret = com_io_tty_process_char(tty_backend,
+                                      buf[i],
+                                      blocking,
+                                      passthrough);
         if (0 != ret) {
             break;
         }
@@ -592,8 +623,12 @@ int com_io_tty_init_text(com_vnode_t **out,
     kstrcpy(&tty_name[3], tty_num_str);
 
     com_vnode_t *tty_dev;
-    int          ret = com_fs_devfs_register(
-        &tty_dev, NULL, tty_name, kstrlen(tty_name), &TextTtyDevOps, tty_data);
+    int          ret = com_fs_devfs_register(&tty_dev,
+                                    NULL,
+                                    tty_name,
+                                    kstrlen(tty_name),
+                                    &TextTtyDevOps,
+                                    tty_data);
 
     if (0 != ret) {
         tty_dev = NULL;
@@ -646,8 +681,12 @@ int com_io_tty_devtty_init(com_vnode_t **devtty) {
     KLOG("initializing /dev/tty clone device");
 
     com_vnode_t *dev = NULL;
-    int          ret =
-        com_fs_devfs_register(&dev, NULL, "tty", 3, &TtyCloneDevOps, NULL);
+    int          ret = com_fs_devfs_register(&dev,
+                                    NULL,
+                                    "tty",
+                                    3,
+                                    &TtyCloneDevOps,
+                                    NULL);
 
     *devtty = dev;
     return ret;

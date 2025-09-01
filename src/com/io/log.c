@@ -56,8 +56,12 @@ void com_io_log_putsn_nolock(const char *s, size_t n) {
     LogHook(s, n);
 
     if (NULL != SecondaryLog.vnode) {
-        com_fs_vfs_write(
-            NULL, SecondaryLog.vnode, (void *)s, n, SecondaryLog.off, 0);
+        com_fs_vfs_write(NULL,
+                         SecondaryLog.vnode,
+                         (void *)s,
+                         n,
+                         SecondaryLog.off,
+                         0);
         SecondaryLog.off += n;
     }
 }

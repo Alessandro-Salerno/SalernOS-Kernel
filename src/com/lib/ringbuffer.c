@@ -27,14 +27,18 @@
 // CREDIT: vloxei64/ke
 // This is my reinterpretation of his code.
 
-#define CHECK_HANGUP_GENERIC(new_nbytes, curr_nbytes, rb, op, arg)             \
-    {                                                                          \
-        bool force_return = false;                                             \
-        int  hup_ret =                                                         \
-            check_hangup(new_nbytes, curr_nbytes, &force_return, rb, op, arg); \
-        if (0 != hup_ret || force_return) {                                    \
-            return hup_ret;                                                    \
-        }                                                                      \
+#define CHECK_HANGUP_GENERIC(new_nbytes, curr_nbytes, rb, op, arg) \
+    {                                                              \
+        bool force_return = false;                                 \
+        int  hup_ret      = check_hangup(new_nbytes,               \
+                                   curr_nbytes,              \
+                                   &force_return,            \
+                                   rb,                       \
+                                   op,                       \
+                                   arg);                     \
+        if (0 != hup_ret || force_return) {                        \
+            return hup_ret;                                        \
+        }                                                          \
     }
 
 static int check_hangup(size_t        *new_nbytes,
@@ -84,8 +88,9 @@ static int write_blocking(kringbuffer_t *rb,
         }
 
         size_t can_write = KMIN(
-            to_write, KRINGBUFFER_AVAIL_WRITE(rb)); // Available space (till
-                                                    // end + wrap around)
+            to_write,
+            KRINGBUFFER_AVAIL_WRITE(rb)); // Available space (till
+                                          // end + wrap around)
         size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
         // Positions left till th end of the array
         size_t left = rb->buffer_size - idxoff;
@@ -165,11 +170,21 @@ int kringbuffer_write_nolock(size_t        *bytes_written,
     KASSERT(atomic_size < rb->buffer_size);
 
     if (blocking) {
-        ret = write_blocking(
-            rb, buf, &buflen, atomic_size, callback, cb_arg, hu_arg);
+        ret = write_blocking(rb,
+                             buf,
+                             &buflen,
+                             atomic_size,
+                             callback,
+                             cb_arg,
+                             hu_arg);
     } else {
-        ret = write_nonblocking(
-            rb, buf, &buflen, atomic_size, callback, cb_arg, hu_arg);
+        ret = write_nonblocking(rb,
+                                buf,
+                                &buflen,
+                                atomic_size,
+                                callback,
+                                cb_arg,
+                                hu_arg);
     }
 
     if (NULL != bytes_written) {

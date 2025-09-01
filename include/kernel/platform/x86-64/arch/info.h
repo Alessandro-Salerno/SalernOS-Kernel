@@ -37,7 +37,7 @@
      LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
      LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type ||     \
      LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
-#define ARCH_MMU_IS_FRAMEBUFFER(entry) \
+#define ARCH_MEMMAP_IS_FRAMEBUFFER(entry) \
     (LIMINE_MEMMAP_FRAMEBUFFER == entry->type)
 
 #define ARCH_PAGE_ROUND(addr) \

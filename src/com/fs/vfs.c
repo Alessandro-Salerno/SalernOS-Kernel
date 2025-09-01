@@ -17,7 +17,9 @@
 *************************************************************************/
 
 #include <errno.h>
+#include <kernel/com/fs/sockfs.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
 #include <lib/util.h>
@@ -191,8 +193,14 @@ int com_fs_vfs_lookup(com_vnode_t **out,
         // If it fails or gets to the end of the path, the loop wil exit
         // (explained below)
         com_vnode_t *symlink_dir;
-        ret = vfs_lookup1(
-            &tmp_out, &symlink_dir, &path, &pathlen, path, pathlen, root, cwd);
+        ret = vfs_lookup1(&tmp_out,
+                          &symlink_dir,
+                          &path,
+                          &pathlen,
+                          path,
+                          pathlen,
+                          root,
+                          cwd);
         if (0 != ret) {
             *out = NULL;
             goto end;
@@ -354,8 +362,12 @@ int com_fs_vfs_readv(kioviter_t  *ioviter,
     for (size_t iov_off = off;
          NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
         size_t curr_read = 0;
-        ret              = node->ops->read(
-            iov->iov_base, iov->iov_len, &curr_read, node, iov_off, flags);
+        ret              = node->ops->read(iov->iov_base,
+                              iov->iov_len,
+                              &curr_read,
+                              node,
+                              iov_off,
+                              flags);
         iov_off += curr_read;
         tot_read += curr_read;
     }
@@ -391,8 +403,12 @@ int com_fs_vfs_writev(size_t      *bytes_written,
     for (size_t iov_off = off;
          NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
         size_t curr_write = 0;
-        ret               = node->ops->write(
-            &curr_write, node, iov->iov_base, iov->iov_len, iov_off, flags);
+        ret               = node->ops->write(&curr_write,
+                               node,
+                               iov->iov_base,
+                               iov->iov_len,
+                               iov_off,
+                               flags);
         iov_off += curr_write;
         tot_write += curr_write;
     }
@@ -497,4 +513,47 @@ int com_fs_vfs_open(com_vnode_t **out, com_vnode_t *node) {
     }
 
     return node->ops->open(out, node);
+}
+int com_fs_vfs_mksocket(com_vnode_t **out,
+                        com_vnode_t  *dir,
+                        const char   *name,
+                        size_t        namelen,
+                        uintmax_t     attr,
+                        uintmax_t     fsattr) {
+
+    if (NULL == dir->ops->mksocket) {
+        return ENOSYS;
+    }
+
+    return dir->ops->mksocket(out, dir, name, namelen, attr, fsattr);
+}
+
+// UTILITY FUNCTIONS
+
+int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
+                           com_vfs_t       *vfs,
+                           com_vnode_type_t type,
+                           com_vnode_ops_t *ops,
+                           void            *extra) {
+    com_vnode_t *new_node = NULL;
+    int          ret      = 0;
+
+    if (E_COM_VNODE_TYPE_SOCKET == type) {
+        new_node = com_fs_sockfs_new();
+    } else if (E_COM_VNODE_TYPE_FIFO == type) {
+        ret = ENOSYS;
+        goto end;
+    } else {
+        new_node = com_mm_slab_alloc(sizeof(com_vnode_t));
+    }
+
+    new_node->type    = type;
+    new_node->num_ref = 1;
+    new_node->vfs     = vfs;
+    new_node->extra   = extra;
+    new_node->ops     = ops;
+
+end:
+    *out = new_node;
+    return ret;
 }

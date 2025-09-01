@@ -48,8 +48,12 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     kspinlock_acquire(&thread->sched_lock);
 
     arch_mmu_pagetable_t *new_pt = NULL;
-    int                   status =
-        com_sys_elf64_prepare_proc(&new_pt, path, argv, env, proc, ctx);
+    int                   status = com_sys_elf64_prepare_proc(&new_pt,
+                                            path,
+                                            argv,
+                                            env,
+                                            proc,
+                                            ctx);
 
     if (0 != status) {
         kspinlock_release(&proc->signal_lock);

@@ -54,6 +54,10 @@
 #define CONST_CALLOUT_ONLY_BSP 0
 #define CONST_CALLOUT_PER_CPU  1
 
+// Mutex modes
+#define CONST_MUTEX_SPINLOCK 0
+#define CONST_MUTEX_REAL     1
+
 /*******************************************************************************
  *                                CONFIGURATION
  * ****************************************************************************/
@@ -76,3 +80,4 @@
 #define CONFIG_INIT_ARGV        NULL         /* Init program argv */
 #define CONFIG_INIT_ENV         NULL         /* Init program env */
 #define CONFIG_CALLOUT_MODE     CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_MODE       CONST_MUTEX_REAL

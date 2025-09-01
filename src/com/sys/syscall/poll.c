@@ -88,8 +88,8 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
             do_wait = false;
         } else if (timeout->tv_nsec >= 0 && timeout->tv_nsec >= 0) {
-            uintmax_t delay_ns =
-                timeout->tv_sec * KNANOS_PER_SEC + timeout->tv_nsec;
+            uintmax_t delay_ns = timeout->tv_sec * KNANOS_PER_SEC +
+                                 timeout->tv_nsec;
             timeout_arg = com_mm_slab_alloc(sizeof(struct poll_timeout_arg));
             timeout_arg->poller = &poller;
             kspinlock_acquire(&poller.lock);

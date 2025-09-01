@@ -56,8 +56,8 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
-    uintptr_t         phys =
-        (uintptr_t)arch_mmu_get_physical(curr_proc->page_table, word_ptr);
+    uintptr_t phys = (uintptr_t)arch_mmu_get_physical(curr_proc->page_table,
+                                                      word_ptr);
 
     kspinlock_acquire(&FutexLock);
 
@@ -81,8 +81,8 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 struct futex *futex;
                 int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
                 if (ENOENT == get_ret) {
-                    struct futex *default_futex =
-                        com_mm_slab_alloc(sizeof(struct futex));
+                    struct futex *default_futex = com_mm_slab_alloc(
+                        sizeof(struct futex));
                     TAILQ_INIT(&default_futex->waiters);
 
                     KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));

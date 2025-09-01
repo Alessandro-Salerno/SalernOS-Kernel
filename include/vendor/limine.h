@@ -54,9 +54,10 @@ extern "C" {
 
 #define LIMINE_REQUESTS_DELIMITER LIMINE_REQUESTS_END_MARKER
 
-#define LIMINE_BASE_REVISION(N)          \
-    uint64_t limine_base_revision[3] = { \
-        0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, (N)};
+#define LIMINE_BASE_REVISION(N)                             \
+    uint64_t limine_base_revision[3] = {0xf9562b2d5c95a6c8, \
+                                        0x6a7b384944536bdc, \
+                                        (N)};
 
 #define LIMINE_BASE_REVISION_SUPPORTED (limine_base_revision[2] == 0)
 

@@ -664,8 +664,8 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
             ctx->set_cursor_pos(ctx, ctx->esc_values[1], ctx->esc_values[0]);
             break;
         case 'M': {
-            size_t count =
-                ctx->esc_values[0] > ctx->rows ? ctx->rows : ctx->esc_values[0];
+            size_t count = ctx->esc_values[0] > ctx->rows ? ctx->rows
+                                                          : ctx->esc_values[0];
             for (size_t i = 0; i < count; i++) {
                 ctx->scroll(ctx);
             }
@@ -674,8 +674,8 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
         case 'L': {
             size_t old_scroll_top_margin = ctx->scroll_top_margin;
             ctx->scroll_top_margin       = y;
-            size_t count =
-                ctx->esc_values[0] > ctx->rows ? ctx->rows : ctx->esc_values[0];
+            size_t count = ctx->esc_values[0] > ctx->rows ? ctx->rows
+                                                          : ctx->esc_values[0];
             for (size_t i = 0; i < count; i++) {
                 ctx->revscroll(ctx);
             }
@@ -691,16 +691,22 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
                     break;
                 case 6:
                     if (ctx->callback != NULL) {
-                        ctx->callback(
-                            ctx, FLANTERM_CB_POS_REPORT, x + 1, y + 1, 0);
+                        ctx->callback(ctx,
+                                      FLANTERM_CB_POS_REPORT,
+                                      x + 1,
+                                      y + 1,
+                                      0);
                     }
                     break;
             }
             break;
         case 'q':
             if (ctx->callback != NULL) {
-                ctx->callback(
-                    ctx, FLANTERM_CB_KBD_LEDS, ctx->esc_values[0], 0, 0);
+                ctx->callback(ctx,
+                              FLANTERM_CB_KBD_LEDS,
+                              ctx->esc_values[0],
+                              0,
+                              0);
             }
             break;
         case 'J':
@@ -708,8 +714,8 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
                 case 0: {
                     size_t rows_remaining = ctx->rows - (y + 1);
                     size_t cols_diff      = ctx->cols - (x + 1);
-                    size_t to_clear =
-                        rows_remaining * ctx->cols + cols_diff + 1;
+                    size_t to_clear = rows_remaining * ctx->cols + cols_diff +
+                                      1;
                     for (size_t i = 0; i < to_clear; i++) {
                         ctx->raw_putchar(ctx, ' ');
                     }
@@ -756,8 +762,8 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
             ctx->set_cursor_pos(ctx, ctx->cols - ctx->esc_values[0], y);
             // FALLTHRU
         case 'X': {
-            size_t count =
-                ctx->esc_values[0] > ctx->cols ? ctx->cols : ctx->esc_values[0];
+            size_t count = ctx->esc_values[0] > ctx->cols ? ctx->cols
+                                                          : ctx->esc_values[0];
             for (size_t i = 0; i < count; i++) ctx->raw_putchar(ctx, ' ');
             ctx->set_cursor_pos(ctx, x, y);
             break;
@@ -766,8 +772,9 @@ static void control_sequence_parse(struct flanterm_context *ctx, uint8_t c) {
             sgr(ctx);
             break;
         case 's':
-            ctx->get_cursor_pos(
-                ctx, &ctx->saved_cursor_x, &ctx->saved_cursor_y);
+            ctx->get_cursor_pos(ctx,
+                                &ctx->saved_cursor_x,
+                                &ctx->saved_cursor_y);
             break;
         case 'u':
             ctx->set_cursor_pos(ctx, ctx->saved_cursor_x, ctx->saved_cursor_y);
@@ -1087,8 +1094,9 @@ int mk_wcwidth(uint32_t ucs) {
         return 1;
 
     /* binary search in table of non-spacing characters */
-    if (bisearch(
-            ucs, combining, sizeof(combining) / sizeof(struct interval) - 1))
+    if (bisearch(ucs,
+                 combining,
+                 sizeof(combining) / sizeof(struct interval) - 1))
         return 0;
 
     /* if we arrive here, ucs is not a combining or C0/C1 control character */
@@ -1528,8 +1536,9 @@ unicode_error:
                 ctx->set_cursor_pos(ctx, ctx->cols - 1, y);
                 return;
             }
-            ctx->set_cursor_pos(
-                ctx, (x / ctx->tab_size + 1) * ctx->tab_size, y);
+            ctx->set_cursor_pos(ctx,
+                                (x / ctx->tab_size + 1) * ctx->tab_size,
+                                y);
             return;
         case 0x0b:
         case 0x0c:

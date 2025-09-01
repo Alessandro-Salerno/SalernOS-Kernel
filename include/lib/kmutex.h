@@ -16,34 +16,20 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/cpu.h>
-#include <kernel/com/ipc/signal.h>
-#include <kernel/com/sys/proc.h>
-#include <kernel/com/sys/syscall.h>
+#pragma once
 
-// SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
-COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+#include <lib/spinlock.h>
+#include <stddef.h>
 
-    int           how  = COM_SYS_SYSCALL_ARG(int, 1);
-    com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
-    com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
-
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-    int sig_ret           = com_ipc_signal_set_mask(&curr_proc->masked_signals,
-                                          how,
-                                          set,
-                                          oset,
-                                          &curr_proc->signal_lock);
-
-    if (0 != sig_ret) {
-        ret.value = -1;
-        ret.err   = sig_ret;
+#define KMUTEX_NEW()                           \
+    (struct kmutex) {                          \
+        .lock = KSPINLOCK_NEW(), .owner = NULL \
     }
 
-    return ret;
-}
+typedef struct kmutex {
+    kspinlock_t        lock;
+    struct com_thread *owner;
+} kmutex_t;
+
+void kmutex_acquire(kmutex_t *mutex);
+void kmutex_release(kmutex_t *mutex);

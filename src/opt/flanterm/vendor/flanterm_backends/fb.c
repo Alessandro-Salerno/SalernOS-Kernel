@@ -487,9 +487,9 @@ static void plot_char_scaled_canvas(struct flanterm_context *_ctx,
     bool *glyph = &ctx->font_bool[c->c * ctx->font_height * ctx->font_width];
     // naming: fx,fy for font coordinates, gx,gy for glyph coordinates
     for (size_t gy = 0; gy < ctx->glyph_height; gy++) {
-        uint8_t            fy = gy / ctx->font_scale_y;
-        volatile uint32_t *fb_line =
-            ctx->framebuffer + x + (y + gy) * (ctx->pitch / 4);
+        uint8_t            fy      = gy / ctx->font_scale_y;
+        volatile uint32_t *fb_line = ctx->framebuffer + x +
+                                     (y + gy) * (ctx->pitch / 4);
         uint32_t *canvas_line   = ctx->canvas + x + (y + gy) * ctx->width;
         bool     *glyph_pointer = glyph + (fy * ctx->font_width);
         for (size_t fx = 0; fx < ctx->font_width; fx++) {
@@ -525,9 +525,9 @@ static void plot_char_scaled_uncanvas(struct flanterm_context *_ctx,
     bool *glyph = &ctx->font_bool[c->c * ctx->font_height * ctx->font_width];
     // naming: fx,fy for font coordinates, gx,gy for glyph coordinates
     for (size_t gy = 0; gy < ctx->glyph_height; gy++) {
-        uint8_t            fy = gy / ctx->font_scale_y;
-        volatile uint32_t *fb_line =
-            ctx->framebuffer + x + (y + gy) * (ctx->pitch / 4);
+        uint8_t            fy      = gy / ctx->font_scale_y;
+        volatile uint32_t *fb_line = ctx->framebuffer + x +
+                                     (y + gy) * (ctx->pitch / 4);
         bool *glyph_pointer = glyph + (fy * ctx->font_width);
         for (size_t fx = 0; fx < ctx->font_width; fx++) {
             for (size_t i = 0; i < ctx->font_scale_x; i++) {
@@ -555,8 +555,8 @@ static void plot_char_unscaled_canvas(struct flanterm_context *_ctx,
     bool *glyph = &ctx->font_bool[c->c * ctx->font_height * ctx->font_width];
     // naming: fx,fy for font coordinates, gx,gy for glyph coordinates
     for (size_t gy = 0; gy < ctx->glyph_height; gy++) {
-        volatile uint32_t *fb_line =
-            ctx->framebuffer + x + (y + gy) * (ctx->pitch / 4);
+        volatile uint32_t *fb_line = ctx->framebuffer + x +
+                                     (y + gy) * (ctx->pitch / 4);
         uint32_t *canvas_line   = ctx->canvas + x + (y + gy) * ctx->width;
         bool     *glyph_pointer = glyph + (gy * ctx->font_width);
         for (size_t fx = 0; fx < ctx->font_width; fx++) {
@@ -588,8 +588,8 @@ static void plot_char_unscaled_uncanvas(struct flanterm_context *_ctx,
     bool *glyph = &ctx->font_bool[c->c * ctx->font_height * ctx->font_width];
     // naming: fx,fy for font coordinates, gx,gy for glyph coordinates
     for (size_t gy = 0; gy < ctx->glyph_height; gy++) {
-        volatile uint32_t *fb_line =
-            ctx->framebuffer + x + (y + gy) * (ctx->pitch / 4);
+        volatile uint32_t *fb_line = ctx->framebuffer + x +
+                                     (y + gy) * (ctx->pitch / 4);
         bool *glyph_pointer = glyph + (gy * ctx->font_width);
         for (size_t fx = 0; fx < ctx->font_width; fx++) {
             fb_line[fx] = *(glyph_pointer++) ? fg : bg;
@@ -923,11 +923,11 @@ static void flanterm_fb_full_refresh(struct flanterm_context *_ctx) {
     for (size_t y = 0; y < ctx->height; y++) {
         for (size_t x = 0; x < ctx->width; x++) {
             if (ctx->canvas != NULL) {
-                ctx->framebuffer[y * (ctx->pitch / sizeof(uint32_t)) + x] =
-                    ctx->canvas[y * ctx->width + x];
+                ctx->framebuffer[y * (ctx->pitch / sizeof(uint32_t)) +
+                                 x] = ctx->canvas[y * ctx->width + x];
             } else {
-                ctx->framebuffer[y * (ctx->pitch / sizeof(uint32_t)) + x] =
-                    default_bg;
+                ctx->framebuffer[y * (ctx->pitch / sizeof(uint32_t)) +
+                                 x] = default_bg;
             }
         }
     }
@@ -1031,10 +1031,11 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
                                       ? FLANTERM_FB_HEIGHT_LIMIT
                                       : height;
 
-            framebuffer =
-                (uint32_t *)((uintptr_t)framebuffer +
-                             ((((height / 2) - (height_limit / 2)) * pitch) +
-                              (((width / 2) - (width_limit / 2)) * 4)));
+            framebuffer = (uint32_t *)((uintptr_t)framebuffer +
+                                       ((((height / 2) - (height_limit / 2)) *
+                                         pitch) +
+                                        (((width / 2) - (width_limit / 2)) *
+                                         4)));
 
             width  = width_limit;
             height = height_limit;
@@ -1080,8 +1081,9 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
 
     if (ansi_bright_colours != NULL) {
         for (size_t i = 0; i < 8; i++) {
-            ctx->ansi_bright_colours[i] =
-                convert_colour(_ctx, ansi_bright_colours[i]);
+            ctx->ansi_bright_colours[i] = convert_colour(
+                _ctx,
+                ansi_bright_colours[i]);
         }
     } else {
         ctx->ansi_bright_colours[0] = convert_colour(_ctx, 0x00555555); // black
@@ -1089,8 +1091,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
         ctx->ansi_bright_colours[2] = convert_colour(_ctx, 0x0055ff55); // green
         ctx->ansi_bright_colours[3] = convert_colour(_ctx, 0x00ffff55); // brown
         ctx->ansi_bright_colours[4] = convert_colour(_ctx, 0x005555ff); // blue
-        ctx->ansi_bright_colours[5] =
-            convert_colour(_ctx, 0x00ff55ff); // magenta
+        ctx->ansi_bright_colours[5] = convert_colour(_ctx,
+                                                     0x00ff55ff); // magenta
         ctx->ansi_bright_colours[6] = convert_colour(_ctx, 0x0055ffff); // cyan
         ctx->ansi_bright_colours[7] = convert_colour(_ctx, 0x00ffffff); // grey
     }
@@ -1110,15 +1112,17 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
     if (default_bg_bright != NULL) {
         ctx->default_bg_bright = convert_colour(_ctx, *default_bg_bright);
     } else {
-        ctx->default_bg_bright =
-            convert_colour(_ctx, 0x00555555); // background (black)
+        ctx->default_bg_bright = convert_colour(
+            _ctx,
+            0x00555555); // background (black)
     }
 
     if (default_fg_bright != NULL) {
         ctx->default_fg_bright = convert_colour(_ctx, *default_fg_bright);
     } else {
-        ctx->default_fg_bright =
-            convert_colour(_ctx, 0x00ffffff); // foreground (grey)
+        ctx->default_fg_bright = convert_colour(
+            _ctx,
+            0x00ffffff); // foreground (grey)
     }
 
     ctx->text_fg = ctx->default_fg;
@@ -1156,8 +1160,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
 
     ctx->font_width += font_spacing;
 
-    ctx->font_bool_size =
-        FLANTERM_FB_FONT_GLYPHS * font_height * ctx->font_width * sizeof(bool);
+    ctx->font_bool_size = FLANTERM_FB_FONT_GLYPHS * font_height *
+                          ctx->font_width * sizeof(bool);
     ctx->font_bool = _malloc(ctx->font_bool_size);
     if (ctx->font_bool == NULL) {
         goto fail;
@@ -1171,8 +1175,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
             // 9 dot wide fonts have 8 dots and one empty column, except
             // characters 0xC0-0xDF replicate column 9.
             for (size_t x = 0; x < 8; x++) {
-                size_t offset =
-                    i * font_height * ctx->font_width + y * ctx->font_width + x;
+                size_t offset = i * font_height * ctx->font_width +
+                                y * ctx->font_width + x;
 
                 if ((glyph[y] & (0x80 >> x))) {
                     ctx->font_bool[offset] = true;
@@ -1182,8 +1186,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
             }
             // fill columns above 8 like VGA Line Graphics Mode does
             for (size_t x = 8; x < ctx->font_width; x++) {
-                size_t offset =
-                    i * font_height * ctx->font_width + y * ctx->font_width + x;
+                size_t offset = i * font_height * ctx->font_width +
+                                y * ctx->font_width + x;
 
                 if (i >= 0xc0 && i <= 0xdf) {
                     ctx->font_bool[offset] = (glyph[y] & 1);
@@ -1204,8 +1208,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
     _ctx->rows = (ctx->height - margin * 2) / ctx->glyph_height;
 
     ctx->offset_x = margin + ((ctx->width - margin * 2) % ctx->glyph_width) / 2;
-    ctx->offset_y =
-        margin + ((ctx->height - margin * 2) % ctx->glyph_height) / 2;
+    ctx->offset_y = margin +
+                    ((ctx->height - margin * 2) % ctx->glyph_height) / 2;
 
     ctx->grid_size = _ctx->rows * _ctx->cols * sizeof(struct flanterm_fb_char);
     ctx->grid      = _malloc(ctx->grid_size);
@@ -1218,8 +1222,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
         ctx->grid[i].bg = ctx->text_bg;
     }
 
-    ctx->queue_size =
-        _ctx->rows * _ctx->cols * sizeof(struct flanterm_fb_queue_item);
+    ctx->queue_size = _ctx->rows * _ctx->cols *
+                      sizeof(struct flanterm_fb_queue_item);
     ctx->queue = _malloc(ctx->queue_size);
     if (ctx->queue == NULL) {
         goto fail;
@@ -1227,8 +1231,8 @@ struct flanterm_context *flanterm_fb_init(void *(*_malloc)(size_t),
     ctx->queue_i = 0;
     memset(ctx->queue, 0, ctx->queue_size);
 
-    ctx->map_size =
-        _ctx->rows * _ctx->cols * sizeof(struct flanterm_fb_queue_item *);
+    ctx->map_size = _ctx->rows * _ctx->cols *
+                    sizeof(struct flanterm_fb_queue_item *);
     ctx->map = _malloc(ctx->map_size);
     if (ctx->map == NULL) {
         goto fail;

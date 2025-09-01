@@ -44,10 +44,10 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
     com_proc_t   *curr_proc   = curr_thread->proc;
     com_vnode_t  *curr_cwd    = atomic_load(&curr_proc->cwd);
 
-    int          err    = 0;
-    com_vnode_t *parent = NULL;
-    ssize_t      place_idx =
-        (ssize_t)size - 2; // if you're above that, that's your problem
+    int          err       = 0;
+    com_vnode_t *parent    = NULL;
+    ssize_t      place_idx = (ssize_t)size -
+                        2; // if you're above that, that's your problem
     buf[size - 1] = 0;     // string terminator
 
     while (0 == err) {
@@ -86,8 +86,12 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
         }
 
         com_vnode_t *old_parent = parent;
-        err                     = com_fs_vfs_lookup(
-            &parent, "..", 2, curr_proc->root, curr_cwd, true);
+        err                     = com_fs_vfs_lookup(&parent,
+                                "..",
+                                2,
+                                curr_proc->root,
+                                curr_cwd,
+                                true);
 
         if (0 == err) {
             // here we release the old parent.

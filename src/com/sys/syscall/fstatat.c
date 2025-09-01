@@ -49,8 +49,10 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     com_file_t  *dir_file  = NULL;
     bool         do_lookup = false;
 
-    int dir_ret =
-        com_sys_proc_get_directory(&dir_file, &dir, curr_proc, dir_fd);
+    int dir_ret = com_sys_proc_get_directory(&dir_file,
+                                             &dir,
+                                             curr_proc,
+                                             dir_fd);
     if (0 != dir_ret) {
         ret = COM_SYS_SYSCALL_ERR(dir_ret);
         goto end;

@@ -36,8 +36,10 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
     kspinlock_acquire(&curr_proc->signal_lock);
-    int sig_ret = com_ipc_signal_set_mask_nolock(
-        &curr_thread->masked_signals, how, set, oset);
+    int sig_ret = com_ipc_signal_set_mask_nolock(&curr_thread->masked_signals,
+                                                 how,
+                                                 set,
+                                                 oset);
 
     if (0 != sig_ret) {
         ret.value = -1;
@@ -58,8 +60,8 @@ COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask) {
                                 ~(curr_thread->masked_signals) &
                                 ~(curr_proc->masked_signals);
     curr_thread->pending_signals |= new_pending;
-    curr_proc->pending_signals &=
-        ~new_pending; // ensures that this is only done once
+    curr_proc->pending_signals &= ~new_pending; // ensures that this is only
+                                                // done once
 
     kspinlock_release(&curr_proc->signal_lock);
     return ret;

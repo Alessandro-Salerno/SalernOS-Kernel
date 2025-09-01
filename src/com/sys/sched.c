@@ -82,7 +82,7 @@ void com_sys_sched_yield_nolock(void) {
     arch_cpu_t *cpu = ARCH_CPU_GET();
     kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
-    KASSERT(curr->sched_lock);
+    KASSERT(NULL == curr || curr->sched_lock);
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
@@ -187,7 +187,10 @@ void com_sys_sched_yield_nolock(void) {
 }
 
 void com_sys_sched_yield(void) {
-    kspinlock_acquire(&ARCH_CPU_GET_THREAD()->sched_lock);
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL != curr_thread) {
+        kspinlock_acquire(&curr_thread->sched_lock);
+    }
     com_sys_sched_yield_nolock();
     // lock released elsewhere
 }
@@ -223,9 +226,9 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     arch_cpu_t   *currcpu     = ARCH_CPU_GET();
     com_thread_t *next        = TAILQ_FIRST(waiters);
-    kspinlock_acquire(&curr_thread->sched_lock);
 
     if (NULL != next) {
+        kspinlock_acquire(&curr_thread->sched_lock);
         kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         TAILQ_REMOVE_HEAD(waiters, threads);
@@ -236,9 +239,8 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
         next->waiting_cond = NULL;
         kspinlock_release(&currcpu->runqueue_lock);
         kspinlock_release(&next->sched_lock);
+        kspinlock_release(&curr_thread->sched_lock);
     }
-
-    kspinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
@@ -292,8 +294,9 @@ void com_sys_sched_init_base(void) {
     KLOG("initializing scheduler (first)");
     KHASHMAP_INIT(&ZombieProcMap);
     TAILQ_INIT(&ZombieThreadQueue);
-    com_thread_t *reaper_thread =
-        com_sys_thread_new_kernel(NULL, sched_reaper_thread);
+    com_thread_t *reaper_thread = com_sys_thread_new_kernel(
+        NULL,
+        sched_reaper_thread);
     reaper_thread->runnable = true;
     TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, reaper_thread, threads);
 }

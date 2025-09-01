@@ -332,8 +332,10 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "new_sp");
 
-    com_sys_syscall_register(
-        0x13, "exit_thread", com_sys_syscall_exit_thread, 0);
+    com_sys_syscall_register(0x13,
+                             "exit_thread",
+                             com_sys_syscall_exit_thread,
+                             0);
 
     com_sys_syscall_register(0x14,
                              "futex",

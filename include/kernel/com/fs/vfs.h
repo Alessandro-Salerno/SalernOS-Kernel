@@ -133,6 +133,12 @@ typedef struct com_vnode_ops {
     int (*poll_head)(struct com_poll_head **out, com_vnode_t *node);
     int (*poll)(short *revents, com_vnode_t *node, short events);
     int (*open)(com_vnode_t **out, com_vnode_t *node);
+    int (*mksocket)(com_vnode_t **out,
+                    com_vnode_t  *dir,
+                    const char   *name,
+                    size_t        namelen,
+                    uintmax_t     attr,
+                    uintmax_t     fsattr);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -217,3 +223,17 @@ int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_vfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_vfs_poll(short *revents, com_vnode_t *node, short events);
 int com_fs_vfs_open(com_vnode_t **out, com_vnode_t *node);
+int com_fs_vfs_mksocket(com_vnode_t **out,
+                        com_vnode_t  *dir,
+                        const char   *name,
+                        size_t        namelen,
+                        uintmax_t     attr,
+                        uintmax_t     fsattr);
+
+// UTILITY FUNCTIONS
+
+int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
+                           com_vfs_t       *vfs,
+                           com_vnode_type_t type,
+                           com_vnode_ops_t *ops,
+                           void            *extra);

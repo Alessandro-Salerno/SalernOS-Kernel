@@ -38,8 +38,8 @@
 __attribute__((
     used,
     section(".limine_response"))) static volatile struct limine_smp_request
-    SmpRequest =
-        (struct limine_smp_request){.id = LIMINE_SMP_REQUEST, .revision = 0};
+    SmpRequest = (struct limine_smp_request){.id       = LIMINE_SMP_REQUEST,
+                                             .revision = 0};
 
 static int     Sentinel;
 static uint8_t TemporaryStack[512 * MAX_CPUS];

@@ -152,7 +152,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
-    uint64_t new    = (uint64_t)com_mm_pmm_alloc();
+    uint64_t  new   = (uint64_t)com_mm_pmm_alloc();
     uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
 
     if (level == 0) {
@@ -161,7 +161,9 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
         for (size_t i = 0; i < 512; i++) {
             if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
                 nvirt[i] = duplicate_recursive(
-                    virt[i], level - 1, addr | ((i << (12 + (level - 1) * 9))));
+                    virt[i],
+                    level - 1,
+                    addr | ((i << (12 + (level - 1) * 9))));
             } else {
                 nvirt[i] = 0;
             }
@@ -216,10 +218,10 @@ arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
         return NULL;
     }
 
-    arch_mmu_pagetable_t *new_virt =
-        (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(new_pt);
-    arch_mmu_pagetable_t *pt_virt =
-        (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(pt);
+    arch_mmu_pagetable_t *new_virt = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(
+        new_pt);
+    arch_mmu_pagetable_t *pt_virt = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(
+        pt);
 
     for (size_t i = 0; i < 256; i++) {
         if (ARCH_MMU_FLAGS_PRESENT & pt_virt[i]) {
@@ -285,7 +287,7 @@ void arch_mmu_init(void) {
                    entry->base + entry->length);
 
             arch_mmu_flags_t other_flags = 0;
-            if (ARCH_MMU_IS_FRAMEBUFFER(entry)) {
+            if (ARCH_MEMMAP_IS_FRAMEBUFFER(entry)) {
                 other_flags |= ARCH_MMU_FLAGS_WC;
             }
 

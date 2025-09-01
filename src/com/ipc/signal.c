@@ -268,8 +268,11 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
            sigaction->sa_restorer,
            sig);
     arch_context_setup_sigrestore(&stack, sigaction->sa_restorer);
-    arch_context_signal_trampoline(
-        sframe, ctx, stack, sigaction->sa_action, sig);
+    arch_context_signal_trampoline(sframe,
+                                   ctx,
+                                   stack,
+                                   sigaction->sa_action,
+                                   sig);
 
 end:
     kspinlock_release(&proc->signal_lock);

@@ -75,6 +75,12 @@ int com_fs_tmpfs_readdir(void        *buf,
                          com_vnode_t *dir,
                          uintmax_t    off);
 int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
+int com_fs_tmpfs_mksocket(com_vnode_t **out,
+                          com_vnode_t  *dir,
+                          const char   *name,
+                          size_t        namelen,
+                          uintmax_t     attr,
+                          uintmax_t     fsattr);
 
 // OTHER FUNCTIONS
 

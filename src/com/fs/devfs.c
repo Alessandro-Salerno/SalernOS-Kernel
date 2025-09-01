@@ -29,19 +29,19 @@ struct devfs_dev {
     void          *devdata;
 };
 
-static com_vnode_ops_t DevfsNodeOps =
-    (com_vnode_ops_t){.read      = com_fs_devfs_read,
-                      .write     = com_fs_devfs_write,
-                      .ioctl     = com_fs_devfs_ioctl,
-                      .close     = com_fs_devfs_close,
-                      .create    = com_fs_devfs_create,
-                      .mkdir     = com_fs_devfs_mkdir,
-                      .lookup    = com_fs_tmpfs_lookup,
-                      .isatty    = com_fs_devfs_isatty,
-                      .stat      = com_fs_devfs_stat,
-                      .poll_head = com_fs_devfs_poll_head,
-                      .poll      = com_fs_devfs_poll,
-                      .open      = com_fs_devfs_open};
+static com_vnode_ops_t DevfsNodeOps = (com_vnode_ops_t){
+    .read      = com_fs_devfs_read,
+    .write     = com_fs_devfs_write,
+    .ioctl     = com_fs_devfs_ioctl,
+    .close     = com_fs_devfs_close,
+    .create    = com_fs_devfs_create,
+    .mkdir     = com_fs_devfs_mkdir,
+    .lookup    = com_fs_tmpfs_lookup,
+    .isatty    = com_fs_devfs_isatty,
+    .stat      = com_fs_devfs_stat,
+    .poll_head = com_fs_devfs_poll_head,
+    .poll      = com_fs_devfs_poll,
+    .open      = com_fs_devfs_open};
 
 static com_vfs_t *Devfs = NULL;
 
@@ -64,8 +64,12 @@ int com_fs_devfs_create(com_vnode_t **out,
                         uintmax_t     attr,
                         uintmax_t     fsattr) {
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_create(
-        &new, dir, name, namelen, attr, fsattr | COM_FS_TMPFS_ATTR_GHOST);
+    int          ret = com_fs_tmpfs_create(&new,
+                                  dir,
+                                  name,
+                                  namelen,
+                                  attr,
+                                  fsattr | COM_FS_TMPFS_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
         *out = NULL;
@@ -90,8 +94,12 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
     }
 
     com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_mkdir(
-        &new, parent, name, namelen, attr, fsattr | COM_FS_TMPFS_ATTR_GHOST);
+    int          ret = com_fs_tmpfs_mkdir(&new,
+                                 parent,
+                                 name,
+                                 namelen,
+                                 attr,
+                                 fsattr | COM_FS_TMPFS_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
         *out = NULL;
@@ -130,8 +138,8 @@ int com_fs_devfs_write(size_t      *bytes_written,
         return ENOSYS;
     }
 
-    return dev->devops->write(
-        bytes_written, dev->devdata, buf, buflen, off, flags);
+    return dev->devops
+        ->write(bytes_written, dev->devdata, buf, buflen, off, flags);
 }
 
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
@@ -231,8 +239,12 @@ int com_fs_devfs_register_anonymous(com_vnode_t  **out,
                                     com_dev_ops_t *devops,
                                     void          *devdata) {
     com_vnode_t *devnode = NULL;
-    int          ret     = com_fs_devfs_create(
-        &devnode, Devfs->root, NULL, 0, 0, COM_FS_TMPFS_ATTR_NO_DIRENT);
+    int          ret     = com_fs_devfs_create(&devnode,
+                                  Devfs->root,
+                                  NULL,
+                                  0,
+                                  0,
+                                  COM_FS_TMPFS_ATTR_NO_DIRENT);
 
     if (0 != ret || NULL == devnode) {
         *out = NULL;

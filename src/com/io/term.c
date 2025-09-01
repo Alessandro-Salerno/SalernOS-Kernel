@@ -32,8 +32,9 @@ static void flush_buffer_nolock(com_term_t *term) {
         return;
     }
 
-    term->backend.ops->putsn(
-        term->backend.data, term->buffering.buffer, term->buffering.index);
+    term->backend.ops->putsn(term->backend.data,
+                             term->buffering.buffer,
+                             term->buffering.index);
     term->buffering.index = 0;
     com_sys_sched_notify_all(&term->buffering.waiters);
 }

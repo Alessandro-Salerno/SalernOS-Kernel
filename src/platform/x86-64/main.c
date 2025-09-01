@@ -152,10 +152,10 @@ KUSED void kbd(com_isr_t *isr, arch_context_t *ctx) {
 
             default:
                 if (code >= 0x3b && code <= 0x44) {
-                    int  fkey = code - 0x3b;
-                    char key_c =
-                        'A' + fkey; // TODO: this is not standard, has to be
-                                    // translated in tty to be sent to userspace
+                    int  fkey  = code - 0x3b;
+                    char key_c = 'A' + fkey; // TODO: this is not standard, has
+                                             // to be translated in tty to be
+                                             // sent to userspace
                     com_io_console_kbd_in(key_c, mod | COM_IO_TTY_MOD_FKEY);
                 } else if (code < 0x80) {
                     if (COM_IO_TTY_MOD_LSHIFT & mod ||
@@ -231,7 +231,6 @@ void kernel_entry(void) {
 
     com_mm_pmm_init();
     arch_mmu_init();
-    KDEBUG("sizeof(com_proc_t) = %d", sizeof(com_proc_t));
 
     x86_64_idt_stub();
     com_sys_syscall_init();
@@ -240,10 +239,12 @@ void kernel_entry(void) {
     com_term_t        *main_term = com_io_term_new(main_tb);
     com_io_term_set_fallback(main_term);
 
-    com_sys_interrupt_register(
-        X86_64_LAPIC_TIMER_INTERRUPT, com_sys_callout_isr, x86_64_lapic_eoi);
-    com_sys_interrupt_register(
-        X86_64_LAPIC_SELF_IPI_INTERRUPT, com_sys_sched_isr, x86_64_lapic_eoi);
+    com_sys_interrupt_register(X86_64_LAPIC_TIMER_INTERRUPT,
+                               com_sys_callout_isr,
+                               x86_64_lapic_eoi);
+    com_sys_interrupt_register(X86_64_LAPIC_SELF_IPI_INTERRUPT,
+                               com_sys_sched_isr,
+                               x86_64_lapic_eoi);
     com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
@@ -253,19 +254,31 @@ void kernel_entry(void) {
 
     com_vnode_t *tmpfs_mountpoint = NULL;
     com_vfs_t   *tmpfs            = NULL;
-    com_fs_tmpfs_mkdir(
-        &tmpfs_mountpoint, rootfs->root, "tmp", kstrlen("tmp"), 0, 0);
+    com_fs_tmpfs_mkdir(&tmpfs_mountpoint,
+                       rootfs->root,
+                       "tmp",
+                       kstrlen("tmp"),
+                       0,
+                       0);
     com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
 
     com_vnode_t *procfs_mountpoint = NULL;
     com_vfs_t   *procfs            = NULL;
-    com_fs_tmpfs_mkdir(
-        &procfs_mountpoint, rootfs->root, "proc", kstrlen("proc"), 0, 0);
+    com_fs_tmpfs_mkdir(&procfs_mountpoint,
+                       rootfs->root,
+                       "proc",
+                       kstrlen("proc"),
+                       0,
+                       0);
     com_fs_tmpfs_mount(&procfs, procfs_mountpoint);
 
     com_vnode_t *proc_kernel = NULL;
-    com_fs_tmpfs_mkdir(
-        &proc_kernel, procfs->root, "kernel", kstrlen("kernel"), 0, 0);
+    com_fs_tmpfs_mkdir(&proc_kernel,
+                       procfs->root,
+                       "kernel",
+                       kstrlen("kernel"),
+                       0,
+                       0);
 
 #if CONFIG_LOG_USE_VNODE
 #warning "log to vnode is experimental!"
@@ -307,12 +320,17 @@ void kernel_entry(void) {
     char *const   envp[] = {CONFIG_INIT_ENV};
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, rootfs->root, rootfs->root);
     com_thread_t *thread  = com_sys_thread_new(proc, NULL, 0, NULL);
-    int           elf_ret = com_sys_elf64_prepare_proc(
-        &proc->page_table, CONFIG_INIT_PATH, argv, envp, proc, &thread->ctx);
+    int           elf_ret = com_sys_elf64_prepare_proc(&proc->page_table,
+                                             CONFIG_INIT_PATH,
+                                             argv,
+                                             envp,
+                                             proc,
+                                             &thread->ctx);
 
     if (0 != elf_ret) {
-        com_sys_panic(
-            NULL, "unable to start init program at %s", CONFIG_INIT_PATH);
+        com_sys_panic(NULL,
+                      "unable to start init program at %s",
+                      CONFIG_INIT_PATH);
     }
 
     com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));

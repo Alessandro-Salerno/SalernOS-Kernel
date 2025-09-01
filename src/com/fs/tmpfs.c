@@ -80,16 +80,19 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .stat     = com_fs_tmpfs_stat,
                                        .truncate = com_fs_tmpfs_truncate,
                                        .readdir  = com_fs_tmpfs_readdir,
-                                       .vnctl    = com_fs_tmpfs_vnctl};
+                                       .vnctl    = com_fs_tmpfs_vnctl,
+                                       .mksocket = com_fs_tmpfs_mksocket};
 
 // SUPPORT FUNCTIONS
-static int createat(struct tmpfs_dir_entry **outent,
-                    com_vnode_t            **out,
-                    com_vnode_t             *dir,
-                    const char              *name,
-                    size_t                   namelen,
-                    uintmax_t                attr,
-                    uintmax_t                fsattr) {
+
+static int create_common(struct tmpfs_dir_entry **outent,
+                         com_vnode_t            **out,
+                         com_vnode_t             *dir,
+                         const char              *name,
+                         size_t                   namelen,
+                         uintmax_t                attr,
+                         uintmax_t                fsattr,
+                         com_vnode_type_t         type) {
     (void)attr;
     KASSERT(E_COM_VNODE_TYPE_DIR == dir->type);
 
@@ -105,7 +108,8 @@ static int createat(struct tmpfs_dir_entry **outent,
         kmemcpy(dirent->name, name, namelen);
     }
 
-    com_fs_tmpfs_vget(out, dir->vfs, tn_new);
+    com_fs_vfs_alloc_vnode(out, dir->vfs, type, &TmpfsNodeOps, tn_new);
+    tn_new->vnode = *out;
 
     if (NULL != dirent) {
         tn_new->dirent = dirent;
@@ -118,6 +122,7 @@ static int createat(struct tmpfs_dir_entry **outent,
 // VFS OPS
 
 int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode) {
+    (void)vfs;
     struct tmpfs_node *tnode = inode;
 
     if (NULL != tnode->vnode) {
@@ -126,16 +131,7 @@ int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode) {
         return 0;
     }
 
-    com_vnode_t *vnode  = com_mm_slab_alloc(sizeof(com_vnode_t));
-    vnode->mountpointof = NULL;
-    vnode->num_ref      = 1;
-    vnode->vfs          = vfs;
-    vnode->ops          = &TmpfsNodeOps;
-    vnode->extra        = inode;
-
-    tnode->vnode = vnode;
-    *out         = vnode;
-    return 0;
+    return ENOENT;
 }
 
 int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
@@ -145,11 +141,15 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
 
     tn_root->lock = KSPINLOCK_NEW();
     TAILQ_INIT(&tn_root->dir.entries);
-    com_fs_tmpfs_vget(&vn_root, tmpfs, tn_root);
+    com_fs_vfs_alloc_vnode(&vn_root,
+                           tmpfs,
+                           E_COM_VNODE_TYPE_DIR,
+                           &TmpfsNodeOps,
+                           tn_root);
     tn_root->dirent = NULL;
     tn_root->parent = NULL;
     vn_root->isroot = true;
-    vn_root->type   = E_COM_VNODE_TYPE_DIR;
+    tn_root->vnode  = vn_root;
 
     tmpfs->root       = vn_root;
     tmpfs->mountpoint = mountpoint;
@@ -173,7 +173,14 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         uintmax_t     attr,
                         uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
-    int inner = createat(&dirent, out, dir, name, namelen, attr, fsattr);
+    int                     inner  = create_common(&dirent,
+                              out,
+                              dir,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_FILE);
     if (0 != inner) {
         return inner;
     }
@@ -183,7 +190,6 @@ int com_fs_tmpfs_create(com_vnode_t **out,
     if (!(COM_FS_TMPFS_ATTR_GHOST & fsattr)) {
         tn->file.size = 0;
         tn->file.data = com_fs_pagecache_new();
-        (*out)->type  = E_COM_VNODE_TYPE_FILE;
     }
 
     if (NULL != dirent) {
@@ -204,7 +210,14 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        uintmax_t     attr,
                        uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
-    int inner = createat(&dirent, out, parent, name, namelen, attr, fsattr);
+    int                     inner  = create_common(&dirent,
+                              out,
+                              parent,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_DIR);
     if (0 != inner) {
         return inner;
     }
@@ -214,7 +227,6 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
 
     tn->parent = parent_data;
     TAILQ_INIT(&tn->dir.entries);
-    (*out)->type = E_COM_VNODE_TYPE_DIR;
 
     kspinlock_acquire(&parent_data->lock);
     TAILQ_INSERT_TAIL(&parent_data->dir.entries, dirent, entries);
@@ -297,8 +309,9 @@ int com_fs_tmpfs_read(void        *buf,
 
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
-        bool      page_present =
-            com_fs_pagecache_get(&page, file->file.data, cur / ARCH_PAGE_SIZE);
+        bool      page_present = com_fs_pagecache_get(&page,
+                                                 file->file.data,
+                                                 cur / ARCH_PAGE_SIZE);
 
         // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a
         // mask to floor the value to a multiple of ARCH_PAGE_SIZE. Then
@@ -384,7 +397,14 @@ int com_fs_tmpfs_symlink(com_vnode_t *dir,
                          size_t       pathlen) {
     struct tmpfs_dir_entry *dirent;
     com_vnode_t            *vn;
-    createat(&dirent, &vn, dir, linkname, linknamelen, 0, 0);
+    create_common(&dirent,
+                  &vn,
+                  dir,
+                  linkname,
+                  linknamelen,
+                  0,
+                  0,
+                  E_COM_VNODE_TYPE_LINK);
     struct tmpfs_node *tn = vn->extra;
     vn->type              = E_COM_VNODE_TYPE_LINK;
 
@@ -447,8 +467,8 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     struct tmpfs_node *file = node->extra;
     out->st_blksize         = 512;
     out->st_ino             = (unsigned long)file;
-    out->st_mode =
-        01777; // TODO: this may cause issues (ke says it makes xorg "happy")
+    out->st_mode = 01777; // TODO: this may cause issues (ke says it makes xorg
+                          // "happy")
 
     if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;
@@ -598,6 +618,39 @@ int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf) {
 
     kspinlock_release(&tnode->lock);
     return ret;
+}
+
+int com_fs_tmpfs_mksocket(com_vnode_t **out,
+                          com_vnode_t  *dir,
+                          const char   *name,
+                          size_t        namelen,
+                          uintmax_t     attr,
+                          uintmax_t     fsattr) {
+    struct tmpfs_dir_entry *dirent = NULL;
+    int                     inner  = create_common(&dirent,
+                              out,
+                              dir,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_SOCKET);
+    if (0 != inner) {
+        return inner;
+    }
+
+    struct tmpfs_node *tn = (*out)->extra;
+    (*out)->type          = E_COM_VNODE_TYPE_SOCKET;
+
+    if (NULL != dirent) {
+        struct tmpfs_node *parent = dir->extra;
+        kspinlock_acquire(&parent->lock);
+        TAILQ_INSERT_TAIL(&parent->dir.entries, dirent, entries);
+        tn->parent = parent;
+        kspinlock_release(&parent->lock);
+    }
+
+    return 0;
 }
 
 // OTHER FUNCTIONS

@@ -29,16 +29,16 @@ __attribute__((
     MemoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
 
 __attribute__((used, section(".limine_requests"))) static volatile struct
-    limine_kernel_address_request KernelAddress =
-        (struct limine_kernel_address_request){
+    limine_kernel_address_request
+        KernelAddress = (struct limine_kernel_address_request){
             .id       = LIMINE_KERNEL_ADDRESS_REQUEST,
             .revision = 0};
 
 __attribute__((
     used,
     section(".limine_requests"))) static volatile struct limine_rsdp_request
-    RsdpRequest =
-        (struct limine_rsdp_request){.id = LIMINE_RSDP_REQUEST, .revision = 0};
+    RsdpRequest = (struct limine_rsdp_request){.id       = LIMINE_RSDP_REQUEST,
+                                               .revision = 0};
 
 __attribute__((
     used,
@@ -50,9 +50,9 @@ __attribute__((
     used,
     section(
         ".limine_response"))) static volatile struct limine_framebuffer_request
-    FramebufferRequest =
-        (struct limine_framebuffer_request){.id = LIMINE_FRAMEBUFFER_REQUEST,
-                                            .revision = 0};
+    FramebufferRequest = (struct limine_framebuffer_request){
+        .id       = LIMINE_FRAMEBUFFER_REQUEST,
+        .revision = 0};
 
 arch_memmap_t *arch_info_get_memmap(void) {
     KASSERT(NULL != MemoryMapRequest.response);

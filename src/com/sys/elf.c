@@ -79,7 +79,11 @@ struct elf_phdr {
     uint64_t  align;
 };
 
-enum elf_phdr_type { PT_LOAD = 1, PT_INTERP = 3, PT_PHDR = 6 };
+enum elf_phdr_type {
+    PT_LOAD   = 1,
+    PT_INTERP = 3,
+    PT_PHDR   = 6
+};
 
 static int load(uintptr_t             vaddr,
                 struct elf_phdr      *phdr,
@@ -106,8 +110,12 @@ static int load(uintptr_t             vaddr,
         if (fsz > 0) {
             size_t len = KMIN(rem, fsz);
 
-            int ret = com_fs_vfs_read(
-                kvirt_page, len, NULL, elf_file, phdr->off + idx, 0);
+            int ret = com_fs_vfs_read(kvirt_page,
+                                      len,
+                                      NULL,
+                                      elf_file,
+                                      phdr->off + idx,
+                                      0);
             if (0 != ret) {
                 return ret;
             }
@@ -129,8 +137,12 @@ int com_sys_elf64_load(com_elf_data_t       *out,
                        uintptr_t             virt_off,
                        arch_mmu_pagetable_t *pt) {
     com_vnode_t *elf_file = NULL;
-    int          ret =
-        com_fs_vfs_lookup(&elf_file, exec_path, exec_path_len, root, cwd, true);
+    int          ret      = com_fs_vfs_lookup(&elf_file,
+                                exec_path,
+                                exec_path_len,
+                                root,
+                                cwd,
+                                true);
     if (0 != ret) {
         return ret;
     }
@@ -139,8 +151,12 @@ int com_sys_elf64_load(com_elf_data_t       *out,
 
     struct elf_header elf_hdr    = {0};
     size_t            bytes_read = 0;
-    ret                          = com_fs_vfs_read(
-        &elf_hdr, sizeof(struct elf_header), &bytes_read, elf_file, 0, 0);
+    ret                          = com_fs_vfs_read(&elf_hdr,
+                          sizeof(struct elf_header),
+                          &bytes_read,
+                          elf_file,
+                          0,
+                          0);
     if (0 != ret) {
         goto cleanup;
     }
@@ -155,8 +171,12 @@ int com_sys_elf64_load(com_elf_data_t       *out,
         struct elf_phdr phdr = {0};
         uintmax_t phdr_off = elf_hdr.phdrs_off + (i * sizeof(struct elf_phdr));
 
-        ret = com_fs_vfs_read(
-            &phdr, sizeof(struct elf_phdr), &bytes_read, elf_file, phdr_off, 0);
+        ret = com_fs_vfs_read(&phdr,
+                              sizeof(struct elf_phdr),
+                              &bytes_read,
+                              elf_file,
+                              phdr_off,
+                              0);
         if (0 != ret) {
             goto cleanup;
         }
@@ -275,8 +295,13 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
     *out_pt                      = new_pt;
 
     com_elf_data_t prog_data = {0};
-    int            status    = com_sys_elf64_load(
-        &prog_data, path, kstrlen(path), proc->root, proc->cwd, 0, new_pt);
+    int            status    = com_sys_elf64_load(&prog_data,
+                                    path,
+                                    kstrlen(path),
+                                    proc->root,
+                                    proc->cwd,
+                                    0,
+                                    new_pt);
 
     if (0 != status) {
         KDEBUG("elf load failed here");
@@ -317,13 +342,13 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
                          ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
     }
 
-    *ctx = (arch_context_t){0};
-    uintptr_t stack_ptr =
-        com_sys_elf64_prepare_stack(prog_data,
-                                    (uintptr_t)stack_phys + ARCH_PAGE_SIZE,
-                                    stack_end,
-                                    argv,
-                                    env);
+    *ctx                = (arch_context_t){0};
+    uintptr_t stack_ptr = com_sys_elf64_prepare_stack(prog_data,
+                                                      (uintptr_t)stack_phys +
+                                                          ARCH_PAGE_SIZE,
+                                                      stack_end,
+                                                      argv,
+                                                      env);
     ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
     return 0;
 
