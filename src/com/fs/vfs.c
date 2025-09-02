@@ -22,6 +22,7 @@
 #include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/str.h>
 #include <lib/util.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -518,14 +519,13 @@ int com_fs_vfs_mksocket(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
-                        uintmax_t     attr,
-                        uintmax_t     fsattr) {
+                        uintmax_t     attr) {
 
     if (NULL == dir->ops->mksocket) {
         return ENOSYS;
     }
 
-    return dir->ops->mksocket(out, dir, name, namelen, attr, fsattr);
+    return dir->ops->mksocket(out, dir, name, namelen, attr, 0);
 }
 
 // UTILITY FUNCTIONS
@@ -555,5 +555,36 @@ int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
 
 end:
     *out = new_node;
+    return ret;
+}
+
+int com_fs_vfs_create_any(com_vnode_t **out,
+                          const char   *path,
+                          size_t        pathlen,
+                          com_vnode_t  *root,
+                          com_vnode_t  *cwd,
+                          uintmax_t     attr,
+                          int (*create_handler)(com_vnode_t **out,
+                                                com_vnode_t  *dir,
+                                                const char   *name,
+                                                size_t        namelen,
+                                                uintmax_t     attr)) {
+    com_vnode_t *vnode = NULL;
+    com_vnode_t *dir   = NULL;
+    int          ret   = 0;
+
+    size_t penult_len, end_idx, end_len;
+    kstrpathpenult(path, pathlen, &penult_len, &end_idx, &end_len);
+    ret = com_fs_vfs_lookup(&dir, path, penult_len, root, cwd, true);
+    if (0 != ret) {
+        goto end;
+    }
+
+    KASSERT(NULL != dir);
+    ret = create_handler(&vnode, dir, &path[end_idx], end_len, attr);
+
+end:
+    *out = vnode;
+    COM_FS_VFS_VNODE_RELEASE(dir);
     return ret;
 }

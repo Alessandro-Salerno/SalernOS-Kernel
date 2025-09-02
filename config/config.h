@@ -73,6 +73,7 @@
 #define CONFIG_PROC_MAX         250000 /* Maximum number of processes */
 #define CONFIG_SYSCALL_MAX      128    /* Maximum number of syscall handlers */
 #define CONFIG_SYMLINK_MAX      32
+#define CONFIG_PATH_MAX         1024
 #define CONFIG_PMM_ZERO         CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
 #define CONFIG_TERM_FPS         60 /* FPS of buffered terminals */
 #define CONFIG_TERM_PANIC       1 /* Display kernel panic to fallback terminal */

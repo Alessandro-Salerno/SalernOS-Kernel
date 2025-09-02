@@ -81,13 +81,22 @@ int com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events) {
 
 int com_fs_sockfs_close(com_vnode_t *node) {
     com_socket_vnode_t *sockfs_vn = (void *)node;
-    return COM_IPC_SOCKET_DESTROY(sockfs_vn->socket);
+    int                 ret       = COM_IPC_SOCKET_DESTROY(sockfs_vn->socket);
+    if (0 == ret) {
+        com_mm_slab_free(sockfs_vn, sizeof(com_socket_vnode_t));
+    }
 }
 
 // OTHER FUNCTIONS
 
+// NOTE: This seems repeated logic with com_fs_vfs_alloc_vnode, but this can
+// also be called directly, whereas vnode_alloc is called by file system
+// implementations and the socket vnode created there is overriden with the file
+// system's ops etc.
 com_vnode_t *com_fs_sockfs_new(void) {
     com_vnode_t *sockfs_vn = com_mm_slab_alloc(sizeof(com_socket_vnode_t));
     sockfs_vn->ops         = &SockfsNodeOps;
+    sockfs_vn->num_ref     = 1;
+    sockfs_vn->type        = E_COM_VNODE_TYPE_SOCKET;
     return sockfs_vn;
 }

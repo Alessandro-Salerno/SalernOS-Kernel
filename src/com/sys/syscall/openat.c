@@ -72,7 +72,7 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
 
         if ((O_EXCL & flags) && 0 == vfs_err) {
             COM_FS_VFS_VNODE_RELEASE(existant);
-            ret.err = EEXIST;
+            ret = COM_SYS_SYSCALL_ERR(EEXIST);
             goto end;
         }
 
@@ -82,38 +82,28 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
             goto setup_fd;
         }
 
-        // if NULL == existant
-        size_t penult_len, end_idx, end_len;
-        kstrpathpenult(path, pathlen, &penult_len, &end_idx, &end_len);
-
-        vfs_err = com_fs_vfs_lookup(&dir,
-                                    path,
-                                    penult_len,
-                                    curr_proc->root,
-                                    dir,
-                                    !(O_NOFOLLOW & flags));
-
+        vfs_err = com_fs_vfs_create_any(&file_vn,
+                                        path,
+                                        pathlen,
+                                        curr_proc->root,
+                                        dir,
+                                        0,
+                                        com_fs_vfs_create);
         if (0 != vfs_err) {
             ret = COM_SYS_SYSCALL_ERR(vfs_err);
             goto end;
         }
-
-        KASSERT(NULL != dir);
-        com_fs_vfs_create(&file_vn, dir, &path[end_idx], end_len, 0);
-        COM_FS_VFS_VNODE_RELEASE(dir);
-        goto setup_fd;
-    }
-
-    // if no O_CREAT
-    vfs_err = com_fs_vfs_lookup(&file_vn,
-                                path,
-                                pathlen,
-                                curr_proc->root,
-                                dir,
-                                true);
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
-        goto end;
+    } else {
+        vfs_err = com_fs_vfs_lookup(&file_vn,
+                                    path,
+                                    pathlen,
+                                    curr_proc->root,
+                                    dir,
+                                    !(O_NOFOLLOW & flags));
+        if (0 != vfs_err) {
+            ret = COM_SYS_SYSCALL_ERR(vfs_err);
+            goto end;
+        }
     }
 
 setup_fd:

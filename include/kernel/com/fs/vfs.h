@@ -67,6 +67,7 @@ typedef struct com_vnode {
     uintmax_t             num_ref;
     bool                  isroot;
     void                 *extra;
+    void                 *binding; // Used for socket/FIFO
 } com_vnode_t;
 
 typedef struct com_vnode_ops {
@@ -227,8 +228,7 @@ int com_fs_vfs_mksocket(com_vnode_t **out,
                         com_vnode_t  *dir,
                         const char   *name,
                         size_t        namelen,
-                        uintmax_t     attr,
-                        uintmax_t     fsattr);
+                        uintmax_t     attr);
 
 // UTILITY FUNCTIONS
 
@@ -237,3 +237,14 @@ int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
                            com_vnode_type_t type,
                            com_vnode_ops_t *ops,
                            void            *extra);
+int com_fs_vfs_create_any(com_vnode_t **out,
+                          const char   *path,
+                          size_t        pathlen,
+                          com_vnode_t  *root,
+                          com_vnode_t  *cwd,
+                          uintmax_t     attr,
+                          int (*create_handler)(com_vnode_t **out,
+                                                com_vnode_t  *dir,
+                                                const char   *name,
+                                                size_t        namelen,
+                                                uintmax_t     attr));
