@@ -46,6 +46,8 @@
 #define COM_IPC_SOCKET_POLL(revents, sock, events) \
     __SOCKET_OP(sock, poll, revents, sock, events)
 #define COM_IPC_SOCKET_DESTROY(sock) __SOCKET_OP(sock, destroy, sock)
+#define COM_IPC_SOCKET_IOCTL(sock, op, buf) \
+    __SOCKET_OP(sock, ioctl, sock, op, buf)
 
 typedef enum com_socket_type {
     E_COM_SOCKET_TYPE_INVAL,
@@ -79,6 +81,7 @@ typedef struct com_socket_desc {
     kioviter_t        *ioviter;
     size_t             count;
     uintmax_t          flags;
+    int                msgflags;
     size_t             count_done;
 } com_socket_desc_t;
 
@@ -96,14 +99,12 @@ typedef struct com_socket_ops {
     int (*getpeername)(com_socket_addr_t *out, com_socket_t *socket);
     int (*poll)(short *revents, com_socket_t *socket, short events);
     int (*destroy)(com_socket_t *socket);
+    int (*ioctl)(com_socket_t *socket, uintmax_t op, void *buf);
 } com_socket_ops_t;
 
 com_socket_t *com_ipc_socket_new(com_socket_type_t type);
 int           com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
                                            struct sockaddr   *abi_addr,
                                            socklen_t          abi_addr_len);
-int           com_ipc_socket_addr_to_abi(struct sockaddr   *out,
-                                         socklen_t         *out_len,
-                                         com_socket_addr_t *addr);
 com_socket_type_t
 com_ipc_socket_type_from_abi(int domain, int type, int protocol);

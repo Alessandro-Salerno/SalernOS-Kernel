@@ -608,5 +608,27 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "addr_len");
 
+    com_sys_syscall_register(0x32,
+                             "sendmsg",
+                             com_sys_syscall_sendmsg,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "msg",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x33,
+                             "recvmsg",
+                             com_sys_syscall_recvmsg,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "msg",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

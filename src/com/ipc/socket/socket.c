@@ -53,11 +53,6 @@ int com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
     return EAFNOSUPPORT;
 }
 
-int com_ipc_socket_addr_to_abi(struct sockaddr   *out,
-                               socklen_t         *out_len,
-                               com_socket_addr_t *addr) {
-}
-
 com_socket_type_t
 com_ipc_socket_type_from_abi(int domain, int type, int protocol) {
     (void)type;

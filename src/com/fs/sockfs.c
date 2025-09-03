@@ -61,12 +61,10 @@ int com_fs_sockfs_writev(size_t      *bytes_written,
     return ret;
 }
 
-// TODO: implement socket ioctl  (for networking only?)
 int com_fs_sockfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
-    (void)node;
-    (void)op;
-    (void)buf;
-    return ENODEV;
+    com_socket_vnode_t *sockfs_vn = (void *)node;
+    com_socket_t       *socket    = sockfs_vn->socket;
+    return COM_IPC_SOCKET_IOCTL(socket, op, buf);
 }
 
 int com_fs_sockfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {

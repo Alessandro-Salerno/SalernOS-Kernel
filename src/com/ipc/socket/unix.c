@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <asm/ioctls.h>
 #include <fcntl.h>
 #include <kernel/com/fs/sockfs.h>
 #include <kernel/com/ipc/socket/unix.h>
@@ -60,6 +61,7 @@ static struct unix_socket *unix_socket_alloc(void) {
     size_t rb_pages          = CONFIG_UNIX_SOCK_RB_SIZE / ARCH_PAGE_SIZE + 1;
     void  *rb_buff = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(rb_pages));
     KRINGBUFFER_INIT_CUSTOM(&sock->rb, rb_buff, CONFIG_UNIX_SOCK_RB_SIZE);
+    sock->rb.fallback_hu_arg = sock;
     TAILQ_INIT(&sock->srv_acceptq);
     TAILQ_INIT(&sock->srv_acceptwait);
     LIST_INIT(&sock->socket.pollhead.polled_list);
@@ -117,9 +119,46 @@ end:
 }
 
 static int unix_socket_send(com_socket_t *socket, com_socket_desc_t *desc) {
+    struct unix_socket *unix_socket = (void *)socket;
+    kspinlock_acquire(&unix_socket->socket.lock);
+
+    if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state ||
+        NULL == unix_socket->peer) {
+        kspinlock_release(&unix_socket->socket.lock);
+        return ENOTCONN;
+    }
+
+    kspinlock_release(&unix_socket->socket.lock);
+    return kioviter_read_to_ringbuffer(&desc->count_done,
+                                       &unix_socket->peer->rb,
+                                       KRINGBUFFER_NOATOMIC,
+                                       !(O_NONBLOCK & desc->flags),
+                                       unix_socket_poll_callback,
+                                       unix_socket->peer,
+                                       NULL,
+                                       desc->ioviter,
+                                       desc->count);
 }
 
 static int unix_socket_recv(com_socket_t *socket, com_socket_desc_t *desc) {
+    struct unix_socket *unix_socket = (void *)socket;
+    kspinlock_acquire(&unix_socket->socket.lock);
+
+    if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state) {
+        kspinlock_release(&unix_socket->socket.lock);
+        return ENOTCONN;
+    }
+
+    kspinlock_release(&unix_socket->socket.lock);
+    return kioviter_write_from_ringbuffer(desc->ioviter,
+                                          desc->count,
+                                          &desc->count_done,
+                                          &unix_socket->rb,
+                                          KRINGBUFFER_NOATOMIC,
+                                          !(O_NONBLOCK & desc->flags),
+                                          unix_socket_poll_callback,
+                                          unix_socket,
+                                          NULL);
 }
 
 static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
@@ -295,6 +334,8 @@ static int unix_socket_getpeername(com_socket_addr_t *out,
 
 static int
 unix_socket_poll(short *revents, com_socket_t *socket, short events) {
+    (void)events;
+
     struct unix_socket *unix_socket = (void *)socket;
     short               out         = 0;
     kspinlock_acquire(&unix_socket->socket.lock);
@@ -310,6 +351,7 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
     }
 
     kspinlock_release(&unix_socket->socket.lock);
+    *revents = out;
     return 0;
 }
 
@@ -322,6 +364,17 @@ static int unix_socket_destroy(com_socket_t *socket) {
     return 0;
 }
 
+static int unix_socket_ioctl(com_socket_t *socket, uintmax_t op, void *buf) {
+    struct unix_socket *unix_socket = (void *)socket;
+
+    if (FIONREAD == op) {
+        *(int *)buf = KRINGBUFFER_AVAIL_READ(&unix_socket->rb);
+        return 0;
+    }
+
+    return ENODEV;
+}
+
 static com_socket_ops_t UnixSocketOps = {
     .bind        = unix_socket_bind,
     .send        = unix_socket_send,
@@ -330,7 +383,11 @@ static com_socket_ops_t UnixSocketOps = {
     .listen      = unix_socket_listen,
     .accept      = unix_socket_accept,
     .getname     = unix_socket_getname,
-    .getpeername = unix_socket_getpeername};
+    .getpeername = unix_socket_getpeername,
+    .ioctl       = unix_socket_ioctl,
+    .poll        = unix_socket_poll,
+    .destroy     = unix_socket_destroy,
+};
 
 // NOTE: Not pasting it directly because I wdislike casts and don't want to cast
 // to unix_socket when I call this above
