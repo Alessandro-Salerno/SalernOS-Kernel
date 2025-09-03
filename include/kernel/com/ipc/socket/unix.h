@@ -17,3 +17,7 @@
 *************************************************************************/
 
 #pragma once
+
+#include <kernel/com/ipc/socket/socket.h>
+
+com_socket_t *com_ipc_socket_unix_new(void);

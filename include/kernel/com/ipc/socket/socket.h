@@ -25,6 +25,7 @@
 #include <lib/spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
 #define __SOCKET_OP(sock, op, ...) \
     ((NULL != (sock)->ops->op) ? (sock)->ops->op(__VA_ARGS__) : ENOSYS)
@@ -36,8 +37,8 @@
     __SOCKET_OP(sock, connect, sock, addr)
 #define COM_IPC_SOCKET_LISTEN(sock, max_conn) \
     __SOCKET_OP(sock, listen, sock, max_conn)
-#define COM_IPC_SOCKET_ACCEPT(server, client, addr, flags) \
-    __SOCKET_OP(server, accept, server, client, addr, flags)
+#define COM_IPC_SOCKET_ACCEPT(out_peer, out_addr, server, flags) \
+    __SOCKET_OP(server, accept, out_peer, out_addr, server, flags)
 #define COM_IPC_SOCKET_GETNAME(out, sock) __SOCKET_OP(sock, getname, out, sock)
 #define COM_IPC_SOCKET_GETPEERNAME(out, sock) \
     __SOCKET_OP(sock, getpeername, out, sock)
@@ -47,6 +48,7 @@
 #define COM_IPC_SOCKET_DESTROY(sock) __SOCKET_OP(sock, destroy, sock)
 
 typedef enum com_socket_type {
+    E_COM_SOCKET_TYPE_INVAL,
     E_COM_SOCKET_TYPE_UNIX
 } com_socket_type_t;
 
@@ -86,12 +88,22 @@ typedef struct com_socket_ops {
     int (*recv)(com_socket_t *socket, com_socket_desc_t *desc);
     int (*connect)(com_socket_t *socket, com_socket_addr_t *addr);
     int (*listen)(com_socket_t *socket, size_t max_connections);
-    int (*accept)(com_socket_t      *server,
-                  com_socket_t      *client,
-                  com_socket_addr_t *addr,
+    int (*accept)(com_socket_t     **out_peer,
+                  com_socket_addr_t *out_addr,
+                  com_socket_t      *server,
                   uintmax_t          flags);
     int (*getname)(com_socket_addr_t *out, com_socket_t *socket);
     int (*getpeername)(com_socket_addr_t *out, com_socket_t *socket);
     int (*poll)(short *revents, com_socket_t *socket, short events);
     int (*destroy)(com_socket_t *socket);
 } com_socket_ops_t;
+
+com_socket_t *com_ipc_socket_new(com_socket_type_t type);
+int           com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
+                                           struct sockaddr   *abi_addr,
+                                           socklen_t          abi_addr_len);
+int           com_ipc_socket_addr_to_abi(struct sockaddr   *out,
+                                         socklen_t         *out_len,
+                                         com_socket_addr_t *addr);
+com_socket_type_t
+com_ipc_socket_type_from_abi(int domain, int type, int protocol);

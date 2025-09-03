@@ -477,6 +477,8 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
         out->st_mode |= S_IFDIR;
     } else if (E_COM_VNODE_TYPE_LINK == node->type) {
         out->st_mode |= S_IFLNK;
+    } else if (E_COM_VNODE_TYPE_SOCKET == node->type) {
+        out->st_mode |= S_IFSOCK;
     } else {
         return ENOSYS;
     }

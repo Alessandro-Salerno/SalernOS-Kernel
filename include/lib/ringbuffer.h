@@ -50,6 +50,18 @@
     TAILQ_INIT(&(rb_ptr)->write.queue);                    \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
+#define KRINGBUFFER_INIT_CUSTOM(rb_ptr, buffptr, buffsz) \
+    (rb_ptr)->lock            = KSPINLOCK_NEW();         \
+    (rb_ptr)->write.index     = 0;                       \
+    (rb_ptr)->read.index      = 0;                       \
+    (rb_ptr)->is_eof          = false;                   \
+    (rb_ptr)->check_hangup    = NULL;                    \
+    (rb_ptr)->fallback_hu_arg = NULL;                    \
+    (rb_ptr)->buffer          = buffptr;                 \
+    (rb_ptr)->buffer_size     = buffsz;                  \
+    TAILQ_INIT(&(rb_ptr)->write.queue);                  \
+    TAILQ_INIT(&(rb_ptr)->read.queue)
+
 typedef struct kringbuffer {
     struct {
         // Default buffer

@@ -555,5 +555,58 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_FLAGS,
                              "flags");
 
+    com_sys_syscall_register(0x2D,
+                             "socket",
+                             com_sys_syscall_socket,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "domain",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "type",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "protocol");
+
+    com_sys_syscall_register(0x2E,
+                             "bind",
+                             com_sys_syscall_bind,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addr",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "addr_len");
+
+    com_sys_syscall_register(0x2F,
+                             "listen",
+                             com_sys_syscall_listen,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "max_connections");
+
+    com_sys_syscall_register(0x30,
+                             "accept",
+                             com_sys_syscall_accept,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addr",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addrlen_ptr");
+
+    com_sys_syscall_register(0x31,
+                             "connect",
+                             com_sys_syscall_connect,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addr",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "addr_len");
+
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

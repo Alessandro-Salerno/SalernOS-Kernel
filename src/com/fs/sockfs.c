@@ -85,6 +85,7 @@ int com_fs_sockfs_close(com_vnode_t *node) {
     if (0 == ret) {
         com_mm_slab_free(sockfs_vn, sizeof(com_socket_vnode_t));
     }
+    return ret;
 }
 
 // OTHER FUNCTIONS

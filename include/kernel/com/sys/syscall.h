@@ -157,3 +157,8 @@ COM_SYS_SYSCALL(com_sys_syscall_poll);
 COM_SYS_SYSCALL(com_sys_syscall_readlinkat);
 COM_SYS_SYSCALL(com_sys_syscall_symlinkat);
 COM_SYS_SYSCALL(com_sys_syscall_unlinkat);
+COM_SYS_SYSCALL(com_sys_syscall_socket);
+COM_SYS_SYSCALL(com_sys_syscall_bind);
+COM_SYS_SYSCALL(com_sys_syscall_listen);
+COM_SYS_SYSCALL(com_sys_syscall_accept);
+COM_SYS_SYSCALL(com_sys_syscall_connect);
