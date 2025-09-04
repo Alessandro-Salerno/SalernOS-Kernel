@@ -630,5 +630,16 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_FLAGS,
                              "flags");
 
+    com_sys_syscall_register(0x34,
+                             "setitimer",
+                             com_sys_syscall_setitimer,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "which",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "new_val",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "old_val");
+
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

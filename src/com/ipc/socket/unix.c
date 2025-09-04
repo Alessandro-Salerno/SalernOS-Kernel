@@ -294,6 +294,10 @@ static int unix_socket_accept(com_socket_t     **out_peer,
         new_client = TAILQ_FIRST(&server->srv_acceptq);
     }
 
+    // We can now remove the incoming connection from the queue, subsequent
+    // calls to accept() will return the same socket
+    TAILQ_REMOVE_HEAD(&server->srv_acceptq, cln_connent);
+
 end:
     if (NULL != out_peer) {
         *out_peer = (void *)new_client;

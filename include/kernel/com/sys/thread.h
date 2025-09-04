@@ -25,11 +25,18 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <kernel/com/ipc/signal.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/proc.h>
 #include <lib/spinlock.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <sys/time.h>
 #include <sys/types.h>
+
+typedef struct com_thread_timer {
+    struct itimerval itimerval;
+    uintmax_t        ctime; // when it was created
+} com_thread_timer_t;
 
 typedef struct com_thread {
     arch_context_t       ctx;
@@ -50,6 +57,11 @@ typedef struct com_thread {
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;
+
+    // TODO: whas if a thread exits while waiting for a timer? Callout will do
+    // its things and all of a sudden we got a page fault in kernel or memory
+    // corruption
+    com_thread_timer_t real_timer;
 } com_thread_t;
 
 com_thread_t *com_sys_thread_new(struct com_proc *proc,

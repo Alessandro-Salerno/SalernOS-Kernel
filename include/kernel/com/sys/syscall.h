@@ -164,3 +164,4 @@ COM_SYS_SYSCALL(com_sys_syscall_accept);
 COM_SYS_SYSCALL(com_sys_syscall_connect);
 COM_SYS_SYSCALL(com_sys_syscall_sendmsg);
 COM_SYS_SYSCALL(com_sys_syscall_recvmsg);
+COM_SYS_SYSCALL(com_sys_syscall_setitimer);
