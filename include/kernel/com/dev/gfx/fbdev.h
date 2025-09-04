@@ -18,12 +18,15 @@
 
 #pragma once
 
-#include <kernel/com/io/tty.h>
-#include <stdint.h>
+#include <arch/info.h>
+#include <kernel/com/fs/vfs.h>
+#include <linux/fb.h>
 
-#define COM_IO_CONSOLE_MAX_TTYS 7
+typedef struct com_fbdev {
+    arch_framebuffer_t      *fb;
+    com_vnode_t             *vnode;
+    struct fb_fix_screeninfo fscreeninfo;
+    struct fb_var_screeninfo vscreeninfo;
+} com_fbdev_t;
 
-void com_io_console_kbd_in(char c, uintmax_t mod);
-void com_io_console_add_tty(com_tty_t *tty);
-void com_io_console_disable_current(void);
-void com_io_console_init(void);
+int com_dev_gfx_fbdev_init(com_fbdev_t **out);

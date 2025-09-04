@@ -49,9 +49,9 @@
     COM_SYS_SYSCALL_UNUSED_CONTEXT(); \
     __COM_SYS_SYSCALL_UNUSED_1
 
-#define COM_SYS_SYSCALL_OK(v)                      \
-    (com_syscall_ret_t) {                          \
-        .value = (v), .err = 0, .discarded = false \
+#define COM_SYS_SYSCALL_OK(v)                                 \
+    (com_syscall_ret_t) {                                     \
+        .value = (uintmax_t)(v), .err = 0, .discarded = false \
     }
 #define COM_SYS_SYSCALL_ERR(e)                      \
     (com_syscall_ret_t) {                           \

@@ -34,21 +34,15 @@ static void itimer_callout(com_callout_t *callout) {
         return;
     }
 
-    uintmax_t expiry = itimerval->it_value.tv_sec * KNANOS_PER_SEC +
-                       itimerval->it_value.tv_usec * 1000UL +
-                       thread->real_timer.ctime;
-
-    if (com_sys_callout_get_time() >= expiry) {
-        if (0 != itimerval->it_interval.tv_sec ||
-            0 != itimerval->it_interval.tv_usec) {
-            itimerval->it_value = itimerval->it_interval;
-            uintmax_t delay     = itimerval->it_value.tv_sec * KNANOS_PER_SEC +
-                              itimerval->it_value.tv_usec * 1000UL;
-            com_sys_callout_reschedule(callout, delay);
-        }
-
-        com_ipc_signal_send_to_thread(thread, SIGALRM, thread->proc);
+    if (0 != itimerval->it_interval.tv_sec ||
+        0 != itimerval->it_interval.tv_usec) {
+        itimerval->it_value = itimerval->it_interval;
+        uintmax_t delay     = itimerval->it_value.tv_sec * KNANOS_PER_SEC +
+                          itimerval->it_value.tv_usec * 1000UL;
+        com_sys_callout_reschedule(callout, delay);
     }
+
+    com_ipc_signal_send_to_thread(thread, SIGALRM, thread->proc);
 }
 
 // SYSCALL: setitimer(int which, struct itimerval *new_val, struct itimerval

@@ -528,6 +528,20 @@ int com_fs_vfs_mksocket(com_vnode_t **out,
     return dir->ops->mksocket(out, dir, name, namelen, attr, 0);
 }
 
+int com_fs_vfs_mmap(void       **out,
+                    com_vnode_t *node,
+                    uintptr_t    hint,
+                    size_t       size,
+                    uintmax_t    flags,
+                    uintmax_t    prot,
+                    uintmax_t    off) {
+    if (NULL == node->ops->mmap) {
+        return ENOSYS;
+    }
+
+    return node->ops->mmap(out, node, hint, size, flags, prot, off);
+}
+
 // UTILITY FUNCTIONS
 
 int com_fs_vfs_alloc_vnode(com_vnode_t    **out,

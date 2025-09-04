@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
@@ -315,6 +316,7 @@ void kernel_entry(void) {
 
     com_sys_proc_init();
     com_io_pty_init();
+    com_dev_gfx_fbdev_init(NULL);
 
     char *const   argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};
     char *const   envp[] = {CONFIG_INIT_ENV};

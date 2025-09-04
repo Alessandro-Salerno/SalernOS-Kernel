@@ -140,6 +140,13 @@ typedef struct com_vnode_ops {
                     size_t        namelen,
                     uintmax_t     attr,
                     uintmax_t     fsattr);
+    int (*mmap)(void       **out,
+                com_vnode_t *node,
+                uintptr_t    hint,
+                size_t       size,
+                uintmax_t    flags,
+                uintmax_t    prot,
+                uintmax_t    off);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -229,6 +236,13 @@ int com_fs_vfs_mksocket(com_vnode_t **out,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr);
+int com_fs_vfs_mmap(void       **out,
+                    com_vnode_t *node,
+                    uintptr_t    hint,
+                    size_t       size,
+                    uintmax_t    flags,
+                    uintmax_t    prot,
+                    uintmax_t    off);
 
 // UTILITY FUNCTIONS
 

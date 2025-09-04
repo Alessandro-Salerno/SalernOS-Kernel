@@ -29,9 +29,41 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
-#define ALLOC_BASE 0x100000000
+static com_syscall_ret_t file_mmap(com_proc_t *curr_proc,
+                                   int         fd,
+                                   size_t      size,
+                                   uintmax_t   flags,
+                                   uintmax_t   prot,
+                                   uintmax_t   off,
+                                   uintptr_t   hint) {
+    com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
+    com_file_t       *file = com_sys_proc_get_file(curr_proc, fd);
+    if (NULL == file) {
+        ret = COM_SYS_SYSCALL_ERR(EBADF);
+        goto end;
+    }
 
-// TODO: probably have to separate prot and falsg for portability
+    void *mmap_ret;
+    int   vfs_err = com_fs_vfs_mmap(&mmap_ret,
+                                  file->vnode,
+                                  hint,
+                                  size,
+                                  flags,
+                                  prot,
+                                  off);
+    if (0 != vfs_err) {
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+        goto end;
+    }
+
+    ret = COM_SYS_SYSCALL_OK(mmap_ret);
+
+end:
+    COM_FS_FILE_RELEASE(file);
+    return ret;
+}
+
+// TODO: properly handle flags, prot, off
 // SYSCALL: mmap(void *hint, size_t size, uintmax_t flags, int fd, ...)
 COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
@@ -41,14 +73,18 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     uintmax_t flags = COM_SYS_SYSCALL_ARG(uintmax_t, 3);
     int       fd    = COM_SYS_SYSCALL_ARG(int, 4);
 
-    if (-1 != fd) {
-        return COM_SYS_SYSCALL_ERR(ENOSYS);
-    }
-
-    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
-
     flags &= 0xffffffff;
-    // KASSERT(MAP_ANONYMOUS & flags);
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+
+    if (-1 != fd) {
+        return file_mmap(curr_proc,
+                         fd,
+                         size,
+                         flags,
+                         PROT_READ | PROT_WRITE | PROT_EXEC,
+                         0,
+                         hint);
+    }
 
     size_t    pages = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
     uintptr_t virt;
@@ -56,14 +92,15 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     if (MAP_FIXED & flags) {
         virt = hint;
     } else {
-        virt = __atomic_fetch_add(&curr->used_pages, pages, __ATOMIC_SEQ_CST) *
-                   ARCH_PAGE_SIZE +
-               ALLOC_BASE;
+        kspinlock_acquire(&curr_proc->pages_lock);
+        virt = curr_proc->used_pages * ARCH_PAGE_SIZE + CONFIG_VMM_ANON_START;
+        curr_proc->used_pages += pages;
+        kspinlock_release(&curr_proc->pages_lock);
     }
 
     for (size_t i = 0; i < pages; i++) {
         void *phys = com_mm_pmm_alloc();
-        arch_mmu_map(curr->page_table,
+        arch_mmu_map(curr_proc->page_table,
                      (void *)(virt + i * ARCH_PAGE_SIZE),
                      phys,
                      ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |

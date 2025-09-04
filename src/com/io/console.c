@@ -76,6 +76,18 @@ void com_io_console_add_tty(com_tty_t *tty) {
     Ttys[tty_idx] = tty;
 }
 
+// TODO: replace this with proper switching from text to fb TTYs
+void com_io_console_disable_current(void) {
+    com_tty_t
+        *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
+
+    if (NULL != fg_tty) {
+        if (E_COM_TTY_TYPE_TEXT == fg_tty->type) {
+            com_io_term_disable(fg_tty->tty.text.term);
+        }
+    }
+}
+
 void com_io_console_init(void) {
     // Nothing for now, not needed
 }
