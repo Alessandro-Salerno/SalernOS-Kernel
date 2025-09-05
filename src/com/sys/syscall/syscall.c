@@ -73,6 +73,7 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 }
                 break;
             case COM_SYS_SYSCALL_TYPE_FLAGS:
+            case COM_SYS_SYSCALL_TYPE_MODE:
                 kprintf("0x%x", (int)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_LONGFLAGS:
@@ -640,6 +641,17 @@ void com_sys_syscall_init(void) {
                              "new_val",
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "old_val");
+
+    com_sys_syscall_register(0x35,
+                             "mkdirat",
+                             com_sys_syscall_mkdirat,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "path",
+                             COM_SYS_SYSCALL_TYPE_MODE,
+                             "mode");
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

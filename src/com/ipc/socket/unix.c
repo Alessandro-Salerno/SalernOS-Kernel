@@ -100,6 +100,8 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
                                 curr_proc->root,
                                 atomic_load(&curr_proc->cwd),
                                 0,
+                                true,
+                                true,
                                 com_fs_vfs_mksocket);
     if (0 != ret) {
         goto end;

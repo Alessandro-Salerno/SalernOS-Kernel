@@ -74,6 +74,7 @@
 #define COM_SYS_SYSCALL_TYPE_LONGFLAGS 6
 #define COM_SYS_SYSCALL_TYPE_OFFT      7
 #define COM_SYS_SYSCALL_TYPE_UINT32    8
+#define COM_SYS_SYSCALL_TYPE_MODE      9
 
 typedef struct {
     uintmax_t value;
@@ -165,3 +166,4 @@ COM_SYS_SYSCALL(com_sys_syscall_connect);
 COM_SYS_SYSCALL(com_sys_syscall_sendmsg);
 COM_SYS_SYSCALL(com_sys_syscall_recvmsg);
 COM_SYS_SYSCALL(com_sys_syscall_setitimer);
+COM_SYS_SYSCALL(com_sys_syscall_mkdirat);

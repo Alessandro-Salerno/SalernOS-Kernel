@@ -472,7 +472,8 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
 
     if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;
-        out->st_size = file->file.size;
+        out->st_size   = file->file.size;
+        out->st_blocks = (out->st_size + 511) / 512;
     } else if (E_COM_VNODE_TYPE_DIR == node->type) {
         out->st_mode |= S_IFDIR;
     } else if (E_COM_VNODE_TYPE_LINK == node->type) {
@@ -480,8 +481,10 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     } else if (E_COM_VNODE_TYPE_SOCKET == node->type) {
         out->st_mode |= S_IFSOCK;
     } else {
-        return ENOSYS;
+        KASSERT("file type not supported");
     }
+
+    out->st_nlink = 1;
 
     return 0;
 }

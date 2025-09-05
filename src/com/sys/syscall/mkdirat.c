@@ -29,19 +29,21 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-// SYSCALL: openat(int dir_fd, const char *path, int flags)
-COM_SYS_SYSCALL(com_sys_syscall_openat) {
+// TODO: implement file system mod
+// SYSCALL: mkdirat(int dir_fd, const char *path, mode_t mode)
+COM_SYS_SYSCALL(com_sys_syscall_mkdirat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
     int         dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
     const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
-    int         flags  = COM_SYS_SYSCALL_ARG(int, 3);
+    mode_t      mode   = COM_SYS_SYSCALL_ARG(mode_t, 3);
+    (void)mode;
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
+    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 
     com_vnode_t *dir      = NULL;
     com_file_t  *dir_file = NULL;
@@ -56,75 +58,18 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
         goto end;
     }
 
-    int          vfs_err = 0;
-    com_vnode_t *file_vn = NULL;
-
-    // TODO: race condition here. File could be deleted or created while we look
-    // it up
-    if (O_CREAT & flags) {
-        vfs_err = com_fs_vfs_create_any(&file_vn,
+    int vfs_err = com_fs_vfs_create_any(NULL,
                                         path,
                                         pathlen,
                                         curr_proc->root,
                                         dir,
                                         0,
-                                        O_EXCL & flags,
-                                        !(O_NOFOLLOW & flags),
-                                        com_fs_vfs_create);
-        if (0 != vfs_err) {
-            ret = COM_SYS_SYSCALL_ERR(vfs_err);
-            goto end;
-        }
-    } else {
-        vfs_err = com_fs_vfs_lookup(&file_vn,
-                                    path,
-                                    pathlen,
-                                    curr_proc->root,
-                                    dir,
-                                    !(O_NOFOLLOW & flags));
-        if (0 != vfs_err) {
-            ret = COM_SYS_SYSCALL_ERR(vfs_err);
-            goto end;
-        }
+                                        true,
+                                        false,
+                                        com_fs_vfs_mkdir);
+    if (0 != vfs_err) {
+        ret = COM_SYS_SYSCALL_ERR(vfs_err);
     }
-
-    KASSERT(NULL != file_vn);
-
-    com_vnode_t *new_vn   = NULL;
-    int          open_ret = com_fs_vfs_open(&new_vn, file_vn);
-    if (0 != open_ret) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        ret = COM_SYS_SYSCALL_ERR(open_ret);
-        goto end;
-    }
-
-    // If the open call has spawned a new vnode (as is the case, for example,
-    // for /dev/ptmx)
-    if (new_vn != file_vn && NULL != new_vn) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        file_vn = new_vn;
-    }
-
-    if ((O_DIRECTORY & flags) && E_COM_VNODE_TYPE_DIR != file_vn->type) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        ret = COM_SYS_SYSCALL_ERR(ENOTDIR);
-        goto end;
-    }
-
-    int fd = com_sys_proc_next_fd(curr_proc);
-    if (-1 == fd) {
-        ret.err = EMFILE;
-        goto end;
-    }
-
-    curr_proc->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *file       = curr_proc->fd[fd].file;
-    file->vnode            = file_vn;
-    file->flags            = flags;
-    file->num_ref          = 1;
-    file->off              = 0;
-    ret.value              = fd;
-    KDEBUG("returning fd=%d (file=%p, vn=%p) for %s", fd, file, file_vn, path);
 
 end:
     COM_FS_FILE_RELEASE(dir_file);

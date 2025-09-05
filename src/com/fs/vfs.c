@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/sockfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
@@ -578,6 +579,8 @@ int com_fs_vfs_create_any(com_vnode_t **out,
                           com_vnode_t  *root,
                           com_vnode_t  *cwd,
                           uintmax_t     attr,
+                          bool          err_if_present,
+                          bool          follow_symlinks,
                           int (*create_handler)(com_vnode_t **out,
                                                 com_vnode_t  *dir,
                                                 const char   *name,
@@ -587,6 +590,24 @@ int com_fs_vfs_create_any(com_vnode_t **out,
     com_vnode_t *dir   = NULL;
     int          ret   = 0;
 
+    int lookup_err = com_fs_vfs_lookup(&vnode,
+                                       path,
+                                       pathlen,
+                                       root,
+                                       cwd,
+                                       follow_symlinks);
+
+    if (0 == lookup_err) {
+        if (err_if_present) {
+            COM_FS_VFS_VNODE_RELEASE(vnode);
+            vnode = NULL;
+            ret   = EEXIST;
+        }
+        goto end;
+    }
+
+    // NOTE: here follow_symlinks is ignored since we're working with a subset
+    // of the path, it is used only for the first lookup
     size_t penult_len, end_idx, end_len;
     kstrpathpenult(path, pathlen, &penult_len, &end_idx, &end_len);
     ret = com_fs_vfs_lookup(&dir, path, penult_len, root, cwd, true);
@@ -598,7 +619,10 @@ int com_fs_vfs_create_any(com_vnode_t **out,
     ret = create_handler(&vnode, dir, &path[end_idx], end_len, attr);
 
 end:
-    *out = vnode;
+    if (NULL != out) {
+        *out = vnode;
+    }
+
     COM_FS_VFS_VNODE_RELEASE(dir);
     return ret;
 }
