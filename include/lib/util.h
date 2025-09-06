@@ -48,12 +48,19 @@
     com_io_log_puts_nolock(":" KSTR(__LINE__) ": ");
 #endif
 
+#if CONFIG_LOG_ALLOW_COLORS
+#define KRESET_COLOR() com_io_log_puts_nolock("\033[0m")
+#else
+#define KRESET_COLOR()
+#endif
+
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
 #define KURGENT(...)                \
     com_io_log_lock();              \
     kinitlog("URGENT", "\033[35m"); \
     __LOG_LOCATION();               \
     kprintf(__VA_ARGS__);           \
+    KRESET_COLOR();                 \
     com_io_log_putc_nolock('\n');   \
     com_io_log_unlock();
 #endif
@@ -64,6 +71,7 @@
     kinitlog("INFO", "\033[32m"); \
     __LOG_LOCATION();             \
     kprintf(__VA_ARGS__);         \
+    KRESET_COLOR();               \
     com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
 #else
@@ -76,6 +84,7 @@
     kinitlog("DEBUG", "");        \
     __LOG_LOCATION();             \
     kprintf(__VA_ARGS__);         \
+    KRESET_COLOR();               \
     com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
 #else

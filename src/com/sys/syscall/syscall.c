@@ -142,6 +142,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     kinitlog("SYSCALL", "\033[33m");
     log_syscall(syscall, args);
     kprintf(" at %p\n", invoke_ip);
+    KRESET_COLOR();
     com_io_log_unlock();
 #else
     (void)invoke_ip;
