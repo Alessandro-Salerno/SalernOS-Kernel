@@ -31,6 +31,7 @@ void com_io_log_putc_nolock(char c);
 void com_io_log_puts_nolock(const char *s);
 void com_io_log_putsn_nolock(const char *s, size_t n);
 void com_io_log_set_vnode_nolock(struct com_vnode *vnode);
+void com_io_log_set_user_hook_nolock(com_intf_log_t hook);
 
 void com_io_log_lock(void);
 void com_io_log_unlock(void);
@@ -40,3 +41,4 @@ void com_io_log_putc(char c);
 void com_io_log_puts(const char *s);
 void com_io_log_putsn(const char *s, size_t n);
 void com_io_log_set_vnode(struct com_vnode *vnode);
+void com_io_log_set_user_hook(com_intf_log_t hook);

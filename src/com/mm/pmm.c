@@ -256,6 +256,7 @@ void com_mm_pmm_get_info(uintmax_t *used_mem,
 }
 
 void com_mm_pmm_init(void) {
+    KLOG("initializing pmm");
     arch_memmap_t *memmap       = arch_info_get_memmap();
     uintptr_t      highest_addr = 0;
 
@@ -317,7 +318,7 @@ void com_mm_pmm_init(void) {
         }
     }
 
-    KLOG("freeing usable pages");
+    KDEBUG("freeing usable pages");
 
     // Unreserve free memory
     uintmax_t max_len = 0;

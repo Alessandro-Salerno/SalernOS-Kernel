@@ -206,6 +206,9 @@ KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
     }
 }
 
+extern const char _binary_src_splash_txt_start[];
+extern const char _binary_src_splash_txt_end[];
+
 void kernel_entry(void) {
     ARCH_CPU_SET(&BaseCpu);
     TAILQ_INIT(&BaseCpu.sched_queue);
@@ -228,6 +231,17 @@ void kernel_entry(void) {
 
 #if CONFIG_LOG_USE_SERIAL
     com_io_log_set_hook_nolock(x86_64_e9_putsn);
+#endif
+
+#if CONFIG_LOG_USE_SCREEN
+    opt_flanterm_init_bootstrap();
+    com_io_log_set_user_hook_nolock(opt_flanterm_bootstrap_putsn);
+#endif
+
+#if CONFIG_LOG_SHOW_SPLASH
+    com_io_log_putsn(_binary_src_splash_txt_start,
+                     _binary_src_splash_txt_end - _binary_src_splash_txt_start);
+    com_io_log_puts("\n\n");
 #endif
 
     com_mm_pmm_init();
@@ -356,6 +370,7 @@ void kernel_entry(void) {
 
     TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
+    com_io_log_set_user_hook(NULL);
     com_io_term_enable(main_term);
     com_io_term_set_buffering(main_term, true);
     arch_context_trampoline(&thread->ctx);

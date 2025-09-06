@@ -40,7 +40,7 @@ typedef struct {
 } __attribute__((packed)) gdtr_t;
 
 void x86_64_gdt_init(void) {
-    KLOG("copying gdt template to cpu struct");
+    KDEBUG("copying gdt  to cpu struct");
     arch_cpu_t *cur_cpu = ARCH_CPU_GET();
 
     cur_cpu->gdt[0] = GdtTemplate[0];
@@ -51,7 +51,7 @@ void x86_64_gdt_init(void) {
     cur_cpu->gdt[5] = GdtTemplate[5];
     cur_cpu->gdt[6] = GdtTemplate[6];
 
-    KLOG("applying changes to gdt template");
+    KDEBUG("applying changes to gdt template");
     uintptr_t ist_addr = (uintptr_t)&ARCH_CPU_GET()->ist;
 
     // Add IST to GDT

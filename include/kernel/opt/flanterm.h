@@ -28,3 +28,5 @@ void              *opt_flanterm_init(arch_framebuffer_t *fb,
                                      size_t              scale_x,
                                      size_t              scale_y);
 com_term_backend_t opt_flanterm_new_context(void);
+void               opt_flanterm_init_bootstrap(void);
+void               opt_flanterm_bootstrap_putsn(const char *s, size_t n);

@@ -79,7 +79,7 @@ override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
 
 -include src/platform/$(PLATFORM)/options.mk
 
-override OBJ = $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
+override OBJ = $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o)) obj/splash.o
 override HEADER_DEPS = $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target.
@@ -112,6 +112,10 @@ obj/src/%.asm.o: src/%.asm GNUmakefile
 	@echo [NS] $<
 	@mkdir -p "$$(dirname $@)"
 	@nasm $(NASMFLAGS) $< -o $@
+
+obj/splash.o: src/splash.txt
+	@echo Creating splash text object in obj/splash.o
+	@$(LD) -r -b binary -o obj/splash.o src/splash.txt
 
 # Remove object files and the final executable.
 .PHONY: clean

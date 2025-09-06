@@ -51,8 +51,6 @@
 #include "../flanterm.h"
 #include "fb.h"
 
-#define FLANTERM_FB_DISABLE_BUMP_ALLOC
-
 #ifndef FLANTERM_FB_DISABLE_BUMP_ALLOC
 
 #ifndef FLANTERM_FB_BUMP_ALLOC_POOL_SIZE

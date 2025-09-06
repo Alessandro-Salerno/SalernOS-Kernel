@@ -35,6 +35,10 @@
 #define CONST_LOG_LEVEL_USER    5 /* Enable kprint syscall */
 #define CONST_LOG_LEVEL_SYSCALL 6 /* Enable system call logging */
 
+// Log location
+#define CONST_LOG_LOCATION_NONE 0
+#define CONST_LOG_LOCATION_ALL  1
+
 // Syscall log modes
 #define CONST_LOG_SYSCALL_BEFORE 0 /* Log syscalls before jumping to them */
 #define CONST_LOG_SYSCALL_AFTER  1 /* Log syscalls on return (for ret value) */
@@ -67,7 +71,10 @@
 #define CONFIG_LOG_SEP_LEN       7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL    1 /* Use serial output for kernel logging */
 #define CONFIG_LOG_USE_VNODE     0 /* Also use a vnode for kernel logging */
+#define CONFIG_LOG_USE_SCREEN    1
+#define CONFIG_LOG_SHOW_SPLASH   1
 #define CONFIG_LOG_SYSCALL_MODE  CONST_LOG_SYSCALL_BEFORE
+#define CONFIG_LOG_LOCATION      CONST_LOG_LOCATION_ALL
 #define CONFIG_ASSERT_ACTION     CONST_ASSERT_PANIC /* Action taken by KASSERT */
 #define CONFIG_OPEN_MAX          96     /* Maximum number of FDs per process */
 #define CONFIG_PROC_MAX          250000 /* Maximum number of processes */

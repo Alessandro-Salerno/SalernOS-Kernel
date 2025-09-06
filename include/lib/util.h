@@ -39,41 +39,44 @@
 // NOTE: only works if multiple is a power of 2
 #define KMOD_FAST(value, multiple) ((value) & ((multiple) - 1))
 
+#if CONFIG_LOG_LOCATION == CONST_LOG_LOCATION_NONE
+#define __LOG_LOCATION()
+#elif CONFIG_LOG_LOCATION == CONST_LOG_LOCATION_ALL
+#define __LOG_LOCATION()                  \
+    com_io_log_puts_nolock(__FILE__ ":"); \
+    com_io_log_puts_nolock(__func__);     \
+    com_io_log_puts_nolock(":" KSTR(__LINE__) ": ");
+#endif
+
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
-#define KURGENT(...)                                 \
-    com_io_log_lock();                               \
-    kinitlog("URGENT", "\033[35m");                  \
-    com_io_log_puts_nolock(__FILE__ ":");            \
-    com_io_log_puts_nolock(__func__);                \
-    com_io_log_puts_nolock(":" KSTR(__LINE__) ": "); \
-    kprintf(__VA_ARGS__);                            \
-    com_io_log_putc_nolock('\n');                    \
+#define KURGENT(...)                \
+    com_io_log_lock();              \
+    kinitlog("URGENT", "\033[35m"); \
+    __LOG_LOCATION();               \
+    kprintf(__VA_ARGS__);           \
+    com_io_log_putc_nolock('\n');   \
     com_io_log_unlock();
 #endif
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_INFO
-#define KLOG(...)                                    \
-    com_io_log_lock();                               \
-    kinitlog("INFO", "\033[32m");                    \
-    com_io_log_puts_nolock(__FILE__ ":");            \
-    com_io_log_puts_nolock(__func__);                \
-    com_io_log_puts_nolock(":" KSTR(__LINE__) ": "); \
-    kprintf(__VA_ARGS__);                            \
-    com_io_log_putc_nolock('\n');                    \
+#define KLOG(...)                 \
+    com_io_log_lock();            \
+    kinitlog("INFO", "\033[32m"); \
+    __LOG_LOCATION();             \
+    kprintf(__VA_ARGS__);         \
+    com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
 #else
 #define KLOG(...)
 #endif
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
-#define KDEBUG(...)                                  \
-    com_io_log_lock();                               \
-    kinitlog("DEBUG", "");                           \
-    com_io_log_puts_nolock(__FILE__ ":");            \
-    com_io_log_puts_nolock(__func__);                \
-    com_io_log_puts_nolock(":" KSTR(__LINE__) ": "); \
-    kprintf(__VA_ARGS__);                            \
-    com_io_log_putc_nolock('\n');                    \
+#define KDEBUG(...)               \
+    com_io_log_lock();            \
+    kinitlog("DEBUG", "");        \
+    __LOG_LOCATION();             \
+    kprintf(__VA_ARGS__);         \
+    com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
 #else
 #define KDEBUG(...)

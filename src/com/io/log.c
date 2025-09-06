@@ -33,7 +33,8 @@ static void dummy_hook(const char *s, size_t n) {
     (void)n;
 }
 
-static volatile com_intf_log_t LogHook = dummy_hook;
+static com_intf_log_t LogHook  = dummy_hook;
+static com_intf_log_t UserHook = dummy_hook;
 
 void com_io_log_set_hook_nolock(com_intf_log_t hook) {
     if (NULL == hook) {
@@ -54,6 +55,7 @@ void com_io_log_puts_nolock(const char *s) {
 
 void com_io_log_putsn_nolock(const char *s, size_t n) {
     LogHook(s, n);
+    UserHook(s, n);
 
     if (NULL != SecondaryLog.vnode) {
         com_fs_vfs_write(NULL,
@@ -105,5 +107,20 @@ void com_io_log_putsn(const char *s, size_t n) {
 void com_io_log_set_vnode(struct com_vnode *vnode) {
     com_io_log_lock();
     com_io_log_set_vnode_nolock(vnode);
+    com_io_log_unlock();
+}
+
+void com_io_log_set_user_hook_nolock(com_intf_log_t hook) {
+    if (NULL == hook) {
+        UserHook = dummy_hook;
+        return;
+    }
+
+    UserHook = hook;
+}
+
+void com_io_log_set_user_hook(com_intf_log_t hook) {
+    com_io_log_lock();
+    com_io_log_set_user_hook_nolock(hook);
     com_io_log_unlock();
 }
