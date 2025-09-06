@@ -300,7 +300,7 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
                                     kstrlen(path),
                                     proc->root,
                                     proc->cwd,
-                                    ARCH_PAGE_SIZE, // Leave null page
+                                    0,
                                     new_pt);
 
     if (0 != status) {
