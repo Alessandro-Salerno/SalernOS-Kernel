@@ -33,7 +33,15 @@ typedef struct Bitmap {
     uintmax_t index;
 } bmp_t;
 
-static bmp_t PageBitmap;
+struct reserved_range {
+    uintptr_t base;
+    size_t    length;
+};
+
+// TODO: This PMM is 4 years old, get rid of all of this
+static bmp_t                 PageBitmap;
+static struct reserved_range ReservedRanges[CONFIG_PMM_RSVRANGE_MAX];
+static size_t                NumReservedRanges = 0;
 
 static uintmax_t MemSize     = 0;
 static uintmax_t UsableMem   = 0;
@@ -58,6 +66,29 @@ static inline void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
 
     bmp->buffer[byte_idx] &= ~bit_indexer;
     bmp->buffer[byte_idx] |= bit_indexer * val;
+}
+
+static void add_reserved_range(uintptr_t base, size_t length) {
+    KASSERT(NumReservedRanges < CONFIG_PMM_RSVRANGE_MAX);
+    ReservedRanges[NumReservedRanges++] = (struct reserved_range){
+        .base   = base,
+        .length = length};
+}
+
+static bool is_reserved(void *ptr, size_t pages) {
+    uintptr_t addr  = (uintptr_t)ptr;
+    size_t    bytes = pages * ARCH_PAGE_SIZE;
+    uintptr_t end   = addr + bytes;
+
+    for (size_t i = 0; i < NumReservedRanges; i++) {
+        struct reserved_range *range = &ReservedRanges[i];
+        if ((addr >= range->base && addr < range->base + range->length) ||
+            (end >= range->base || end < range->base + range->length)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static inline void reserve_page(void *address, uintmax_t *rsvmemcount) {
@@ -179,6 +210,11 @@ void com_mm_pmm_free(void *page) {
 }
 
 void com_mm_pmm_free_many(void *base, size_t pages) {
+    // Avoid freeing reserved pages
+    if (is_reserved(base, pages)) {
+        return;
+    }
+
     kspinlock_acquire(&Lock);
 
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
@@ -237,6 +273,7 @@ void com_mm_pmm_init(void) {
 
         if (!ARCH_MEMMAP_IS_USABLE(entry)) {
             ReservedMem += entry->length;
+            add_reserved_range(entry->base, entry->length);
             continue;
         }
 
@@ -272,6 +309,7 @@ void com_mm_pmm_init(void) {
 
             // Reserve the entire memory space
             kmemset((void *)PageBitmap.buffer, bmp_sz, 0xff);
+            add_reserved_range(entry->base, bmp_sz);
 
             // If a good-enough segment has been found
             // there's no need to continue
