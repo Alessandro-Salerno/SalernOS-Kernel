@@ -467,8 +467,8 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     struct tmpfs_node *file = node->extra;
     out->st_blksize         = 512;
     out->st_ino             = (unsigned long)file;
-    out->st_mode = 0700; // TODO: this may cause issues (ke says it makes xorg
-                         // "happy")
+    out->st_mode = 01777; // TODO: this may cause issues (ke says it makes xorg
+                          // "happy")
 
     if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;

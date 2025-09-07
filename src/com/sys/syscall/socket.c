@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/sockfs.h>
 #include <kernel/com/fs/vfs.h>
@@ -61,6 +62,14 @@ COM_SYS_SYSCALL(com_sys_syscall_socket) {
     file->flags            = 0;
     file->num_ref          = 1;
     file->off              = 0;
+
+    // Convert OSKC_* flags into O_* flags
+    if (SOCK_NONBLOCK & type) {
+        file->flags |= O_NONBLOCK;
+    }
+    if (SOCK_CLOEXEC & type) {
+        file->flags |= O_CLOEXEC;
+    }
 
     return COM_SYS_SYSCALL_OK(fd);
 }

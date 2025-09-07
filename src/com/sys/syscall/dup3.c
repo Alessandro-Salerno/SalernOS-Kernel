@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
