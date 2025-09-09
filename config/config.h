@@ -73,14 +73,14 @@
 #define CONFIG_LOG_USE_VNODE     0 /* Also use a vnode for kernel logging */
 #define CONFIG_LOG_USE_SCREEN    1
 #define CONFIG_LOG_SHOW_SPLASH   1
-#define CONFIG_LOG_SYSCALL_MODE  CONST_LOG_SYSCALL_BEFORE
+#define CONFIG_LOG_SYSCALL_MODE  CONST_LOG_SYSCALL_AFTER
 #define CONFIG_LOG_LOCATION      CONST_LOG_LOCATION_ALL
 #define CONFIG_ASSERT_ACTION     CONST_ASSERT_PANIC /* Action taken by KASSERT */
 #define CONFIG_OPEN_MAX          96     /* Maximum number of FDs per process */
 #define CONFIG_PROC_MAX          250000 /* Maximum number of processes */
 #define CONFIG_SYSCALL_MAX       128    /* Maximum number of syscall handlers */
 #define CONFIG_SYMLINK_MAX       32
-#define CONFIG_PATH_MAX          1024
+#define CONFIG_PATH_MAX          256
 #define CONFIG_PMM_ZERO          CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
 #define CONFIG_PMM_RSVRANGE_MAX  32
 #define CONFIG_TERM_FPS          60 /* FPS of buffered terminals */

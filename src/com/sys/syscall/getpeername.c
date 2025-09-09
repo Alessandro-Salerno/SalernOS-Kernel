@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/sockfs.h>
 #include <kernel/com/fs/vfs.h>
@@ -25,20 +26,16 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <stdint.h>
-#include <sys/socket.h>
 
-// SYSCALL: accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen_ptr)
-COM_SYS_SYSCALL(com_sys_syscall_accept) {
+// SYSCALL: getpeername(int sockfd, struct sockaddr *addr, socklen_t
+// max_addrlen)
+COM_SYS_SYSCALL(com_sys_syscall_getpeername) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
-    int              sockfd   = COM_SYS_SYSCALL_ARG(int, 1);
-    struct sockaddr *addr     = COM_SYS_SYSCALL_ARG(void *, 2);
-    socklen_t       *addr_len = COM_SYS_SYSCALL_ARG(void *, 3);
-
-    // TODO: handle addr output
-    (void)addr;
-    (void)addr_len;
+    int              sockfd      = COM_SYS_SYSCALL_ARG(int, 1);
+    struct sockaddr *addr        = COM_SYS_SYSCALL_ARG(void *, 2);
+    socklen_t        max_addrlen = COM_SYS_SYSCALL_ARG(socklen_t, 3);
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
@@ -47,53 +44,38 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
 
     com_file_t *sockfile = com_sys_proc_get_file(curr_proc, sockfd);
     if (NULL == sockfile) {
-        KASSERT("no file with this fd");
         ret = COM_SYS_SYSCALL_ERR(EBADF);
         goto end;
     }
 
     if (NULL == sockfile->vnode ||
         E_COM_VNODE_TYPE_SOCKET != sockfile->vnode->type) {
-        KASSERT("file is not a socket");
         ret = COM_SYS_SYSCALL_ERR(ENOTSOCK);
         goto end;
     }
 
-    com_socket_vnode_t *server_vn = (void *)sockfile->vnode;
-    KASSERT(NULL != server_vn->socket);
-    com_socket_t *server_socket = server_vn->socket;
+    com_socket_vnode_t *socket_vn = (void *)sockfile->vnode;
+    KASSERT(NULL != socket_vn->socket);
+    com_socket_t *socket = socket_vn->socket;
 
-    com_socket_addr_t new_client_addr;
-    com_socket_t     *new_client;
-    int               sock_ret = COM_IPC_SOCKET_ACCEPT(&new_client,
-                                         &new_client_addr,
-                                         server_socket,
-                                         sockfile->flags);
+    com_socket_addr_t peer_addr;
+    int               sock_ret = COM_IPC_SOCKET_GETPEERNAME(&peer_addr, socket);
     if (0 != sock_ret) {
-        KASSERT("bad socket return");
+        ret = COM_SYS_SYSCALL_ERR(sock_ret);
+    }
+
+    socklen_t addr_len;
+    sock_ret = com_ipc_socket_abi_from_addr(&addr_len,
+                                            addr,
+                                            &peer_addr,
+                                            socket->type,
+                                            max_addrlen);
+    if (0 != sock_ret) {
         ret = COM_SYS_SYSCALL_ERR(sock_ret);
         goto end;
     }
 
-    int new_fd = com_sys_proc_next_fd(curr_proc);
-    if (-1 == new_fd) {
-        KASSERT("too many files");
-        ret = COM_SYS_SYSCALL_ERR(EMFILE);
-        goto end;
-    }
-
-    com_vnode_t        *client_vn = com_fs_sockfs_new();
-    com_socket_vnode_t *sockfs_vn = (void *)client_vn;
-    sockfs_vn->socket             = new_client;
-
-    curr_proc->fd[new_fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *new_file       = curr_proc->fd[new_fd].file;
-    new_file->vnode            = client_vn;
-    new_file->flags            = 0;
-    new_file->num_ref          = 1;
-    new_file->off              = 0;
-
-    ret = COM_SYS_SYSCALL_OK(new_fd);
+    ret = COM_SYS_SYSCALL_OK(addr_len);
 
 end:
     COM_FS_FILE_RELEASE(sockfile);

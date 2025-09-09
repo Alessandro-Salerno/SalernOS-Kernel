@@ -106,5 +106,10 @@ com_socket_t *com_ipc_socket_new(com_socket_type_t type);
 int           com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
                                            struct sockaddr   *abi_addr,
                                            socklen_t          abi_addr_len);
+int           com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
+                                           struct sockaddr   *abi_addr,
+                                           com_socket_addr_t *addr,
+                                           com_socket_type_t  socktype,
+                                           socklen_t          max_abi_addr_len);
 com_socket_type_t
 com_ipc_socket_type_from_abi(int domain, int type, int protocol);

@@ -24,8 +24,11 @@
 
 com_socket_t *com_ipc_socket_new(com_socket_type_t type) {
     switch (type) {
-        case E_COM_SOCKET_TYPE_UNIX:
-            return com_ipc_socket_unix_new();
+        case E_COM_SOCKET_TYPE_UNIX: {
+            com_socket_t *sun = com_ipc_socket_unix_new();
+            sun->type         = type;
+            return sun;
+        }
         default:
             break;
     }
@@ -47,6 +50,30 @@ int com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
         }
 
         default:
+            break;
+    }
+
+    return EAFNOSUPPORT;
+}
+
+int com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
+                                 struct sockaddr   *abi_addr,
+                                 com_socket_addr_t *addr,
+                                 com_socket_type_t  socktype,
+                                 socklen_t          max_abi_addr_len) {
+    switch (socktype) {
+        case E_COM_SOCKET_TYPE_UNIX: {
+            struct sockaddr_un *unaddr = (void *)abi_addr;
+            unaddr->sun_family         = AF_UNIX;
+            size_t copy_size = KMIN(addr->local.pathlen, max_abi_addr_len - 1);
+            kmemcpy(unaddr->sun_path, addr->local.path, copy_size);
+            unaddr->sun_path[copy_size] = 0;
+            *abi_addr_len               = copy_size;
+            return 0;
+        }
+
+        default:
+            KASSERT(false);
             break;
     }
 

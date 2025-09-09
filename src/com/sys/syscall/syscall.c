@@ -62,7 +62,9 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 if (NULL != (void *)args[i]) {
                     // TODO: poor man's usercopy, if the string is longer than
                     // ARCH_PAGE_SIZE this may still crash
-                    if (NULL != arch_mmu_get_physical(curr_proc->page_table,
+#include <lib/str.h>
+                    if (0 != kstrcmp(syscall->name, "execve") &&
+                        NULL != arch_mmu_get_physical(curr_proc->page_table,
                                                       (void *)args[i])) {
                         kprintf("\"%s\"", (void *)args[i]);
                     } else {
@@ -653,6 +655,17 @@ void com_sys_syscall_init(void) {
                              "path",
                              COM_SYS_SYSCALL_TYPE_MODE,
                              "mode");
+
+    com_sys_syscall_register(0x36,
+                             "getpeername",
+                             com_sys_syscall_getpeername,
+                             3,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "sockfd",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addr",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "max_addrlen");
 
     com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

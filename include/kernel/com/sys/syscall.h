@@ -167,3 +167,4 @@ COM_SYS_SYSCALL(com_sys_syscall_sendmsg);
 COM_SYS_SYSCALL(com_sys_syscall_recvmsg);
 COM_SYS_SYSCALL(com_sys_syscall_setitimer);
 COM_SYS_SYSCALL(com_sys_syscall_mkdirat);
+COM_SYS_SYSCALL(com_sys_syscall_getpeername);

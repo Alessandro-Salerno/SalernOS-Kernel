@@ -89,9 +89,6 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
 
     struct unix_socket_binding *binding = com_mm_slab_alloc(
         sizeof(struct unix_socket_binding));
-    com_socket_addr_t bind_path;
-    bind_path.local.pathlen = addr->local.pathlen;
-    kmemcpy(bind_path.local.path, addr->local.path, addr->local.pathlen);
 
     com_vnode_t *socket_vn = NULL;
     ret                    = com_fs_vfs_create_any(&socket_vn,
@@ -107,12 +104,15 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
         goto end;
     }
 
-    binding->server           = unix_socket;
-    binding->vnode            = socket_vn;
-    binding->lock             = KSPINLOCK_NEW();
-    socket_vn->binding        = binding;
-    unix_socket->srv_binding  = binding;
-    unix_socket->binding_path = bind_path;
+    binding->server                         = unix_socket;
+    binding->vnode                          = socket_vn;
+    binding->lock                           = KSPINLOCK_NEW();
+    socket_vn->binding                      = binding;
+    unix_socket->srv_binding                = binding;
+    unix_socket->binding_path.local.pathlen = addr->local.pathlen;
+    kmemcpy(unix_socket->binding_path.local.path,
+            addr->local.path,
+            addr->local.pathlen);
     unix_socket->socket.state = E_COM_SOCKET_STATE_BOUND;
 
 end:
@@ -226,6 +226,7 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     server_peer->peer               = client;
     client->peer                    = server_peer;
     server_peer->socket.state       = E_COM_SOCKET_STATE_CONNECTED;
+    server_peer->binding_path       = server->binding_path;
     client->socket.state            = E_COM_SOCKET_STATE_CONNECTED;
     TAILQ_INSERT_TAIL(&server->srv_acceptq, server_peer, cln_connent);
 
@@ -282,7 +283,7 @@ static int unix_socket_accept(com_socket_t     **out_peer,
 
     new_client = TAILQ_FIRST(&server->srv_acceptq);
     if (NULL != new_client) {
-        goto end;
+        goto client_found;
     }
 
     if (O_NONBLOCK & flags) {
@@ -296,9 +297,11 @@ static int unix_socket_accept(com_socket_t     **out_peer,
         new_client = TAILQ_FIRST(&server->srv_acceptq);
     }
 
+client_found:
     // We can now remove the incoming connection from the queue, subsequent
     // calls to accept() will return the same socket
     TAILQ_REMOVE_HEAD(&server->srv_acceptq, cln_connent);
+    TAILQ_INIT(&server->srv_acceptq);
 
 end:
     if (NULL != out_peer) {
@@ -332,10 +335,24 @@ end:
 
 static int unix_socket_getpeername(com_socket_addr_t *out,
                                    com_socket_t      *socket) {
-    (void)socket;
-    out->local.path[0] = 0;
-    out->local.pathlen = 0;
-    return 0;
+    struct unix_socket *unix_socket = (void *)socket;
+    int                 ret         = 0;
+    kspinlock_acquire(&unix_socket->socket.lock);
+
+    if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state) {
+        out->local.path[0] = 0;
+        out->local.pathlen = 0;
+        goto end;
+    }
+
+    out->local.pathlen = unix_socket->peer->binding_path.local.pathlen;
+    kmemcpy(out->local.path,
+            unix_socket->peer->binding_path.local.path,
+            unix_socket->peer->binding_path.local.pathlen);
+
+end:
+    kspinlock_release(&unix_socket->socket.lock);
+    return ret;
 }
 
 static int
