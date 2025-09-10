@@ -36,6 +36,7 @@
 #include <lib/str.h>
 #include <lib/util.h>
 #include <poll.h>
+#include <salernos/ktty.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -48,7 +49,7 @@
 
 static size_t NextttyNum = 0;
 
-// SUPPORT FUNCTIONS
+// TEXT TTY FUNCTIONS
 
 static int text_tty_echo(size_t     *bytes_written,
                          const char *buf,
@@ -187,6 +188,18 @@ static void text_tty_kbd_in(com_tty_t *self, com_kbd_packet_t *kbd_pkt) {
     text_tty_kbd_convert(tty, kbd_pkt->c, mod);
 }
 
+// FRAMEBUFFER TTY FUNCTIONS
+
+static void fb_tty_kbd_in(com_tty_t *self, com_kbd_packet_t *kbd_pkt) {
+    (void)self;
+    com_io_keyboard_send_packet(kbd_pkt->keyboard, kbd_pkt);
+}
+
+static void fb_tty_mouse_in(com_tty_t *self, com_mouse_packet_t *mouse_pkt) {
+    (void)self;
+    com_io_mouse_send_packet(mouse_pkt->mouse, mouse_pkt);
+}
+
 // DEV OPS
 
 static int tty_read(void     *buf,
@@ -198,9 +211,12 @@ static int tty_read(void     *buf,
     (void)off;
 
     com_tty_t *tty_data = devdata;
-    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
-    com_text_tty_t *tty = &tty_data->tty.text;
+    if (E_COM_TTY_TYPE_TEXT != tty_data->type) {
+        *bytes_read = 0;
+        return 0;
+    }
 
+    com_text_tty_t *tty = &tty_data->tty.text;
     return kringbuffer_read(buf,
                             bytes_read,
                             &tty->backend.slave_rb,
@@ -222,9 +238,12 @@ static int tty_write(size_t   *bytes_written,
     (void)flags;
 
     com_tty_t *tty_data = devdata;
-    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
-    com_text_tty_t *tty = &tty_data->tty.text;
+    if (E_COM_TTY_TYPE_TEXT != tty_data->type) {
+        *bytes_written = 0;
+        return 0;
+    }
 
+    com_text_tty_t *tty = &tty_data->tty.text;
     return com_io_tty_text_backend_echo(bytes_written,
                                         &tty->backend,
                                         buf,
@@ -235,9 +254,37 @@ static int tty_write(size_t   *bytes_written,
 
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_tty_t *tty_data = devdata;
-    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
-    com_text_tty_t *tty = &tty_data->tty.text;
 
+    // In SalernOS, TTYs can either be graphical or text mode. Text mode TTYs
+    // have all the features implemented in this file and use a terminal
+    // backend, whereas graphical TTYs have none of these features and use a
+    // framebuffer backend. Userspace is responsible for management of graphical
+    // TTYs.
+    if (KTTY_IOCTL_SETMODE == op) {
+        uintptr_t mode = (uintptr_t)buf;
+        switch (mode) {
+            case KTTY_MODE_TEXT:
+                tty_data->type     = E_COM_TTY_TYPE_FRAMEBUFFER;
+                tty_data->kbd_in   = text_tty_kbd_in;
+                tty_data->mouse_in = NULL;
+                com_io_term_enable(tty_data->tty.text.term);
+                return 0;
+            case KTTY_MODE_GRAPHICS:
+                tty_data->type     = E_COM_TTY_TYPE_FRAMEBUFFER;
+                tty_data->kbd_in   = fb_tty_kbd_in;
+                tty_data->mouse_in = fb_tty_mouse_in;
+                com_io_term_disable(tty_data->tty.text.term);
+                return 0;
+            default:
+                return EINVAL;
+        }
+    }
+
+    if (E_COM_TTY_TYPE_TEXT != tty_data->type) {
+        return ENOSYS;
+    }
+
+    com_text_tty_t *tty = &tty_data->tty.text;
     return com_io_tty_text_backend_ioctl(&tty->backend,
                                          tty_data->vnode,
                                          op,
@@ -265,16 +312,23 @@ static int tty_stat(struct stat *out, void *devdata) {
 
 static int tty_poll_head(com_poll_head_t **out, void *devdata) {
     com_tty_t *tty_data = devdata;
-    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
-    com_text_tty_t *tty = &tty_data->tty.text;
-    *out                = &tty->backend.slave_ph;
-    return 0;
+
+    if (E_COM_TTY_TYPE_TEXT == tty_data->type) {
+        com_text_tty_t *tty = &tty_data->tty.text;
+        *out                = &tty->backend.slave_ph;
+        return 0;
+    }
+
+    return ENOSYS;
 }
 
 static int tty_poll(short *revents, void *devdata, short events) {
     (void)events;
     com_tty_t *tty_data = devdata;
-    KASSERT(E_COM_TTY_TYPE_TEXT == tty_data->type);
+    if (E_COM_TTY_TYPE_TEXT != tty_data->type) {
+        return ENOSYS;
+    }
+
     com_text_tty_t *tty = &tty_data->tty.text;
     short           out = POLLOUT;
 
@@ -375,7 +429,6 @@ int com_io_tty_text_backend_echo(size_t                 *bytes_written,
                                  size_t                  buflen,
                                  bool                    blocking,
                                  void                   *passthrough) {
-
     size_t utmp;
     if (NULL == bytes_written) {
         bytes_written = &utmp;
@@ -677,7 +730,15 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 // KERNEL TTY INTERFACE
 
 void com_io_tty_kbd_in(com_tty_t *tty, com_kbd_packet_t *kbd_pkt) {
-    tty->kbd_in(tty, kbd_pkt);
+    if (NULL != tty->kbd_in) {
+        tty->kbd_in(tty, kbd_pkt);
+    }
+}
+
+void com_io_tty_mouse_in(com_tty_t *tty, com_mouse_packet_t *mouse_pkt) {
+    if (NULL != tty->mouse_in) {
+        tty->mouse_in(tty, mouse_pkt);
+    }
 }
 
 int com_io_tty_init_text(com_vnode_t **out,

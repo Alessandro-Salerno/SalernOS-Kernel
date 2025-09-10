@@ -248,7 +248,11 @@ int com_fs_devfs_register(com_vnode_t  **out,
     struct devfs_dev *dev = com_fs_tmpfs_get_other(devnode);
     dev->devops           = devops;
     dev->devdata          = devdata;
-    *out                  = devnode;
+
+    if (NULL != out) {
+        *out = devnode;
+    }
+
     return 0;
 }
 

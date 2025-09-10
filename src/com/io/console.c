@@ -22,12 +22,12 @@
 #include <stdint.h>
 #include <vendor/tailq.h>
 
-static com_tty_t *Ttys[COM_IO_CONSOLE_MAX_TTYS] = {NULL};
-static int        ForegroundTtyIdx              = 0;
-static int        TtyNext                       = 0;
+static com_tty_t *Ttys[CONFIG_TTY_MAX] = {NULL};
+static int        ForegroundTtyIdx     = 0;
+static int        TtyNext              = 0;
 
 static void switch_tty(int new_fg) {
-    if (new_fg >= COM_IO_CONSOLE_MAX_TTYS) {
+    if (new_fg >= CONFIG_TTY_MAX) {
         return;
     }
 
@@ -69,23 +69,20 @@ void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
     }
 }
 
-void com_io_console_add_tty(com_tty_t *tty) {
-    int tty_idx = __atomic_fetch_add(&TtyNext, 1, __ATOMIC_SEQ_CST);
-    KDEBUG("adding tty %d to kernel console", tty_idx);
-    KASSERT(tty_idx < COM_IO_CONSOLE_MAX_TTYS);
-    Ttys[tty_idx] = tty;
-}
-
-// TODO: replace this with proper switching from text to fb TTYs
-void com_io_console_disable_current(void) {
+void com_io_console_mouse_in(com_mouse_packet_t *pkt) {
     com_tty_t
         *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
 
     if (NULL != fg_tty) {
-        if (E_COM_TTY_TYPE_TEXT == fg_tty->type) {
-            com_io_term_disable(fg_tty->tty.text.term);
-        }
+        com_io_tty_mouse_in(fg_tty, pkt);
     }
+}
+
+void com_io_console_add_tty(com_tty_t *tty) {
+    int tty_idx = __atomic_fetch_add(&TtyNext, 1, __ATOMIC_SEQ_CST);
+    KDEBUG("adding tty %d to kernel console", tty_idx);
+    KASSERT(tty_idx < CONFIG_TTY_MAX);
+    Ttys[tty_idx] = tty;
 }
 
 void com_io_console_init(void) {

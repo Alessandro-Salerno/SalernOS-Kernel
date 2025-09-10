@@ -18,12 +18,29 @@
 
 #pragma once
 
-#include <kernel/com/io/keyboard.h>
-#include <kernel/com/io/mouse.h>
-#include <kernel/com/io/tty.h>
-#include <stdint.h>
+#include <kernel/com/fs/poll.h>
+#include <kernel/com/fs/vfs.h>
+#include <lib/ringbuffer.h>
 
-void com_io_console_kbd_in(com_kbd_packet_t *pkt);
-void com_io_console_mouse_in(com_mouse_packet_t *pkt);
-void com_io_console_add_tty(com_tty_t *tty);
-void com_io_console_init(void);
+#define COM_IO_MOUSE_RIGHTBUTTON 0x01
+#define COM_IO_MOUSE_MIDBUTTON   0x02
+#define COM_IO_MOUSE_LEFTBUTTON  0x04
+#define COM_IO_MOUSE_BUTTON4     0x08
+#define COM_IO_MOUSE_BUTTON5     0x10
+
+typedef struct com_mouse_packet {
+    struct com_mouse *mouse;
+    int               buttons;
+    int               dx;
+    int               dy;
+    int               dz;
+} com_mouse_packet_t;
+
+typedef struct com_mouse {
+    com_vnode_t         *vnode;
+    kringbuffer_t        rb;
+    struct com_poll_head pollhead;
+} com_mouse_t;
+
+com_mouse_t *com_io_mouse_new(void);
+int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt);

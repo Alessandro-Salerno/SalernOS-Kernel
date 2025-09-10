@@ -163,10 +163,10 @@ typedef struct com_keyboard {
     } state;
 } com_keyboard_t;
 
+int             com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
+                                            com_kbd_packet_t *pkt);
 com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout);
 
 // LAYOUTS
 
-int              com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
-                                             com_kbd_packet_t *pkt);
 com_kbd_action_t com_io_keyboard_layout_en_us(com_kbd_packet_t *pkt);

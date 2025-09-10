@@ -81,6 +81,7 @@
 #define CONFIG_SYSCALL_MAX        128 /* Maximum number of syscall handlers */
 #define CONFIG_SYMLINK_MAX        32
 #define CONFIG_PATH_MAX           256
+#define CONFIG_TTY_MAX            7
 #define CONFIG_PMM_ZERO           CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
 #define CONFIG_PMM_RSVRANGE_MAX   32
 #define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */

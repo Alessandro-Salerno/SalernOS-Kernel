@@ -82,8 +82,6 @@ static int fbdev_mmap(void    **out,
         kspinlock_release(&curr_proc->pages_lock);
     }
 
-    com_io_console_disable_current();
-
     for (size_t i = 0; i < pages; i++) {
         arch_mmu_map(curr_proc->page_table,
                      (void *)(virt + i * ARCH_PAGE_SIZE),

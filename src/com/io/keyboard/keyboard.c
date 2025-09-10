@@ -86,9 +86,18 @@ static int keyboard_poll(short *revents, void *devdata, short events) {
     return 0;
 }
 
+static int keyboard_stat(struct stat *out, void *devdata) {
+    out->st_blksize = sizeof(com_kbd_packet_t);
+    out->st_ino     = (ino_t)devdata;
+    out->st_mode    = 0777;
+    out->st_mode |= S_IFCHR;
+    return 0;
+}
+
 static com_dev_ops_t KeyboardDevOps = {.read      = keyboard_read,
                                        .poll_head = keyboard_poll_head,
-                                       .poll      = keyboard_poll};
+                                       .poll      = keyboard_poll,
+                                       .stat      = keyboard_stat};
 
 int com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
                                 com_kbd_packet_t *pkt) {
@@ -117,6 +126,7 @@ com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout) {
     com_keyboard_t *keyboard = com_mm_slab_alloc(sizeof(com_keyboard_t));
     keyboard->layout         = DEFAULT_LAYOUT;
     KRINGBUFFER_INIT(&keyboard->rb);
+    LIST_INIT(&keyboard->pollhead.polled_list);
 
     if (NULL != layout) {
         keyboard->layout = layout;

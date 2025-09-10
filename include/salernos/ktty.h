@@ -1,0 +1,8 @@
+#ifndef _SALERNOS_KTTY_H
+#define _SALERNOS_KTTY_H
+
+#define KTTY_IOCTL_SETMODE 0x4B3A
+#define KTTY_MODE_TEXT     0x00
+#define KTTY_MODE_GRAPHICS 0x01
+
+#endif

@@ -18,12 +18,4 @@
 
 #pragma once
 
-#include <kernel/com/io/keyboard.h>
-#include <kernel/com/io/mouse.h>
-#include <kernel/com/io/tty.h>
-#include <stdint.h>
-
-void com_io_console_kbd_in(com_kbd_packet_t *pkt);
-void com_io_console_mouse_in(com_mouse_packet_t *pkt);
-void com_io_console_add_tty(com_tty_t *tty);
-void com_io_console_init(void);
+int com_dev_null_init(void);

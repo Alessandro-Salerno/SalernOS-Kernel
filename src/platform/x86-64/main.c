@@ -20,6 +20,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/dev/gfx/fbdev.h>
+#include <kernel/com/dev/null.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
@@ -204,7 +205,7 @@ void kernel_entry(void) {
     com_io_term_init();
     com_io_console_add_tty(main_tty_data);
 
-    for (size_t i = 0; i < COM_IO_CONSOLE_MAX_TTYS - 1; i++) {
+    for (size_t i = 0; i < CONFIG_TTY_MAX - 1; i++) {
         com_term_backend_t tb   = opt_flanterm_new_context();
         com_term_t        *term = com_io_term_new(tb);
 
@@ -218,6 +219,7 @@ void kernel_entry(void) {
     com_sys_proc_init();
     com_io_pty_init();
     com_dev_gfx_fbdev_init(NULL);
+    com_dev_null_init();
 
     char *const   argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};
     char *const   envp[] = {CONFIG_INIT_ENV};
