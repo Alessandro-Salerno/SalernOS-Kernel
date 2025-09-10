@@ -27,6 +27,7 @@ void kinitlog(const char *category, const char *color) {
     struct com_thread *curr_thread = ARCH_CPU_GET_THREAD();
 
 #if CONFIG_LOG_ALLOW_COLORS
+    KRESET_COLOR();
     kprintf("%s[%s  ", color, category);
 #else
     (void)color;

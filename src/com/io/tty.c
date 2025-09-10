@@ -66,13 +66,10 @@ static int text_tty_echo(size_t     *bytes_written,
     return 0;
 }
 
-static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
+static void text_tty_kbd_convert(com_text_tty_t *tty, char c, int mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
     bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
     bool is_del       = false;
-
-    KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
-    com_text_tty_t *tty = &self->tty.text;
 
     if (CONTROL_DEL == c) {
         is_del = true;
@@ -107,6 +104,87 @@ static void text_tty_kbd_in(com_tty_t *self, char c, uintmax_t mod) {
     }
 
     com_io_tty_process_char(&tty->backend, c, false, tty);
+}
+
+static void text_tty_kbd_in(com_tty_t *self, com_kbd_packet_t *kbd_pkt) {
+    static int mod = 0;
+
+    KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
+    com_text_tty_t *tty = &self->tty.text;
+
+    if (COM_IO_KEYBOARD_KEYSTATE_RELEASED == kbd_pkt->keystate) {
+        switch (kbd_pkt->keycode) {
+            case COM_IO_KEYBOARD_KEY_LEFTCTRL:
+                mod &= ~(COM_IO_TTY_MOD_LCTRL);
+                return;
+            case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
+                mod &= ~(COM_IO_TTY_MOD_RCTRL);
+                return;
+            case COM_IO_KEYBOARD_KEY_LEFTALT:
+                mod &= ~(COM_IO_TTY_MOD_LALT);
+                return;
+            case COM_IO_KEYBOARD_KEY_RIGHTALT:
+                mod &= ~(COM_IO_TTY_MOD_RALT);
+                return;
+            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+                mod &= ~(COM_IO_TTY_MOD_LSHIFT);
+                return;
+            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+                mod &= ~(COM_IO_TTY_MOD_RSHIFT);
+                return;
+            default:
+                return;
+        }
+    }
+
+    // Here COM_IO_KEYBOARD_KEYSTATE_PRESSED == kbd_pkt->keystate
+    switch (kbd_pkt->keycode) {
+        // Modifiers
+        case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+            mod = mod | COM_IO_TTY_MOD_LSHIFT;
+            return;
+        case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+            mod = mod | COM_IO_TTY_MOD_RSHIFT;
+            return;
+        case COM_IO_KEYBOARD_KEY_LEFTCTRL:
+            mod = mod | COM_IO_TTY_MOD_LCTRL;
+            return;
+        case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
+            mod = mod | COM_IO_TTY_MOD_RCTRL;
+            return;
+        case COM_IO_KEYBOARD_KEY_LEFTALT:
+            mod = mod | COM_IO_TTY_MOD_LALT;
+            return;
+        case COM_IO_KEYBOARD_KEY_RIGHTALT:
+            mod = mod | COM_IO_TTY_MOD_RALT;
+            return;
+
+        // Special keys
+        case COM_IO_KEYBOARD_KEY_BACKSPACE:
+            text_tty_kbd_convert(tty, 127, mod);
+            break;
+
+        // Arrow keys
+        case COM_IO_KEYBOARD_KEY_UP:
+            text_tty_kbd_convert(tty, 'A', mod | COM_IO_TTY_MOD_ARROW);
+            return;
+        case COM_IO_KEYBOARD_KEY_DOWN:
+            text_tty_kbd_convert(tty, 'B', mod | COM_IO_TTY_MOD_ARROW);
+            return;
+        case COM_IO_KEYBOARD_KEY_RIGHT:
+            text_tty_kbd_convert(tty, 'C', mod | COM_IO_TTY_MOD_ARROW);
+            return;
+        case COM_IO_KEYBOARD_KEY_LEFT:
+            text_tty_kbd_convert(tty, 'D', mod | COM_IO_TTY_MOD_ARROW);
+            return;
+
+        default:
+            break;
+    }
+
+    // This is called by the kernel console, which is called by the keyboard
+    // drivcer AFTER calling the layout driver, so we can use the c field
+    text_tty_kbd_convert(tty, kbd_pkt->c, mod);
 }
 
 // DEV OPS
@@ -598,8 +676,8 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 
 // KERNEL TTY INTERFACE
 
-void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod) {
-    tty->kbd_in(tty, c, mod);
+void com_io_tty_kbd_in(com_tty_t *tty, com_kbd_packet_t *kbd_pkt) {
+    tty->kbd_in(tty, kbd_pkt);
 }
 
 int com_io_tty_init_text(com_vnode_t **out,

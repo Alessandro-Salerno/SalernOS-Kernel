@@ -80,7 +80,11 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
     }
 
     if (F_SETFL == op) {
-        // TODO: probably wrong
+        file->flags = arg1;
+        goto end;
+    }
+
+    if (F_SETFD == op) {
         fildes->flags = arg1;
         goto end;
     }

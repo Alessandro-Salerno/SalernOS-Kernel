@@ -301,7 +301,6 @@ client_found:
     // We can now remove the incoming connection from the queue, subsequent
     // calls to accept() will return the same socket
     TAILQ_REMOVE_HEAD(&server->srv_acceptq, cln_connent);
-    TAILQ_INIT(&server->srv_acceptq);
 
 end:
     if (NULL != out_peer) {
@@ -380,6 +379,7 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
 
 static int unix_socket_destroy(com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
+
     void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(unix_socket->rb.buffer);
     size_t rbuff_pages = unix_socket->rb.buffer_size / ARCH_PAGE_SIZE + 1;
     com_mm_pmm_free_many(phys_buff, rbuff_pages);

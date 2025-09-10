@@ -50,6 +50,7 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <lib/hashmap.h>
 #include <lib/mem.h>
@@ -62,122 +63,7 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-// #define X86_64_NO_E9_LOG
-
-static arch_cpu_t BaseCpu = {0};
-
-// from Astral & ke!
-static char asciitable[] = {
-    0,    '\033', '1', '2',  '3', '4', '5', '6', '7', '8', '9', '0', '-',  '=',
-    '\b', '\t',   'q', 'w',  'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[',  ']',
-    '\r', 0,      'a', 's',  'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
-    0,    '\\',   'z', 'x',  'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,    '*',
-    0,    ' ',    0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   0,    0,
-    0,    '7',    '8', '9',  '-', '4', '5', '6', '+', '1', '2', '3', '0',  '.',
-    0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
-    '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
-
-static char asciitableShifted[] = {
-    0,    '\033', '!', '@',  '#', '$', '%', '^', '&', '*', '(', ')', '_',  '+',
-    '\b', '\t',   'Q', 'W',  'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{',  '}',
-    '\r', 0,      'A', 'S',  'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"',  '~',
-    0,    '|',    'Z', 'X',  'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0,    '*',
-    0,    ' ',    0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   0,    0,
-    0,    '7',    '8', '9',  '-', '4', '5', '6', '+', '1', '2', '3', '0',  '.',
-    0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
-    '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
-
-KUSED void kbd(com_isr_t *isr, arch_context_t *ctx) {
-    (void)isr;
-    (void)ctx;
-    static uint8_t   prev_code = 0;
-    static uintmax_t mod       = 0;
-    uint8_t          code      = X86_64_IO_INB(0x60);
-
-    if (0xe0 == prev_code) {
-        if (0x53 == code) {
-            com_io_console_kbd_in(127, 0);
-            goto end;
-        }
-
-        switch (code) {
-            case 0x4b:
-                com_io_console_kbd_in('D', COM_IO_TTY_MOD_ARROW);
-                break;
-
-            case 0x4d:
-                com_io_console_kbd_in('C', COM_IO_TTY_MOD_ARROW);
-                break;
-
-            case 0x48:
-                com_io_console_kbd_in('A', COM_IO_TTY_MOD_ARROW);
-                break;
-
-            case 0x50:
-                com_io_console_kbd_in('B', COM_IO_TTY_MOD_ARROW);
-                break;
-        }
-    } else {
-        switch (code) {
-            case 0x2a:
-                mod = mod | COM_IO_TTY_MOD_LSHIFT;
-                break;
-
-            case 0xaa:
-                mod = mod & ~COM_IO_TTY_MOD_LSHIFT;
-                break;
-
-            case 0x36:
-                mod = mod | COM_IO_TTY_MOD_RSHIFT;
-                break;
-
-            case 0xb6:
-                mod = mod & ~COM_IO_TTY_MOD_RSHIFT;
-                break;
-
-            case 0x1d:
-                mod = mod | COM_IO_TTY_MOD_LCTRL;
-                break;
-
-            case 0x9d:
-                mod = mod & ~COM_IO_TTY_MOD_LCTRL;
-                break;
-
-            case 0x38:
-                mod = mod | COM_IO_TTY_MOD_LALT;
-                break;
-
-            case 0xb8:
-                mod = mod & ~COM_IO_TTY_MOD_LALT;
-                break;
-
-            default:
-                if (code >= 0x3b && code <= 0x44) {
-                    int  fkey  = code - 0x3b;
-                    char key_c = 'A' + fkey; // TODO: this is not standard, has
-                                             // to be translated in tty to be
-                                             // sent to userspace
-                    com_io_console_kbd_in(key_c, mod | COM_IO_TTY_MOD_FKEY);
-                } else if (code < 0x80) {
-                    if (COM_IO_TTY_MOD_LSHIFT & mod ||
-                        COM_IO_TTY_MOD_RSHIFT & mod) {
-                        com_io_console_kbd_in(asciitableShifted[code], mod);
-                    } else {
-                        com_io_console_kbd_in(asciitable[code], mod);
-                    }
-                }
-                break;
-        }
-    }
-
-end:
-    prev_code = code;
-}
-
-KUSED void kbd_eoi(com_isr_t *isr) {
-    (void)isr;
-    X86_64_IO_OUTB(0x20, 0x20);
-}
+static arch_cpu_t BspCpu = {0};
 
 KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
@@ -210,24 +96,13 @@ extern const char _binary_src_splash_txt_start[];
 extern const char _binary_src_splash_txt_end[];
 
 void kernel_entry(void) {
-    ARCH_CPU_SET(&BaseCpu);
-    TAILQ_INIT(&BaseCpu.sched_queue);
-    TAILQ_INIT(&BaseCpu.callout.queue);
-    BaseCpu.runqueue_lock = KSPINLOCK_NEW();
-    BaseCpu.callout.lock  = KSPINLOCK_NEW();
-    com_sys_callout_set_bsp_nolock(&BaseCpu.callout);
-
-    X86_64_IO_OUTB(0x20, 0x11);
-    X86_64_IO_OUTB(0xa0, 0x11);
-    X86_64_IO_OUTB(0x21, 0x20);
-    X86_64_IO_OUTB(0xa1, 0x28);
-    X86_64_IO_OUTB(0x21, 4);
-    X86_64_IO_OUTB(0xa1, 2);
-    X86_64_IO_OUTB(0x21, 0x01);
-    X86_64_IO_OUTB(0xa1, 0x01);
-    X86_64_IO_OUTB(0x21, 0b11111101);
-    X86_64_IO_OUTB(0xA1, 0b11111111);
-    com_sys_interrupt_register(0x21, kbd, kbd_eoi);
+    // BSP CPU initialization
+    ARCH_CPU_SET(&BspCpu);
+    TAILQ_INIT(&BspCpu.sched_queue);
+    TAILQ_INIT(&BspCpu.callout.queue);
+    BspCpu.runqueue_lock = KSPINLOCK_NEW();
+    BspCpu.callout.lock  = KSPINLOCK_NEW();
+    com_sys_callout_set_bsp_nolock(&BspCpu.callout);
 
 #if CONFIG_LOG_USE_SERIAL
     com_io_log_set_hook_nolock(x86_64_e9_putsn);
@@ -244,9 +119,20 @@ void kernel_entry(void) {
     com_io_log_puts("\n\n");
 #endif
 
+    // PIC initialization
+    X86_64_IO_OUTB(0x20, 0x11);
+    X86_64_IO_OUTB(0xa0, 0x11);
+    X86_64_IO_OUTB(0x21, 0x20);
+    X86_64_IO_OUTB(0xa1, 0x28);
+    X86_64_IO_OUTB(0x21, 4);
+    X86_64_IO_OUTB(0xa1, 2);
+    X86_64_IO_OUTB(0x21, 0x01);
+    X86_64_IO_OUTB(0xa1, 0x01);
+    X86_64_IO_OUTB(0x21, 0b11111101);
+    X86_64_IO_OUTB(0xA1, 0b11111111);
+
     com_mm_pmm_init();
     arch_mmu_init();
-
     x86_64_idt_stub();
     com_sys_syscall_init();
 
@@ -307,6 +193,7 @@ void kernel_entry(void) {
 
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
+    x86_64_ps2_keyboard_init();
 
     com_vnode_t *devtty = NULL;
     com_io_tty_devtty_init(&devtty);
@@ -368,7 +255,7 @@ void kernel_entry(void) {
     arch_mmu_switch(proc->page_table);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
-    TAILQ_INSERT_TAIL(&BaseCpu.sched_queue, thread, threads);
+    TAILQ_INSERT_TAIL(&BspCpu.sched_queue, thread, threads);
     com_sys_sched_init_base();
     com_io_log_set_user_hook(NULL);
     com_io_term_enable(main_term);

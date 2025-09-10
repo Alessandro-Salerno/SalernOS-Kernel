@@ -18,13 +18,4 @@
 
 #pragma once
 
-#include <kernel/com/io/keyboard.h>
-#include <kernel/com/io/tty.h>
-#include <stdint.h>
-
-#define COM_IO_CONSOLE_MAX_TTYS 7
-
-void com_io_console_kbd_in(com_kbd_packet_t *pkt);
-void com_io_console_add_tty(com_tty_t *tty);
-void com_io_console_disable_current(void);
-void com_io_console_init(void);
+void x86_64_ps2_keyboard_init(void);

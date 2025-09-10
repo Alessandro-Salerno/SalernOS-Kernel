@@ -109,6 +109,7 @@
 #elif CONFIG_ASSERT_ACTION == CONST_ASSERT_PANIC
 #define KASSERT(statement)                                        \
     if (KUNKLIKELY(!(statement))) {                               \
+        KRESET_COLOR();                                           \
         com_io_log_lock();                                        \
         kinitlog("ASSERT", "");                                   \
         com_io_log_puts_nolock(__FILE__ ":");                     \

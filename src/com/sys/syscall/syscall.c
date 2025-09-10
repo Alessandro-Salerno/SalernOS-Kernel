@@ -62,9 +62,7 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 if (NULL != (void *)args[i]) {
                     // TODO: poor man's usercopy, if the string is longer than
                     // ARCH_PAGE_SIZE this may still crash
-#include <lib/str.h>
-                    if (0 != kstrcmp(syscall->name, "execve") &&
-                        NULL != arch_mmu_get_physical(curr_proc->page_table,
+                    if (NULL != arch_mmu_get_physical(curr_proc->page_table,
                                                       (void *)args[i])) {
                         kprintf("\"%s\"", (void *)args[i]);
                     } else {
@@ -160,6 +158,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     kinitlog("SYSCALL", "\033[33m");
     log_syscall(syscall, args);
     kprintf(" -> {ret = %u, errno = %u}\n", ret.value, ret.err);
+    KRESET_COLOR();
     com_io_log_unlock();
 #undef DO_SYSCALL_LOG_AFTER
 #endif

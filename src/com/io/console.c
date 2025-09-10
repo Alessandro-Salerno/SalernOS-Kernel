@@ -50,9 +50,8 @@ static void switch_tty(int new_fg) {
     }
 }
 
-void com_io_console_kbd_in(char c, uintmax_t mod) {
-    if (COM_IO_TTY_MOD_FKEY & mod &&
-        /* COM_IO_TTY_MOD_LCTRL & mod && */ (COM_IO_TTY_MOD_LSHIFT |
+void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
+    /*if ((COM_IO_TTY_MOD_LSHIFT |
                                              COM_IO_TTY_MOD_RSHIFT) &
             mod) {
         size_t new_fg = c - 'A';
@@ -60,12 +59,13 @@ void com_io_console_kbd_in(char c, uintmax_t mod) {
         switch_tty(new_fg);
         return;
     }
+    */
 
     com_tty_t
         *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
 
     if (NULL != fg_tty) {
-        com_io_tty_kbd_in(fg_tty, c, mod);
+        com_io_tty_kbd_in(fg_tty, pkt);
     }
 }
 

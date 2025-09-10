@@ -20,6 +20,7 @@
 
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/io/keyboard.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ringbuffer.h>
@@ -80,7 +81,7 @@ typedef struct com_tty {
         com_text_tty_t text;
         com_fb_tty_t   fb;
     } tty;
-    void (*kbd_in)(struct com_tty *tty, char c, uintmax_t mod);
+    void (*kbd_in)(struct com_tty *tty, com_kbd_packet_t *kbd_pkt);
     size_t num;
 } com_tty_t;
 
@@ -114,7 +115,7 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                               bool        blocking,
                                               void       *passthrough));
 
-void com_io_tty_kbd_in(com_tty_t *tty, char c, uintmax_t mod);
+void com_io_tty_kbd_in(com_tty_t *tty, com_kbd_packet_t *kbd_pkt);
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);

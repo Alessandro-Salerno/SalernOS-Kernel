@@ -167,6 +167,7 @@ int kringbuffer_write_nolock(size_t        *bytes_written,
                              void *cb_arg,
                              void *hu_arg) {
     int ret;
+    KASSERT(0 != rb->buffer_size);
     KASSERT(atomic_size < rb->buffer_size);
 
     if (blocking) {
