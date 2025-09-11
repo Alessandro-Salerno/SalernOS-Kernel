@@ -93,9 +93,6 @@ static int mouse_poll(short *revents, void *devdata, short events) {
     if (KRINGBUFFER_AVAIL_READ(&mouse->rb) > 0 || mouse->consolidated.present) {
         out |= POLLIN;
     }
-    if (KRINGBUFFER_AVAIL_WRITE(&mouse->rb) > sizeof(com_mouse_packet_t)) {
-        out |= POLLOUT;
-    }
     kspinlock_release(&mouse->rb.lock);
 
     *revents = out;
@@ -138,7 +135,8 @@ int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt) {
         mouse->consolidated.packet.dy += pkt->dy;
         mouse->consolidated.packet.dz += pkt->dz;
         mouse->consolidated.present = true;
-        rb_err                      = 0;
+        mouse_poll_callback(mouse);
+        rb_err = 0;
     }
 
     kspinlock_release(&mouse->rb.lock);

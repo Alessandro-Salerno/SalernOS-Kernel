@@ -78,9 +78,6 @@ static int keyboard_poll(short *revents, void *devdata, short events) {
     if (KRINGBUFFER_AVAIL_READ(&keyboard->rb) > 0) {
         out |= POLLIN;
     }
-    if (KRINGBUFFER_AVAIL_WRITE(&keyboard->rb) > sizeof(com_kbd_packet_t)) {
-        out |= POLLOUT;
-    }
 
     *revents = out;
     return 0;

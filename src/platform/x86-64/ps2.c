@@ -306,6 +306,7 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     pkt.buttons            = PS2_MOUSEPKT_TO_PROTOCOL(mouse_data);
     pkt.dx                 = mouse_data[1] - (0x10 & mouse_data[0] ? 0x100 : 0);
     pkt.dy                 = mouse_data[2] - (0x20 & mouse_data[0] ? 0x100 : 0);
+    pkt.dy                 = -pkt.dy;
     pkt.dz = (0x07 & mouse_data[3]) * (0x08 & mouse_data[3] ? -1 : 1);
 
     cycle = 0;
@@ -404,6 +405,6 @@ void x86_64_ps2_mouse_init(void) {
     }
 
     Ps2Mouse.mouse     = com_io_mouse_new();
-    Ps2Mouse.has_wheel = true;
+    Ps2Mouse.has_wheel = false;
     com_sys_interrupt_register(0x2C, ps2_mouse_isr, ps2_mouse_eoi);
 }

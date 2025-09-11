@@ -206,6 +206,9 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         kspinlock_t             *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     kspinlock_acquire(&curr->sched_lock);
+    /*KURGENT("going to sleep on waitlist %p invoked at %p",
+            waiting_on,
+            __builtin_return_address(0));*/
 
     // curr->cpu is nulled and curr is removed from runqueue in sched, no need
     // to do it here. In fact, this has caused issues, specifically with
