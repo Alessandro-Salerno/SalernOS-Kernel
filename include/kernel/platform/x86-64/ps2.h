@@ -18,4 +18,6 @@
 
 #pragma once
 
+void x86_64_ps2_init(void);
 void x86_64_ps2_keyboard_init(void);
+void x86_64_ps2_mouse_init(void);

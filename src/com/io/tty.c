@@ -750,6 +750,7 @@ int com_io_tty_init_text(com_vnode_t **out,
     com_tty_t *tty_data = com_mm_slab_alloc(sizeof(com_tty_t));
     tty_data->type      = E_COM_TTY_TYPE_TEXT;
     tty_data->kbd_in    = text_tty_kbd_in;
+    tty_data->mouse_in  = NULL;
     tty_data->num       = tty_num;
     com_text_tty_t *tty = &tty_data->tty.text;
     tty->term           = term;

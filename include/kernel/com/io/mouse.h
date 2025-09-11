@@ -40,6 +40,17 @@ typedef struct com_mouse {
     com_vnode_t         *vnode;
     kringbuffer_t        rb;
     struct com_poll_head pollhead;
+
+    // Packets are first written to the ringbuffer, but since that is only
+    // ARCH_PAGE_SIZE / 4, it will fill up very quickly. Thus, all other packets
+    // are "consolidated" into a single one. The reason why this is not the
+    // default (which would be much faster in terms of overhead) is that this
+    // would apparently break mouse acceleration in userspace. Thus we try to
+    // strike a balance between performance, precision, and features
+    struct {
+        com_mouse_packet_t packet;
+        bool               present;
+    } consolidated;
 } com_mouse_t;
 
 com_mouse_t *com_io_mouse_new(void);

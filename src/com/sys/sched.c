@@ -126,6 +126,7 @@ void com_sys_sched_yield_nolock(void) {
 
         next = cpu->idle_thread;
     } else {
+        KASSERT(next != cpu->idle_thread);
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
     }
 

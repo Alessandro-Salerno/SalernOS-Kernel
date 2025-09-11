@@ -122,19 +122,20 @@ void kernel_entry(void) {
 
     // PIC initialization
     X86_64_IO_OUTB(0x20, 0x11);
-    X86_64_IO_OUTB(0xa0, 0x11);
+    X86_64_IO_OUTB(0xA0, 0x11);
     X86_64_IO_OUTB(0x21, 0x20);
-    X86_64_IO_OUTB(0xa1, 0x28);
+    X86_64_IO_OUTB(0xA1, 0x28);
     X86_64_IO_OUTB(0x21, 4);
-    X86_64_IO_OUTB(0xa1, 2);
+    X86_64_IO_OUTB(0xA1, 2);
     X86_64_IO_OUTB(0x21, 0x01);
-    X86_64_IO_OUTB(0xa1, 0x01);
-    X86_64_IO_OUTB(0x21, 0b11111101);
-    X86_64_IO_OUTB(0xA1, 0b11111111);
+    X86_64_IO_OUTB(0xA1, 0x01);
+    X86_64_IO_OUTB(0x21, 0b11111001);
+    X86_64_IO_OUTB(0xA1, 0b11101111);
 
     com_mm_pmm_init();
     arch_mmu_init();
     x86_64_idt_stub();
+    x86_64_ps2_init();
     com_sys_syscall_init();
 
     com_term_backend_t main_tb   = opt_flanterm_new_context();
@@ -194,7 +195,9 @@ void kernel_entry(void) {
 
     com_vfs_t *devfs = NULL;
     com_fs_devfs_init(&devfs, rootfs);
+
     x86_64_ps2_keyboard_init();
+    x86_64_ps2_mouse_init();
 
     com_vnode_t *devtty = NULL;
     com_io_tty_devtty_init(&devtty);

@@ -87,10 +87,13 @@ static int keyboard_poll(short *revents, void *devdata, short events) {
 }
 
 static int keyboard_stat(struct stat *out, void *devdata) {
-    out->st_blksize = sizeof(com_kbd_packet_t);
+    out->st_blksize = 512;
     out->st_ino     = (ino_t)devdata;
-    out->st_mode    = 0777;
+    out->st_mode    = 0666;
     out->st_mode |= S_IFCHR;
+    out->st_dev   = (10 << 8);
+    out->st_rdev  = (10 << 8);
+    out->st_nlink = 1;
     return 0;
 }
 
@@ -106,7 +109,7 @@ int com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
                              pkt,
                              sizeof(com_kbd_packet_t),
                              sizeof(com_kbd_packet_t),
-                             true,
+                             false,
                              keyboard_poll_callback,
                              keyboard,
                              NULL);

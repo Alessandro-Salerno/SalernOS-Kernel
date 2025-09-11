@@ -18,12 +18,57 @@
 
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/keyboard.h>
+#include <kernel/com/io/mouse.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/ps2.h>
 
 #define PS2_KEYBOARD_EXTENDED_SCANCODE 0xE0
 #define PS2_KEYBOARD_KEY_RELEASED      0x80
+
+#define PS2_MOUSE    0
+#define PS2_MOUSE_Z  3
+#define PS2_MOUSE_5B 4
+
+#define PS2_MOUSECTL_SAMPLERATE 0xF3
+#define PS2_MOUSECTL_PULSE4     0xF4
+#define PS2_MOUSECTL_PULSE6     0xF6
+#define PS2_MOUSECTL_PULSE10    0xFA
+
+#define PS2_MOUSEPKT_GOOD 8
+#define PS2_MOUSEPKT_ENOUGH(mouse, cycle) \
+    (((mouse)->has_wheel && 4 == cycle) || (!(mouse)->has_wheel && 3 == cycle))
+#define PS2_MOUSEPKT_TO_PROTOCOL(data)                 \
+    (1 & data[0] ? COM_IO_MOUSE_LEFTBUTTON : 0) |      \
+        (2 & data[0] ? COM_IO_MOUSE_RIGHTBUTTON : 0) | \
+        (4 & data[0] ? COM_IO_MOUSE_MIDBUTTON : 0) |   \
+        (0x10 & data[3] ? COM_IO_MOUSE_BUTTON4 : 0) |  \
+        (0x20 & data[3] ? COM_IO_MOUSE_BUTTON5 : 0)
+
+#define PS2_PORT_DATA          0x60
+#define PS2_PORT_CNTL          0x64
+#define PS2_PORT_KEYBOARD_CNTL 0x61
+
+#define PS2_CNTL_DISABLE_KEYBAORD 0xAD
+#define PS2_CNTL_DISABLE_MOUSE    0xA7
+#define PS2_CNTL_ENABLE_KEYBAORD  0xAE
+#define PS2_CNTL_ENABLE_MOUSE     0xA8
+#define PS2_CNTL_READ_CFG         0x20
+#define PS2_CNTL_WRITE_CFG        0x60
+#define PS2_CNTL_WRITE_MOUSE      0xD4
+
+#define PS2_STATUS_OUTDATA 1
+#define PS2_STATUS_INDATA  2
+
+#define PS2_CFG_IRQ0_ENABLE        (1 << 0)
+#define PS2_CFG_IRQ1_ENABLE        (1 << 1)
+#define PS2_CFG_MOUSE_EXISTS       (1 << 5)
+#define PS2_CFG_TRANSLATION_ENABLE (1 << 6)
+
+struct ps2_mouse {
+    com_mouse_t *mouse;
+    bool         has_wheel;
+};
 
 // TAKEN: Mathewnd/Astral
 static const char G_PS2_KEYBOARD_SCANCODES[128] = {
@@ -134,14 +179,57 @@ static const char G_PS2_KEYBOARD_EXT_SCANCODES[128] = {
     [0x53] = COM_IO_KEYBOARD_KEY_DELETE       // delete
 };
 
-static com_keyboard_t *Ps2Keyboard = NULL;
+static com_keyboard_t  *Ps2Keyboard = NULL;
+static struct ps2_mouse Ps2Mouse    = {0};
+
+// UTILITY CODE
+
+static void ps2_write(uint16_t port, uint8_t val) {
+    while (2 & X86_64_IO_INB(0x64)) {
+        ARCH_CPU_PAUSE();
+    }
+
+    X86_64_IO_OUTB(port, val);
+}
+
+static uint16_t ps2_read(uint16_t port) {
+    while (X86_64_IO_INB(0x64) & 2) asm("pause");
+    return X86_64_IO_INB(port);
+}
+
+static void ps2_mouse_wait(uint8_t bit) {
+    for (uint32_t i = 0; i < 100000; i++) {
+        if (PS2_STATUS_OUTDATA == bit &&
+            1 == (PS2_STATUS_OUTDATA & X86_64_IO_INB(PS2_PORT_CNTL))) {
+            return;
+        }
+        if (PS2_STATUS_INDATA == bit &&
+            0 == (PS2_STATUS_INDATA & X86_64_IO_INB(PS2_PORT_CNTL))) {
+            return;
+        }
+    }
+}
+
+static void ps2_mouse_write(uint8_t val) {
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+    X86_64_IO_OUTB(PS2_PORT_DATA, val);
+}
+
+static uint8_t ps2_mouse_read(void) {
+    ps2_mouse_wait(PS2_STATUS_OUTDATA);
+    return X86_64_IO_INB(PS2_PORT_DATA);
+}
+
+// KEYBOARD HANDLERS
 
 static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
 
     static bool extended = false;
-    uint8_t     scancode = X86_64_IO_INB(0x60);
+    uint8_t     scancode = X86_64_IO_INB(PS2_PORT_DATA);
 
     if (PS2_KEYBOARD_EXTENDED_SCANCODE == scancode) {
         extended = true;
@@ -191,8 +279,131 @@ static void ps2_keyboard_eoi(com_isr_t *isr) {
     X86_64_IO_OUTB(0x20, 0x20);
 }
 
+// MOUSE HANDLERS
+
+// CREDIT: Mathewnd/Astral
+static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
+    (void)isr;
+    (void)ctx;
+
+    static uint8_t mouse_data[5] = {0};
+    static size_t  cycle         = 0;
+
+    uint8_t curr_byte = X86_64_IO_INB(PS2_PORT_DATA);
+    mouse_data[cycle] = curr_byte;
+    if (!(PS2_MOUSEPKT_GOOD & mouse_data[0])) {
+        cycle = 0;
+        return;
+    }
+
+    cycle++;
+    if (!PS2_MOUSEPKT_ENOUGH(&Ps2Mouse, cycle)) {
+        return;
+    }
+
+    com_mouse_packet_t pkt = {0};
+    pkt.mouse              = Ps2Mouse.mouse;
+    pkt.buttons            = PS2_MOUSEPKT_TO_PROTOCOL(mouse_data);
+    pkt.dx                 = mouse_data[1] - (0x10 & mouse_data[0] ? 0x100 : 0);
+    pkt.dy                 = mouse_data[2] - (0x20 & mouse_data[0] ? 0x100 : 0);
+    pkt.dz = (0x07 & mouse_data[3]) * (0x08 & mouse_data[3] ? -1 : 1);
+
+    cycle = 0;
+    com_io_console_mouse_in(&pkt);
+}
+
+static void ps2_mouse_eoi(com_isr_t *isr) {
+    (void)isr;
+    X86_64_IO_OUTB(0xA0, 0x20);
+    X86_64_IO_OUTB(0x20, 0x20);
+}
+
+// SETUP CODE
+
+void x86_64_ps2_init(void) {
+    KLOG("initializing ps/2 controller");
+
+    ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_KEYBAORD);
+    ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_MOUSE);
+
+    // FLush input buffer
+    while (PS2_STATUS_OUTDATA & X86_64_IO_INB(PS2_PORT_CNTL)) {
+        X86_64_IO_INB(PS2_PORT_DATA);
+    }
+
+    ps2_write(PS2_PORT_CNTL, PS2_CNTL_READ_CFG);
+    uint8_t cfg = ps2_read(PS2_PORT_DATA);
+    cfg |= PS2_CFG_IRQ0_ENABLE | PS2_CFG_TRANSLATION_ENABLE;
+
+    // Only enable mouse if it exists
+    if (PS2_CFG_MOUSE_EXISTS & cfg) {
+        cfg |= PS2_CFG_IRQ1_ENABLE;
+    }
+
+    ps2_write(PS2_PORT_CNTL, PS2_CNTL_WRITE_CFG);
+    ps2_write(PS2_PORT_DATA, cfg);
+
+    // Re-enable devices that were disabled at the beginning (if available)
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_KEYBAORD);
+    if (PS2_CFG_MOUSE_EXISTS & cfg) {
+        X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
+    }
+}
+
 void x86_64_ps2_keyboard_init(void) {
     KLOG("initializing ps/2 keyboard");
     Ps2Keyboard = com_io_keyboard_new(NULL);
     com_sys_interrupt_register(0x21, ps2_keyboard_isr, ps2_keyboard_eoi);
+}
+
+// CREDIT: vloxei64/ke
+void x86_64_ps2_mouse_init(void) {
+    KLOG("initializing ps/2 mouse");
+
+    // Enable mouse device
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+
+    // Read current configuration
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_READ_CFG);
+    ps2_mouse_wait(PS2_STATUS_OUTDATA);
+    uint8_t cfg = X86_64_IO_INB(PS2_PORT_DATA);
+
+    // Enable mouse IRQ and write new configuration
+    cfg |= PS2_CFG_IRQ1_ENABLE;
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_CFG);
+    ps2_mouse_wait(PS2_STATUS_INDATA);
+    X86_64_IO_OUTB(PS2_PORT_DATA, cfg);
+
+    // No idea what is going on here
+    ps2_mouse_write(PS2_MOUSECTL_PULSE6);
+    ps2_mouse_read();
+    ps2_mouse_write(PS2_MOUSECTL_PULSE4);
+    ps2_mouse_read();
+
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    X86_64_IO_OUTB(PS2_PORT_DATA, PS2_MOUSECTL_SAMPLERATE);
+    uint8_t sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
+    if (PS2_MOUSECTL_PULSE10 != sample_rate) {
+        KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
+               "%x, got %x",
+               PS2_MOUSECTL_PULSE10,
+               sample_rate);
+    }
+
+    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    X86_64_IO_OUTB(PS2_PORT_DATA, 10);
+    sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
+    if (PS2_MOUSECTL_PULSE10 != sample_rate) {
+        KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
+               "%x, got %x",
+               PS2_MOUSECTL_PULSE10,
+               sample_rate);
+    }
+
+    Ps2Mouse.mouse     = com_io_mouse_new();
+    Ps2Mouse.has_wheel = true;
+    com_sys_interrupt_register(0x2C, ps2_mouse_isr, ps2_mouse_eoi);
 }
