@@ -26,6 +26,7 @@
 #define memset(dst, val, sz) kmemset((dst), (sz), (val))
 #define memcmp(b1, b2, sz)   kmemcmp((b1), (b2), (sz))
 #define memchr(s, c, n)      kmemchr((s), (c), (n))
+#define memmove(...)         kmemmove(__VA_ARGS__)
 
 #define strlen(s)      kstrlen((s))
 #define strcmp(s1, s2) kstrcmp((s1), (s2))

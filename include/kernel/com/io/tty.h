@@ -72,7 +72,7 @@ typedef struct com_text_tty {
 } com_text_tty_t;
 
 typedef struct com_fb_tty {
-
+    pid_t owner;
 } com_fb_tty_t;
 
 typedef struct com_tty {

@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void kmemset(void *buff, size_t buffsize, uint8_t val) {
+void *kmemset(void *buff, size_t buffsize, uint8_t val) {
 #ifdef ARCH_LIBHELP_FAST_MEMSET
     ARCH_LIBHELP_FAST_MEMSET(buff, val, buffsize);
 #else
@@ -30,6 +30,7 @@ void kmemset(void *buff, size_t buffsize, uint8_t val) {
         *(uint8_t *)((uint64_t)(buff) + i) = val;
     }
 #endif
+    return buff;
 }
 
 int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
@@ -45,7 +46,7 @@ int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
     return 0;
 }
 
-void kmemcpy(void *dst, const void *src, size_t buffsize) {
+void *kmemcpy(void *dst, const void *src, size_t buffsize) {
 #ifdef ARCH_LIBHELP_FAST_MEMCPY
     ARCH_LIBHELP_FAST_MEMCPY(dst, src, buffsize);
 #else
@@ -57,6 +58,7 @@ void kmemcpy(void *dst, const void *src, size_t buffsize) {
         *(uint8_t *)(dst_off + i) = val;
     }
 #endif
+    return dst;
 }
 
 void *kmemchr(const void *str, int c, size_t n) {

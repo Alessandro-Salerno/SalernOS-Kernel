@@ -274,6 +274,7 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
                 tty_data->kbd_in   = fb_tty_kbd_in;
                 tty_data->mouse_in = fb_tty_mouse_in;
                 com_io_term_disable(tty_data->tty.text.term);
+                tty_data->tty.fb.owner = tty_data->tty.text.backend.fg_pgid;
                 return 0;
             default:
                 return EINVAL;

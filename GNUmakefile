@@ -73,21 +73,24 @@ override LDFLAGS += \
     -z max-page-size=0x1000 \
     -T src/platform/$(PLATFORM)/linker.ld
 
+override OPTDEPS = 
 override CFILES = $(call rwildcard, src/com, *.c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
 override ASFILES = $(call rwildcard, src/platform/$(PLATFORM), *.S)
 override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
 
+override OBJ = 
+override HEADER_DEPS = 
 -include src/platform/$(PLATFORM)/options.mk
 
-override OBJ = $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o)) obj/splash.o
-override HEADER_DEPS = $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
+override OBJ += $(addprefix obj/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o)) obj/splash.o
+override HEADER_DEPS += $(addprefix obj/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target.
 .PHONY: all
 all: bin/$(OUTPUT)
 
 # Link rules for the final executable.
-bin/$(OUTPUT): GNUmakefile src/platform/$(PLATFORM)/linker.ld $(OBJ)
+bin/$(OUTPUT): GNUmakefile src/platform/$(PLATFORM)/linker.ld $(OBJ) $(OPTDEPS)
 	@echo [LD] Linking...
 	@mkdir -p "$$(dirname $@)"
 	@$(LD) $(OBJ) $(LDFLAGS) -o $@

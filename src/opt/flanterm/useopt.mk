@@ -1,1 +1,1 @@
-override CFILES += $(call rwildcard, src/opt/flanterm, *c)
+override CFILES += $(call rwildcard, src/opt/flanterm, *.c)

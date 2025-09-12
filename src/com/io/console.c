@@ -51,15 +51,68 @@ static void switch_tty(int new_fg) {
 }
 
 void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
-    /*if ((COM_IO_TTY_MOD_LSHIFT |
-                                             COM_IO_TTY_MOD_RSHIFT) &
-            mod) {
-        size_t new_fg = c - 'A';
+    static int mod = 0;
+
+    if (COM_IO_KEYBOARD_KEYSTATE_RELEASED == pkt->keystate) {
+        switch (pkt->keycode) {
+            case COM_IO_KEYBOARD_KEY_LEFTCTRL:
+                mod &= ~(COM_IO_TTY_MOD_LCTRL);
+                break;
+            case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
+                mod &= ~(COM_IO_TTY_MOD_RCTRL);
+                break;
+            case COM_IO_KEYBOARD_KEY_LEFTALT:
+                mod &= ~(COM_IO_TTY_MOD_LALT);
+                break;
+            case COM_IO_KEYBOARD_KEY_RIGHTALT:
+                mod &= ~(COM_IO_TTY_MOD_RALT);
+                break;
+            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+                mod &= ~(COM_IO_TTY_MOD_LSHIFT);
+                break;
+            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+                mod &= ~(COM_IO_TTY_MOD_RSHIFT);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Here COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate
+    switch (pkt->keycode) {
+        // Modifiers
+        case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+            mod = mod | COM_IO_TTY_MOD_LSHIFT;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+            mod = mod | COM_IO_TTY_MOD_RSHIFT;
+            break;
+        case COM_IO_KEYBOARD_KEY_LEFTCTRL:
+            mod = mod | COM_IO_TTY_MOD_LCTRL;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
+            mod = mod | COM_IO_TTY_MOD_RCTRL;
+            break;
+        case COM_IO_KEYBOARD_KEY_LEFTALT:
+            mod = mod | COM_IO_TTY_MOD_LALT;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTALT:
+            mod = mod | COM_IO_TTY_MOD_RALT;
+            break;
+
+        default:
+            break;
+    }
+
+    if ((COM_IO_TTY_MOD_LSHIFT | COM_IO_TTY_MOD_RSHIFT) & mod &&
+        pkt->keycode >= COM_IO_KEYBOARD_KEY_F1 &&
+        pkt->keycode <= COM_IO_KEYBOARD_KEY_F12) {
+        size_t new_fg = pkt->keycode - COM_IO_KEYBOARD_KEY_F1;
         KDEBUG("switching to tty %d", new_fg);
         switch_tty(new_fg);
+        mod = 0;
         return;
     }
-    */
 
     com_tty_t
         *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];

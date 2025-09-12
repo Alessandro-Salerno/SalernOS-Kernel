@@ -21,6 +21,7 @@
 #include <arch/info.h>
 #include <kernel/com/fs/vfs.h>
 #include <linux/fb.h>
+#include <sys/types.h>
 
 typedef struct com_fbdev {
     arch_framebuffer_t      *fb;
