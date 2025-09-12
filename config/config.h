@@ -66,8 +66,8 @@
  *                                CONFIGURATION
  * ****************************************************************************/
 
-#define CONFIG_LOG_LEVEL          CONST_LOG_LEVEL_DEBUG /* Kernel log level */
-#define CONFIG_LOG_ALLOW_COLORS   1 /* Allow colors in logging */
+#define CONFIG_LOG_LEVEL          CONST_LOG_LEVEL_INFO /* Kernel log level */
+#define CONFIG_LOG_ALLOW_COLORS   0 /* Allow colors in logging */
 #define CONFIG_LOG_SEP_LEN        7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL     1 /* Use serial output for kernel logging */
 #define CONFIG_LOG_USE_VNODE      0 /* Also use a vnode for kernel logging */

@@ -55,6 +55,32 @@ struct unix_socket_binding {
 // Foward declaration, defined below
 static com_socket_ops_t UnixSocketOps;
 
+static int unix_socket_rb_check_hangup(size_t        *new_nbytes,
+                                       size_t         curr_nbytes,
+                                       bool          *force_return,
+                                       kringbuffer_t *rb,
+                                       int            op,
+                                       void          *arg) {
+    (void)curr_nbytes;
+    (void)rb;
+    (void)new_nbytes;
+    (void)force_return;
+    struct unix_socket *unix_socket = arg;
+    KASSERT(NULL != unix_socket);
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+
+    if (KRINGBUFFER_OP_WRITE == op) {
+        if (NULL == unix_socket->peer) {
+            com_ipc_signal_send_to_thread(curr_thread,
+                                          SIGPIPE,
+                                          curr_thread->proc);
+            return EPIPE;
+        }
+    }
+
+    return 0;
+}
+
 static struct unix_socket *unix_socket_alloc(void) {
     struct unix_socket *sock = com_mm_slab_alloc(sizeof(struct unix_socket));
     sock->socket.ops         = &UnixSocketOps;
@@ -62,6 +88,7 @@ static struct unix_socket *unix_socket_alloc(void) {
     void  *rb_buff = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(rb_pages));
     KRINGBUFFER_INIT_CUSTOM(&sock->rb, rb_buff, CONFIG_UNIX_SOCK_RB_SIZE);
     sock->rb.fallback_hu_arg = sock;
+    sock->rb.check_hangup    = unix_socket_rb_check_hangup;
     TAILQ_INIT(&sock->srv_acceptq);
     TAILQ_INIT(&sock->srv_acceptwait);
     LIST_INIT(&sock->socket.pollhead.polled_list);
@@ -379,6 +406,27 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
 
 static int unix_socket_destroy(com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
+    struct unix_socket *peer        = unix_socket->peer;
+
+    kspinlock_acquire(&unix_socket->socket.lock);
+    unix_socket->peer = NULL;
+    kspinlock_acquire(&unix_socket->rb.lock);
+    com_sys_sched_notify_all(&unix_socket->rb.read.queue);
+    com_sys_sched_notify_all(&unix_socket->rb.write.queue);
+    kspinlock_release(&unix_socket->rb.lock);
+    unix_socket_poll_callback(unix_socket);
+    kspinlock_release(&unix_socket->socket.lock);
+
+    if (NULL != peer) {
+        kspinlock_acquire(&peer->socket.lock);
+        peer->peer = NULL;
+        kspinlock_acquire(&peer->rb.lock);
+        com_sys_sched_notify_all(&peer->rb.read.queue);
+        com_sys_sched_notify_all(&peer->rb.write.queue);
+        kspinlock_release(&peer->rb.lock);
+        unix_socket_poll_callback(unix_socket);
+        kspinlock_release(&peer->socket.lock);
+    }
 
     void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(unix_socket->rb.buffer);
     size_t rbuff_pages = unix_socket->rb.buffer_size / ARCH_PAGE_SIZE + 1;

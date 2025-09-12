@@ -58,6 +58,7 @@ int com_fs_pipefs_read(void        *buf,
                        uintmax_t    flags) {
     (void)off;
     (void)flags;
+    KDEBUG("pipe read");
 
     struct pipefs_node *pipe = node->extra;
     kspinlock_acquire(&pipe->lock);
@@ -99,6 +100,7 @@ int com_fs_pipefs_read(void        *buf,
         }
 
         com_sys_sched_notify(&pipe->writers);
+        ARCH_CPU_SELF_IPI();
     }
 
 end:
@@ -117,6 +119,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
+    KDEBUG("pipe write");
     kspinlock_acquire(&pipe->lock);
 
     size_t req_space   = buflen;
@@ -159,6 +162,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         write_count += writesz;
 
         com_sys_sched_notify(&pipe->readers);
+        ARCH_CPU_SELF_IPI();
     }
 
 end:

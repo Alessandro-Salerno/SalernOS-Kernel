@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -88,10 +89,14 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
                     futex = default_futex;
                 } else if (0 != get_ret) {
-                    ret.err = get_ret;
+                    ret = COM_SYS_SYSCALL_ERR(get_ret);
                     goto end;
                 }
                 com_sys_sched_wait(&futex->waiters, &FutexLock);
+                if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+                    ret = COM_SYS_SYSCALL_ERR(EINTR);
+                    goto end;
+                }
             }
             break;
 
@@ -101,7 +106,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
             if (ENOENT == get_ret) {
                 goto end;
             } else if (0 != get_ret) {
-                ret.err = get_ret;
+                ret = COM_SYS_SYSCALL_ERR(get_ret);
                 goto end;
             }
             if (INT_MAX == value) {
@@ -109,13 +114,13 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
             } else if (1 == value) {
                 com_sys_sched_notify(&futex->waiters);
             } else {
-                ret.err = EINVAL;
+                ret = COM_SYS_SYSCALL_ERR(EINVAL);
             }
             break;
         }
 
         default:
-            ret.err = ENOSYS;
+            ret = COM_SYS_SYSCALL_ERR(ENOSYS);
             goto end;
     }
 
