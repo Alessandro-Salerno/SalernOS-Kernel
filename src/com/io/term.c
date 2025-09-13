@@ -245,5 +245,35 @@ void com_io_term_set_fallback(com_term_t *fallback_term) {
     atomic_store(&FallbackTerm, fallback_term);
 }
 
+void com_io_term_panic_putsn(const char *s, size_t n) {
+    static com_term_t *fallback = NULL;
+
+    // fallback is static, so we need to initialize it once
+    if (NULL == fallback) {
+        fallback = atomic_load(&FallbackTerm);
+        // It was null and now it isn't, so we got it
+        if (NULL != fallback) {
+            // We don't use the wrapper functions because those do more and we
+            // don't need that in panic
+            fallback->buffering.enabled = false;
+            fallback->buffering.index   = 0;
+            fallback->backend.ops->enable(fallback->backend.data);
+            fallback->backend.ops->flush(fallback->backend.data);
+            fallback->backend.ops->panic(fallback->backend.data);
+        }
+    }
+
+    // And this is done every other time
+    if (NULL != fallback) {
+        fallback->backend.ops->putsn(fallback->backend.data, s, n);
+    }
+}
+
+void com_io_term_panic(void) {
+    static const char reset_sequence[] = "\033[0m\033[H\033[2J";
+    com_io_term_panic_putsn(reset_sequence, sizeof(reset_sequence));
+    com_io_log_set_user_hook(com_io_term_panic_putsn);
+}
+
 void com_io_term_init(void) {
 }

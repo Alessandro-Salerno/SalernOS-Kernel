@@ -748,13 +748,14 @@ int com_io_tty_init_text(com_vnode_t **out,
     size_t tty_num = __atomic_fetch_add(&NextttyNum, 1, __ATOMIC_SEQ_CST);
     KLOG("initializing text tty %u", tty_num);
 
-    com_tty_t *tty_data = com_mm_slab_alloc(sizeof(com_tty_t));
-    tty_data->type      = E_COM_TTY_TYPE_TEXT;
-    tty_data->kbd_in    = text_tty_kbd_in;
-    tty_data->mouse_in  = NULL;
-    tty_data->num       = tty_num;
-    com_text_tty_t *tty = &tty_data->tty.text;
-    tty->term           = term;
+    com_tty_t *tty_data  = com_mm_slab_alloc(sizeof(com_tty_t));
+    tty_data->type       = E_COM_TTY_TYPE_TEXT;
+    tty_data->kbd_in     = text_tty_kbd_in;
+    tty_data->mouse_in   = NULL;
+    tty_data->num        = tty_num;
+    com_text_tty_t *tty  = &tty_data->tty.text;
+    tty->term            = term;
+    tty_data->panic_term = term;
 
     // Poor man's sprintf
     char tty_num_str[24];

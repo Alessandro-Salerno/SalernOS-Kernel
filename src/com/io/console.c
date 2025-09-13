@@ -16,9 +16,12 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <fcntl.h>
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/term.h>
+#include <lib/str.h>
 #include <lib/util.h>
+#include <salernos/ktty.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
@@ -55,18 +58,6 @@ void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
 
     if (COM_IO_KEYBOARD_KEYSTATE_RELEASED == pkt->keystate) {
         switch (pkt->keycode) {
-            case COM_IO_KEYBOARD_KEY_LEFTCTRL:
-                mod &= ~(COM_IO_TTY_MOD_LCTRL);
-                break;
-            case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
-                mod &= ~(COM_IO_TTY_MOD_RCTRL);
-                break;
-            case COM_IO_KEYBOARD_KEY_LEFTALT:
-                mod &= ~(COM_IO_TTY_MOD_LALT);
-                break;
-            case COM_IO_KEYBOARD_KEY_RIGHTALT:
-                mod &= ~(COM_IO_TTY_MOD_RALT);
-                break;
             case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
                 mod &= ~(COM_IO_TTY_MOD_LSHIFT);
                 break;
@@ -76,32 +67,19 @@ void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
             default:
                 break;
         }
-    }
+    } else if (COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate) {
+        switch (pkt->keycode) {
+            // Modifiers
+            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+                mod = mod | COM_IO_TTY_MOD_LSHIFT;
+                break;
+            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+                mod = mod | COM_IO_TTY_MOD_RSHIFT;
+                break;
 
-    // Here COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate
-    switch (pkt->keycode) {
-        // Modifiers
-        case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-            mod = mod | COM_IO_TTY_MOD_LSHIFT;
-            break;
-        case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-            mod = mod | COM_IO_TTY_MOD_RSHIFT;
-            break;
-        case COM_IO_KEYBOARD_KEY_LEFTCTRL:
-            mod = mod | COM_IO_TTY_MOD_LCTRL;
-            break;
-        case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
-            mod = mod | COM_IO_TTY_MOD_RCTRL;
-            break;
-        case COM_IO_KEYBOARD_KEY_LEFTALT:
-            mod = mod | COM_IO_TTY_MOD_LALT;
-            break;
-        case COM_IO_KEYBOARD_KEY_RIGHTALT:
-            mod = mod | COM_IO_TTY_MOD_RALT;
-            break;
-
-        default:
-            break;
+            default:
+                break;
+        }
     }
 
     if ((COM_IO_TTY_MOD_LSHIFT | COM_IO_TTY_MOD_RSHIFT) & mod &&
@@ -110,7 +88,6 @@ void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
         size_t new_fg = pkt->keycode - COM_IO_KEYBOARD_KEY_F1;
         KDEBUG("switching to tty %d", new_fg);
         switch_tty(new_fg);
-        mod = 0;
         return;
     }
 

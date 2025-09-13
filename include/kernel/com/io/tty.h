@@ -38,7 +38,6 @@
 #define COM_IO_TTY_MOD_RSHIFT 16UL
 #define COM_IO_TTY_MOD_LALT   32UL
 #define COM_IO_TTY_MOD_RALT   64UL
-#define COM_IO_TTY_MOD_FKEY   128UL
 
 typedef enum com_tty_type {
     E_COM_TTY_TYPE_TEXT,
@@ -78,6 +77,9 @@ typedef struct com_fb_tty {
 typedef struct com_tty {
     com_tty_type_t type;
     com_vnode_t   *vnode;
+
+    com_term_t *panic_term;
+
     union {
         com_text_tty_t text;
         com_fb_tty_t   fb;

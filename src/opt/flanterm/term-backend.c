@@ -68,6 +68,11 @@ static void flanterm_backend_refresh(void *termdata) {
     flanterm_full_refresh(context);
 }
 
+static void flanterm_backend_panic(void *termdata) {
+    struct flanterm_context *context = termdata;
+    flanterm_set_oob_output(context, FLANTERM_OOB_OUTPUT_ONLCR);
+}
+
 static void *flanterm_backend_malloc(size_t bytes) {
     return (void *)ARCH_PHYS_TO_HHDM(
         com_mm_pmm_alloc_many(bytes / ARCH_PAGE_SIZE + 1));
@@ -122,6 +127,7 @@ com_term_backend_t opt_flanterm_new_context(void) {
                                          .flush    = flanterm_backend_flush,
                                          .enable   = flanterm_backend_enable,
                                          .disable  = flanterm_backend_disable,
-                                         .refresh  = flanterm_backend_refresh};
+                                         .refresh  = flanterm_backend_refresh,
+                                         .panic    = flanterm_backend_panic};
     return (com_term_backend_t){.ops = &ops, .data = NULL};
 }

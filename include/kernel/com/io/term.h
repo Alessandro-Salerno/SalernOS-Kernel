@@ -39,6 +39,7 @@ typedef struct com_term_backend_ops {
     void (*enable)(void *termdata);
     void (*disable)(void *termdata);
     void (*refresh)(void *termdata);
+    void (*panic)(void *termdata);
 } com_term_backend_ops_t;
 
 typedef struct com_term_backend {
@@ -71,4 +72,6 @@ void        com_io_term_enable(com_term_t *term);
 void        com_io_term_disable(com_term_t *term);
 void        com_io_term_refresh(com_term_t *term);
 void        com_io_term_set_fallback(com_term_t *fallback_term);
+void        com_io_term_panic_putsn(const char *s, size_t n);
+void        com_io_term_panic(void);
 void        com_io_term_init(void);

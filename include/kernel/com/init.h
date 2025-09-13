@@ -16,37 +16,13 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
-#include <arch/cpu.h>
-#include <kernel/com/io/log.h>
+#pragma once
+
 #include <kernel/com/io/term.h>
-#include <kernel/com/sys/interrupt.h>
-#include <kernel/com/sys/panic.h>
-#include <kernel/platform/context.h>
-#include <lib/printf.h>
-#include <stdarg.h>
-#include <stddef.h>
 
-__attribute__((noreturn)) void
-com_sys_panic(arch_context_t *ctx, const char *fmt, ...) {
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    com_io_term_panic();
-    kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());
-
-    if (NULL != fmt) {
-        va_list args;
-        va_start(args, fmt);
-        kvprintf(fmt, args);
-        va_end(args);
-        kprintf("\n");
-    }
-
-    if (NULL != ctx) {
-        arch_context_print(ctx);
-    }
-
-    while (1) {
-        ARCH_CPU_DISABLE_INTERRUPTS();
-        ARCH_CPU_HALT();
-    }
-}
+void com_init_splash(void);
+void com_init_memory(void);
+void com_init_filesystem(void);
+void com_init_tty(com_term_backend_t (*new_backend)(void));
+void com_init_devices(void);
+void com_init_pid1(void);
