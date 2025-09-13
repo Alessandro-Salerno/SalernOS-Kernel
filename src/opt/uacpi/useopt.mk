@@ -1,3 +1,4 @@
+override CFLAGS += -DHAVE_OPT_UACPI
 override UACPI_CFILES = $(call rwildcard, src/opt/uacpi, *.c)
 override UACPI_ASFILES = $(call rwildcard, src/opt/uacpi, *.S)
 override UACPI_NASMFILES = $(call rwildcard, src/opt/uacpi, *.asm)
@@ -6,7 +7,7 @@ override UACPI_OBJ = $(addprefix obj/,$(UACPI_CFILES:.c=.c.o) $(UACPI_ASFILES:.S
 override UACPI_HEADER_DEPS = $(addprefix obj/,$(UACPI_CFILES:.c=.c.d) $(UACPI_ASFILES:.S=.S.d))
 
 override OBJ += $(UACPI_OBJ)
-override UACPI_FLAGS = -DUACPI_OVERRIDE_LIBC -DUACPI_KERNEL_INITIALIZATION
+override UACPI_FLAGS = -DUACPI_OVERRIDE_LIBC -DUACPI_KERNEL_INITIALIZATION -DUACPI_NATIVE_ALLOC_ZEROED -DUACPI_SIZED_FREES
 
 -include $(UACPI_HEADER_DEPS)
 

@@ -16,21 +16,10 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
 #include <arch/info.h>
-#include <kernel/com/io/term.h>
-#include <stdint.h>
 
-#ifndef HAVE_OPT_FLANTERM
-#error "cannot including this header without having opt/flanterm"
+#ifndef HAVE_OPT_ACPI
+#error "cannot include this header without having opt/acpi"
 #endif
 
-void              *opt_flanterm_init(arch_framebuffer_t *fb,
-                                     uint32_t            fg_color,
-                                     uint32_t            bg_color,
-                                     size_t              scale_x,
-                                     size_t              scale_y);
-com_term_backend_t opt_flanterm_new_context(void);
-void               opt_flanterm_init_bootstrap(void);
-void               opt_flanterm_bootstrap_putsn(const char *s, size_t n);
+arch_rsdp_t *arch_info_get_rsdp(void);

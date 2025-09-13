@@ -18,6 +18,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/io/log.h>
+#include <kernel/opt/acpi.h>
 #include <kernel/platform/info.h>
 #include <lib/str.h>
 #include <stdint.h>
@@ -86,7 +87,7 @@ arch_file_t *arch_info_get_initrd(void) {
 
 arch_framebuffer_t *arch_info_get_fb(void) {
     KASSERT(NULL != FramebufferRequest.response);
-    KASSERT(0 < FramebufferRequest.response->framebuffer_count);
+    KASSERT(FramebufferRequest.response->framebuffer_count > 0);
 
     return FramebufferRequest.response->framebuffers[0];
 }

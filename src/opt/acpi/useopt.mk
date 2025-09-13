@@ -1,0 +1,1 @@
+override CFLAGS += -DHAVE_OPT_ACPI

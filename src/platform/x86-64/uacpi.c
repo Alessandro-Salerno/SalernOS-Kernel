@@ -16,21 +16,42 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <kernel/opt/uacpi.h>
 
-#include <arch/info.h>
-#include <kernel/com/io/term.h>
-#include <stdint.h>
+int arch_uacpi_io_map(opt_uacpi_handle_t *out_handle,
+                      opt_uacpi_io_addr_t base,
+                      opt_uacpi_size_t    len) {
+}
 
-#ifndef HAVE_OPT_FLANTERM
-#error "cannot including this header without having opt/flanterm"
-#endif
+void arch_uacpi_io_unmap(opt_uacpi_handle_t handle) {
+}
 
-void              *opt_flanterm_init(arch_framebuffer_t *fb,
-                                     uint32_t            fg_color,
-                                     uint32_t            bg_color,
-                                     size_t              scale_x,
-                                     size_t              scale_y);
-com_term_backend_t opt_flanterm_new_context(void);
-void               opt_flanterm_init_bootstrap(void);
-void               opt_flanterm_bootstrap_putsn(const char *s, size_t n);
+int arch_uacpi_io_read8(opt_uacpi_u8_t    *out_value,
+                        opt_uacpi_handle_t handle,
+                        opt_uacpi_size_t   offset) {
+}
+
+int arch_uacpi_io_read16(opt_uacpi_u16_t   *out_value,
+                         opt_uacpi_handle_t handle,
+                         opt_uacpi_size_t   offset) {
+}
+
+int arch_uacpi_io_read32(opt_uacpi_u32_t   *out_value,
+                         opt_uacpi_handle_t handle,
+                         opt_uacpi_size_t   offset) {
+}
+
+int arch_uacpi_io_write8(opt_uacpi_handle_t handle,
+                         opt_uacpi_size_t   offset,
+                         opt_uacpi_u8_t     value) {
+}
+
+int arch_uacpi_io_write16(opt_uacpi_handle_t handle,
+                          opt_uacpi_size_t   offset,
+                          opt_uacpi_u16_t    value) {
+}
+
+int arch_uacpi_io_write32(opt_uacpi_handle_t handle,
+                          opt_uacpi_size_t   offset,
+                          opt_uacpi_u32_t    value) {
+}

@@ -56,6 +56,8 @@ typedef struct arch_cpu {
     uint64_t     gdt[7];
     x86_64_ist_t ist;
     uint32_t     lapic_id;
+    // NOTE: keeping this per core since some older CPUs may do weird things
+    uint64_t tsc_freq;
 
     arch_mmu_pagetable_t *root_page_table;
 

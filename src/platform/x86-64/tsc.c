@@ -16,21 +16,49 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <arch/cpu.h>
+#include <kernel/platform/x86-64/cpuid.h>
+#include <kernel/platform/x86-64/tsc.h>
+#include <lib/util.h>
+#include <stdbool.h>
 
-#include <arch/info.h>
-#include <kernel/com/io/term.h>
-#include <stdint.h>
+#define TSC_REQUIRED_LEAF 0x80000007
+#define TSC_CPUID_AVAIL   (1 << 8)
 
-#ifndef HAVE_OPT_FLANTERM
-#error "cannot including this header without having opt/flanterm"
-#endif
+static bool tsc_probe(void) {
+    uint32_t max_leaf = X86_64_CPUID_EXT_MAX_LEAF();
+    if (max_leaf < TSC_REQUIRED_LEAF) {
+        return false;
+    }
 
-void              *opt_flanterm_init(arch_framebuffer_t *fb,
-                                     uint32_t            fg_color,
-                                     uint32_t            bg_color,
-                                     size_t              scale_x,
-                                     size_t              scale_y);
-com_term_backend_t opt_flanterm_new_context(void);
-void               opt_flanterm_init_bootstrap(void);
-void               opt_flanterm_bootstrap_putsn(const char *s, size_t n);
+    x86_64_cpuid_t cpuid;
+    X86_64_CPUID(&cpuid, TSC_REQUIRED_LEAF);
+    return TSC_CPUID_AVAIL & cpuid.edx;
+}
+
+void x86_64_tsc_init(void) {
+    if (!tsc_probe()) {
+        return;
+    }
+
+    KLOG("initializing tsc");
+
+    if (X86_64_CPUID_BASE_MAX_LEAF() >= 0x15) {
+        x86_64_cpuid_t regs;
+        X86_64_CPUID(&regs, 0x15);
+
+        if (0 == regs.eax || 0 == regs.ebx || 0 == regs.ecx) {
+            goto calibrate;
+        }
+
+        uint64_t core_freq        = regs.ecx;
+        uint64_t core_numerator   = regs.ebx;
+        uint64_t core_denominator = regs.eax;
+        ARCH_CPU_GET()->tsc_freq  = core_freq * core_numerator /
+                                   core_denominator;
+        return;
+    }
+
+calibrate:
+    // TODO: implement tsc calibration
+}

@@ -8,7 +8,7 @@
 | (at your option) any later version.                                    |
 |                                                                        |
 | This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY{} without even the implied warranty of         |
+
 | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
 | GNU General Public License for more details.                           |
 |                                                                        |
@@ -16,13 +16,77 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include "vendor/include/uacpi/kernel_api.h"
-#include "vendor/include/uacpi/platform/arch_helpers.h"
+#include <assert.h>
+#include <errno.h>
+#include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/slab.h>
+#include <kernel/com/sys/callout.h>
+#include <kernel/opt/acpi.h>
+#include <kernel/opt/uacpi.h>
+#include <lib/util.h>
+#include <uacpi/status.h>
+#include <uacpi/types.h>
 
-#include "vendor/include/uacpi/types.h"
+#include <uacpi/kernel_api.h>
+#include <uacpi/platform/arch_helpers.h>
+
+_Static_assert(__builtin_types_compatible_p(uacpi_handle, opt_uacpi_handle_t),
+               "uacpi_handle must be the same as opt_uacpi_handle_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_size, opt_uacpi_size_t),
+               "uacpi_size must be the same as opt_uacpi_size_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_u8, opt_uacpi_u8_t),
+               "uacpi_u8 must be the same as opt_uacpi_u8_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_u16, opt_uacpi_u16_t),
+               "uacpi_u16 must be the same as opt_uacpi_u16_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_u32, opt_uacpi_u32_t),
+               "uacpi_u32 must be the same as opt_uacpi_u32_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_u64, opt_uacpi_u64_t),
+               "uacpi_u64 must be the same as opt_uacpi_u64_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_i8, opt_uacpi_i8_t),
+               "uacpi_i8 must be the same as opt_uacpi_i8_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_i16, opt_uacpi_i16_t),
+               "uacpi_i16 must be the same as opt_uacpi_i16_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_i32, opt_uacpi_i32_t),
+               "uacpi_i32 must be the same as opt_uacpi_i32_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_i64, opt_uacpi_i64_t),
+               "uacpi_i64 must be the same as opt_uacpi_i64_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_phys_addr,
+                                            opt_uacpi_phys_addr_t),
+               "uacpi_phys_addr must be the same as opt_uacpi_phys_addr_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_io_addr, opt_uacpi_io_addr_t),
+               "uacpi_io_addr must be the same as opt_uacpi_phys_io_t");
+
+static inline uacpi_status posix_to_uacpi(int e) {
+    switch (e) {
+        case 0:
+            return UACPI_STATUS_OK;
+        case ENOSYS:
+        case EOPNOTSUPP:
+#if ENOTSUP != EOPNOTSUPP
+        case ENOTSUP:
+#endif
+            return UACPI_STATUS_UNIMPLEMENTED;
+        case EINVAL:
+            return UACPI_STATUS_INVALID_ARGUMENT;
+        case ENOMEM:
+            return UACPI_STATUS_OUT_OF_MEMORY;
+        case EPERM:
+        case EFAULT:
+            return UACPI_STATUS_DENIED;
+        default:
+            KASSERT(!"unsupported error");
+    }
+}
 
 // Returns the PHYSICAL address of the RSDP structure via *out_rsdp_address.
 uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
+    arch_rsdp_t *rsdp = arch_info_get_rsdp();
+    if (NULL == rsdp) {
+        return UACPI_STATUS_UNIMPLEMENTED;
+    }
+
+    *out_rsdp_address = (uacpi_phys_addr)(ARCH_HHDM_TO_PHYS(rsdp->address));
+    return UACPI_STATUS_OK;
 }
 
 /*
@@ -62,9 +126,34 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
  *       as well as its true length.
  */
 void uacpi_kernel_unmap(void *addr, uacpi_size len) {
+    (void)addr;
+    (void)len;
 }
 
-void uacpi_kernel_log(uacpi_log_level, const uacpi_char *) {
+void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
+    const char *lvlstr = "n/a";
+
+    switch (log_level) {
+        case UACPI_LOG_DEBUG:
+            lvlstr = "debug";
+            break;
+        case UACPI_LOG_TRACE:
+            lvlstr = "trace";
+            break;
+        case UACPI_LOG_INFO:
+            lvlstr = "info";
+            break;
+        case UACPI_LOG_WARN:
+            lvlstr = "warn";
+            break;
+        case UACPI_LOG_ERROR:
+            lvlstr = "error";
+            break;
+        default:
+            break;
+    }
+
+    KDEBUG("[uacpi %s] %s", lvlstr, msg);
 }
 
 /*
@@ -123,8 +212,16 @@ void uacpi_kernel_deinitialize(void) {
  */
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address,
                                           uacpi_handle     *out_handle) {
+    uint64_t v = ((uint64_t)address.segment << 48) |
+                 ((uint64_t)address.bus << 32) |
+                 ((uint64_t)address.device << 16) |
+                 ((uint64_t)address.function);
+    *out_handle = (uacpi_handle)v;
+    return UACPI_STATUS_OK;
 }
-void uacpi_kernel_pci_device_close(uacpi_handle) {
+
+void uacpi_kernel_pci_device_close(uacpi_handle handle) {
+    (void)handle;
 }
 
 /*
@@ -134,10 +231,12 @@ uacpi_status uacpi_kernel_pci_read8(uacpi_handle device,
                                     uacpi_size   offset,
                                     uacpi_u8    *value) {
 }
+
 uacpi_status uacpi_kernel_pci_read16(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u16   *value) {
 }
+
 uacpi_status uacpi_kernel_pci_read32(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u32   *value) {
@@ -147,10 +246,12 @@ uacpi_status uacpi_kernel_pci_write8(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u8     value) {
 }
+
 uacpi_status uacpi_kernel_pci_write16(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u16    value) {
 }
+
 uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u32    value) {
@@ -166,8 +267,11 @@ uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
 uacpi_status uacpi_kernel_io_map(uacpi_io_addr base,
                                  uacpi_size    len,
                                  uacpi_handle *out_handle) {
+    return posix_to_uacpi(arch_uacpi_io_map(out_handle, base, len));
 }
+
 void uacpi_kernel_io_unmap(uacpi_handle handle) {
+    arch_uacpi_io_unmap(handle);
 }
 
 /*
@@ -181,24 +285,40 @@ void uacpi_kernel_io_unmap(uacpi_handle handle) {
  * You are NOT allowed to break e.g. a 4-byte access into four 1-byte accesses.
  * Hardware ALWAYS expects accesses to be of the exact width.
  */
-uacpi_status
-uacpi_kernel_io_read8(uacpi_handle, uacpi_size offset, uacpi_u8 *out_value) {
-}
-uacpi_status
-uacpi_kernel_io_read16(uacpi_handle, uacpi_size offset, uacpi_u16 *out_value) {
-}
-uacpi_status
-uacpi_kernel_io_read32(uacpi_handle, uacpi_size offset, uacpi_u32 *out_value) {
+uacpi_status uacpi_kernel_io_read8(uacpi_handle handle,
+                                   uacpi_size   offset,
+                                   uacpi_u8    *out_value) {
+    return posix_to_uacpi(arch_uacpi_io_read8(out_value, handle, offset));
 }
 
-uacpi_status
-uacpi_kernel_io_write8(uacpi_handle, uacpi_size offset, uacpi_u8 in_value) {
+uacpi_status uacpi_kernel_io_read16(uacpi_handle handle,
+                                    uacpi_size   offset,
+                                    uacpi_u16   *out_value) {
+    return posix_to_uacpi(arch_uacpi_io_read16(out_value, handle, offset));
 }
-uacpi_status
-uacpi_kernel_io_write16(uacpi_handle, uacpi_size offset, uacpi_u16 in_value) {
+
+uacpi_status uacpi_kernel_io_read32(uacpi_handle handle,
+                                    uacpi_size   offset,
+                                    uacpi_u32   *out_value) {
+    return posix_to_uacpi(arch_uacpi_io_read32(out_value, handle, offset));
 }
-uacpi_status
-uacpi_kernel_io_write32(uacpi_handle, uacpi_size offset, uacpi_u32 in_value) {
+
+uacpi_status uacpi_kernel_io_write8(uacpi_handle handle,
+                                    uacpi_size   offset,
+                                    uacpi_u8     in_value) {
+    return posix_to_uacpi(arch_uacpi_io_write8(handle, offset, in_value));
+}
+
+uacpi_status uacpi_kernel_io_write16(uacpi_handle handle,
+                                     uacpi_size   offset,
+                                     uacpi_u16    in_value) {
+    return posix_to_uacpi(arch_uacpi_io_write16(handle, offset, in_value));
+}
+
+uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
+                                     uacpi_size   offset,
+                                     uacpi_u32    in_value) {
+    return posix_to_uacpi(arch_uacpi_io_write32(handle, offset, in_value));
 }
 
 /*
@@ -206,6 +326,12 @@ uacpi_kernel_io_write32(uacpi_handle, uacpi_size offset, uacpi_u32 in_value) {
  * The contents of the allocated memory are unspecified.
  */
 void *uacpi_kernel_alloc(uacpi_size size) {
+    if (size < ARCH_PAGE_SIZE) {
+        return com_mm_slab_alloc(size);
+    }
+
+    size_t num_pages = (size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
+    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(num_pages));
 }
 
 #ifdef UACPI_NATIVE_ALLOC_ZEROED
@@ -214,6 +340,12 @@ void *uacpi_kernel_alloc(uacpi_size size) {
  * The returned memory block is expected to be zero-filled.
  */
 void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
+    if (size < ARCH_PAGE_SIZE) {
+        return com_mm_slab_alloc(size);
+    }
+
+    size_t num_pages = (size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
+    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(num_pages));
 }
 #endif
 
@@ -232,6 +364,13 @@ void uacpi_kernel_free(void *mem) {
 }
 #else
 void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
+    if (size_hint < ARCH_PAGE_SIZE) {
+        com_mm_slab_free(mem, size_hint);
+        return;
+    }
+
+    size_t num_pages = (size_hint + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
+    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(mem), num_pages);
 }
 #endif
 
@@ -240,6 +379,7 @@ void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
  * strictly monotonic.
  */
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
+    return com_sys_callout_get_time();
 }
 
 /*

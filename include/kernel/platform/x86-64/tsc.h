@@ -18,19 +18,15 @@
 
 #pragma once
 
-#include <arch/info.h>
-#include <kernel/com/io/term.h>
 #include <stdint.h>
 
-#ifndef HAVE_OPT_FLANTERM
-#error "cannot including this header without having opt/flanterm"
-#endif
+#define X86_64_TSC_READ() __hdr_x86_64_tsc_raed()
 
-void              *opt_flanterm_init(arch_framebuffer_t *fb,
-                                     uint32_t            fg_color,
-                                     uint32_t            bg_color,
-                                     size_t              scale_x,
-                                     size_t              scale_y);
-com_term_backend_t opt_flanterm_new_context(void);
-void               opt_flanterm_init_bootstrap(void);
-void               opt_flanterm_bootstrap_putsn(const char *s, size_t n);
+void x86_64_tsc_init(void);
+
+static inline uint64_t __hdr_x86_64_tsc_read(void) {
+    uint32_t high;
+    uint32_t low;
+    asm volatile("cpuid; rdtsc;" : "=a"(low), "=d"(high) : : "rbx", "rcx");
+    return ((uint64_t)high << 32) | low;
+}

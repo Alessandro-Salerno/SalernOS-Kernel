@@ -75,6 +75,8 @@ typedef struct limine_kernel_address_response arch_kaddr_t;
 typedef struct limine_hhdm_response arch_hhdm_t;
 
 // This type must contain a field named "address" of type void pointer
+// This type is never used in src/com, include/kernel/com, or include/lib since
+// it is specific to some systems (ACPI)
 typedef struct limine_rsdp_response arch_rsdp_t;
 
 typedef struct limine_framebuffer arch_framebuffer_t;

@@ -26,6 +26,7 @@
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <kernel/platform/x86-64/tsc.h>
 #include <lib/mem.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
@@ -73,6 +74,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     TAILQ_INIT(&cpu->callout.queue);
     cpu->callout.ns = InitTime;
     x86_64_lapic_init();
+    x86_64_tsc_init();
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {

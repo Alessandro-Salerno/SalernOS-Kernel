@@ -18,4 +18,6 @@
 -mno-sse2 
 -mno-red-zone 
 -mcmodel=kernel
-
+-DHAVE_OPT_FLANTERM
+-DHAVE_OPT_ACPI
+-DHAVE_OPT_UACPI
