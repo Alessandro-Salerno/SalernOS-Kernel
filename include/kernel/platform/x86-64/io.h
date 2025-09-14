@@ -22,6 +22,10 @@
 
 #define X86_64_IO_OUTB(port, data) __hdr_x86_64_io_outb(port, data)
 #define X86_64_IO_INB(port)        __hdr_x86_64_io_inb(port)
+#define X86_64_IO_OUTW(port, data) __hdr_x86_64_io_outw(port, data)
+#define X86_64_IO_INW(port)        __hdr_x86_64_io_inw(port)
+#define X86_64_IO_OUTD(port, data) __hdr_x86_64_io_outd(port, data)
+#define X86_64_IO_IND(port)        __hdr_x86_64_io_ind(port)
 
 static inline void __hdr_x86_64_io_outb(uint16_t port, uint8_t data) {
     asm volatile("outb %0, %1" : : "a"(data), "Nd"(port));
@@ -30,5 +34,25 @@ static inline void __hdr_x86_64_io_outb(uint16_t port, uint8_t data) {
 static inline uint8_t __hdr_x86_64_io_inb(uint16_t port) {
     uint8_t ret;
     asm volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void __hdr_x86_64_io_outw(uint16_t port, uint16_t data) {
+    asm volatile("out %%ax, %%dx" : : "a"(data), "d"(port));
+}
+
+static inline uint16_t __hdr_x86_64_io_inw(uint16_t port) {
+    uint16_t ret;
+    asm volatile("in %%dx, %%ax" : "=a"(ret) : "d"(port));
+    return ret;
+}
+
+static inline void __hdr_x86_64_io_outd(uint16_t port, uint32_t data) {
+    asm volatile("out %%eax, %%dx" : : "a"(data), "d"(port));
+}
+
+static inline uint32_t __hdr_x86_64_io_ind(uint16_t port) {
+    uint32_t ret;
+    asm volatile("in %%dx, %%eax" : "=a"(ret) : "d"(port));
     return ret;
 }

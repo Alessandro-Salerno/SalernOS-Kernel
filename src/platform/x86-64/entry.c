@@ -16,35 +16,14 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
-#include <kernel/com/dev/gfx/fbdev.h>
-#include <kernel/com/dev/null.h>
-#include <kernel/com/fs/devfs.h>
-#include <kernel/com/fs/file.h>
-#include <kernel/com/fs/initrd.h>
-#include <kernel/com/fs/tmpfs.h>
-#include <kernel/com/fs/vfs.h>
 #include <kernel/com/init.h>
-#include <kernel/com/io/console.h>
 #include <kernel/com/io/log.h>
-#include <kernel/com/io/pty.h>
-#include <kernel/com/io/term.h>
-#include <kernel/com/io/tty.h>
-#include <kernel/com/ipc/signal.h>
-#include <kernel/com/mm/pmm.h>
-#include <kernel/com/mm/slab.h>
-#include <kernel/com/sys/callout.h>
-#include <kernel/com/sys/elf.h>
-#include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
-#include <kernel/com/sys/thread.h>
 #include <kernel/opt/flanterm.h>
-#include <kernel/platform/context.h>
-#include <kernel/platform/info.h>
-#include <kernel/platform/mmu.h>
+#include <kernel/opt/uacpi.h>
 #include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -54,14 +33,9 @@
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
-#include <lib/hashmap.h>
-#include <lib/mem.h>
 #include <lib/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
-#include <signal.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
@@ -147,6 +121,8 @@ void x86_64_entry(void) {
     x86_64_ps2_mouse_init();
     com_init_tty(opt_flanterm_new_context);
     com_init_devices();
+
+    opt_uacpi_init(0);
     com_init_pid1();
 
     for (;;) {

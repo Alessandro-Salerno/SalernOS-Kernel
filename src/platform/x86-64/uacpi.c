@@ -17,41 +17,64 @@
 *************************************************************************/
 
 #include <kernel/opt/uacpi.h>
+#include <kernel/platform/x86-64/io.h>
 
 int arch_uacpi_io_map(opt_uacpi_handle_t *out_handle,
                       opt_uacpi_io_addr_t base,
                       opt_uacpi_size_t    len) {
+    (void)len;
+    *out_handle = (opt_uacpi_handle_t)base;
+    return 0;
 }
 
 void arch_uacpi_io_unmap(opt_uacpi_handle_t handle) {
+    (void)handle;
 }
 
 int arch_uacpi_io_read8(opt_uacpi_u8_t    *out_value,
                         opt_uacpi_handle_t handle,
                         opt_uacpi_size_t   offset) {
+    *out_value = X86_64_IO_INB((opt_uacpi_io_addr_t)handle + offset);
+    return 0;
 }
 
 int arch_uacpi_io_read16(opt_uacpi_u16_t   *out_value,
                          opt_uacpi_handle_t handle,
                          opt_uacpi_size_t   offset) {
+    *out_value = X86_64_IO_INW((opt_uacpi_io_addr_t)handle + offset);
+    return 0;
 }
 
 int arch_uacpi_io_read32(opt_uacpi_u32_t   *out_value,
                          opt_uacpi_handle_t handle,
                          opt_uacpi_size_t   offset) {
+    *out_value = X86_64_IO_IND((opt_uacpi_io_addr_t)handle + offset);
+    return 0;
 }
 
 int arch_uacpi_io_write8(opt_uacpi_handle_t handle,
                          opt_uacpi_size_t   offset,
                          opt_uacpi_u8_t     value) {
+    X86_64_IO_OUTB((opt_uacpi_io_addr_t)handle + offset, value);
+    return 0;
 }
 
 int arch_uacpi_io_write16(opt_uacpi_handle_t handle,
                           opt_uacpi_size_t   offset,
                           opt_uacpi_u16_t    value) {
+    X86_64_IO_OUTW((opt_uacpi_io_addr_t)handle + offset, value);
+    return 0;
 }
 
 int arch_uacpi_io_write32(opt_uacpi_handle_t handle,
                           opt_uacpi_size_t   offset,
                           opt_uacpi_u32_t    value) {
+    X86_64_IO_OUTD((opt_uacpi_io_addr_t)handle + offset, value);
+    return 0;
+}
+
+int arch_uacpi_set_irq(opt_uacpi_u32_t irq, com_isr_t *isr) {
+}
+
+void arch_uacpi_irq_eoi(com_isr_t *isr) {
 }

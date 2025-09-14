@@ -8,7 +8,7 @@
 | (at your option) any later version.                                    |
 |                                                                        |
 | This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
+
 | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
 | GNU General Public License for more details.                           |
 |                                                                        |
@@ -16,28 +16,19 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <kernel/opt/uacpi.h>
+#include <lib/util.h>
+#include <uacpi/uacpi.h>
 
-#include <arch/context.h>
-#include <stdbool.h>
-#include <stdint.h>
+static int uacpi_to_posix(uacpi_status status) {
+    switch (status) {
+        case UACPI_STATUS_OK:
+            return 0;
+        default:
+            KASSERT(!"something went wrong");
+    }
+}
 
-typedef struct com_isr com_isr_t;
-typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
-typedef void (*com_intf_eoi_t)(com_isr_t *isr);
-
-typedef struct com_isr {
-    com_intf_isr_t func;
-    com_intf_eoi_t eoi;
-    uintmax_t      vec;
-    void          *extra;
-    bool           taken;
-} com_isr_t;
-
-bool       com_sys_interrupt_set(bool status);
-com_isr_t *com_sys_interrupt_register(uintmax_t      vec,
-                                      com_intf_isr_t func,
-                                      com_intf_eoi_t eoi);
-com_isr_t *com_sys_interrupt_allocate(com_intf_isr_t func, com_intf_eoi_t eoi);
-void       com_sys_interrupt_free(com_isr_t *isr);
-void       com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx);
+int opt_uacpi_init(opt_uacpi_u64_t flags) {
+    return uacpi_to_posix(uacpi_initialize(flags));
+}

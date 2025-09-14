@@ -28,16 +28,43 @@
 #include <stddef.h>
 #include <stdint.h>
 
-static com_isr_t InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
+static kspinlock_t InterruptTableLock                  = KSPINLOCK_NEW();
+static com_isr_t   InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
 
-void com_sys_interrupt_register(uintmax_t      vec,
-                                com_intf_isr_t func,
-                                com_intf_eoi_t eoi) {
+com_isr_t *com_sys_interrupt_register(uintmax_t      vec,
+                                      com_intf_isr_t func,
+                                      com_intf_eoi_t eoi) {
     KDEBUG("registering handler at %p for vector %u (%p)", func, vec, vec);
+    kspinlock_acquire(&InterruptTableLock);
     com_isr_t *isr = &InterruptTable[vec];
     isr->func      = func;
     isr->eoi       = eoi;
     isr->vec       = vec;
+    isr->taken     = true;
+    kspinlock_release(&InterruptTableLock);
+    return isr;
+}
+
+com_isr_t *com_sys_interrupt_allocate(com_intf_isr_t func, com_intf_eoi_t eoi) {
+    kspinlock_acquire(&InterruptTableLock);
+    for (uintmax_t i = 0; i < ARCH_NUM_INTERRUPTS; i++) {
+        com_isr_t *isr = &InterruptTable[i];
+        if (!isr->taken) {
+            com_sys_interrupt_register(i, func, eoi);
+            return isr;
+        }
+    }
+    kspinlock_release(&InterruptTableLock);
+    return NULL;
+}
+
+void com_sys_interrupt_free(com_isr_t *isr) {
+    kspinlock_acquire(&InterruptTableLock);
+    isr->func  = NULL;
+    isr->eoi   = NULL;
+    isr->extra = NULL;
+    isr->taken = false;
+    kspinlock_release(&InterruptTableLock);
 }
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
