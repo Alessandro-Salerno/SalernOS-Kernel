@@ -18,6 +18,7 @@
 
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
@@ -145,6 +146,29 @@ int com_sys_elf64_load(com_elf_data_t       *out,
                                 true);
     if (0 != ret) {
         return ret;
+    }
+
+    if (E_COM_VNODE_TYPE_FILE != elf_file->type) {
+        goto cleanup;
+    }
+
+    char   elf_signature[4];
+    char   expected_signaturr[4] = {0x7F, 'E', 'L', 'F'};
+    size_t signature_bytes       = 0;
+    ret                          = com_fs_vfs_read(elf_signature,
+                          sizeof(elf_signature),
+                          &signature_bytes,
+                          elf_file,
+                          0,
+                          0);
+    if (0 != ret) {
+        goto cleanup;
+    }
+    if (sizeof(elf_signature) != signature_bytes ||
+        0 !=
+            kmemcmp(elf_signature, expected_signaturr, sizeof(elf_signature))) {
+        ret = EACCES;
+        goto cleanup;
     }
 
     // Here vnode is already held

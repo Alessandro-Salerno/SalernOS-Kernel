@@ -33,6 +33,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// TODO: I used to take sched_lock here because back in 0.2.3 not doing it
+// somehow crashed the kernel sometimes, but now the opposite seems to happen:
+// use icewm, when passing on the main bar, it does execve for some reason and
+// has CLOEXEC on a socket, so the socket sybsystem notifies readers with
+// com_sys_sched_notify_all which also takes the sched_lock. So I need to check
+// which version is correct.
+
 // SYSCALL: execve(const char *path, char *const *argv, char *const *envp)
 COM_SYS_SYSCALL(com_sys_syscall_execve) {
     COM_SYS_SYSCALL_UNUSED_START(4);
@@ -45,7 +52,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_thread_t *thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc   = thread->proc;
     kspinlock_acquire(&proc->signal_lock);
-    kspinlock_acquire(&thread->sched_lock);
+    // kspinlock_acquire(&thread->sched_lock);
 
     arch_mmu_pagetable_t *new_pt = NULL;
     int                   status = com_sys_elf64_prepare_proc(&new_pt,
@@ -57,7 +64,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     if (0 != status) {
         kspinlock_release(&proc->signal_lock);
-        kspinlock_release(&thread->sched_lock);
+        // kspinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
 
@@ -89,7 +96,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     proc->did_execve = true;
-    kspinlock_release(&thread->sched_lock);
+    // kspinlock_release(&thread->sched_lock);
     kspinlock_release(&proc->signal_lock);
 
     return COM_SYS_SYSCALL_OK(0);

@@ -410,22 +410,22 @@ static int unix_socket_destroy(com_socket_t *socket) {
 
     kspinlock_acquire(&unix_socket->socket.lock);
     unix_socket->peer = NULL;
+    kspinlock_release(&unix_socket->socket.lock);
     kspinlock_acquire(&unix_socket->rb.lock);
     com_sys_sched_notify_all(&unix_socket->rb.read.queue);
     com_sys_sched_notify_all(&unix_socket->rb.write.queue);
     kspinlock_release(&unix_socket->rb.lock);
     unix_socket_poll_callback(unix_socket);
-    kspinlock_release(&unix_socket->socket.lock);
 
     if (NULL != peer) {
         kspinlock_acquire(&peer->socket.lock);
         peer->peer = NULL;
+        kspinlock_release(&peer->socket.lock);
         kspinlock_acquire(&peer->rb.lock);
         com_sys_sched_notify_all(&peer->rb.read.queue);
         com_sys_sched_notify_all(&peer->rb.write.queue);
         kspinlock_release(&peer->rb.lock);
         unix_socket_poll_callback(unix_socket);
-        kspinlock_release(&peer->socket.lock);
     }
 
     void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(unix_socket->rb.buffer);

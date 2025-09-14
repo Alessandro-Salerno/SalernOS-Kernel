@@ -109,14 +109,19 @@
 #elif CONFIG_ASSERT_ACTION == CONST_ASSERT_PANIC
 #define KASSERT(statement)                                        \
     if (KUNKLIKELY(!(statement))) {                               \
-        KRESET_COLOR();                                           \
         com_io_log_lock();                                        \
+        KRESET_COLOR();                                           \
         kinitlog("ASSERT", "");                                   \
         com_io_log_puts_nolock(__FILE__ ":");                     \
         com_io_log_puts_nolock(__func__);                         \
         com_io_log_puts_nolock(":" KSTR(__LINE__) ": " #statement \
                                                   " failed\n");   \
-        com_sys_panic(NULL, NULL);                                \
+        com_sys_panic(NULL,                                       \
+                      "assertion failed: %s:%s:%u: %s",           \
+                      __FILE__,                                   \
+                      __func__,                                   \
+                      __LINE__,                                   \
+                      #statement);                                \
     }
 #else
 #error "unsupported assert action, check config/config.h"

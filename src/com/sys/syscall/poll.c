@@ -106,6 +106,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             com_mm_pmm_alloc_many_zero(polleds_pages));
     }
 
+    kspinlock_acquire(&curr_proc->fd_lock);
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
         polled->poller       = &poller;
@@ -117,7 +118,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             continue;
         }
 
-        com_file_t *file = com_sys_proc_get_file(curr_proc, fd);
+        com_file_t *file = com_sys_proc_get_file_nolock(curr_proc, fd);
         if (NULL == file) {
             continue;
         }
@@ -135,6 +136,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             kspinlock_release(&poll_head->lock);
         }
     }
+    kspinlock_release(&curr_proc->fd_lock);
 
     int count = 0;
     int sig   = COM_IPC_SIGNAL_NONE;

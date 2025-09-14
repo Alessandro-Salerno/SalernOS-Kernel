@@ -106,6 +106,10 @@ int com_fs_pipefs_read(void        *buf,
 end:
     kspinlock_release(&pipe->lock);
     *bytes_read = read_count;
+    if (NULL == pipe->read_end && NULL == pipe->write_end) {
+        com_mm_slab_free(pipe, sizeof(struct pipefs_node));
+        com_mm_slab_free(node, sizeof(com_vnode_t));
+    }
     return ret;
 }
 
@@ -168,22 +172,33 @@ int com_fs_pipefs_write(size_t      *bytes_written,
 end:
     kspinlock_release(&pipe->lock);
     *bytes_written = write_count;
+    if (NULL == pipe->read_end && NULL == pipe->write_end) {
+        com_mm_slab_free(pipe, sizeof(struct pipefs_node));
+        com_mm_slab_free(node, sizeof(com_vnode_t));
+    }
     return ret;
 }
 
 int com_fs_pipefs_close(com_vnode_t *vnode) {
-    struct pipefs_node *pipe = vnode->extra;
+    struct pipefs_node *pipe         = vnode->extra;
+    bool                has_notified = false;
     kspinlock_acquire(&pipe->lock);
 
     if (vnode == pipe->read_end) {
+        has_notified   = !TAILQ_EMPTY(&pipe->writers);
         pipe->read_end = NULL;
         com_sys_sched_notify(&pipe->writers);
     } else if (vnode == pipe->write_end) {
+        has_notified    = !TAILQ_EMPTY(&pipe->readers);
         pipe->write_end = NULL;
         com_sys_sched_notify(&pipe->readers);
     }
 
     kspinlock_release(&pipe->lock);
+    if (!has_notified && NULL == pipe->write_end && NULL == pipe->read_end) {
+        com_mm_slab_free(pipe, sizeof(struct pipefs_node));
+        com_mm_slab_free(vnode, sizeof(com_vnode_t));
+    }
     return 0;
 }
 

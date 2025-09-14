@@ -272,7 +272,8 @@ void com_io_term_panic_putsn(const char *s, size_t n) {
 void com_io_term_panic(void) {
     static const char reset_sequence[] = "\033[0m\033[H\033[2J";
     com_io_term_panic_putsn(reset_sequence, sizeof(reset_sequence));
-    com_io_log_set_user_hook(com_io_term_panic_putsn);
+    // Best to have weird output than to have a deadlock in panic
+    com_io_log_set_user_hook_nolock(com_io_term_panic_putsn);
 }
 
 void com_io_term_init(void) {

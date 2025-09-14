@@ -23,6 +23,11 @@
 
 #include "vendor/flanterm_backends/fb.h"
 
+// This should not be done, but we do it because we need it in case of panic
+#define FLANTERM_IN_FLANTERM
+#include "vendor/flanterm_private.h"
+#undef FLANTERM_IN_FLANTERM
+
 #include "vendor/flanterm.h"
 
 static void *flanterm_backend_init(void) {
@@ -70,7 +75,7 @@ static void flanterm_backend_refresh(void *termdata) {
 
 static void flanterm_backend_panic(void *termdata) {
     struct flanterm_context *context = termdata;
-    flanterm_set_oob_output(context, FLANTERM_OOB_OUTPUT_ONLCR);
+    *context = *(struct flanterm_context *)opt_flanterm_bootstrap_get_context();
 }
 
 static void *flanterm_backend_malloc(size_t bytes) {

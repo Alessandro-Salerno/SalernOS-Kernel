@@ -64,3 +64,7 @@ void opt_flanterm_bootstrap_putsn(const char *s, size_t n) {
         flanterm_write(FlantermBootstrapContext, s, n);
     }
 }
+
+void *opt_flanterm_bootstrap_get_context(void) {
+    return FlantermBootstrapContext;
+}

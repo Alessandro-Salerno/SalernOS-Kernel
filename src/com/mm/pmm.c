@@ -83,7 +83,7 @@ static bool is_reserved(void *ptr, size_t pages) {
     for (size_t i = 0; i < NumReservedRanges; i++) {
         struct reserved_range *range = &ReservedRanges[i];
         if ((addr >= range->base && addr < range->base + range->length) ||
-            (end >= range->base || end < range->base + range->length)) {
+            (end >= range->base && end < range->base + range->length)) {
             return true;
         }
     }
