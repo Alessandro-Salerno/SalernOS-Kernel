@@ -122,7 +122,7 @@ void x86_64_entry(void) {
     com_init_tty(opt_flanterm_new_context);
     com_init_devices();
 
-    opt_uacpi_init(0);
+    // opt_uacpi_init(0);
     com_init_pid1();
 
     for (;;) {
