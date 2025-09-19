@@ -24,12 +24,12 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/opt/flanterm.h>
 #include <kernel/opt/uacpi.h>
-#include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/io.h>
+#include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
@@ -89,7 +89,7 @@ void x86_64_entry(void) {
     com_init_splash();
 
     // PIC initialization
-    X86_64_IO_OUTB(0x20, 0x11);
+    /*X86_64_IO_OUTB(0x20, 0x11);
     X86_64_IO_OUTB(0xA0, 0x11);
     X86_64_IO_OUTB(0x21, 0x20);
     X86_64_IO_OUTB(0xA1, 0x28);
@@ -98,7 +98,7 @@ void x86_64_entry(void) {
     X86_64_IO_OUTB(0x21, 0x01);
     X86_64_IO_OUTB(0xA1, 0x01);
     X86_64_IO_OUTB(0x21, 0b11111001);
-    X86_64_IO_OUTB(0xA1, 0b11101111);
+    X86_64_IO_OUTB(0xA1, 0b11101111);*/
 
     // PHASE 1: memory, interrupts, and processors
     com_init_memory();
@@ -116,13 +116,15 @@ void x86_64_entry(void) {
 
     // PHASE 3: user program interface
     com_init_filesystem();
+    com_init_tty(opt_flanterm_new_context);
+
+    // PHASE 4: devices
+    opt_uacpi_init(0);
     x86_64_ps2_init();
     x86_64_ps2_keyboard_init();
     x86_64_ps2_mouse_init();
-    com_init_tty(opt_flanterm_new_context);
     com_init_devices();
 
-    // opt_uacpi_init(0);
     com_init_pid1();
 
     for (;;) {

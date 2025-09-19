@@ -21,9 +21,9 @@
 #include <arch/info.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/mmu.h>
-#include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/io.h>
+#include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/printf.h>
 #include <stddef.h>
@@ -68,7 +68,7 @@ void x86_64_lapic_eoi(com_isr_t *isr) {
     lapic_write(E_LAPIC_REG_EOI, 0);
 }
 
-static void calibrate(void) {
+static void lapic_calibrate(void) {
     lapic_write(E_LAPIC_REG_LVT_TIMER, 1UL << 16);
     lapic_write(E_LAPIC_REG_DIV_CONF, 0);
 
@@ -107,7 +107,7 @@ void x86_64_lapic_bsp_init(void) {
                  ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                      ARCH_MMU_FLAGS_NOEXEC);
 
-    calibrate();
+    lapic_calibrate();
 }
 
 void x86_64_lapic_init(void) {

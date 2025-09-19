@@ -8,7 +8,7 @@
 | (at your option) any later version.                                    |
 |                                                                        |
 | This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
+
 | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
 | GNU General Public License for more details.                           |
 |                                                                        |
@@ -16,24 +16,22 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/info.h>
+#include <kernel/opt/acpi.h>
+#include <uacpi/tables.h>
+#include <uacpi/uacpi.h>
 
-#ifndef HAVE_OPT_ACPI
-#error "cannot include this header without having opt/acpi"
-#endif
+#include "uacpi_util.h"
 
-#ifndef OPT_ACPI_IMPLEMENTATION
-#error "cannot use opt/acpi without having an acpi implementation"
-#endif
-
-typedef struct opt_acpi_table {
-    void *phys_addr;
-    void *virt_addr;
-} opt_acpi_table_t;
-
-// these functions are implemennted by platforms using this option
-arch_rsdp_t *arch_info_get_rsdp(void);
-
-// these functions are implemented by the option and used by platformes
 int opt_acpi_impl_find_table_by_signature(opt_acpi_table_t *out,
-                                          const char       *signature);
+                                          const char       *signature) {
+    uacpi_table  tbl;
+    uacpi_status ret = uacpi_table_find_by_signature(signature, &tbl);
+    if (UACPI_STATUS_OK != ret) {
+        goto end;
+    }
+
+    out->phys_addr = tbl.ptr;
+    out->virt_addr = (void *)tbl.virt_addr;
+end:
+    return uacpi_util_status_to_posix(ret);
+}

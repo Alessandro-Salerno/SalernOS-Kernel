@@ -1,3 +1,35 @@
+/*MIT License
+
+Copyright (c) 2022-2025 Daniil Tatianin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// NOTE: this header is taken from uACPI but changed to allow its inclusion in
+// common code and arch-specific code. This is because, generally speaking,
+// there should be an interface between src/opt/<option> and other code, so that
+// an update or change to foreign code does not require changes outside its
+// option directory. Including uACPI headers directly would break this, so I
+// took src/opt/uacpi/vendor/include/uacpi/acpi.h and made this. Also note that
+// this is far less portable than the oriinal, since it assumes GNU C and
+// "normal" type behaviour
+
 #pragma once
 
 #ifdef UACPI_OVERRIDE_CONFIG
@@ -13,33 +45,30 @@
  * =======================
  */
 #ifndef UACPI_DEFAULT_LOG_LEVEL
-    #define UACPI_DEFAULT_LOG_LEVEL UACPI_LOG_INFO
+#define UACPI_DEFAULT_LOG_LEVEL UACPI_LOG_INFO
 #endif
 
 UACPI_BUILD_BUG_ON_WITH_MSG(
-    UACPI_DEFAULT_LOG_LEVEL < UACPI_LOG_ERROR ||
-    UACPI_DEFAULT_LOG_LEVEL > UACPI_LOG_DEBUG,
-    "configured default log level is invalid"
-);
+    UACPI_DEFAULT_LOG_LEVEL<UACPI_LOG_ERROR || UACPI_DEFAULT_LOG_LEVEL>
+        UACPI_LOG_DEBUG,
+    "configured default log level is invalid");
 
 #ifndef UACPI_DEFAULT_LOOP_TIMEOUT_SECONDS
-    #define UACPI_DEFAULT_LOOP_TIMEOUT_SECONDS 30
+#define UACPI_DEFAULT_LOOP_TIMEOUT_SECONDS 30
 #endif
 
 UACPI_BUILD_BUG_ON_WITH_MSG(
     UACPI_DEFAULT_LOOP_TIMEOUT_SECONDS < 1,
-    "configured default loop timeout is invalid (expecting at least 1 second)"
-);
+    "configured default loop timeout is invalid (expecting at least 1 second)");
 
 #ifndef UACPI_DEFAULT_MAX_CALL_STACK_DEPTH
-    #define UACPI_DEFAULT_MAX_CALL_STACK_DEPTH 256
+#define UACPI_DEFAULT_MAX_CALL_STACK_DEPTH 256
 #endif
 
 UACPI_BUILD_BUG_ON_WITH_MSG(
     UACPI_DEFAULT_MAX_CALL_STACK_DEPTH < 4,
     "configured default max call stack depth is invalid "
-    "(expecting at least 4 frames)"
-);
+    "(expecting at least 4 frames)");
 
 /*
  * ===================
@@ -66,7 +95,6 @@ UACPI_BUILD_BUG_ON_WITH_MSG(
  * performance penalty in some cases.
  */
 // #define UACPI_SIZED_FREES
-
 
 /*
  * Makes uacpi_kernel_alloc_zeroed mandatory to implement by the host, uACPI
@@ -137,13 +165,12 @@ UACPI_BUILD_BUG_ON_WITH_MSG(
  * pre-formatted message that is passed to the logging callback.
  */
 #ifndef UACPI_PLAIN_LOG_BUFFER_SIZE
-    #define UACPI_PLAIN_LOG_BUFFER_SIZE 128
+#define UACPI_PLAIN_LOG_BUFFER_SIZE 128
 #endif
 
 UACPI_BUILD_BUG_ON_WITH_MSG(
     UACPI_PLAIN_LOG_BUFFER_SIZE < 16,
-    "configured log buffer size is too small (expecting at least 16 bytes)"
-);
+    "configured log buffer size is too small (expecting at least 16 bytes)");
 
 /*
  * The size of the table descriptor inline storage. All table descriptors past
@@ -151,12 +178,11 @@ UACPI_BUILD_BUG_ON_WITH_MSG(
  * of one table descriptor is approximately 56 bytes.
  */
 #ifndef UACPI_STATIC_TABLE_ARRAY_LEN
-    #define UACPI_STATIC_TABLE_ARRAY_LEN 16
+#define UACPI_STATIC_TABLE_ARRAY_LEN 16
 #endif
 
 UACPI_BUILD_BUG_ON_WITH_MSG(
     UACPI_STATIC_TABLE_ARRAY_LEN < 1,
-    "configured static table array length is too small (expecting at least 1)"
-);
+    "configured static table array length is too small (expecting at least 1)");
 
 #endif

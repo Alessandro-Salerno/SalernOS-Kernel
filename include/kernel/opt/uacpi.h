@@ -67,5 +67,6 @@ int  arch_uacpi_io_write32(opt_uacpi_handle_t handle,
                            opt_uacpi_u32_t    value);
 int  arch_uacpi_set_irq(opt_uacpi_u32_t irq, com_isr_t *isr);
 void arch_uacpi_irq_eoi(com_isr_t *isr);
+int  arch_uacpi_early_init(void);
 
 int opt_uacpi_init(opt_uacpi_u64_t flags);

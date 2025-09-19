@@ -21,6 +21,7 @@
 #include <kernel/com/io/mouse.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/x86-64/io.h>
+#include <kernel/platform/x86-64/ioapic.h>
 #include <kernel/platform/x86-64/ps2.h>
 
 #define PS2_KEYBOARD_EXTENDED_SCANCODE 0xE0
@@ -274,10 +275,10 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
     }
 }
 
-static void ps2_keyboard_eoi(com_isr_t *isr) {
+/*static void ps2_keyboard_eoi(com_isr_t *isr) {
     (void)isr;
     X86_64_IO_OUTB(0x20, 0x20);
-}
+}*/
 
 // MOUSE HANDLERS
 
@@ -313,11 +314,11 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_io_console_mouse_in(&pkt);
 }
 
-static void ps2_mouse_eoi(com_isr_t *isr) {
+/*static void ps2_mouse_eoi(com_isr_t *isr) {
     (void)isr;
     X86_64_IO_OUTB(0xA0, 0x20);
     X86_64_IO_OUTB(0x20, 0x20);
-}
+}*/
 
 // SETUP CODE
 
@@ -353,8 +354,13 @@ void x86_64_ps2_init(void) {
 
 void x86_64_ps2_keyboard_init(void) {
     KLOG("initializing ps/2 keyboard");
-    Ps2Keyboard = com_io_keyboard_new(NULL);
-    com_sys_interrupt_register(0x21, ps2_keyboard_isr, ps2_keyboard_eoi);
+    Ps2Keyboard        = com_io_keyboard_new(NULL);
+    com_isr_t *kbd_isr = com_sys_interrupt_allocate(ps2_keyboard_isr,
+                                                    x86_64_lapic_eoi);
+    x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_KEYBOARD,
+                          kbd_isr->vec,
+                          ARCH_CPU_GET_HARDWARE_ID(),
+                          false);
 }
 
 // CREDIT: vloxei64/ke
@@ -404,7 +410,12 @@ void x86_64_ps2_mouse_init(void) {
                sample_rate);
     }
 
-    Ps2Mouse.mouse     = com_io_mouse_new();
-    Ps2Mouse.has_wheel = false;
-    com_sys_interrupt_register(0x2C, ps2_mouse_isr, ps2_mouse_eoi);
+    Ps2Mouse.mouse       = com_io_mouse_new();
+    Ps2Mouse.has_wheel   = false;
+    com_isr_t *mouse_isr = com_sys_interrupt_allocate(ps2_mouse_isr,
+                                                      x86_64_lapic_eoi);
+    x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_MOUSE,
+                          mouse_isr->vec,
+                          ARCH_CPU_GET_HARDWARE_ID(),
+                          false);
 }

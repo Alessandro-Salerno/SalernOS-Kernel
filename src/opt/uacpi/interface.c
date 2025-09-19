@@ -18,17 +18,36 @@
 
 #include <kernel/opt/uacpi.h>
 #include <lib/util.h>
+#include <uacpi/event.h>
 #include <uacpi/uacpi.h>
 
-static int uacpi_to_posix(uacpi_status status) {
-    switch (status) {
-        case UACPI_STATUS_OK:
-            return 0;
-        default:
-            KASSERT(!"something went wrong");
-    }
-}
+#include "uacpi_util.h"
 
 int opt_uacpi_init(opt_uacpi_u64_t flags) {
-    return uacpi_to_posix(uacpi_initialize(flags));
+    KLOG("initializing uacpi");
+
+    uacpi_status ret = uacpi_initialize(flags);
+    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
+        goto end;
+    }
+
+    int kernel_ret = arch_uacpi_early_init();
+    if (0 != kernel_ret) {
+        return kernel_ret;
+    }
+
+    ret = uacpi_namespace_load();
+    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
+        goto end;
+    }
+
+    ret = uacpi_namespace_initialize();
+    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
+        goto end;
+    }
+
+    ret = uacpi_finalize_gpe_initialization();
+
+end:
+    return uacpi_util_status_to_posix(ret);
 }

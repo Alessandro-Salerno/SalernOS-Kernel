@@ -21,10 +21,10 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
-#include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
+#include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/mem.h>
@@ -122,6 +122,7 @@ void x86_64_smp_init(void) {
         arch_cpu_t             *cpu  = &cpus[i];
         cpu->lapic_id                = info->lapic_id;
         cpu->id                      = i;
+        cpu->root_page_table         = caller_cpu->root_page_table;
         info->extra_argument         = (uint64_t)cpu;
 
         if (info->lapic_id == smp->bsp_lapic_id) {

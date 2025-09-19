@@ -19,11 +19,10 @@
 #pragma once
 
 #include <kernel/com/sys/callout.h>
-#include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
-#include <kernel/platform/x86-64/apic.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
 #include <kernel/platform/x86-64/ist.h>
+#include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/spinlock.h>
 #include <stdbool.h>
@@ -33,9 +32,10 @@
 #define ARCH_CPU_SET_INTERRUPT_STACK(cpu, kstack) \
     (cpu)->ist.rsp0 = (uint64_t)kstack
 
-#define ARCH_CPU_GET()        __hdr_arch_cpu_get()
-#define ARCH_CPU_GET_THREAD() __hdr_arch_cpu_get_thread()
-#define ARCH_CPU_GET_ID()     __hdr_arch_cpu_get_id()
+#define ARCH_CPU_GET()             __hdr_arch_cpu_get()
+#define ARCH_CPU_GET_THREAD()      __hdr_arch_cpu_get_thread()
+#define ARCH_CPU_GET_ID()          __hdr_arch_cpu_get_id()
+#define ARCH_CPU_GET_HARDWARE_ID() __hdr_arch_cpu_get_hardware_id()
 
 #define ARCH_CPU_PAUSE() asm volatile("pause")
 
@@ -51,8 +51,8 @@ typedef struct arch_cpu {
     // Must be here
     struct com_thread *thread;
     struct arch_cpu   *self;
+    uint64_t           id;
 
-    uint64_t     id;
     uint64_t     gdt[7];
     x86_64_ist_t ist;
     uint32_t     lapic_id;
@@ -85,7 +85,13 @@ static inline struct com_thread *__hdr_arch_cpu_get_thread(void) {
 }
 
 static inline long __hdr_arch_cpu_get_id(void) {
-    long id;
-    asm volatile("mov %%gs:24, %%rax" : "=a"(id) : : "memory");
+    uint64_t id;
+    asm volatile("mov %%gs:16, %%rax" : "=a"(id) : : "memory");
     return id;
+}
+
+static inline long __hdr_arch_cpu_get_hardware_id(void) {
+    uint32_t hw_id;
+    asm volatile("mov %%gs:40, %%rax" : "=a"(hw_id) : : "memory");
+    return hw_id;
 }

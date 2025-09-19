@@ -16,8 +16,12 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/x86-64/io.h>
+#include <kernel/platform/x86-64/ioapic.h>
+#include <kernel/platform/x86-64/lapic.h>
+#include <lib/util.h>
 
 int arch_uacpi_io_map(opt_uacpi_handle_t *out_handle,
                       opt_uacpi_io_addr_t base,
@@ -74,7 +78,18 @@ int arch_uacpi_io_write32(opt_uacpi_handle_t handle,
 }
 
 int arch_uacpi_set_irq(opt_uacpi_u32_t irq, com_isr_t *isr) {
+    x86_64_ioapic_set_irq(irq,
+                          isr->vec & 0xff,
+                          ARCH_CPU_GET_HARDWARE_ID(),
+                          false);
+    return 0;
 }
 
 void arch_uacpi_irq_eoi(com_isr_t *isr) {
+    x86_64_lapic_eoi(isr);
+}
+
+int arch_uacpi_early_init(void) {
+    x86_64_ioapic_init();
+    return 0;
 }

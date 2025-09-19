@@ -16,24 +16,16 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/info.h>
+#pragma once
 
-#ifndef HAVE_OPT_ACPI
-#error "cannot include this header without having opt/acpi"
-#endif
+#include <stdbool.h>
+#include <stdint.h>
 
-#ifndef OPT_ACPI_IMPLEMENTATION
-#error "cannot use opt/acpi without having an acpi implementation"
-#endif
+#define X86_64_IOAPIC_IRQ_KEYBOARD 1
+#define X86_64_IOAPIC_IRQ_MOUSE    12
 
-typedef struct opt_acpi_table {
-    void *phys_addr;
-    void *virt_addr;
-} opt_acpi_table_t;
-
-// these functions are implemennted by platforms using this option
-arch_rsdp_t *arch_info_get_rsdp(void);
-
-// these functions are implemented by the option and used by platformes
-int opt_acpi_impl_find_table_by_signature(opt_acpi_table_t *out,
-                                          const char       *signature);
+void x86_64_ioapic_init(void);
+void x86_64_ioapic_set_irq(uint8_t irq,
+                           uint8_t vector,
+                           uint8_t proc,
+                           bool    masked);

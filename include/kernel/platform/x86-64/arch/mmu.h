@@ -26,7 +26,7 @@
 #define ARCH_MMU_USERSPACE_START   (void *)0x0000000000001000
 #define ARCH_MMU_USERSPACE_END     (void *)0x0000800000000000
 
-#define ARCH_MMU_ADDR_IS_USER(a) ((void *)a < USERSPACE_END)
+#define ARCH_MMU_ADDR_IS_USER(a) ((void *)a < ARCH_MMU_USERSPACE_END)
 
 #define ARCH_MMU_FLAGS_READ    (uint64_t)1
 #define ARCH_MMU_FLAGS_WRITE   (uint64_t)2

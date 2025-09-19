@@ -8,7 +8,7 @@
 | (at your option) any later version.                                    |
 |                                                                        |
 | This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
+
 | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
 | GNU General Public License for more details.                           |
 |                                                                        |
@@ -16,24 +16,41 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/info.h>
+#pragma once
 
-#ifndef HAVE_OPT_ACPI
-#error "cannot include this header without having opt/acpi"
+#include <errno.h>
+#include <lib/util.h>
+#include <stdbool.h>
+#include <uacpi/uacpi.h>
+
+static inline uacpi_status uacpi_util_posix_to_status(int e) {
+    switch (e) {
+        case 0:
+            return UACPI_STATUS_OK;
+        case ENOSYS:
+        case EOPNOTSUPP:
+#if ENOTSUP != EOPNOTSUPP
+        case ENOTSUP:
 #endif
+            return UACPI_STATUS_UNIMPLEMENTED;
+        case EINVAL:
+            return UACPI_STATUS_INVALID_ARGUMENT;
+        case ENOMEM:
+            return UACPI_STATUS_OUT_OF_MEMORY;
+        case EPERM:
+        case EFAULT:
+            return UACPI_STATUS_DENIED;
+        default:
+            KASSERT(!"unsupported error");
+    }
+}
 
-#ifndef OPT_ACPI_IMPLEMENTATION
-#error "cannot use opt/acpi without having an acpi implementation"
-#endif
-
-typedef struct opt_acpi_table {
-    void *phys_addr;
-    void *virt_addr;
-} opt_acpi_table_t;
-
-// these functions are implemennted by platforms using this option
-arch_rsdp_t *arch_info_get_rsdp(void);
-
-// these functions are implemented by the option and used by platformes
-int opt_acpi_impl_find_table_by_signature(opt_acpi_table_t *out,
-                                          const char       *signature);
+static int uacpi_util_status_to_posix(uacpi_status status) {
+    switch (status) {
+        case UACPI_STATUS_OK:
+            return 0;
+        default:
+            KDEBUG("wtf, got %u", status);
+            KASSERT(false);
+    }
+}

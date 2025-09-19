@@ -31,3 +31,4 @@ bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
 void                  arch_mmu_switch(arch_mmu_pagetable_t *pt);
 void                  arch_mmu_switch_default(void);
 void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr);
+arch_mmu_pagetable_t *arch_mmu_get_table(void);

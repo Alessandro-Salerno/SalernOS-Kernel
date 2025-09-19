@@ -18,7 +18,6 @@
 
 #include <arch/context.h>
 #include <assert.h>
-#include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/callout.h>
@@ -27,11 +26,14 @@
 #include <kernel/com/sys/thread.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/opt/uacpi.h>
+#include <kernel/platform/mmu.h>
 #include <lib/util.h>
 #include <stdatomic.h>
+#include <uacpi/acpi.h>
 #include <uacpi/status.h>
 #include <uacpi/types.h>
 
+#include "uacpi_util.h"
 #include <uacpi/kernel_api.h>
 #include <uacpi/platform/arch_helpers.h>
 
@@ -92,28 +94,6 @@ struct uacpi_glue_wrok {
 
 static struct uacpi_glue_global_waitlist InFlightInterruptWaitlist = {0};
 static struct uacpi_glue_global_waitlist ScheduledWorkWaitlist     = {0};
-
-static inline uacpi_status posix_to_uacpi(int e) {
-    switch (e) {
-        case 0:
-            return UACPI_STATUS_OK;
-        case ENOSYS:
-        case EOPNOTSUPP:
-#if ENOTSUP != EOPNOTSUPP
-        case ENOTSUP:
-#endif
-            return UACPI_STATUS_UNIMPLEMENTED;
-        case EINVAL:
-            return UACPI_STATUS_INVALID_ARGUMENT;
-        case ENOMEM:
-            return UACPI_STATUS_OUT_OF_MEMORY;
-        case EPERM:
-        case EFAULT:
-            return UACPI_STATUS_DENIED;
-        default:
-            KASSERT(!"unsupported error");
-    }
-}
 
 static void uacpi_glue_isr(com_isr_t *isr, arch_context_t *ctx) {
     struct uacpi_glue_isr_extra *extra = isr->extra;
@@ -210,6 +190,27 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
  *              to uACPI.
  */
 void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
+    arch_mmu_pagetable_t *pt = arch_mmu_get_table();
+    KASSERT(NULL != pt);
+
+    void     *page_paddr = (void *)((uintptr_t)addr & ~(ARCH_PAGE_SIZE - 1));
+    void     *page_vaddr = (void *)ARCH_PHYS_TO_HHDM(page_paddr);
+    uintptr_t page_off   = addr % ARCH_PAGE_SIZE;
+    size_t    size_p_off = page_off + len;
+    size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+
+    for (size_t i = 0; i < size_in_pages; i++) {
+        uintptr_t offset = i * ARCH_PAGE_SIZE;
+        void     *vaddr  = (void *)((uintptr_t)page_vaddr + offset);
+        void     *paddr  = (void *)((uintptr_t)page_paddr + offset);
+        arch_mmu_map(pt,
+                     vaddr,
+                     paddr,
+                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                         ARCH_MMU_FLAGS_NOEXEC);
+    }
+
+    return (void *)ARCH_PHYS_TO_HHDM(addr);
 }
 
 /*
@@ -375,7 +376,7 @@ uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
 uacpi_status uacpi_kernel_io_map(uacpi_io_addr base,
                                  uacpi_size    len,
                                  uacpi_handle *out_handle) {
-    return posix_to_uacpi(arch_uacpi_io_map(out_handle, base, len));
+    return uacpi_util_posix_to_status(arch_uacpi_io_map(out_handle, base, len));
 }
 
 void uacpi_kernel_io_unmap(uacpi_handle handle) {
@@ -396,37 +397,43 @@ void uacpi_kernel_io_unmap(uacpi_handle handle) {
 uacpi_status uacpi_kernel_io_read8(uacpi_handle handle,
                                    uacpi_size   offset,
                                    uacpi_u8    *out_value) {
-    return posix_to_uacpi(arch_uacpi_io_read8(out_value, handle, offset));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_read8(out_value, handle, offset));
 }
 
 uacpi_status uacpi_kernel_io_read16(uacpi_handle handle,
                                     uacpi_size   offset,
                                     uacpi_u16   *out_value) {
-    return posix_to_uacpi(arch_uacpi_io_read16(out_value, handle, offset));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_read16(out_value, handle, offset));
 }
 
 uacpi_status uacpi_kernel_io_read32(uacpi_handle handle,
                                     uacpi_size   offset,
                                     uacpi_u32   *out_value) {
-    return posix_to_uacpi(arch_uacpi_io_read32(out_value, handle, offset));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_read32(out_value, handle, offset));
 }
 
 uacpi_status uacpi_kernel_io_write8(uacpi_handle handle,
                                     uacpi_size   offset,
                                     uacpi_u8     in_value) {
-    return posix_to_uacpi(arch_uacpi_io_write8(handle, offset, in_value));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_write8(handle, offset, in_value));
 }
 
 uacpi_status uacpi_kernel_io_write16(uacpi_handle handle,
                                      uacpi_size   offset,
                                      uacpi_u16    in_value) {
-    return posix_to_uacpi(arch_uacpi_io_write16(handle, offset, in_value));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_write16(handle, offset, in_value));
 }
 
 uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
                                      uacpi_size   offset,
                                      uacpi_u32    in_value) {
-    return posix_to_uacpi(arch_uacpi_io_write32(handle, offset, in_value));
+    return uacpi_util_posix_to_status(
+        arch_uacpi_io_write32(handle, offset, in_value));
 }
 
 /*
@@ -434,6 +441,7 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
  * The contents of the allocated memory are unspecified.
  */
 void *uacpi_kernel_alloc(uacpi_size size) {
+    void *buf = UACPI_NULL;
     if (size < ARCH_PAGE_SIZE) {
         return com_mm_slab_alloc(size);
     }
@@ -506,8 +514,10 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
  * Create/free an opaque non-recursive kernel mutex object.
  */
 uacpi_handle uacpi_kernel_create_mutex(void) {
+    return uacpi_kernel_create_spinlock();
 }
-void uacpi_kernel_free_mutex(uacpi_handle) {
+void uacpi_kernel_free_mutex(uacpi_handle handle) {
+    uacpi_kernel_free_spinlock(handle);
 }
 
 /*
@@ -553,9 +563,11 @@ uacpi_thread_id uacpi_kernel_get_thread_id(void) {
  */
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle,
                                         uacpi_u16    timeout) {
+    return uacpi_kernel_lock_spinlock(handle);
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
+    uacpi_kernel_unlock_spinlock(handle, 0);
 }
 
 /*
@@ -664,7 +676,7 @@ uacpi_kernel_install_interrupt_handler(uacpi_u32               irq,
     extra->ctx                         = ctx;
     isr->extra                         = extra;
     *out_irq_handle                    = isr;
-    return posix_to_uacpi(arch_uacpi_set_irq(irq, isr));
+    return uacpi_util_posix_to_status(arch_uacpi_set_irq(irq, isr));
 }
 
 /*

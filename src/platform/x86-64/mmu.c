@@ -248,7 +248,6 @@ void arch_mmu_switch_default(void) {
     arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
 }
 
-// TODO: implement this
 void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     uint64_t *entry = get_page(pagetable, virt_addr);
     if (NULL == entry) {
@@ -256,6 +255,15 @@ void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     }
     return (void *)((*entry & ADDRMASK) +
                     ((uintptr_t)virt_addr & (ARCH_PAGE_SIZE - 1)));
+}
+
+arch_mmu_pagetable_t *arch_mmu_get_table(void) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread || NULL == curr_thread->proc) {
+        return ARCH_CPU_GET()->root_page_table;
+    }
+
+    return curr_thread->proc->page_table;
 }
 
 void arch_mmu_init(void) {
@@ -269,9 +277,8 @@ void arch_mmu_init(void) {
     // Map the higher half into the new page table
     KDEBUG("mapping higher half to kernel page table");
     for (uintmax_t i = 256; i < 512; i++) {
-        uint64_t *entry = com_mm_pmm_alloc();
+        uint64_t *entry = com_mm_pmm_alloc_zero();
         KASSERT(NULL != entry);
-        kmemset((void *)ARCH_PHYS_TO_HHDM(entry), ARCH_PAGE_SIZE, 0);
         RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE |
                        ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_USER;
     }
