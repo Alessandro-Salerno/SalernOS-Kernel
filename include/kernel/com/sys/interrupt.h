@@ -22,6 +22,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define COM_SYS_INTERRUPT_FALGS_EOI_AFTER (1 << 8)
+
 typedef struct com_isr com_isr_t;
 typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
 typedef void (*com_intf_eoi_t)(com_isr_t *isr);
@@ -31,6 +33,7 @@ typedef struct com_isr {
     com_intf_eoi_t eoi;
     uintmax_t      vec;
     void          *extra;
+    int            flags;
     bool           taken;
 } com_isr_t;
 

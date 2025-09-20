@@ -275,11 +275,6 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
     }
 }
 
-/*static void ps2_keyboard_eoi(com_isr_t *isr) {
-    (void)isr;
-    X86_64_IO_OUTB(0x20, 0x20);
-}*/
-
 // MOUSE HANDLERS
 
 // CREDIT: Mathewnd/Astral
@@ -314,12 +309,6 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_io_console_mouse_in(&pkt);
 }
 
-/*static void ps2_mouse_eoi(com_isr_t *isr) {
-    (void)isr;
-    X86_64_IO_OUTB(0xA0, 0x20);
-    X86_64_IO_OUTB(0x20, 0x20);
-}*/
-
 // SETUP CODE
 
 void x86_64_ps2_init(void) {
@@ -328,7 +317,7 @@ void x86_64_ps2_init(void) {
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_KEYBAORD);
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_MOUSE);
 
-    // FLush input buffer
+    // Flush input buffer
     while (PS2_STATUS_OUTDATA & X86_64_IO_INB(PS2_PORT_CNTL)) {
         X86_64_IO_INB(PS2_PORT_DATA);
     }
@@ -357,8 +346,9 @@ void x86_64_ps2_keyboard_init(void) {
     Ps2Keyboard        = com_io_keyboard_new(NULL);
     com_isr_t *kbd_isr = com_sys_interrupt_allocate(ps2_keyboard_isr,
                                                     x86_64_lapic_eoi);
+    kbd_isr->flags |= COM_SYS_INTERRUPT_FALGS_EOI_AFTER;
     x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_KEYBOARD,
-                          kbd_isr->vec,
+                          kbd_isr->vec & 0xff,
                           ARCH_CPU_GET_HARDWARE_ID(),
                           false);
 }
@@ -414,8 +404,9 @@ void x86_64_ps2_mouse_init(void) {
     Ps2Mouse.has_wheel   = false;
     com_isr_t *mouse_isr = com_sys_interrupt_allocate(ps2_mouse_isr,
                                                       x86_64_lapic_eoi);
+    mouse_isr->flags |= COM_SYS_INTERRUPT_FALGS_EOI_AFTER;
     x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_MOUSE,
-                          mouse_isr->vec,
+                          mouse_isr->vec & 0xff,
                           ARCH_CPU_GET_HARDWARE_ID(),
                           false);
 }

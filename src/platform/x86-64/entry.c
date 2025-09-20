@@ -88,18 +88,6 @@ void x86_64_entry(void) {
 
     com_init_splash();
 
-    // PIC initialization
-    /*X86_64_IO_OUTB(0x20, 0x11);
-    X86_64_IO_OUTB(0xA0, 0x11);
-    X86_64_IO_OUTB(0x21, 0x20);
-    X86_64_IO_OUTB(0xA1, 0x28);
-    X86_64_IO_OUTB(0x21, 4);
-    X86_64_IO_OUTB(0xA1, 2);
-    X86_64_IO_OUTB(0x21, 0x01);
-    X86_64_IO_OUTB(0xA1, 0x01);
-    X86_64_IO_OUTB(0x21, 0b11111001);
-    X86_64_IO_OUTB(0xA1, 0b11101111);*/
-
     // PHASE 1: memory, interrupts, and processors
     com_init_memory();
     x86_64_idt_stub();

@@ -84,18 +84,23 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
         curr_thread->lock_depth = 1;
     }
 
-    com_isr_t *isr = &InterruptTable[vec];
+    com_isr_t *isr       = &InterruptTable[vec];
+    bool       eoi_after = COM_SYS_INTERRUPT_FALGS_EOI_AFTER & isr->flags;
 
     if (NULL == isr) {
         com_sys_panic(ctx, "isr not set for interrupt vector %u", vec);
     }
 
-    if (NULL != isr->eoi) {
+    if (!eoi_after && NULL != isr->eoi) {
         isr->eoi(isr);
     }
 
     if (NULL != isr->func) {
         isr->func(isr, ctx);
+    }
+
+    if (eoi_after && NULL != isr->eoi) {
+        isr->eoi(isr);
     }
 
     KASSERT(curr_thread == ARCH_CPU_GET_THREAD());

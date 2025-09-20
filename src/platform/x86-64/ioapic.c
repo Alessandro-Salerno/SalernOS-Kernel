@@ -62,8 +62,9 @@ static inline void ioapic_write(void *ioapic, int reg, uint32_t v) {
 
 static struct ioapic *ioapic_by_gsi(int gsi) {
     for (size_t i = 0; i < IOAPICCount; ++i) {
-        if (IOAPICArray[i].top > gsi && IOAPICArray[i].base <= gsi) {
-            return &IOAPICArray[i];
+        struct ioapic *ioapic = &IOAPICArray[i];
+        if (gsi >= ioapic->base && gsi < ioapic->top) {
+            return ioapic;
         }
     }
 
@@ -137,6 +138,7 @@ void x86_64_ioapic_set_irq(uint8_t irq,
         struct acpi_madt_interrupt_source_override *override = madt_getentry(
             ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE,
             i);
+        KASSERT(NULL != override);
 
         if (override->source == irq) {
             polarity = override->flags & 2 ? 1 : 0; // active low
@@ -147,7 +149,8 @@ void x86_64_ioapic_set_irq(uint8_t irq,
     }
 
     struct ioapic *ioapic = ioapic_by_gsi(irq);
-    irq                   = irq - ioapic->base;
+    KASSERT(NULL != ioapic);
+    irq = irq - ioapic->base;
     iored_write(ioapic->addr,
                 irq,
                 vector,
@@ -181,27 +184,20 @@ void x86_64_ioapic_init(void) {
         struct acpi_madt_ioapic *entry = madt_getentry(
             ACPI_MADT_ENTRY_TYPE_IOAPIC,
             i);
+        struct ioapic *ioapic = &IOAPICArray[i];
 
-        IOAPICArray[i].addr = (void *)ARCH_PHYS_TO_HHDM(entry->address);
+        ioapic->addr = (void *)ARCH_PHYS_TO_HHDM(entry->address);
         arch_mmu_map(pt,
-                     IOAPICArray[i].addr,
+                     ioapic->addr,
                      (void *)(uintptr_t)entry->address,
                      ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                          ARCH_MMU_FLAGS_NOEXEC);
-        IOAPICArray[i].base = entry->gsi_base;
-        size_t count = ioapic_read(IOAPICArray[i].addr, IOAPIC_REG_ENTRY_COUNT);
-        IOAPICArray[i].top = entry->gsi_base + ((count >> 16) & 0xff) + 1;
+        ioapic->base = entry->gsi_base;
+        size_t count = ioapic_read(ioapic->addr, IOAPIC_REG_ENTRY_COUNT);
+        ioapic->top  = entry->gsi_base + ((count >> 16) & 0xff) + 1;
 
-        for (int j = IOAPICArray[i].base; j < IOAPICArray[i].top; j++) {
-            iored_write(IOAPICArray[i].addr,
-                        j - IOAPICArray[i].base,
-                        0xfe,
-                        0,
-                        0,
-                        0,
-                        0,
-                        1,
-                        0);
+        for (int j = ioapic->base; j < ioapic->top; j++) {
+            iored_write(ioapic->addr, j - ioapic->base, 0xfe, 0, 0, 0, 0, 1, 0);
         }
     }
 }
