@@ -25,6 +25,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/opt/acpi.h>
+#include <kernel/opt/pci.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/mmu.h>
 #include <lib/util.h>
@@ -96,6 +97,7 @@ static struct uacpi_glue_global_waitlist InFlightInterruptWaitlist = {0};
 static struct uacpi_glue_global_waitlist ScheduledWorkWaitlist     = {0};
 
 static void uacpi_glue_isr(com_isr_t *isr, arch_context_t *ctx) {
+    (void)ctx;
     struct uacpi_glue_isr_extra *extra = isr->extra;
 
     // Bump the number of in-flight interrupts
@@ -249,6 +251,10 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
             break;
     }
 
+#if CONFIG_LOG_LEVEL < CONST_LOG_LEVEL_DEBUG
+    (void)lvlstr;
+#endif
+
     KDEBUG("[uacpi %s] %s", lvlstr, msg);
 }
 
@@ -321,16 +327,18 @@ void uacpi_kernel_deinitialize(void) {
  */
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address,
                                           uacpi_handle     *out_handle) {
-    uint64_t v = ((uint64_t)address.segment << 48) |
-                 ((uint64_t)address.bus << 32) |
-                 ((uint64_t)address.device << 16) |
-                 ((uint64_t)address.function);
-    *out_handle = (uacpi_handle)v;
+    opt_pci_addr_t *kernel_addr = com_mm_slab_alloc(sizeof(*kernel_addr));
+    kernel_addr->segment        = address.segment;
+    kernel_addr->bus            = address.bus;
+    kernel_addr->device         = address.device;
+    kernel_addr->function       = address.function;
+
+    *out_handle = (uacpi_handle)kernel_addr;
     return UACPI_STATUS_OK;
 }
 
 void uacpi_kernel_pci_device_close(uacpi_handle handle) {
-    (void)handle;
+    com_mm_slab_free(handle, sizeof(opt_pci_addr_t));
 }
 
 /*
@@ -339,31 +347,43 @@ void uacpi_kernel_pci_device_close(uacpi_handle handle) {
 uacpi_status uacpi_kernel_pci_read8(uacpi_handle device,
                                     uacpi_size   offset,
                                     uacpi_u8    *value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_read8(value, addr, offset));
 }
 
 uacpi_status uacpi_kernel_pci_read16(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u16   *value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_read16(value, addr, offset));
 }
 
 uacpi_status uacpi_kernel_pci_read32(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u32   *value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_read32(value, addr, offset));
 }
 
 uacpi_status uacpi_kernel_pci_write8(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u8     value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_write8(addr, offset, value));
 }
 
 uacpi_status uacpi_kernel_pci_write16(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u16    value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_write16(addr, offset, value));
 }
 
 uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u32    value) {
+    opt_pci_addr_t *addr = (void *)device;
+    return uacpi_util_posix_to_status(opt_pci_write32(addr, offset, value));
 }
 
 /*
@@ -441,7 +461,6 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
  * The contents of the allocated memory are unspecified.
  */
 void *uacpi_kernel_alloc(uacpi_size size) {
-    void *buf = UACPI_NULL;
     if (size < ARCH_PAGE_SIZE) {
         return com_mm_slab_alloc(size);
     }

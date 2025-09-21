@@ -101,14 +101,13 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pdpt = next(pml4[pml4offset]);
     if (NULL == pdpt) {
-        pdpt = com_mm_pmm_alloc();
+        pdpt = com_mm_pmm_alloc_zero();
         if (NULL == pdpt) {
             return false;
         }
         pml4[pml4offset] = (uint64_t)pdpt | ARCH_MMU_FLAGS_READ |
                            ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pdpt = (uint64_t *)ARCH_PHYS_TO_HHDM(pdpt);
-        kmemset(pdpt, ARCH_PAGE_SIZE, 0);
     }
 
     if (DEPTH_PD == depth) {
@@ -118,14 +117,13 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pd = next(pdpt[pdptoffset]);
     if (NULL == pd) {
-        pd = com_mm_pmm_alloc();
+        pd = com_mm_pmm_alloc_zero();
         if (NULL == pd) {
             return false;
         }
         pdpt[pdptoffset] = (uint64_t)pd | ARCH_MMU_FLAGS_READ |
                            ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pd = (uint64_t *)ARCH_PHYS_TO_HHDM(pd);
-        kmemset(pd, ARCH_PAGE_SIZE, 0);
     }
 
     if (DEPTH_PT == depth) {
@@ -135,14 +133,13 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pt = next(pd[pdoffset]);
     if (NULL == pt) {
-        pt = com_mm_pmm_alloc();
+        pt = com_mm_pmm_alloc_zero();
         if (NULL == pt) {
             return false;
         }
         pd[pdoffset] = (uint64_t)pt | ARCH_MMU_FLAGS_READ |
                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
         pt = (uint64_t *)ARCH_PHYS_TO_HHDM(pt);
-        kmemset(pt, ARCH_PAGE_SIZE, 0);
     }
 
     pt[ptoffset] = entry;
@@ -269,10 +266,9 @@ arch_mmu_pagetable_t *arch_mmu_get_table(void) {
 void arch_mmu_init(void) {
     // Allocate the kernel (root) page table
     KLOG("initializing mmu");
-    RootTable = com_mm_pmm_alloc();
+    RootTable = com_mm_pmm_alloc_zero();
     KASSERT(NULL != RootTable);
     RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
-    kmemset(RootTable, ARCH_PAGE_SIZE, 0);
 
     // Map the higher half into the new page table
     KDEBUG("mapping higher half to kernel page table");

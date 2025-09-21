@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <uacpi/uacpi.h>
 
-static inline uacpi_status uacpi_util_posix_to_status(int e) {
+KUSED static inline uacpi_status uacpi_util_posix_to_status(int e) {
     switch (e) {
         case 0:
             return UACPI_STATUS_OK;
@@ -45,7 +45,7 @@ static inline uacpi_status uacpi_util_posix_to_status(int e) {
     }
 }
 
-static int uacpi_util_status_to_posix(uacpi_status status) {
+KUSED static int uacpi_util_status_to_posix(uacpi_status status) {
     switch (status) {
         case UACPI_STATUS_OK:
             return 0;

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/opt/acpi.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/ioapic.h>
@@ -91,5 +92,6 @@ void arch_uacpi_irq_eoi(com_isr_t *isr) {
 
 int arch_uacpi_early_init(void) {
     x86_64_ioapic_init();
+    opt_acpi_init_pci();
     return 0;
 }

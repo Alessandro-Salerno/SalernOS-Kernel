@@ -16,6 +16,8 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#pragma once
+
 #include <arch/info.h>
 
 #ifndef HAVE_OPT_ACPI
@@ -37,3 +39,6 @@ arch_rsdp_t *arch_info_get_rsdp(void);
 // these functions are implemented by the option and used by platformes
 int opt_acpi_impl_find_table_by_signature(opt_acpi_table_t *out,
                                           const char       *signature);
+
+// these functions are implemented by the ACPI option itself
+int opt_acpi_init_pci(void);
