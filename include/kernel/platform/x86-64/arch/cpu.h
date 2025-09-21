@@ -52,10 +52,10 @@ typedef struct arch_cpu {
     struct com_thread *thread;
     struct arch_cpu   *self;
     uint64_t           id;
+    uint32_t           lapic_id;
 
     uint64_t     gdt[7];
     x86_64_ist_t ist;
-    uint32_t     lapic_id;
     // NOTE: keeping this per core since some older CPUs may do weird things
     uint64_t tsc_freq;
 
@@ -84,14 +84,14 @@ static inline struct com_thread *__hdr_arch_cpu_get_thread(void) {
     return thread;
 }
 
-static inline long __hdr_arch_cpu_get_id(void) {
+static inline uint64_t __hdr_arch_cpu_get_id(void) {
     uint64_t id;
     asm volatile("mov %%gs:16, %%rax" : "=a"(id) : : "memory");
     return id;
 }
 
-static inline long __hdr_arch_cpu_get_hardware_id(void) {
+static inline uint32_t __hdr_arch_cpu_get_hardware_id(void) {
     uint32_t hw_id;
-    asm volatile("mov %%gs:40, %%rax" : "=a"(hw_id) : : "memory");
+    asm volatile("mov %%gs:24, %%rax" : "=a"(hw_id) : : "memory");
     return hw_id;
 }

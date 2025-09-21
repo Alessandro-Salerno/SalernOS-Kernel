@@ -113,7 +113,7 @@ void x86_64_entry(void) {
     x86_64_ps2_mouse_init();
     com_init_devices();
 
-    // com_init_pid1();
+    com_init_pid1();
 
     for (;;) {
         asm volatile("hlt");
