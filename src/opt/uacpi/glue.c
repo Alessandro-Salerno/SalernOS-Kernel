@@ -348,42 +348,48 @@ uacpi_status uacpi_kernel_pci_read8(uacpi_handle device,
                                     uacpi_size   offset,
                                     uacpi_u8    *value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_read8(value, addr, offset));
+    *value               = opt_pci_read8(addr, offset);
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_pci_read16(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u16   *value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_read16(value, addr, offset));
+    *value               = opt_pci_read16(addr, offset);
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_pci_read32(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u32   *value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_read32(value, addr, offset));
+    *value               = opt_pci_read32(addr, offset);
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_pci_write8(uacpi_handle device,
                                      uacpi_size   offset,
                                      uacpi_u8     value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_write8(addr, offset, value));
+    opt_pci_write8(addr, offset, value);
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_pci_write16(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u16    value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_write16(addr, offset, value));
+    opt_pci_write16(addr, offset, value);
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
                                       uacpi_size   offset,
                                       uacpi_u32    value) {
     opt_pci_addr_t *addr = (void *)device;
-    return uacpi_util_posix_to_status(opt_pci_write32(addr, offset, value));
+    opt_pci_write32(addr, offset, value);
+    return UACPI_STATUS_OK;
 }
 
 /*

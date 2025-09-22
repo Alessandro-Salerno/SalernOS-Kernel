@@ -58,6 +58,19 @@
 
 #define OPT_PCI_CAPOFF_ABSENT 0
 
+#define __PCI_ENUM_READ(func, e, off) func(&(e)->addr, off)
+#define OPT_PCI_ENUM_READ8(e, off)    __PCI_ENUM_READ(opt_pci_read8, e, off)
+#define OPT_PCI_ENUM_READ16(e, off)   __PCI_ENUM_READ(opt_pci_read16, e, off)
+#define OPT_PCI_ENUM_READ32(e, off)   __PCI_ENUM_READ(opt_pci_read32, e, off)
+
+#define __PCI_ENUM_WRITE(func, e, off, v) func(&(e)->addr, off, v)
+#define OPT_PCI_ENUM_WRIET8(e, off, v) \
+    __PCI_ENUM_WRITE(opt_pci_write8, e, off, v)
+#define OPT_PCI_ENUM_WRITE16(e, off, v) \
+    __PCI_ENUM_WRITE(opt_pci_write16, e, off, v)
+#define OPT_PCI_ENUM_WRITE32(e, off, v) \
+    __PCI_ENUM_WRITE(opt_pci_write32, e, off, v)
+
 typedef struct opt_pci_addr {
     uint32_t segment;
     uint32_t bus;
@@ -74,12 +87,12 @@ typedef struct opt_pci_overrides {
     void (*write32)(const opt_pci_addr_t *addr, size_t off, uint32_t val);
 } opt_pci_overrides_t;
 
-typedef struct {
+typedef struct opt_pci_cap {
     bool    exists;
     uint8_t offset;
 } opt_pci_cap_t;
 
-typedef struct {
+typedef struct opt_pci_bar {
     uintptr_t address;
     uintptr_t physical;
     size_t    length;
@@ -103,26 +116,27 @@ typedef struct opt_pci_enum {
     opt_pci_bar_t  bar[6];
     union {
         struct {
-            int       bir;
-            uintmax_t tableoffset;
-            int       pbir;
-            uintmax_t pboffset;
-            size_t    entrycount;
+            uint32_t bir;
+            uint32_t table_offset;
+            uint32_t pbir;
+            uint32_t pba_offset;
+            uint16_t num_entries;
         } msix;
     } irq;
 } opt_pci_enum_t;
 
 // abstraction
-int opt_pci_read8(uint8_t *out, const opt_pci_addr_t *addr, size_t off);
-int opt_pci_read16(uint16_t *out, const opt_pci_addr_t *addr, size_t off);
-int opt_pci_read32(uint32_t *out, const opt_pci_addr_t *addr, size_t off);
-int opt_pci_write8(const opt_pci_addr_t *addr, size_t off, uint8_t val);
-int opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val);
-int opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
+uint8_t  opt_pci_read8(const opt_pci_addr_t *addr, size_t off);
+uint16_t opt_pci_read16(const opt_pci_addr_t *addr, size_t off);
+uint32_t opt_pci_read32(const opt_pci_addr_t *addr, size_t off);
+void     opt_pci_write8(const opt_pci_addr_t *addr, size_t off, uint8_t val);
+void     opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val);
+void     opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
 
-// query functions
+// PCI interface
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop);
+uint16_t opt_pci_init_msix(opt_pci_enum_t *e);
 
 // setup functions
 void opt_pci_set_overrides(opt_pci_overrides_t *overrides);
