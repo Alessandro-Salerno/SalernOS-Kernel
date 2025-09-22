@@ -199,7 +199,6 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     KDEBUG("tid=%d received signal %d", thread->tid, sig);
 
     COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
-    // COM_IPC_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
 
     com_sigaction_t *sigaction = proc->sigaction[sig];
 
@@ -222,10 +221,25 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
             kspinlock_release(&proc->signal_lock);
+
+            // com_sys_proc_stop will return early if the stop signal has
+            // already been sent to a single thread. This way we don't flood the
+            // system with an infinite number of stop signals
             com_sys_proc_stop(proc, sig);
+
+            // we clear the stop signal because com_sys_proc_stop may have sent
+            // it to us again
+            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+
+            // com_sys_proc_stop will ensure that the signal is sent to all
+            // threads, so all will arrive here, and all will set themselves to
+            // not runnable
             kspinlock_acquire(&thread->sched_lock);
             thread->runnable = false;
             com_sys_sched_yield_nolock();
+
+            KASSERT(COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->pending_signals,
+                                                 SIGCONT));
 
             // After execution resumes
             // Execution gets beck here after the process receives a SIGCONT, as
@@ -324,12 +338,10 @@ int com_ipc_signal_set_mask(com_sigmask_t *mask,
 
 int com_ipc_signal_check_nolock(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
 
     int           sig        = -1;
     com_sigmask_t to_service = curr_thread->pending_signals &
-                               (~curr_thread->masked_signals) &
-                               (~curr_proc->masked_signals);
+                               (~curr_thread->masked_signals);
 
     if (to_service) {
         sig = __builtin_ffsl(to_service);

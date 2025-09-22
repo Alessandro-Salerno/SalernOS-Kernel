@@ -96,7 +96,6 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
 
     proc->signal_lock = KSPINLOCK_NEW();
     COM_IPC_SIGNAL_SIGMASK_INIT(&proc->pending_signals);
-    COM_IPC_SIGNAL_SIGMASK_INIT(&proc->masked_signals);
 
     com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
     if (NULL != parent && NULL != parent->proc_group) {
@@ -361,6 +360,7 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
 
 void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
     com_sys_proc_acquire_glock();
+    KASSERT(COM_IPC_SIGNAL_NONE != stop_signal);
 
     if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
         goto end;
@@ -375,11 +375,12 @@ void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
         com_ipc_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
-    // TODO: lock here and avoid sending multiple times
-    /*com_thread_t *t, *_;
+    com_thread_t *t, *_;
+    kspinlock_acquire(&proc->threads_lock);
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
         com_ipc_signal_send_to_thread(t, stop_signal, proc);
-    }*/
+    }
+    kspinlock_release(&proc->threads_lock);
 
 end:
     com_sys_proc_release_glock();

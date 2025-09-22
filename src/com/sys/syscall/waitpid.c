@@ -42,15 +42,14 @@ static int waitpid_proc(com_proc_t *curr_proc,
             *status = (towait->exit_status & 0xff) << 8;
             int ret = towait->pid;
             // TODO: i think this creates issues with multithreading (race where
-            // one of two wating threads may read from deallocated memory)
+            // one of two waiting threads may read from deallocated memory)
             __atomic_add_fetch(&towait->num_ref, -1, __ATOMIC_SEQ_CST);
             return ret;
         }
 
         if (COM_IPC_SIGNAL_NONE != towait->stop_signal) {
             if (towait->stop_notified) {
-                // KASSERT(WNOHANG & flags);
-                return 0;
+                goto do_wait;
             }
 
             *status               = 0x7F | (towait->stop_signal << 8);
@@ -58,6 +57,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
             return towait->pid;
         }
 
+    do_wait:
         if (WNOHANG & flags) {
             return 0;
         }

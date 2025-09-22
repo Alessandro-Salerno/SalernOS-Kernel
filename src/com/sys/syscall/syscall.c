@@ -396,16 +396,7 @@ void com_sys_syscall_init(void) {
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "set");
 
-    com_sys_syscall_register(0x1C,
-                             "sigthreadmask",
-                             com_sys_syscall_ssigthreadmask,
-                             3,
-                             COM_SYS_SYSCALL_TYPE_INT,
-                             "how",
-                             COM_SYS_SYSCALL_TYPE_PTR,
-                             "set",
-                             COM_SYS_SYSCALL_TYPE_PTR,
-                             "oset");
+    // 0x1C used to be sigthreadmask(), it's now free to use
 
     com_sys_syscall_register(0x1D,
                              "sigaction",

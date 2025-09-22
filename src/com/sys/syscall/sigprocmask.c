@@ -33,17 +33,15 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-    int sig_ret           = com_ipc_signal_set_mask(&curr_proc->masked_signals,
+    int sig_ret = com_ipc_signal_set_mask(&curr_thread->masked_signals,
                                           how,
                                           set,
                                           oset,
                                           &curr_proc->signal_lock);
 
     if (0 != sig_ret) {
-        ret.value = -1;
-        ret.err   = sig_ret;
+        return COM_SYS_SYSCALL_ERR(sig_ret);
     }
 
-    return ret;
+    return COM_SYS_SYSCALL_OK(0);
 }

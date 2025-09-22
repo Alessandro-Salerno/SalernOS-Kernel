@@ -141,7 +141,6 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid);
 COM_SYS_SYSCALL(com_sys_syscall_setsid);
 COM_SYS_SYSCALL(com_sys_syscall_sigprocmask);
 COM_SYS_SYSCALL(com_sys_syscall_sigpending);
-COM_SYS_SYSCALL(com_sys_syscall_ssigthreadmask);
 COM_SYS_SYSCALL(com_sys_syscall_sigaction);
 COM_SYS_SYSCALL(com_sys_syscall_kill);
 COM_SYS_SYSCALL(com_sys_syscall_kill_thread);
