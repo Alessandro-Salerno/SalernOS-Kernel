@@ -23,6 +23,8 @@
 #include <stdbool.h>
 #include <uacpi/uacpi.h>
 
+#define UACPI_UTIL_LOG(...) KOPTMSG("UACPI", __VA_ARGS__)
+
 KUSED static inline uacpi_status uacpi_util_posix_to_status(int e) {
     switch (e) {
         case 0:

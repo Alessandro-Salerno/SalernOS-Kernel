@@ -24,6 +24,8 @@
 // CREDIT: Mathewnd/Astral
 // NOTE: mostly inspired by Astral, also uses some parts from 2022 SalernOS
 
+#define PCI_LOG(fmt, ...) KOPTMSG("PCI", fmt "\n", __VA_ARGS__)
+
 #define PCI_FUNC_EXISTS(bus, device, function) \
     (0xffffffff != pci_raw_read32(bus, device, function, 0))
 #define PCI_DEV_EXISTS(bus, device) PCI_FUNC_EXISTS(bus, device, 0)
@@ -85,18 +87,18 @@ static void enumerate_function(uint32_t bus, uint32_t dev, uint32_t func) {
 
     LIST_INSERT_HEAD(&PCIEnumeratorList, e, tqe_enums);
 
-    KDEBUG("pci device %x:%x.%x %x %x %x:%x (rev = %x) (interrupt = %s)",
-           bus,
-           dev,
-           func,
-           e->devclass,
-           e->subclass,
-           e->vendor,
-           e->deviceid,
-           e->revision,
-           (e->msix.exists)  ? "msix"
-           : (e->msi.exists) ? "msi"
-                             : "n/a");
+    PCI_LOG("(info) device: %x:%x.%x %x %x %x:%x (rev = %x) (interrupt = %s)",
+            bus,
+            dev,
+            func,
+            e->devclass,
+            e->subclass,
+            e->vendor,
+            e->deviceid,
+            e->revision,
+            (e->msix.exists)  ? "msix"
+            : (e->msi.exists) ? "msi"
+                              : "n/a");
 }
 
 static void enumerate_device(uint32_t bus, uint32_t dev) {

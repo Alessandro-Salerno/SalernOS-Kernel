@@ -103,14 +103,13 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
         isr->eoi(isr);
     }
 
-    KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
-    KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
-
     if (ARCH_CONTEXT_ISUSER(ctx)) {
         com_ipc_signal_dispatch(ctx, curr_thread);
     }
 
     if (NULL != curr_thread) {
+        KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
+        KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
         KASSERT(1 == curr_thread->lock_depth);
         curr_thread->lock_depth = 0;
     }

@@ -19,11 +19,13 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef int kspinlock_t;
 
 #define KSPINLOCK_NEW() 0
 
 void kspinlock_acquire(kspinlock_t *lock);
+bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns);
 void kspinlock_release(kspinlock_t *lock);
 void kspinlock_fake_release();

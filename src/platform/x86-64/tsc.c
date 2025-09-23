@@ -17,13 +17,32 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/info.h>
+#include <kernel/com/sys/callout.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/platform/x86-64/cpuid.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/util.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 
-#define TSC_REQUIRED_LEAF 0x80000007
-#define TSC_CPUID_AVAIL   (1 << 8)
+#define TSC_REQUIRED_LEAF        0x80000007
+#define TSC_CPUID_AVAIL          (1 << 8)
+#define TSC_CALIBRATE_TIME_NS    (ARCH_TIMER_NS * 32)
+#define TSC_CALIBRATE_TIME_MILLS (TSC_CALIBRATE_TIME_NS / 1000000UL)
+
+// From what I could understand, if the TSC is invariant, then it ticks at a
+// constant rate across all cores, so we can calibrate it just once Of course
+// all of this is terribly stupid because it is not backwards compatible AND
+// relies on callout timer, which is very very unreliable
+static uintmax_t   StartCount   = 0;
+static uintmax_t   EndCount     = 0;
+static atomic_bool DoneSentinel = false;
+
+// NOTE: not static so we can access them from the header which is better for
+// inlining
+uintmax_t __x86_64_TSC_Frequency = 0;
+uint64_t  __x86_64_TSC_BootValue = 0;
 
 static bool tsc_probe(void) {
     uint32_t max_leaf = X86_64_CPUID_EXT_MAX_LEAF();
@@ -34,6 +53,16 @@ static bool tsc_probe(void) {
     x86_64_cpuid_t cpuid;
     X86_64_CPUID(&cpuid, TSC_REQUIRED_LEAF);
     return TSC_CPUID_AVAIL & cpuid.edx;
+}
+
+static void tsc_calibrate_timeout(com_callout_t *callout) {
+    (void)callout;
+    EndCount = X86_64_TSC_READ();
+    atomic_store(&DoneSentinel, true);
+}
+
+void x86_64_tsc_boot(void) {
+    __x86_64_TSC_BootValue = X86_64_TSC_READ();
 }
 
 void x86_64_tsc_init(void) {
@@ -60,5 +89,14 @@ void x86_64_tsc_init(void) {
     }
 
 calibrate:
-    // TODO: implement tsc calibration
+    StartCount = X86_64_TSC_READ();
+    com_sys_callout_add(tsc_calibrate_timeout, NULL, TSC_CALIBRATE_TIME_NS);
+    ARCH_CPU_ENABLE_INTERRUPTS();
+    while (!atomic_load(&DoneSentinel)) {
+        ARCH_CPU_PAUSE();
+    }
+    __x86_64_TSC_Frequency = (EndCount - StartCount) * 1000UL /
+                             TSC_CALIBRATE_TIME_MILLS;
+    KDEBUG("tsc has %u hz", __x86_64_TSC_Frequency);
+    ARCH_CPU_DISABLE_INTERRUPTS();
 }

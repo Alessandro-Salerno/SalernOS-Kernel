@@ -33,6 +33,7 @@
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <kernel/platform/x86-64/tsc.h>
 #include <lib/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
@@ -70,6 +71,7 @@ KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
 
 void x86_64_entry(void) {
     // BSP CPU initialization
+    x86_64_tsc_boot();
     ARCH_CPU_SET(&BspCpu);
     TAILQ_INIT(&BspCpu.sched_queue);
     TAILQ_INIT(&BspCpu.callout.queue);
@@ -101,6 +103,7 @@ void x86_64_entry(void) {
     com_sys_syscall_init();
     x86_64_lapic_bsp_init();
     x86_64_smp_init();
+    x86_64_tsc_init();
 
     // PHASE 3: user program interface
     com_init_filesystem();

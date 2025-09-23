@@ -78,6 +78,18 @@
 #define KLOG(...)
 #endif
 
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_OPTION
+#define KOPTMSG(optname, ...)      \
+    com_io_log_lock();             \
+    kinitlog(optname, "\033[94m"); \
+    __LOG_LOCATION();              \
+    kprintf(__VA_ARGS__);          \
+    KRESET_COLOR();                \
+    com_io_log_unlock();
+#else
+#define KOPTMSG(...)
+#endif
+
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
 #define KDEBUG(...)               \
     com_io_log_lock();            \

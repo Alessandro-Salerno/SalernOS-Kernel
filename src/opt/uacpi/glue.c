@@ -138,6 +138,13 @@ static void uacpi_glue_event_timeout(com_callout_t *callout) {
     com_sys_callout_reschedule(callout, KNANOS_PER_SEC);
 }
 
+static void uacpi_glue_sleep_timeout(com_callout_t *callout) {
+    struct uacpi_glue_waitlist *waitlist = callout->arg;
+    kspinlock_acquire(&waitlist->condvar);
+    com_sys_sched_notify(&waitlist->waitlist);
+    kspinlock_release(&waitlist->condvar);
+}
+
 static void uacpi_glue_work_dispatcher(com_callout_t *callout) {
     struct uacpi_glue_wrok *work = callout->arg;
     kspinlock_acquire(&ScheduledWorkWaitlist.waitlist.condvar);
@@ -253,9 +260,10 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
 
 #if CONFIG_LOG_LEVEL < CONST_LOG_LEVEL_DEBUG
     (void)lvlstr;
+    (void)msg;
 #endif
 
-    KDEBUG("[uacpi %s] %s", lvlstr, msg);
+    UACPI_UTIL_LOG("(%s) %s", lvlstr, msg);
 }
 
 /*
@@ -520,19 +528,35 @@ void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
  * strictly monotonic.
  */
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
-    return com_sys_callout_get_time();
+    return ARCH_CPU_GET_TIME();
 }
 
 /*
  * Spin for N microseconds.
  */
 void uacpi_kernel_stall(uacpi_u8 usec) {
+    uintmax_t start      = ARCH_CPU_GET_TIME();
+    uintmax_t usec_to_ns = (uintmax_t)usec * 1000UL;
+    uintmax_t end        = start + usec_to_ns;
+
+    while (ARCH_CPU_GET_TIME() < end) {
+        ARCH_CPU_PAUSE();
+    }
 }
 
 /*
  * Sleep for N milliseconds.
  */
 void uacpi_kernel_sleep(uacpi_u64 msec) {
+    struct uacpi_glue_waitlist waitlist;
+    TAILQ_INIT(&waitlist.waitlist);
+    waitlist.condvar = KSPINLOCK_NEW();
+    kspinlock_acquire(&waitlist.condvar);
+    com_sys_callout_add(uacpi_glue_sleep_timeout,
+                        &waitlist,
+                        msec * 1000UL * 1000UL);
+    com_sys_sched_wait(&waitlist.waitlist, &waitlist.condvar);
+    kspinlock_release(&waitlist.condvar);
 }
 
 /*
@@ -588,7 +612,11 @@ uacpi_thread_id uacpi_kernel_get_thread_id(void) {
  */
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle,
                                         uacpi_u16    timeout) {
-    return uacpi_kernel_lock_spinlock(handle);
+    if (kspinlock_acquire_timeout((kspinlock_t *)handle, timeout)) {
+        return UACPI_STATUS_OK;
+    }
+
+    return UACPI_STATUS_TIMEOUT;
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
@@ -711,8 +739,10 @@ uacpi_kernel_install_interrupt_handler(uacpi_u32               irq,
 uacpi_status
 uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
                                          uacpi_handle            irq_handle) {
+    (void)handler;
     com_isr_t *isr = (void *)irq_handle;
     com_sys_interrupt_free(isr);
+    return UACPI_STATUS_OK;
 }
 
 /*
@@ -809,4 +839,6 @@ uacpi_status uacpi_kernel_wait_for_work_completion(void) {
                            &ScheduledWorkWaitlist.waitlist.condvar);
     }
     kspinlock_release(&ScheduledWorkWaitlist.waitlist.condvar);
+
+    return UACPI_STATUS_OK;
 }

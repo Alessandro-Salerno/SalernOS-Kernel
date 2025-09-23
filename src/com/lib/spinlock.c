@@ -18,16 +18,49 @@
 
 #include <arch/cpu.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/sys/panic.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
 
+#define INCREMENT_LOCK_DEPTH(thr) \
+    if (NULL != thr)              \
+        thr->lock_depth++;
+#define DECREMENT_LOCK_DEPTH(thr) \
+    if (NULL != thr)              \
+        thr->lock_depth--;
+
+#define INCREMENT_CURR_LOCK_DEPTH() INCREMENT_LOCK_DEPTH(ARCH_CPU_GET_THREAD())
+#define DECREMENT_CURR_LOCK_DEPTH() DECREMENT_LOCK_DEPTH(ARCH_CPU_GET_THREAD())
+
+#define LOCK_ERROR(fmt, ...)                             \
+    com_sys_panic(NULL,                                  \
+                  "(lock error) " fmt " [called at %p]", \
+                  __VA_ARGS__,                           \
+                  __builtin_return_address(0));
+
+static inline void decrement_lock_depth_tested(void) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+
+    if (NULL != curr_thread) {
+        int old_depth = curr_thread->lock_depth--;
+
+        if (old_depth < 1) {
+            LOCK_ERROR(
+                "trying to unlock lock on thread with invalid lock depth %d",
+                old_depth);
+        }
+
+        if (1 == old_depth) {
+            ARCH_CPU_ENABLE_INTERRUPTS();
+        }
+    }
+}
+
 void kspinlock_acquire(kspinlock_t *lock) {
     ARCH_CPU_DISABLE_INTERRUPTS();
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL != curr_thread) {
-        curr_thread->lock_depth++;
-    }
+    INCREMENT_CURR_LOCK_DEPTH();
+
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
         if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
@@ -40,39 +73,46 @@ void kspinlock_acquire(kspinlock_t *lock) {
     }
 }
 
+bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    INCREMENT_CURR_LOCK_DEPTH();
+
+    uintmax_t start_ns = ARCH_CPU_GET_TIME();
+    uintmax_t end_ns   = start_ns + timeout_ns;
+
+    while (true) {
+        // this is before the spinning since hopefully the lock is uncontended
+        if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
+            return true;
+        }
+        // spin with no ordering constraints
+        while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
+            if (end_ns <= ARCH_CPU_GET_TIME()) {
+                goto fail;
+            }
+            ARCH_CPU_PAUSE();
+        }
+    }
+
+fail:
+    // Control reaches here only in case of timeout
+    DECREMENT_CURR_LOCK_DEPTH();
+    return false;
+}
+
 void kspinlock_release(kspinlock_t *lock) {
-    if (!(*lock)) {
-        KDEBUG("trying to unlock unlocked lock at %p",
-               __builtin_return_address(0));
-    } else if (1 != *lock) {
-        KDEBUG("lock %p (released at %p) has value %d",
-               lock,
-               __builtin_return_address(0),
-               *lock);
+    if (0 == *lock) {
+        LOCK_ERROR("trying to unlock unlocked lock %p", lock);
     }
-    KASSERT(1 == *lock);
+
+    if (1 != *lock) {
+        LOCK_ERROR("lock at %p has impossible value %d", lock, *lock);
+    }
+
     __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL != curr_thread) {
-        int oldval = curr_thread->lock_depth--;
-        if (oldval == 0) {
-            KDEBUG("trying to unlock with depth 0 at %p",
-                   __builtin_return_address(0));
-        }
-        KASSERT(oldval != 0);
-        if (oldval == 1) {
-            ARCH_CPU_ENABLE_INTERRUPTS();
-        }
-    }
+    decrement_lock_depth_tested();
 }
 
 void kspinlock_fake_release() {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL != curr_thread) {
-        int oldval = curr_thread->lock_depth--;
-        KASSERT(oldval != 0);
-        if (oldval == 1) {
-            ARCH_CPU_ENABLE_INTERRUPTS();
-        }
-    }
+    decrement_lock_depth_tested();
 }

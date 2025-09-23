@@ -24,6 +24,7 @@
 #include <kernel/platform/x86-64/ist.h>
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <kernel/platform/x86-64/tsc.h>
 #include <lib/spinlock.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,6 +47,8 @@
     x86_64_lapic_send_ipi((dst_cpu)->lapic_id, X86_64_LAPIC_SELF_IPI_INTERRUPT);
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
+
+#define ARCH_CPU_GET_TIME() X86_64_TSC_GET_NS()
 
 typedef struct arch_cpu {
     // Must be here

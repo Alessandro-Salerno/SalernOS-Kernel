@@ -31,9 +31,10 @@
 // Log levels (relative, use >= in #if)
 #define CONST_LOG_LEVEL_URGENT  2 /* Enable KURGENT */
 #define CONST_LOG_LEVEL_INFO    3 /* Enable KLOG */
-#define CONST_LOG_LEVEL_DEBUG   4 /* Enable KDEBUG */
-#define CONST_LOG_LEVEL_USER    5 /* Enable kprint syscall */
-#define CONST_LOG_LEVEL_SYSCALL 6 /* Enable system call logging */
+#define CONST_LOG_LEVEL_OPTION  4 /* Enable KOPTMSG */
+#define CONST_LOG_LEVEL_DEBUG   5 /* Enable KDEBUG */
+#define CONST_LOG_LEVEL_USER    6 /* Enable kprint syscall */
+#define CONST_LOG_LEVEL_SYSCALL 7 /* Enable system call logging */
 
 // Log location
 #define CONST_LOG_LOCATION_NONE 0
@@ -66,7 +67,7 @@
  *                                CONFIGURATION
  * ****************************************************************************/
 
-#define CONFIG_LOG_LEVEL          CONST_LOG_LEVEL_DEBUG /* Kernel log level */
+#define CONFIG_LOG_LEVEL          CONST_LOG_LEVEL_OPTION /* Kernel log level */
 #define CONFIG_LOG_ALLOW_COLORS   1 /* Allow colors in logging */
 #define CONFIG_LOG_SEP_LEN        7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL     1 /* Use serial output for kernel logging */
