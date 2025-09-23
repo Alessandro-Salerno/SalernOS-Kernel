@@ -273,7 +273,6 @@ cleanup:
     return ret;
 }
 
-// TODO: read locks?
 int com_fs_tmpfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
@@ -340,7 +339,6 @@ int com_fs_tmpfs_read(void        *buf,
     return 0;
 }
 
-// TODO: lock only the write side?
 int com_fs_tmpfs_write(size_t      *bytes_written,
                        com_vnode_t *node,
                        void        *buf,
@@ -467,9 +465,7 @@ int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     struct tmpfs_node *file = node->extra;
     out->st_blksize         = 512;
     out->st_ino             = (unsigned long)file;
-    out->st_mode = 0700; // TODO: this may cause issues (ke says it makes xorg
-                         // "happy")
-
+    out->st_mode            = 0700;
     if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;
         out->st_size   = file->file.size;

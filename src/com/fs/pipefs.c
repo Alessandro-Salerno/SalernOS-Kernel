@@ -58,7 +58,6 @@ int com_fs_pipefs_read(void        *buf,
                        uintmax_t    flags) {
     (void)off;
     (void)flags;
-    KDEBUG("pipe read");
 
     struct pipefs_node *pipe = node->extra;
     kspinlock_acquire(&pipe->lock);
@@ -84,7 +83,6 @@ int com_fs_pipefs_read(void        *buf,
         size_t end    = PIPE_BUF_SZ - modidx;
 
         kmemcpy(buf, (uint8_t *)pipe->buf + modidx, KMIN(readsz, end));
-
         if (readsz > end) {
             kmemcpy((uint8_t *)buf + end, pipe->buf, readsz - end);
         }
@@ -123,14 +121,12 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    KDEBUG("pipe write");
     kspinlock_acquire(&pipe->lock);
 
     size_t req_space   = buflen;
     size_t write_count = 0;
 
     if (buflen > PIPE_BUF_SZ) {
-        // TODO: take a look here
         req_space = 1;
     }
 
@@ -155,7 +151,6 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         size_t end     = PIPE_BUF_SZ - modidx;
 
         kmemcpy(pipe->buf + modidx, buf, KMIN(writesz, end));
-
         if (writesz > end) {
             kmemcpy(pipe->buf, (uint8_t *)buf + end, writesz - end);
         }
@@ -176,6 +171,7 @@ end:
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
         com_mm_slab_free(node, sizeof(com_vnode_t));
     }
+
     return ret;
 }
 
