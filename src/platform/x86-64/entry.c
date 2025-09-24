@@ -102,8 +102,8 @@ void x86_64_entry(void) {
     com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
     com_sys_syscall_init();
     x86_64_lapic_bsp_init();
+    x86_64_tsc_bsp_init();
     x86_64_smp_init();
-    x86_64_tsc_init();
 
     // PHASE 3: user program interface
     com_init_filesystem();

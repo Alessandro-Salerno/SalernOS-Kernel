@@ -26,6 +26,7 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <kernel/platform/x86-64/tsc.h>
 #include <lib/mem.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
@@ -46,7 +47,6 @@ static uint8_t TemporaryStack[512 * MAX_CPUS];
 
 static arch_cpu_t *Cpus;
 static size_t      NumCpus;
-static uintmax_t   InitTime;
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
     ARCH_CPU_DISABLE_INTERRUPTS();
@@ -71,12 +71,13 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     arch_mmu_switch_default();
 
     TAILQ_INIT(&cpu->callout.queue);
-    cpu->callout.ns = InitTime;
     x86_64_lapic_init();
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {
     common_cpu_init(cpu_info);
+    x86_64_tsc_init();
+
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
@@ -97,23 +98,20 @@ void x86_64_smp_init(void) {
     struct limine_smp_response *smp = SmpRequest.response;
 
     if (NULL == smp) {
-        KLOG("unable to setup smp");
+        KURGENT("unable to setup smp");
         return;
     }
 
-    arch_cpu_t *cpus       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    arch_cpu_t *cpus       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_zero());
     size_t      avail_cpus = KMIN(MAX_CPUS, smp->cpu_count);
     Cpus                   = cpus;
     NumCpus                = avail_cpus;
-    kmemset(cpus, ARCH_PAGE_SIZE, 0);
     KDEBUG("found %u cpus, using max = %u, initializing %u cpus",
            smp->cpu_count,
            MAX_CPUS,
            avail_cpus);
 
     arch_cpu_t *caller_cpu = ARCH_CPU_GET();
-    kspinlock_acquire(&caller_cpu->callout.lock);
-    InitTime = caller_cpu->callout.ns;
 
     for (size_t i = 0; i < avail_cpus; i++) {
         struct limine_smp_info *info = smp->cpus[i];
@@ -124,6 +122,7 @@ void x86_64_smp_init(void) {
         info->extra_argument         = (uint64_t)cpu;
 
         if (info->lapic_id == smp->bsp_lapic_id) {
+            *cpu = *caller_cpu;
             common_cpu_init(info);
             com_sys_callout_set_bsp_nolock(&cpu->callout);
             continue;
@@ -136,8 +135,6 @@ void x86_64_smp_init(void) {
             asm("pause");
         }
     }
-
-    kspinlock_release(&caller_cpu->callout.lock);
 }
 
 arch_cpu_t *x86_64_smp_get_random(void) {

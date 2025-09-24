@@ -25,6 +25,7 @@
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
+#include <kernel/platform/x86-64/pit.h>
 #include <lib/printf.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -56,13 +57,6 @@ static uint32_t lapic_read(uint32_t offset) {
     return *(volatile uint32_t *)(ARCH_PHYS_TO_HHDM(BSP_APIC_ADDR) + offset);
 }
 
-static uint16_t pit_read(void) {
-    X86_64_IO_OUTB(0x43, 0);
-    uint8_t low  = X86_64_IO_INB(0x40);
-    uint8_t high = X86_64_IO_INB(0x40);
-    return low | high << 8;
-}
-
 void x86_64_lapic_eoi(com_isr_t *isr) {
     (void)isr;
     lapic_write(E_LAPIC_REG_EOI, 0);
@@ -71,27 +65,11 @@ void x86_64_lapic_eoi(com_isr_t *isr) {
 static void lapic_calibrate(void) {
     lapic_write(E_LAPIC_REG_LVT_TIMER, 1UL << 16);
     lapic_write(E_LAPIC_REG_DIV_CONF, 0);
-
-    X86_64_IO_OUTB(0x43, 0x34);
-    X86_64_IO_OUTB(0x40, 0xff);
-    X86_64_IO_OUTB(0x40, 0xff);
-
-    uint64_t delta    = 32768;
-    uint16_t start    = 0xffff - pit_read();
-    uint16_t meas_pit = start;
-
     lapic_write(E_LAPIC_REG_INIT_COUNT, 0xffffffff);
 
-    while (true) {
-        meas_pit = 0xffff - pit_read();
-
-        if ((uint16_t)(meas_pit - start) >= delta) {
-            break;
-        }
-    }
-
+    uint16_t meas_pit   = x86_64_pit_wait_ticks(32768);
     uint64_t meas_lapic = 0xffffffff - lapic_read(E_LAPIC_REG_CURR_COUNT);
-    TicksPerSec         = (meas_lapic * 1193182UL) / meas_pit;
+    TicksPerSec         = (meas_lapic * X86_64_PIT_FREQUENCY) / meas_pit;
 }
 
 static void periodic(uint64_t ns, size_t interrupt) {

@@ -43,8 +43,8 @@
 #define ARCH_PAGE_ROUND(addr) \
     ((uintptr_t)(addr) & ~((uintptr_t)ARCH_PAGE_SIZE - 1))
 
-#define ARCH_TIMER_NS (8UL * 1000UL * 1000UL)
-#define ARCH_SCHED_NS (64UL * 1000UL * 1000UL)
+#define ARCH_TIMER_NS (1UL * 1000UL * 1000UL)
+#define ARCH_SCHED_NS (16UL * 1000UL * 1000UL)
 
 // This type must contain the following fields:
 //  - uintmax_t (or any integer) type

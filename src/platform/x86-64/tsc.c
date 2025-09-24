@@ -17,32 +17,27 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/info.h>
-#include <kernel/com/sys/callout.h>
-#include <kernel/com/sys/sched.h>
 #include <kernel/platform/x86-64/cpuid.h>
+#include <kernel/platform/x86-64/pit.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-#define TSC_REQUIRED_LEAF        0x80000007
-#define TSC_CPUID_AVAIL          (1 << 8)
-#define TSC_CALIBRATE_TIME_NS    (ARCH_TIMER_NS * 32)
-#define TSC_CALIBRATE_TIME_MILLS (TSC_CALIBRATE_TIME_NS / 1000000UL)
+#define TSC_REQUIRED_LEAF       0x80000007
+#define TSC_CPUID_AVAIL         (1 << 8)
+#define TSC_CALIBRATE_PIT_TICKS (32768)
 
 // From what I could understand, if the TSC is invariant, then it ticks at a
 // constant rate across all cores, so we can calibrate it just once Of course
 // all of this is terribly stupid because it is not backwards compatible AND
-// relies on callout timer, which is very very unreliable
-static uintmax_t   StartCount   = 0;
-static uintmax_t   EndCount     = 0;
-static atomic_bool DoneSentinel = false;
+// relies on PIT, which is not precise enough
 
 // NOTE: not static so we can access them from the header which is better for
 // inlining
-uintmax_t __x86_64_TSC_Frequency = 0;
-uint64_t  __x86_64_TSC_BootValue = 0;
+uint64_t __x86_64_TSC_BootValue = 0;
+uint64_t __x86_64_TSC_BootTime  = 0;
 
 static bool tsc_probe(void) {
     uint32_t max_leaf = X86_64_CPUID_EXT_MAX_LEAF();
@@ -55,14 +50,15 @@ static bool tsc_probe(void) {
     return TSC_CPUID_AVAIL & cpuid.edx;
 }
 
-static void tsc_calibrate_timeout(com_callout_t *callout) {
-    (void)callout;
-    EndCount = X86_64_TSC_READ();
-    atomic_store(&DoneSentinel, true);
-}
-
 void x86_64_tsc_boot(void) {
     __x86_64_TSC_BootValue = X86_64_TSC_READ();
+}
+
+void x86_64_tsc_bsp_init(void) {
+    KASSERT(0 == __x86_64_TSC_BootTime);
+    x86_64_tsc_init();
+    __x86_64_TSC_BootTime = X86_64_TSC_VAL_TO_NS(ARCH_CPU_GET()->tsc_freq,
+                                                 __x86_64_TSC_BootValue);
 }
 
 void x86_64_tsc_init(void) {
@@ -71,6 +67,7 @@ void x86_64_tsc_init(void) {
     }
 
     KLOG("initializing tsc");
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
 
     if (X86_64_CPUID_BASE_MAX_LEAF() >= 0x15) {
         x86_64_cpuid_t regs;
@@ -83,20 +80,16 @@ void x86_64_tsc_init(void) {
         uint64_t core_freq        = regs.ecx;
         uint64_t core_numerator   = regs.ebx;
         uint64_t core_denominator = regs.eax;
-        ARCH_CPU_GET()->tsc_freq  = core_freq * core_numerator /
-                                   core_denominator;
+        curr_cpu->tsc_freq = core_freq * core_numerator / core_denominator;
         return;
     }
 
-calibrate:
-    StartCount = X86_64_TSC_READ();
-    com_sys_callout_add(tsc_calibrate_timeout, NULL, TSC_CALIBRATE_TIME_NS);
-    ARCH_CPU_ENABLE_INTERRUPTS();
-    while (!atomic_load(&DoneSentinel)) {
-        ARCH_CPU_PAUSE();
-    }
-    __x86_64_TSC_Frequency = (EndCount - StartCount) * 1000UL /
-                             TSC_CALIBRATE_TIME_MILLS;
-    KDEBUG("tsc has %u hz", __x86_64_TSC_Frequency);
-    ARCH_CPU_DISABLE_INTERRUPTS();
+calibrate:;
+    uintmax_t start_tsc = X86_64_TSC_READ();
+    uint64_t  meas_pit  = x86_64_pit_wait_ticks(TSC_CALIBRATE_PIT_TICKS);
+    uintmax_t end_tsc   = X86_64_TSC_READ();
+    curr_cpu->tsc_freq  = (end_tsc - start_tsc) / meas_pit *
+                         X86_64_PIT_FREQUENCY;
+
+    KDEBUG("tsc has %u hz measured with pit=%u", curr_cpu->tsc_freq, meas_pit);
 }
