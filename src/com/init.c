@@ -60,7 +60,7 @@ static com_term_t  *MainTerm   = NULL;
 static com_vnode_t *MainTtyDev = NULL;
 static com_vfs_t   *RootFs     = NULL;
 
-static void init_tmpfs(com_vfs_t *rootfs) {
+static com_vfs_t *init_tmpfs(com_vfs_t *rootfs) {
     com_vnode_t *tmpfs_mountpoint = NULL;
     com_vfs_t   *tmpfs            = NULL;
     com_fs_tmpfs_mkdir(&tmpfs_mountpoint,
@@ -70,9 +70,10 @@ static void init_tmpfs(com_vfs_t *rootfs) {
                        0,
                        0);
     com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
+    return tmpfs;
 }
 
-static void init_procfs(com_vfs_t *rootfs) {
+static com_vfs_t *init_procfs(com_vfs_t *rootfs) {
     com_vnode_t *procfs_mountpoint = NULL;
     com_vfs_t   *procfs            = NULL;
     com_fs_tmpfs_mkdir(&procfs_mountpoint,
@@ -82,6 +83,7 @@ static void init_procfs(com_vfs_t *rootfs) {
                        0,
                        0);
     com_fs_tmpfs_mount(&procfs, procfs_mountpoint);
+    return procfs;
 }
 
 void com_init_splash(void) {
@@ -102,7 +104,7 @@ void com_init_filesystem(void) {
     com_fs_tmpfs_mount(&rootfs, NULL);
 
     init_tmpfs(rootfs);
-    init_procfs(rootfs);
+    com_vfs_t *procfs = init_procfs(rootfs);
 
 #if CONFIG_LOG_USE_VNODE
     com_vnode_t *proc_kernel = NULL;
@@ -218,5 +220,6 @@ void com_init_pid1(void) {
     com_io_log_set_user_hook(NULL);
     com_io_term_enable(MainTerm);
     com_io_term_set_buffering(MainTerm, true);
+    com_io_log_set_vnode(NULL);
     arch_context_trampoline(&thread->ctx);
 }

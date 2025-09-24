@@ -25,6 +25,7 @@
 // NOTE: mostly inspired by Astral, also uses some parts from 2022 SalernOS
 
 #define PCI_LOG(fmt, ...) KOPTMSG("PCI", fmt "\n", __VA_ARGS__)
+#define PCI_PANIC()       com_sys_panic(NULL, "pci error");
 
 #define PCI_FUNC_EXISTS(bus, device, function) \
     (0xffffffff != pci_raw_read32(bus, device, function, 0))
@@ -168,6 +169,27 @@ opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop) {
     return offset;
 }
 
+void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode) {
+    uint16_t command = OPT_PCI_ENUM_READ16(e, OPT_PCI_CONFIG_COMMAND);
+
+    switch (mask_mode) {
+        case OPT_PCI_MASKMODE_SET:
+            command |= mask;
+            break;
+        case OPT_PCI_MASKMODE_UNSET:
+            command &= ~mask;
+            break;
+        case OPT_PCI_MASKMODE_OVERRIDE:
+            command = mask;
+            break;
+        default:
+            PCI_LOG("(error) unknown mask mode %d", mask_mode);
+            PCI_PANIC();
+    }
+
+    OPT_PCI_ENUM_WRITE16(e, OPT_PCI_CONFIG_COMMAND, command);
+}
+
 uint16_t opt_pci_init_msix(opt_pci_enum_t *e) {
     if (!e->msix.exists) {
         return 0;
@@ -185,6 +207,8 @@ uint16_t opt_pci_init_msix(opt_pci_enum_t *e) {
     uint32_t pbir          = OPT_PCI_ENUM_READ32(e, e->msix.offset + 8);
     e->irq.msix.pbir       = pbir & 0b111;
     e->irq.msix.pba_offset = pbir & ~(uint32_t)0b111;
+
+    opt_pci_set_command(e, OPT_PCI_COMMAND_IRQDISABLE, OPT_PCI_MASKMODE_SET);
 
     return e->irq.msix.num_entries;
 }

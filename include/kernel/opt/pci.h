@@ -58,6 +58,10 @@
 
 #define OPT_PCI_CAPOFF_ABSENT 0
 
+#define OPT_PCI_MASKMODE_SET      1
+#define OPT_PCI_MASKMODE_UNSET    2
+#define OPT_PCI_MASKMODE_OVERRIDE 3
+
 #define __PCI_ENUM_READ(func, e, off) func(&(e)->addr, off)
 #define OPT_PCI_ENUM_READ8(e, off)    __PCI_ENUM_READ(opt_pci_read8, e, off)
 #define OPT_PCI_ENUM_READ16(e, off)   __PCI_ENUM_READ(opt_pci_read16, e, off)

@@ -591,7 +591,11 @@ void uacpi_kernel_free_event(uacpi_handle handle) {
  * The returned thread id cannot be UACPI_THREAD_ID_NONE.
  */
 uacpi_thread_id uacpi_kernel_get_thread_id(void) {
-    return (uacpi_thread_id)ARCH_CPU_GET_THREAD();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL != curr_thread) {
+        return (uacpi_thread_id)(uintmax_t)curr_thread->tid;
+    }
+    return (uacpi_thread_id)curr_thread;
 }
 
 /*

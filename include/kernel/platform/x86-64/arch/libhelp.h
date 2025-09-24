@@ -29,3 +29,9 @@
                  : "=c"((int){0})             \
                  : "D"(dst), "S"(src), "c"(n) \
                  : "flags", "memory");
+
+#define ARCH_LIBHELP_FAST_REVERSE_MEMCPY(dst, src, n) \
+    asm volatile("std; rep movsb; cld;"               \
+                 : "=c"((int){0})                     \
+                 : "D"(dst), "S"(src), "c"(n)         \
+                 : "flags", "memory");
