@@ -167,12 +167,12 @@ void opt_pci_write8(const opt_pci_addr_t *addr, size_t off, uint8_t val) {
 
 void opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val) {
     KASSERT(NULL != Overrides);
-    Overrides->write8(addr, off, val);
+    Overrides->write16(addr, off, val);
 }
 
 void opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val) {
     KASSERT(NULL != Overrides);
-    Overrides->write8(addr, off, val);
+    Overrides->write32(addr, off, val);
 }
 
 // PCI interface
