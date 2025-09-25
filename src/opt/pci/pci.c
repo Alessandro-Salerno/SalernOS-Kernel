@@ -16,8 +16,10 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/info.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/opt/pci.h>
+#include <kernel/platform/mmu.h>
 #include <lib/util.h>
 #include <stdbool.h>
 
@@ -26,6 +28,11 @@
 
 #define PCI_LOG(fmt, ...) KOPTMSG("PCI", fmt "\n", __VA_ARGS__)
 #define PCI_PANIC()       com_sys_panic(NULL, "pci error");
+
+#define PCI_BAR_IO           1
+#define PCI_BAR_TYPE_MASK    0x6
+#define PCI_BAR_TYPE_64BIT   0x4
+#define PCI_BAR_PREFETCHABLE 0x8
 
 #define PCI_FUNC_EXISTS(bus, device, function) \
     (0xffffffff != pci_raw_read32(bus, device, function, 0))
@@ -42,6 +49,25 @@ struct msix_message {
 
 static opt_pci_overrides_t *Overrides = NULL;
 static LIST_HEAD(, opt_pci_enum) PCIEnumeratorList;
+
+static void *pci_map_bar(opt_pci_bar_t bar) {
+    arch_mmu_pagetable_t *pt          = arch_mmu_get_table();
+    arch_mmu_flags_t      cache_flags = (bar.prefetchable ? ARCH_MMU_FLAGS_WT
+                                                          : ARCH_MMU_FLAGS_UC);
+    size_t length_pages = (bar.length + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    void  *virt_addr    = (void *)ARCH_PHYS_TO_HHDM(bar.address);
+
+    for (size_t i = 0; i < length_pages; i++) {
+        uintptr_t addr_off = i * ARCH_PAGE_SIZE;
+        arch_mmu_map(pt,
+                     (void *)((uintptr_t)virt_addr + addr_off),
+                     (void *)(bar.address + addr_off),
+                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                         ARCH_MMU_FLAGS_NOEXEC | cache_flags);
+    }
+
+    return virt_addr;
+}
 
 static inline uint8_t
 pci_raw_read8(uint32_t bus, uint32_t dev, uint32_t func, size_t off) {
@@ -190,7 +216,90 @@ void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode) {
     OPT_PCI_ENUM_WRITE16(e, OPT_PCI_CONFIG_COMMAND, command);
 }
 
-uint16_t opt_pci_init_msix(opt_pci_enum_t *e) {
+opt_pci_bar_t opt_pci_get_bar(opt_pci_enum_t *e, size_t index) {
+    if (0 != e->bar[index].length) {
+        return e->bar[index];
+    }
+
+    opt_pci_bar_t ret;
+    size_t        off = 0x10 + index * 4;
+    uint32_t      bar = OPT_PCI_ENUM_READ32(e, off);
+
+    if (PCI_BAR_IO & bar) {
+        ret.mmio         = false;
+        ret.prefetchable = false;
+        ret.is64bits     = false;
+        ret.address      = bar & 0xfffffffc;
+        OPT_PCI_ENUM_WRITE32(e, off, 0xffffffff);
+        ret.length = -1;
+        OPT_PCI_ENUM_WRITE32(e, off, bar);
+        goto end;
+    }
+
+    ret.mmio         = true;
+    ret.prefetchable = PCI_BAR_PREFETCHABLE & bar;
+    ret.address = ret.physical = bar & 0xfffffff0;
+    ret.length                 = -1;
+    ret.is64bits = PCI_BAR_TYPE_64BIT == (bar & PCI_BAR_TYPE_MASK);
+
+    if (ret.is64bits) {
+        ret.address |= (uint64_t)OPT_PCI_ENUM_READ32(e, off + 4) << 32;
+    }
+
+    OPT_PCI_ENUM_WRITE32(e, off, 0xffffffff);
+    ret.length = ~(OPT_PCI_ENUM_READ32(e, off) & 0xfffffff0) + 1;
+    OPT_PCI_ENUM_WRITE32(e, off, bar);
+    ret.address = (uintptr_t)pci_map_bar(ret);
+
+end:
+    e->bar[index] = ret;
+    return ret;
+}
+
+void opt_pci_msix_set_mask(opt_pci_enum_t *e, int mask_mode) {
+    uint16_t msgctl = OPT_PCI_ENUM_READ16(e, e->msix.offset + 2);
+
+    switch (mask_mode) {
+        case OPT_PCI_MASKMODE_SET:
+            msgctl |= 0x4000;
+            break;
+        case OPT_PCI_MASKMODE_UNSET:
+            msgctl &= ~0x4000;
+            break;
+        default:
+            PCI_LOG("(error) unknown mask mode %d", mask_mode);
+            PCI_PANIC();
+    }
+
+    OPT_PCI_ENUM_WRITE16(e, e->msix.offset + 2, msgctl);
+}
+
+void opt_pci_msix_add(opt_pci_enum_t *e,
+                      uint8_t         msixvec,
+                      uintmax_t       intvec,
+                      int             flags) {
+    KASSERT(e->msix.exists);
+    KASSERT(msixvec < e->irq.msix.num_entries);
+
+    // NOTE: here address is 64 bits because we then have to split it into low
+    // and high chunks, but this is still portable as long as it is not used on
+    // a machine with addresses larger than 64 bits. But I think this is
+    // something the PCI people will look into, not me.
+    opt_pci_bar_t bir = opt_pci_get_bar(e, e->irq.msix.bir);
+    volatile struct msix_message
+        *msix_table = (void *)(bir.address + e->irq.msix.table_offset);
+    volatile struct msix_message *msix_entry = &msix_table[msixvec];
+
+    uint32_t data;
+    uint64_t address = arch_pci_msi_format_message(&data, intvec, flags);
+
+    msix_entry->addresslow  = address & 0xffffffff;
+    msix_entry->addresshigh = (address >> 32) & 0xffffffff;
+    msix_entry->data        = data;
+    msix_entry->control     = 0;
+}
+
+uint16_t opt_pci_msix_init(opt_pci_enum_t *e) {
     if (!e->msix.exists) {
         return 0;
     }

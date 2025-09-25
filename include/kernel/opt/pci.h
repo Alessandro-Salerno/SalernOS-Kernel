@@ -62,6 +62,9 @@
 #define OPT_PCI_MASKMODE_UNSET    2
 #define OPT_PCI_MASKMODE_OVERRIDE 3
 
+#define OPT_PCI_MSIFMT_EDGE_TRIGGER 1
+#define OPT_PCI_MSIFMT_DEASSERT     2
+
 #define __PCI_ENUM_READ(func, e, off) func(&(e)->addr, off)
 #define OPT_PCI_ENUM_READ8(e, off)    __PCI_ENUM_READ(opt_pci_read8, e, off)
 #define OPT_PCI_ENUM_READ16(e, off)   __PCI_ENUM_READ(opt_pci_read16, e, off)
@@ -140,8 +143,19 @@ void     opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
 // PCI interface
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop);
-uint16_t opt_pci_init_msix(opt_pci_enum_t *e);
+void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode);
+opt_pci_bar_t opt_pci_get_bar(opt_pci_enum_t *e, size_t index);
+void          opt_pci_msix_add(opt_pci_enum_t *e,
+                               uint8_t         msixvec,
+                               uintmax_t       intvec,
+                               int             flags);
+void          opt_pci_msix_set_mask(opt_pci_enum_t *e, int mask_mode);
+uint16_t      opt_pci_msix_init(opt_pci_enum_t *e);
 
 // setup functions
 void opt_pci_set_overrides(opt_pci_overrides_t *overrides);
 void opt_pci_enumate(uint32_t start_bus, uint32_t end_bus);
+
+// platform interface functions
+uint64_t
+arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags);
