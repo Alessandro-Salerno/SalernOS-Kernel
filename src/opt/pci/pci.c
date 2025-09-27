@@ -93,12 +93,12 @@ static void enumerate_function(uint32_t bus, uint32_t dev, uint32_t func) {
     e->addr.device    = dev;
     e->addr.function  = func;
     e->addr.segment   = 0;
-    e->devclass       = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_CLASS);
-    e->subclass       = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_SUBCLASS);
-    e->progif         = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_PROGIF);
-    e->vendor         = OPT_PCI_ENUM_READ16(e, OPT_PCI_CONFIG_VENDOR);
-    e->deviceid       = OPT_PCI_ENUM_READ16(e, OPT_PCI_CONFIG_DEVICEID);
-    e->revision       = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_REVISION);
+    e->info.clazz     = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_CLASS);
+    e->info.subclass  = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_SUBCLASS);
+    e->info.progif    = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_PROGIF);
+    e->info.vendor    = OPT_PCI_ENUM_READ16(e, OPT_PCI_CONFIG_VENDOR);
+    e->info.deviceid  = OPT_PCI_ENUM_READ16(e, OPT_PCI_CONFIG_DEVICEID);
+    e->info.revision  = OPT_PCI_ENUM_READ8(e, OPT_PCI_CONFIG_REVISION);
 
     uint8_t msix_off = opt_pci_get_capability_offset(e, OPT_PCI_CAP_MSIX, 0);
     if (OPT_PCI_CAPOFF_ABSENT != msix_off) {
@@ -118,11 +118,11 @@ static void enumerate_function(uint32_t bus, uint32_t dev, uint32_t func) {
             bus,
             dev,
             func,
-            e->devclass,
-            e->subclass,
-            e->vendor,
-            e->deviceid,
-            e->revision,
+            e->info.clazz,
+            e->info.subclass,
+            e->info.vendor,
+            e->info.deviceid,
+            e->info.revision,
             (e->msix.exists)  ? "msix"
             : (e->msi.exists) ? "msi"
                               : "n/a");
@@ -176,6 +176,9 @@ void opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val) {
 }
 
 // PCI interface
+
+opt_pci_enum_t *opt_pci_get_enum(opt_pci_query_t query, size_t index) {
+}
 
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop) {

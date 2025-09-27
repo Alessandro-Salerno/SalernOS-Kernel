@@ -65,6 +65,14 @@
 #define OPT_PCI_MSIFMT_EDGE_TRIGGER 1
 #define OPT_PCI_MSIFMT_DEASSERT     2
 
+#define OPT_PCI_QUERYMASK_NONE     0
+#define OPT_PCI_QUERYMASK_CLASS    1
+#define OPT_PCI_QUERYMASK_SUBCLASS 2
+#define OPT_PCI_QUERYMASK_PROGIF   4
+#define OPT_PCI_QUERYMASK_VENDOR   8
+#define OPT_PCI_QUERYMASK_DEVICEID 16
+#define OPT_PCI_QUERYMASK_REVISION 32
+
 #define __PCI_ENUM_READ(func, e, off) func(&(e)->addr, off)
 #define OPT_PCI_ENUM_READ8(e, off)    __PCI_ENUM_READ(opt_pci_read8, e, off)
 #define OPT_PCI_ENUM_READ16(e, off)   __PCI_ENUM_READ(opt_pci_read16, e, off)
@@ -84,6 +92,15 @@ typedef struct opt_pci_addr {
     uint32_t device;
     uint32_t function;
 } opt_pci_addr_t;
+
+typedef struct opt_pci_query {
+    uint8_t  clazz;
+    uint8_t  subclass;
+    uint8_t  progif;
+    uint16_t vendor;
+    uint16_t deviceid;
+    uint8_t  revision;
+} opt_pci_query_t;
 
 typedef struct opt_pci_overrides {
     uint8_t (*read8)(const opt_pci_addr_t *addr, size_t off);
@@ -110,17 +127,11 @@ typedef struct opt_pci_bar {
 
 typedef struct opt_pci_enum {
     LIST_ENTRY(opt_pci_enum) tqe_enums;
-    opt_pci_addr_t addr;
-    int            type;
-    uint8_t        devclass;
-    uint8_t        subclass;
-    uint8_t        progif;
-    uint16_t       vendor;
-    uint16_t       deviceid;
-    uint8_t        revision;
-    opt_pci_cap_t  msi;
-    opt_pci_cap_t  msix;
-    opt_pci_bar_t  bar[6];
+    opt_pci_addr_t  addr;
+    opt_pci_query_t info;
+    opt_pci_cap_t   msi;
+    opt_pci_cap_t   msix;
+    opt_pci_bar_t   bar[6];
     union {
         struct {
             uint32_t bir;
@@ -132,7 +143,13 @@ typedef struct opt_pci_enum {
     } irq;
 } opt_pci_enum_t;
 
+typedef struct opt_pci_dev_driver {
+    opt_pci_query_t wildcard;
+    int (*init)(opt_pci_enum_t *e);
+} opt_pci_dev_driver_t;
+
 // abstraction
+void     opt_pci_register_driver(opt_pci_dev_driver_t driver);
 uint8_t  opt_pci_read8(const opt_pci_addr_t *addr, size_t off);
 uint16_t opt_pci_read16(const opt_pci_addr_t *addr, size_t off);
 uint32_t opt_pci_read32(const opt_pci_addr_t *addr, size_t off);
@@ -141,6 +158,7 @@ void     opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val);
 void     opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
 
 // PCI interface
+opt_pci_enum_t *opt_pci_get_enum(opt_pci_query_t query, size_t index);
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop);
 void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode);
