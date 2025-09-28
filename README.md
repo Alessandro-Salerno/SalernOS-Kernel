@@ -29,6 +29,97 @@
   <img src=".github/Kernel-024-Mid.png" width="100%">
 </div>
 
+## Features
+As of kernel release 0.2.4 (indev), it is now possible to run a variety of programs. Ports for some well-known applications are available in the [SalernOS](https://github.com/Alessandro-Salerno/SalernOS) repository (as redistributions of those used by [Gloire](https://github.com/Ironclad-Project/Gloire) and [Astral](https;//github.com/Mathewnd/Astral)). Included are ports for the likes of Xorg, Vim, GNU Coreutils, GCC, GNU Binutils, mlibc, xterm, and more.
+
+The kernel itself supports the following features:
+
+- Platform-specific
+  - x86-64
+    - [x] GDT
+    - [x] IDT
+    - [x] PIT
+    - [x] LAPIC
+    - [x] LAPIc Timer 
+    - [x] IOAPIC
+    - [x] MMU (4-level paging)
+    - [x] Invariant TSC
+    - [x] PS/2 keyboard & mouse
+    - [x] QEMU I/o Port `0xE9` logging 
+- Common code
+  - Memory management
+    - [x] PMM
+    - [x] Slab allocator
+    - [ ] VMM (currently I call MMU code directly)
+    - [ ] Page cache (will be added soon)
+  - System management
+    - [x] System Call Interface
+    - [x] Callout (Timer multiplexer)
+    - [x] ELF loading
+    - [x] Interrupt management
+    - [x] Kernel panic
+    - [x] SMP Preemptive scheduler (RR)
+  - Process management
+    - [x] Processes
+    - [x] Threads (with userspace API)
+    - [x] Job control
+  - Input/Output Software Interfaces
+    - [x] TTY
+    - [x] PTY
+    - [x] VT-ish subsystem and multiplexing (KTTY & Kernel Console)
+    - [x] Kernel log
+  - Device Abstraction Layer (HAL)
+    - [x] Terminal
+    - [x] Keyboard
+    - [x] Mouse
+    - [ ] Block device
+  - Abstract devices
+    - [x] Linux-compatible framebuffer device
+    - [x] `/dev/null`
+    - [ ] `/dev/zero`
+    - [ ] `/dev/urandom`
+  - Inter-process communication (IPC) and synchronization
+    - [x] Pipes
+    - [x] UNIX domain sockets
+    - [x] Signals
+    - [x] Futex (Fast Userspace Mutex)
+    - [ ] Shared memory
+    - [ ] Message queues
+    - [ ] FIFOs (Named pipes)
+  - File system
+    - [x] Virtual File System (VFS)
+    - [x] initrd
+    - [x] iovec (optional)
+    - [x] piepfs
+    - [x] sockfs
+    - [x] tmpfs
+    - [x] devfs
+    - [ ] ext2
+  - Kernel library and data structures
+    - [x] Hashmap
+    - [x] Radix tree (XArray)
+    - [x] Ring buffer
+    - [x] Spinlock
+    - [x] Mutex
+    - [x] Vectored I/O Iterator
+    - [x] libc-like functions
+- Compiletime modules (a.k.a. "options", see [src/opt](./src/opt/))
+  - [x] [flanterm](https://codeberg.org/Mintsuki/Flanterm)
+  - [x] ACPI
+  - [x] [uACPI](https://github.com/uACPI/uACPI)
+  - [x] PCI/PCIe
+  - [ ] NVMe
+  - [ ] XHCI
+  - [ ] USB
+- Build system and source structure
+  - Platform abstraction: platform-specific code is placed in special directories and implements the platform interface defined in [include/platform](./include/platform)
+  - Features that may be common to some platforms are held in [src/opt](./src/opt) and may be turned on or off by platform implementations
+  - Common code shall not assume the presence of any option, but platform-specific code is allowed to do so
+  - Types, functions, and variables follow strict naming conventions
+  - Configuration is done via [config/config.h](./config/config.h) and other ifles in the [config](directory)
+  - All headers go in the [include](./include) directory, except for headers within options which are not visible to the rest of the code. Headers from external projects shall be placed under [include/vendor](./include/vendor)
+  - Options and platform implementations shall provide files required by the build system such as `useopt.mk` for options and `options.mk` for platforms
+
 ## Goals
 The SalernOS Kernel is part of the [SalernOS Project](https://github.com/Alessandro-Salerno/SalernOS). The goal of the project is to "learn by doing", i.e. building an OS because it's fun and educational. In practical terms, this means that the ultimate goal of this Kernel is to be able to run all necessary programs and do so while following [POSIX](https://en.wikipedia.org/wiki/X86-64) as much as possible to allow programs from other systems (e.g., Linux) to run.
 
@@ -36,6 +127,19 @@ The SalernOS Kernel is part of the [SalernOS Project](https://github.com/Alessan
 Development on this Kernel started on December 12th, 2021. Since then, the source code has gone through many rewrites and has experienced long periods of stagnation. Development resumed in late 2024 after almost two years of inactivity. 
 
 This is a personal project (hence the name) and holds a special place in my heart as it played a relatively significant role in my life for several years.
+
+## How to build
+### Requirements
+- GNU C compatible compiler (like GCC - preferably `<arch>-salernos-mlibc-gcc`)
+- Binutils
+- NASM (for x86-64)
+### Procedure
+Simply run the following command and hit enter:
+```
+make -j8
+```
+> [!NOTE]
+> This will only build the kernel executable for the target architecture (`bin/vmsalernos`). To build the full OS, use the tools in the [SalernOS Repository](https://github.com/Alessandro-Salerno/SalernOS).
 
 ## License
 The SalernOS Kernel is distributed under the GNU General Public License (GPL) v3.0. More details in the [LICENSE](./LICENSE) file.
