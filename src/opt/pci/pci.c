@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <errno.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/opt/pci.h>
 #include <kernel/platform/mmu.h>
@@ -40,6 +41,12 @@
 
 #define PCI_NUM_DEVICES_PER_BUS 32
 
+#define PCI_FOREACH_ENUM_WILDCARD(currptr, wildcard, wildcard_mask) \
+    for (*(currptr) = LIST_FIRST(&PCIEnumeratorList);               \
+         NULL != *(currptr) &&                                      \
+         pci_wildcard_match(*(currptr), wildcard, wildcard_mask);   \
+         *(currptr) = pci_enum_next(*(currptr), wildcard, wildcard_mask))
+
 struct msix_message {
     uint32_t addresslow;
     uint32_t addresshigh;
@@ -49,6 +56,38 @@ struct msix_message {
 
 static opt_pci_overrides_t *Overrides = NULL;
 static LIST_HEAD(, opt_pci_enum) PCIEnumeratorList;
+
+static inline bool pci_wildcard_match(opt_pci_enum_t *e,
+                                      opt_pci_query_t wildcard,
+                                      int             wildcard_mask) {
+    bool class_matches = !(OPT_PCI_QUERYMASK_CLASS & wildcard_mask) ||
+                         e->info.clazz == wildcard.clazz;
+    bool subclass_matches = !(OPT_PCI_QUERYMASK_SUBCLASS & wildcard_mask) ||
+                            e->info.subclass == wildcard.subclass;
+    bool progif_matches = !(OPT_PCI_QUERYMASK_PROGIF & wildcard_mask) ||
+                          e->info.progif == wildcard.progif;
+    bool vendor_matches = !(OPT_PCI_QUERYMASK_VENDOR & wildcard_mask) ||
+                          e->info.vendor == wildcard.vendor;
+    bool deviceid_matches = !(OPT_PCI_QUERYMASK_DEVICEID & wildcard_mask) ||
+                            e->info.deviceid == wildcard.deviceid;
+    bool revision_matches = !(OPT_PCI_QUERYMASK_REVISION & wildcard_mask) ||
+                            e->info.revision == wildcard.revision;
+
+    return class_matches && subclass_matches && progif_matches &&
+           vendor_matches && deviceid_matches && revision_matches;
+}
+
+static inline opt_pci_enum_t *
+pci_enum_next(opt_pci_enum_t *e, opt_pci_query_t wildcard, int wildcard_mask) {
+    for (opt_pci_enum_t *next = LIST_NEXT(e, tqe_enums); NULL != next;
+         next                 = LIST_NEXT(next, tqe_enums)) {
+        if (pci_wildcard_match(next, wildcard, wildcard_mask)) {
+            return next;
+        }
+    }
+
+    return NULL;
+}
 
 static void *pci_map_bar(opt_pci_bar_t bar) {
     arch_mmu_pagetable_t *pt          = arch_mmu_get_table();
@@ -323,6 +362,19 @@ uint16_t opt_pci_msix_init(opt_pci_enum_t *e) {
     opt_pci_set_command(e, OPT_PCI_COMMAND_IRQDISABLE, OPT_PCI_MASKMODE_SET);
 
     return e->irq.msix.num_entries;
+}
+
+// driver interface
+int opt_pci_install_driver(opt_pci_dev_driver_t *driver) {
+    opt_pci_enum_t *e;
+    int             ret = ENODEV;
+
+    PCI_FOREACH_ENUM_WILDCARD(&e, driver->wildcard, driver->wildcard_mask) {
+        driver->init_dev(e);
+        ret = 0;
+    }
+
+    return ret;
 }
 
 // setup functions
