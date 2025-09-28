@@ -44,9 +44,7 @@
 #define OPT_PCI_CONFIG_REVISION               0x8
 #define OPT_PCI_CONFIG_PROGIF                 0x9
 #define OPT_PCI_CONFIG_SUBCLASS               0xa
-#define OPT_PCI_SUBCLASS_STORAGE_NVM          0x8
 #define OPT_PCI_CONFIG_CLASS                  0xb
-#define OPT_PCI_CLASS_STORAGE                 0x1
 #define OPT_PCI_CONFIG_HEADERTYPE             0xe
 #define OPT_PCI_HEADERTYPE_MULTIFUNCTION_MASK 0x80
 #define OPT_PCI_HEADERTYPE_MASK               0x7f
@@ -55,6 +53,12 @@
 #define OPT_PCI_CAP_MSI                       0x5
 #define OPT_PCI_CAP_VENDORSPECIFIC            0x9
 #define OPT_PCI_CAP_MSIX                      0x11
+
+// PCI device classes
+#define OPT_PCI_CLASS_STORAGE 0x1
+
+// PCI device subclasses
+#define OPT_PCI_SUBCLASS_STORAGE_NVM 0x8
 
 #define OPT_PCI_CAPOFF_ABSENT 0
 
@@ -85,6 +89,10 @@
     __PCI_ENUM_WRITE(opt_pci_write16, e, off, v)
 #define OPT_PCI_ENUM_WRITE32(e, off, v) \
     __PCI_ENUM_WRITE(opt_pci_write32, e, off, v)
+
+#define OPT_PCI_ADDR_PRINTF_FMT "%x:%x:%x"
+#define OPT_PCI_ADDR_PRINTF_VALUES(addr) \
+    (addr).bus, (addr).device, (addr).function
 
 typedef struct opt_pci_addr {
     uint32_t segment;
@@ -145,7 +153,8 @@ typedef struct opt_pci_enum {
 
 typedef struct opt_pci_dev_driver {
     opt_pci_query_t wildcard;
-    int (*init)(opt_pci_enum_t *e);
+    int             wildcard_mask;
+    int (*init_dev)(opt_pci_enum_t *e);
 } opt_pci_dev_driver_t;
 
 // abstraction
@@ -158,7 +167,6 @@ void     opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val);
 void     opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
 
 // PCI interface
-opt_pci_enum_t *opt_pci_get_enum(opt_pci_query_t query, size_t index);
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop);
 void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode);
@@ -169,6 +177,9 @@ void          opt_pci_msix_add(opt_pci_enum_t *e,
                                int             flags);
 void          opt_pci_msix_set_mask(opt_pci_enum_t *e, int mask_mode);
 uint16_t      opt_pci_msix_init(opt_pci_enum_t *e);
+
+// driver interface
+int opt_pci_install_driver(opt_pci_dev_driver_t *driver);
 
 // setup functions
 void opt_pci_set_overrides(opt_pci_overrides_t *overrides);

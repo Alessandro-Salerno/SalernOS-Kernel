@@ -42,9 +42,8 @@
 #define PCI_NUM_DEVICES_PER_BUS 32
 
 #define PCI_FOREACH_ENUM_WILDCARD(currptr, wildcard, wildcard_mask) \
-    for (*(currptr) = LIST_FIRST(&PCIEnumeratorList);               \
-         NULL != *(currptr) &&                                      \
-         pci_wildcard_match(*(currptr), wildcard, wildcard_mask);   \
+    for (*(currptr) = pci_enum_first(wildcard, wildcard_mask);      \
+         NULL != *(currptr);                                        \
          *(currptr) = pci_enum_next(*(currptr), wildcard, wildcard_mask))
 
 struct msix_message {
@@ -75,6 +74,18 @@ static inline bool pci_wildcard_match(opt_pci_enum_t *e,
 
     return class_matches && subclass_matches && progif_matches &&
            vendor_matches && deviceid_matches && revision_matches;
+}
+
+static inline opt_pci_enum_t *pci_enum_first(opt_pci_query_t wildcard,
+                                             int             wildcard_mask) {
+    opt_pci_enum_t *e, *_;
+    LIST_FOREACH_SAFE(e, &PCIEnumeratorList, tqe_enums, _) {
+        if (pci_wildcard_match(e, wildcard, wildcard_mask)) {
+            return e;
+        }
+    }
+
+    return NULL;
 }
 
 static inline opt_pci_enum_t *
@@ -215,9 +226,6 @@ void opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val) {
 }
 
 // PCI interface
-
-opt_pci_enum_t *opt_pci_get_enum(opt_pci_query_t query, size_t index) {
-}
 
 uint8_t
 opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop) {
@@ -365,6 +373,7 @@ uint16_t opt_pci_msix_init(opt_pci_enum_t *e) {
 }
 
 // driver interface
+
 int opt_pci_install_driver(opt_pci_dev_driver_t *driver) {
     opt_pci_enum_t *e;
     int             ret = ENODEV;

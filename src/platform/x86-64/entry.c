@@ -23,6 +23,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/opt/flanterm.h>
+#include <kernel/opt/nvme.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/e9.h>
@@ -115,6 +116,7 @@ void x86_64_entry(void) {
     x86_64_ps2_keyboard_init();
     x86_64_ps2_mouse_init();
     com_init_devices();
+    opt_nvme_init();
 
     com_init_pid1();
 
