@@ -1,6 +1,6 @@
 <p align="center">
     <h1 align="center">SalernOS Kernel</h1>
-    <p align="center"> Tiny x86-64 Unix-like Kernel </p>
+    <p align="center">Almost usable x86-64 Unix-like kernel</p>
 </p>
 
 <div align="center">
