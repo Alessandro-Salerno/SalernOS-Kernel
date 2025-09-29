@@ -19,6 +19,7 @@
 #pragma once
 
 #include <arch/mmu.h>
+#include <kernel/com/mm/vmm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -96,8 +97,8 @@ int           kioviter_write_from_ringbuffer_nolock(kioviter_t         *ioviter,
                                                     void *cb_arg,
                                                     void *hu_arg);
 struct iovec *kioviter_next(kioviter_t *ioviter);
-int           kioviter_next_page(void                **out_phys_page,
-                                 size_t               *out_page_off,
-                                 size_t               *out_page_rem,
-                                 kioviter_t           *ioviter,
-                                 arch_mmu_pagetable_t *pagetable);
+int           kioviter_next_page(void             **out_phys_page,
+                                 size_t            *out_page_off,
+                                 size_t            *out_page_rem,
+                                 kioviter_t        *ioviter,
+                                 com_vmm_context_t *vmm_context);

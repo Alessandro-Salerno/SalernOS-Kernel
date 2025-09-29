@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
@@ -79,11 +80,13 @@ static void periodic(uint64_t ns, size_t interrupt) {
 }
 
 void x86_64_lapic_bsp_init(void) {
-    arch_mmu_map(ARCH_CPU_GET()->root_page_table,
-                 (void *)ARCH_PHYS_TO_HHDM(BSP_APIC_ADDR),
-                 BSP_APIC_ADDR,
-                 ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                     ARCH_MMU_FLAGS_NOEXEC);
+    com_mm_vmm_map(NULL,
+                   NULL,
+                   BSP_APIC_ADDR,
+                   ARCH_PAGE_SIZE,
+                   COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
+                   ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                       ARCH_MMU_FLAGS_NOEXEC);
 
     lapic_calibrate();
 }

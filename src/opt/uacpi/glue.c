@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/sched.h>
@@ -199,27 +200,13 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
  *              to uACPI.
  */
 void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
-    arch_mmu_pagetable_t *pt = arch_mmu_get_table();
-    KASSERT(NULL != pt);
-
-    void     *page_paddr = (void *)((uintptr_t)addr & ~(ARCH_PAGE_SIZE - 1));
-    void     *page_vaddr = (void *)ARCH_PHYS_TO_HHDM(page_paddr);
-    uintptr_t page_off   = addr % ARCH_PAGE_SIZE;
-    size_t    size_p_off = page_off + len;
-    size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
-
-    for (size_t i = 0; i < size_in_pages; i++) {
-        uintptr_t offset = i * ARCH_PAGE_SIZE;
-        void     *vaddr  = (void *)((uintptr_t)page_vaddr + offset);
-        void     *paddr  = (void *)((uintptr_t)page_paddr + offset);
-        arch_mmu_map(pt,
-                     vaddr,
-                     paddr,
-                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                         ARCH_MMU_FLAGS_NOEXEC);
-    }
-
-    return (void *)ARCH_PHYS_TO_HHDM(addr);
+    return com_mm_vmm_map(NULL,
+                          NULL,
+                          (void *)addr,
+                          len,
+                          COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
+                          ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                              ARCH_MMU_FLAGS_NOEXEC);
 }
 
 /*

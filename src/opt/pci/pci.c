@@ -19,6 +19,7 @@
 #include <arch/info.h>
 #include <errno.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/opt/pci.h>
 #include <kernel/platform/mmu.h>
 #include <lib/util.h>
@@ -101,22 +102,15 @@ pci_enum_next(opt_pci_enum_t *e, opt_pci_query_t wildcard, int wildcard_mask) {
 }
 
 static void *pci_map_bar(opt_pci_bar_t bar) {
-    arch_mmu_pagetable_t *pt          = arch_mmu_get_table();
-    arch_mmu_flags_t      cache_flags = (bar.prefetchable ? ARCH_MMU_FLAGS_WT
-                                                          : ARCH_MMU_FLAGS_UC);
-    size_t length_pages = (bar.length + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
-    void  *virt_addr    = (void *)ARCH_PHYS_TO_HHDM(bar.address);
-
-    for (size_t i = 0; i < length_pages; i++) {
-        uintptr_t addr_off = i * ARCH_PAGE_SIZE;
-        arch_mmu_map(pt,
-                     (void *)((uintptr_t)virt_addr + addr_off),
-                     (void *)(bar.address + addr_off),
-                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                         ARCH_MMU_FLAGS_NOEXEC | cache_flags);
-    }
-
-    return virt_addr;
+    arch_mmu_flags_t cache_flags = (bar.prefetchable ? ARCH_MMU_FLAGS_WT
+                                                     : ARCH_MMU_FLAGS_UC);
+    return com_mm_vmm_map(NULL,
+                          NULL,
+                          (void *)bar.address,
+                          bar.length,
+                          COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
+                          ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                              ARCH_MMU_FLAGS_NOEXEC | cache_flags);
 }
 
 static inline uint8_t

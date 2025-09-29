@@ -43,48 +43,47 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     arch_context_t *ctx = COM_SYS_SYSCALL_CONTEXT();
 
-    com_thread_t *cur_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *proc       = cur_thread->proc;
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
 
-    kspinlock_acquire(&proc->fd_lock);
-    kspinlock_acquire(&proc->vmm_context->lock);
+    kspinlock_acquire(&curr_proc->fd_lock);
+    kspinlock_acquire(&curr_proc->vmm_context->lock);
 
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
-        proc->vmm_context);
+        curr_proc->vmm_context);
     com_proc_t *new_proc = com_sys_proc_new(new_vmm_ctx,
-                                            proc->pid,
-                                            proc->root,
-                                            proc->cwd);
+                                            curr_proc->pid,
+                                            curr_proc->root,
+                                            curr_proc->cwd);
     // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
-    ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, cur_thread->xctx);
+    ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, curr_thread->xctx);
 
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
-        if (NULL != proc->fd[i].file) {
-            new_proc->fd[i].flags = proc->fd[i].flags;
-            COM_FS_FILE_HOLD(proc->fd[i].file);
-            new_proc->fd[i].file = proc->fd[i].file;
+        if (NULL != curr_proc->fd[i].file) {
+            new_proc->fd[i].flags = curr_proc->fd[i].flags;
+            COM_FS_FILE_HOLD(curr_proc->fd[i].file);
+            new_proc->fd[i].file = curr_proc->fd[i].file;
         }
     }
 
-    new_proc->next_fd = proc->next_fd;
+    new_proc->next_fd = curr_proc->next_fd;
 
     ARCH_CONTEXT_FORK(new_thread, *ctx);
 
-    __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
-    kspinlock_release(&proc->fd_lock);
-    kspinlock_release(&proc->vmm_context->lock);
-    ;
+    __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_SEQ_CST);
+    kspinlock_release(&curr_proc->fd_lock);
+    kspinlock_release(&curr_proc->vmm_context->lock);
 
-    kspinlock_acquire(&proc->signal_lock);
+    kspinlock_acquire(&curr_proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
-        if (NULL != proc->sigaction[i]) {
+        if (NULL != curr_proc->sigaction[i]) {
             com_sigaction_t *sa    = com_mm_slab_alloc(sizeof(com_sigaction_t));
-            *sa                    = *proc->sigaction[i];
+            *sa                    = *curr_proc->sigaction[i];
             new_proc->sigaction[i] = sa;
         }
     }
-    kspinlock_release(&proc->signal_lock);
+    kspinlock_release(&curr_proc->signal_lock);
 
     new_thread->runnable = false;
     com_sys_thread_ready(new_thread);

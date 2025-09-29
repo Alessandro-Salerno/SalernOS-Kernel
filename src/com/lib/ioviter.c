@@ -311,11 +311,11 @@ struct iovec *kioviter_next(kioviter_t *ioviter) {
     return ioviter->curr_iov++;
 }
 
-int kioviter_next_page(void                **out_phys_page,
-                       size_t               *out_page_off,
-                       size_t               *out_page_rem,
-                       kioviter_t           *ioviter,
-                       arch_mmu_pagetable_t *pagetable) {
+int kioviter_next_page(void             **out_phys_page,
+                       size_t            *out_page_off,
+                       size_t            *out_page_rem,
+                       kioviter_t        *ioviter,
+                       com_vmm_context_t *vmm_context) {
     size_t    curr_rem  = KIOVITER_CURR_REMAINING(ioviter);
     void     *phys_page = NULL;
     uintptr_t page_off  = 0;
@@ -326,7 +326,7 @@ int kioviter_next_page(void                **out_phys_page,
         void *vaddr = (void *)((uint8_t *)ioviter->curr_iov->iov_base +
                                ioviter->curr_off);
         page_off    = (uintptr_t)vaddr % ARCH_PAGE_SIZE;
-        void *paddr = arch_mmu_get_physical(pagetable, vaddr);
+        void *paddr = com_mm_vmm_get_physical(vmm_context, vaddr);
         if (NULL == paddr) {
             ret = EFAULT;
             goto end;

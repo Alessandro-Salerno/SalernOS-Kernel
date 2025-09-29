@@ -18,6 +18,7 @@
 
 #include <arch/mmu.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/opt/pci.h>
 #include <kernel/platform/mmu.h>
@@ -152,28 +153,20 @@ int opt_acpi_init_pci(void) {
             mcfg->entries,
             MCFGNumEntries * sizeof(struct acpi_mcfg_allocation));
 
-    arch_mmu_pagetable_t *pt = arch_mmu_get_table();
-
     for (size_t i = 0; i < MCFGNumEntries; i++) {
         void     *phys_addr    = (void *)MCFGEntries[i].address;
-        void     *virt_addr    = (void *)ARCH_PHYS_TO_HHDM(phys_addr);
         uintptr_t page_off     = (uintptr_t)phys_addr % ARCH_PAGE_SIZE;
         size_t    mapping_size = page_off +
                               MCFG_MAPPING_SIZE(MCFGEntries[i].end_bus -
                                                 MCFGEntries[i].start_bus + 1);
-        size_t mapping_size_pages = (mapping_size + ARCH_PAGE_SIZE - 1) /
-                                    ARCH_PAGE_SIZE;
 
-        for (size_t j = 0; j < mapping_size_pages; j++) {
-            uintptr_t page_to_off = j * ARCH_PAGE_SIZE;
-            arch_mmu_map(pt,
-                         (void *)((uintptr_t)virt_addr + page_to_off),
-                         (void *)((uintptr_t)phys_addr + page_to_off),
-                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_READ |
-                             ARCH_MMU_FLAGS_NOEXEC);
-        }
-
-        MCFGEntries[i].address = (uintptr_t)virt_addr + page_off;
+        MCFGEntries[i].address = (uintptr_t)com_mm_vmm_map(
+            NULL,
+            NULL,
+            phys_addr,
+            mapping_size,
+            COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
+            ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC);
     }
 
     // TODO: unref the table

@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <kernel/com/mm/vmm.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/mmu.h>
@@ -178,20 +179,20 @@ void x86_64_ioapic_init(void) {
     IOAPICCount = madt_getcount(ACPI_MADT_ENTRY_TYPE_IOAPIC);
     KDEBUG("found %u overrides and %u ioapics", OverrideCount, IOAPICCount);
 
-    arch_mmu_pagetable_t *pt = arch_mmu_get_table();
-
     for (size_t i = 0; i < IOAPICCount; i++) {
         struct acpi_madt_ioapic *entry = madt_getentry(
             ACPI_MADT_ENTRY_TYPE_IOAPIC,
             i);
         struct ioapic *ioapic = &IOAPICArray[i];
 
-        ioapic->addr = (void *)ARCH_PHYS_TO_HHDM(entry->address);
-        arch_mmu_map(pt,
-                     ioapic->addr,
-                     (void *)(uintptr_t)entry->address,
-                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                         ARCH_MMU_FLAGS_NOEXEC);
+        ioapic->addr = com_mm_vmm_map(
+            NULL,
+            NULL,
+            (void *)(uintptr_t)entry->address,
+            ARCH_PAGE_SIZE,
+            COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
+            ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC);
+
         ioapic->base = entry->gsi_base;
         size_t count = ioapic_read(ioapic->addr, IOAPIC_REG_ENTRY_COUNT);
         ioapic->top  = entry->gsi_base + ((count >> 16) & 0xff) + 1;

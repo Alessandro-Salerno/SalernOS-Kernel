@@ -44,6 +44,10 @@ vmm_ensure_context(com_vmm_context_t *context) {
 }
 
 com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable) {
+    if (NULL == pagetable) {
+        pagetable = arch_mmu_new_table();
+    }
+
     com_vmm_context_t *context = com_mm_slab_alloc(sizeof(com_vmm_context_t));
     context->pagetable         = pagetable;
     context->lock              = KSPINLOCK_NEW();
@@ -73,7 +77,8 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
         phys = NULL;
     }
 
-    void     *page_paddr = (void *)((uintptr_t)phys & ~(ARCH_PAGE_SIZE - 1));
+    void     *page_paddr = (void *)((uintptr_t)phys &
+                                ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     uintptr_t page_off   = (uintptr_t)phys % ARCH_PAGE_SIZE;
     size_t    size_p_off = page_off + len;
     size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
@@ -93,7 +98,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
             KASSERT(!"unsupported vmm flags");
         }
     } else {
-        virt = (void *)((uintptr_t)virt & ~(ARCH_PAGE_SIZE - 1));
+        virt = (void *)((uintptr_t)virt & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     }
 
     for (size_t i = 0; i < size_in_pages; i++) {
@@ -114,7 +119,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
         KASSERT(success);
     }
 
-    return virt;
+    return (void *)((uintptr_t)virt + page_off);
 }
 
 void com_mm_vmm_switch(com_vmm_context_t *context) {

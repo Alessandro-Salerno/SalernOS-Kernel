@@ -317,9 +317,8 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
                                char *const         env[],
                                com_proc_t         *proc,
                                arch_context_t     *ctx) {
-    com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
-        proc->vmm_context);
-    *out_vmm_context = new_vmm_ctx;
+    com_vmm_context_t *new_vmm_ctx = com_mm_vmm_new_context(NULL);
+    *out_vmm_context               = new_vmm_ctx;
 
     com_elf_data_t prog_data = {0};
     int            status    = com_sys_elf64_load(&prog_data,
