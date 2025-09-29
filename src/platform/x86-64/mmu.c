@@ -255,12 +255,9 @@ void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
 }
 
 arch_mmu_pagetable_t *arch_mmu_get_table(void) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL == curr_thread || NULL == curr_thread->proc) {
-        return ARCH_CPU_GET()->root_page_table;
-    }
-
-    return curr_thread->proc->page_table;
+    void *pt;
+    asm volatile("mov %%cr3, %0" : "=r"(pt));
+    return pt;
 }
 
 void arch_mmu_init(void) {

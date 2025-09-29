@@ -23,6 +23,7 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
@@ -54,8 +55,8 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     kspinlock_acquire(&proc->signal_lock);
     // kspinlock_acquire(&thread->sched_lock);
 
-    arch_mmu_pagetable_t *new_pt = NULL;
-    int                   status = com_sys_elf64_prepare_proc(&new_pt,
+    com_vmm_context_t *new_vmm_ctx = NULL;
+    int                status      = com_sys_elf64_prepare_proc(&new_vmm_ctx,
                                             path,
                                             argv,
                                             env,
@@ -69,9 +70,9 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     }
 
     com_sys_proc_kill_other_threads(proc, thread);
-    arch_mmu_switch(new_pt);
-    arch_mmu_destroy_table(proc->page_table);
-    proc->page_table = new_pt;
+    com_mm_vmm_switch(new_vmm_ctx);
+    com_mm_vmm_destroy_context(proc->vmm_context);
+    proc->vmm_context = new_vmm_ctx;
 
     kspinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {

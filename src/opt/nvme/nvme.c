@@ -40,6 +40,5 @@ static opt_pci_dev_driver_t NVMEDriver = {
 int opt_nvme_init(void) {
     KLOG("initializing nvme");
     int ret = opt_pci_install_driver(&NVMEDriver);
-    KASSERT(0 == ret);
     return ret;
 }

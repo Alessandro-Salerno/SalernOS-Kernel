@@ -19,6 +19,7 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
@@ -62,8 +63,8 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 if (NULL != (void *)args[i]) {
                     // TODO: poor man's usercopy, if the string is longer than
                     // ARCH_PAGE_SIZE this may still crash
-                    if (NULL != arch_mmu_get_physical(curr_proc->page_table,
-                                                      (void *)args[i])) {
+                    if (NULL != com_mm_vmm_get_physical(curr_proc->vmm_context,
+                                                        (void *)args[i])) {
                         kprintf("\"%s\"", (void *)args[i]);
                     } else {
                         kprintf("**UNMAPPED**");

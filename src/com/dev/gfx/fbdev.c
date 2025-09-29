@@ -24,6 +24,7 @@
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/io/console.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <lib/util.h>
@@ -57,40 +58,24 @@ static int fbdev_stat(struct stat *out, void *devdata) {
     return 0;
 }
 
-static int fbdev_mmap(void    **out,
-                      void     *devdata,
-                      uintptr_t hint,
-                      size_t    size,
-                      uintmax_t flags,
-                      uintmax_t prot,
-                      uintmax_t off) {
-    (void)prot;
+static int fbdev_mmap(void           **out,
+                      void            *devdata,
+                      uintptr_t        hint,
+                      size_t           size,
+                      int              vmm_flags,
+                      arch_mmu_flags_t mmu_flags,
+                      uintmax_t        off) {
     (void)off;
 
-    com_fbdev_t *fbdev     = devdata;
-    com_proc_t  *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    void        *phys      = (void *)ARCH_HHDM_TO_PHYS(fbdev->fb->address);
-    size_t       pages     = (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    com_fbdev_t *fbdev = devdata;
+    void        *phys  = (void *)ARCH_HHDM_TO_PHYS(fbdev->fb->address);
 
-    uintptr_t virt;
-    if (MAP_FIXED & flags) {
-        virt = hint;
-    } else {
-        kspinlock_acquire(&curr_proc->pages_lock);
-        virt = curr_proc->used_pages * ARCH_PAGE_SIZE + CONFIG_VMM_ANON_START;
-        curr_proc->used_pages += pages;
-        kspinlock_release(&curr_proc->pages_lock);
-    }
-
-    for (size_t i = 0; i < pages; i++) {
-        arch_mmu_map(curr_proc->page_table,
-                     (void *)(virt + i * ARCH_PAGE_SIZE),
-                     (void *)((uintptr_t)phys + i * ARCH_PAGE_SIZE),
-                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                         ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_WC);
-    }
-
-    *out = (void *)virt;
+    *out = com_mm_vmm_map(NULL,
+                          (void *)hint,
+                          phys,
+                          size,
+                          vmm_flags,
+                          mmu_flags | ARCH_MMU_FLAGS_WC);
     return 0;
 }
 

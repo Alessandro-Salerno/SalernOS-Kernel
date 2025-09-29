@@ -28,6 +28,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
 #include <signal.h>
@@ -55,21 +56,18 @@ typedef struct com_proc {
     pid_t pid;
     pid_t parent_pid;
     bool  exited;
-    int   stop_signal; // COM_IPC_SIGNAL_NONE if not stopped, signal number
-                       // otherwise
-    bool                  stop_notified;
-    int                   exit_status;
-    arch_mmu_pagetable_t *page_table;
-    size_t                num_children;
+    // COM_IPC_SIGNAL_NONE if not stopped, signal number otherwise
+    int                stop_signal;
+    bool               stop_notified;
+    int                exit_status;
+    com_vmm_context_t *vmm_context;
+    size_t             num_children;
 
     com_vnode_t           *root;
     _Atomic(com_vnode_t *) cwd;
     kspinlock_t            fd_lock;
     int                    next_fd;
     com_filedesc_t         fd[CONFIG_OPEN_MAX];
-
-    kspinlock_t pages_lock;
-    size_t      used_pages;
 
     struct com_thread_tailq notifications;
 
@@ -87,10 +85,10 @@ typedef struct com_proc {
     com_sigmask_t         pending_signals;
 } com_proc_t;
 
-com_proc_t     *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                                 pid_t                 parent_pid,
-                                 com_vnode_t          *root,
-                                 com_vnode_t          *cwd);
+com_proc_t     *com_sys_proc_new(com_vmm_context_t *vmm_context,
+                                 pid_t              parent_pid,
+                                 com_vnode_t       *root,
+                                 com_vnode_t       *cwd);
 void            com_sys_proc_destroy(com_proc_t *proc);
 int             com_sys_proc_next_fd(com_proc_t *proc);
 com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd);

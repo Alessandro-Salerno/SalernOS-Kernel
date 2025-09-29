@@ -23,6 +23,7 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
@@ -56,13 +57,13 @@ static void proc_update_fd_hint(com_proc_t *proc) {
          proc->next_fd++);
 }
 
-com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
-                             pid_t                 parent_pid,
-                             com_vnode_t          *root,
-                             com_vnode_t          *cwd) {
+com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
+                             pid_t              parent_pid,
+                             com_vnode_t       *root,
+                             com_vnode_t       *cwd) {
 
     com_proc_t *proc    = com_mm_slab_alloc(sizeof(com_proc_t));
-    proc->page_table    = page_table;
+    proc->vmm_context   = vmm_context;
     proc->exited        = false;
     proc->stop_signal   = COM_IPC_SIGNAL_NONE;
     proc->stop_notified = false;
@@ -71,11 +72,9 @@ com_proc_t *com_sys_proc_new(arch_mmu_pagetable_t *page_table,
     proc->parent_pid    = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
-    proc->root       = root;
-    proc->cwd        = cwd;
-    proc->pages_lock = KSPINLOCK_NEW();
-    proc->used_pages = 0;
-    proc->num_ref    = 1; // 1 because of the parent
+    proc->root    = root;
+    proc->cwd     = cwd;
+    proc->num_ref = 1; // 1 because of the parent
     TAILQ_INIT(&proc->notifications);
 
     proc->threads_lock = KSPINLOCK_NEW();
@@ -117,9 +116,9 @@ void com_sys_proc_destroy(com_proc_t *proc) {
         TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
     }
     kspinlock_fake_release();
-    arch_mmu_pagetable_t *proc_pt = proc->page_table;
+    com_vmm_context_t *proc_vmm_ctx = proc->vmm_context;
     com_mm_slab_free(proc, sizeof(com_proc_t));
-    arch_mmu_destroy_table(proc_pt);
+    com_mm_vmm_destroy_context(proc_vmm_ctx);
 }
 
 int com_sys_proc_next_fd(com_proc_t *proc) {

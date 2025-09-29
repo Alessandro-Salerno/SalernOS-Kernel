@@ -35,6 +35,7 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
@@ -97,6 +98,7 @@ void com_init_splash(void) {
 void com_init_memory(void) {
     com_mm_pmm_init();
     arch_mmu_init();
+    com_mm_vmm_init();
 }
 
 void com_init_filesystem(void) {
@@ -177,7 +179,7 @@ void com_init_pid1(void) {
     char *const   envp[] = {CONFIG_INIT_ENV};
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, RootFs->root, RootFs->root);
     com_thread_t *thread  = com_sys_thread_new(proc, NULL, 0, NULL);
-    int           elf_ret = com_sys_elf64_prepare_proc(&proc->page_table,
+    int           elf_ret = com_sys_elf64_prepare_proc(&proc->vmm_context,
                                              CONFIG_INIT_PATH,
                                              argv,
                                              envp,
@@ -210,8 +212,8 @@ void com_init_pid1(void) {
     curr_cpu->thread = thread;
 
     KASSERT(NULL != proc);
-    KASSERT(NULL != proc->page_table);
-    arch_mmu_switch(proc->page_table);
+    KASSERT(NULL != proc->vmm_context);
+    com_mm_vmm_switch(proc->vmm_context);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     com_sys_sched_init_base();

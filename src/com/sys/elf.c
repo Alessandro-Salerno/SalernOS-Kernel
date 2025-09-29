@@ -22,6 +22,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/platform/mmu.h>
@@ -86,10 +87,10 @@ enum elf_phdr_type {
     PT_PHDR   = 6
 };
 
-static int load(uintptr_t             vaddr,
-                struct elf_phdr      *phdr,
-                com_vnode_t          *elf_file,
-                arch_mmu_pagetable_t *pt) {
+static int load(uintptr_t          vaddr,
+                struct elf_phdr   *phdr,
+                com_vnode_t       *elf_file,
+                com_vmm_context_t *vmm_context) {
     size_t   idx = 0;
     intmax_t fsz = phdr->file_sz;
 
@@ -97,16 +98,16 @@ static int load(uintptr_t             vaddr,
         intmax_t misalign = cur & (ARCH_PAGE_SIZE - 1);
         intmax_t rem      = ARCH_PAGE_SIZE - misalign;
 
-        void *phys_page  = com_mm_pmm_alloc();
+        void *phys_page  = com_mm_pmm_alloc_zero();
         void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
-        kmemset(kvirt_page, ARCH_PAGE_SIZE - misalign, 0);
-#endif
-        arch_mmu_map(pt,
-                     (void *)(cur - misalign),
-                     phys_page,
-                     ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
-                         ARCH_MMU_FLAGS_WRITE); // TODO: NO_EXEC for data?
+
+        com_mm_vmm_map(vmm_context,
+                       (void *)(cur - misalign),
+                       phys_page,
+                       ARCH_PAGE_SIZE,
+                       COM_MM_VMM_FLAGS_NONE,
+                       ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
+                           ARCH_MMU_FLAGS_WRITE);
 
         if (fsz > 0) {
             size_t len = KMIN(rem, fsz);
@@ -130,13 +131,13 @@ static int load(uintptr_t             vaddr,
     return 0;
 }
 
-int com_sys_elf64_load(com_elf_data_t       *out,
-                       const char           *exec_path,
-                       size_t                exec_path_len,
-                       com_vnode_t          *root,
-                       com_vnode_t          *cwd,
-                       uintptr_t             virt_off,
-                       arch_mmu_pagetable_t *pt) {
+int com_sys_elf64_load(com_elf_data_t    *out,
+                       const char        *exec_path,
+                       size_t             exec_path_len,
+                       com_vnode_t       *root,
+                       com_vnode_t       *cwd,
+                       uintptr_t          virt_off,
+                       com_vmm_context_t *vmm_context) {
     com_vnode_t *elf_file = NULL;
     int          ret      = com_fs_vfs_lookup(&elf_file,
                                 exec_path,
@@ -232,7 +233,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
                     phdr_off,
                     phdr.off,
                     phdr.virt_addr);
-                ret = load(vaddr, &phdr, elf_file, pt);
+                ret = load(vaddr, &phdr, elf_file, vmm_context);
                 if (0 != ret) {
                     goto cleanup;
                 }
@@ -241,6 +242,7 @@ int com_sys_elf64_load(com_elf_data_t       *out,
     }
 
     out->entry = virt_off + elf_hdr.entry;
+
 cleanup:
     COM_FS_VFS_VNODE_RELEASE(elf_file);
     return ret;
@@ -309,14 +311,15 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
 #undef PUSH
 }
 
-int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
-                               const char            *path,
-                               char *const            argv[],
-                               char *const            env[],
-                               com_proc_t            *proc,
-                               arch_context_t        *ctx) {
-    arch_mmu_pagetable_t *new_pt = arch_mmu_new_table();
-    *out_pt                      = new_pt;
+int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
+                               const char         *path,
+                               char *const         argv[],
+                               char *const         env[],
+                               com_proc_t         *proc,
+                               arch_context_t     *ctx) {
+    com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
+        proc->vmm_context);
+    *out_vmm_context = new_vmm_ctx;
 
     com_elf_data_t prog_data = {0};
     int            status    = com_sys_elf64_load(&prog_data,
@@ -325,10 +328,9 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
                                     proc->root,
                                     proc->cwd,
                                     0,
-                                    new_pt);
+                                    new_vmm_ctx);
 
     if (0 != status) {
-        KDEBUG("elf load failed here");
         goto fail;
     }
 
@@ -342,10 +344,9 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
                                     proc->root,
                                     proc->cwd,
                                     0x40000000,
-                                    new_pt);
+                                    new_vmm_ctx);
 
         if (0 != status) {
-            KDEBUG("elf load failed here");
             goto fail;
         }
 
@@ -359,11 +360,13 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
     for (uintptr_t curr = stack_start; curr < stack_end;
          curr += ARCH_PAGE_SIZE) {
         stack_phys = com_mm_pmm_alloc();
-        arch_mmu_map(new_pt,
-                     (void *)curr,
-                     stack_phys,
-                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                         ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+        com_mm_vmm_map(new_vmm_ctx,
+                       (void *)curr,
+                       stack_phys,
+                       ARCH_PAGE_SIZE,
+                       COM_MM_VMM_FLAGS_NONE,
+                       ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                           ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
     }
 
     *ctx                = (arch_context_t){0};
@@ -377,6 +380,6 @@ int com_sys_elf64_prepare_proc(arch_mmu_pagetable_t **out_pt,
     return 0;
 
 fail:
-    arch_mmu_destroy_table(new_pt);
+    com_mm_vmm_destroy_context(new_vmm_ctx);
     return status;
 }

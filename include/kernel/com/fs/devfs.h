@@ -40,13 +40,13 @@ typedef struct com_dev_ops {
     int (*poll_head)(struct com_poll_head **out, void *devdata);
     int (*poll)(short *revents, void *devdata, short events);
     int (*open)(com_vnode_t **out, void *devdata);
-    int (*mmap)(void    **out,
-                void     *devdata,
-                uintptr_t hint,
-                size_t    size,
-                uintmax_t flags,
-                uintmax_t prot,
-                uintmax_t off);
+    int (*mmap)(void           **out,
+                void            *devdata,
+                uintptr_t        hint,
+                size_t           size,
+                int              vmm_flags,
+                arch_mmu_flags_t mmu_flags,
+                uintmax_t        off);
 } com_dev_ops_t;
 
 // VNODE OPS
@@ -82,13 +82,13 @@ int com_fs_devfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events);
 int com_fs_devfs_open(com_vnode_t **out, com_vnode_t *node);
-int com_fs_devfs_mmap(void       **out,
-                      com_vnode_t *node,
-                      uintptr_t    hint,
-                      size_t       size,
-                      uintmax_t    flags,
-                      uintmax_t    prot,
-                      uintmax_t    off);
+int com_fs_devfs_mmap(void           **out,
+                      com_vnode_t     *node,
+                      uintptr_t        hint,
+                      size_t           size,
+                      int              vmm_flags,
+                      arch_mmu_flags_t mmu_flags,
+                      uintmax_t        off);
 
 // OTHER FUNCTIONS
 

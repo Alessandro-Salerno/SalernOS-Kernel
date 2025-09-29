@@ -19,6 +19,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/cr.h>
@@ -68,7 +69,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     com_sys_sched_init();
     TAILQ_INIT(&cpu->sched_queue);
 
-    arch_mmu_switch_default();
+    com_mm_vmm_switch(NULL);
 
     TAILQ_INIT(&cpu->callout.queue);
     x86_64_lapic_init();

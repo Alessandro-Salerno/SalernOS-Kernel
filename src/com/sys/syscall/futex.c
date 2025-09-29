@@ -22,6 +22,7 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -57,8 +58,8 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
-    uintptr_t phys = (uintptr_t)arch_mmu_get_physical(curr_proc->page_table,
-                                                      word_ptr);
+    uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,
+                                                        word_ptr);
 
     kspinlock_acquire(&FutexLock);
 

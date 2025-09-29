@@ -20,30 +20,34 @@
 
 #include <arch/mmu.h>
 #include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
 #include <stddef.h>
 
-#define COM_MM_VMM_FLAGS_PAGESIZE 1
-#define COM_MM_VMM_FLAGS_ALLOCATE 2
-#define COM_MM_VMM_FLAGS_PHYSICAL 4
-#define COM_MM_VMM_FLAGS_FILE     8
-#define COM_MM_VMM_FLAGS_EXACT    16
-#define COM_MM_VMM_FLAGS_SHARED   32
-#define COM_MM_VMM_FLAGS_REPLACE  64
+#define COM_MM_VMM_FLAGS_NONE      0
+#define COM_MM_VMM_FLAGS_ANONYMOUS 1
+#define COM_MM_VMM_FLAGS_NOHINT    2
+#define COM_MM_VMM_FLAGS_PHYSICAL  4
+#define COM_MM_VMM_FLAGS_FILE      8
+#define COM_MM_VMM_FLAGS_EXACT     16
+#define COM_MM_VMM_FLAGS_SHARED    32
+#define COM_MM_VMM_FLAGS_REPLACE   64
+#define COM_MM_VMM_FLAGS_ALLOCATE  128
 
 typedef struct com_vmm_context {
     arch_mmu_pagetable_t *pagetable;
-    size_t used_pages;
+    size_t                anon_pages;
+    kspinlock_t           lock;
 } com_vmm_context_t;
 
 void               com_mm_vmm_init(void);
 com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable);
 void               com_mm_vmm_destroy_context(com_vmm_context_t *context);
 com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context);
-bool               com_mm_vmm_map(com_vmm_context_t *context,
+void              *com_mm_vmm_map(com_vmm_context_t *context,
                                   void              *virt,
                                   void              *phys,
-                                  size_t len,
+                                  size_t             len,
                                   int                vmm_flags,
                                   arch_mmu_flags_t   mmu_flags);
-void               com_mm_vmm_switch(com_vmm_context_t *context);
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr);
+void  com_mm_vmm_switch(com_vmm_context_t *context);

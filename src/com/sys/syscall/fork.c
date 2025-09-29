@@ -24,6 +24,7 @@
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
@@ -46,21 +47,17 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     com_proc_t   *proc       = cur_thread->proc;
 
     kspinlock_acquire(&proc->fd_lock);
-    kspinlock_acquire(&proc->pages_lock);
+    kspinlock_acquire(&proc->vmm_context->lock);
 
-    arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(proc->page_table);
-
-    com_proc_t *new_proc = com_sys_proc_new(new_pt,
+    com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
+        proc->vmm_context);
+    com_proc_t *new_proc = com_sys_proc_new(new_vmm_ctx,
                                             proc->pid,
                                             proc->root,
                                             proc->cwd);
     // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, cur_thread->xctx);
-
-    if (NULL == new_pt || NULL == new_proc || NULL == new_thread) {
-        return COM_SYS_SYSCALL_ERR(ENOMEM);
-    }
 
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != proc->fd[i].file) {
@@ -70,14 +67,14 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
         }
     }
 
-    new_proc->next_fd    = proc->next_fd;
-    new_proc->used_pages = proc->used_pages;
+    new_proc->next_fd = proc->next_fd;
 
     ARCH_CONTEXT_FORK(new_thread, *ctx);
 
     __atomic_add_fetch(&proc->num_children, 1, __ATOMIC_SEQ_CST);
     kspinlock_release(&proc->fd_lock);
-    kspinlock_release(&proc->pages_lock);
+    kspinlock_release(&proc->vmm_context->lock);
+    ;
 
     kspinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {

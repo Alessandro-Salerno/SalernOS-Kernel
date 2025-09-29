@@ -21,6 +21,7 @@
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
@@ -44,12 +45,6 @@ static void sched_idle(void) {
     }
 }
 
-static inline void *read_cr3(void) {
-    void *value;
-    __asm__ volatile("mov %%cr3, %0" : "=r"(value));
-    return value;
-}
-
 static void sched_reaper_thread(void) {
     while (true) {
         kspinlock_acquire(&ZombieProcLock);
@@ -70,7 +65,6 @@ static void sched_reaper_thread(void) {
 
             if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
                 KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-                KASSERT(read_cr3() != proc->page_table);
                 com_sys_proc_destroy(proc);
             }
         }
@@ -113,10 +107,6 @@ void com_sys_sched_yield_nolock(void) {
         kspinlock_release(&ZombieProcLock);
     }
 
-    if (NULL != curr->proc) {
-        KASSERT(read_cr3() == curr->proc->page_table);
-    }
-
     if (NULL == next) {
         if (curr->runnable) {
             kspinlock_release(&cpu->runqueue_lock);
@@ -139,30 +129,26 @@ void com_sys_sched_yield_nolock(void) {
 
     kspinlock_release(&cpu->runqueue_lock);
 
-    arch_mmu_pagetable_t *prev_pt = NULL;
-    arch_mmu_pagetable_t *next_pt = NULL;
+    com_vmm_context_t *prev_vmm_ctx = NULL;
+    com_vmm_context_t *next_vmm_ctx = NULL;
 
     if (NULL != curr->proc) {
-        prev_pt = curr->proc->page_table;
+        prev_vmm_ctx = curr->proc->vmm_context;
     }
 
     if (NULL != next->proc) {
-        next_pt = next->proc->page_table;
+        next_vmm_ctx = next->proc->vmm_context;
     }
 
     if (!ARCH_CONTEXT_ISUSER(&next->ctx)) {
-        arch_mmu_switch_default();
-    } else if (NULL != next_pt && next_pt != prev_pt) {
-        arch_mmu_switch(next_pt);
+        com_mm_vmm_switch(NULL);
+    } else if (NULL != next_vmm_ctx && next_vmm_ctx != prev_vmm_ctx) {
+        com_mm_vmm_switch(next_vmm_ctx);
     }
 
     ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
     if (ARCH_CONTEXT_ISUSER(&next->ctx)) {
         ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
-    }
-
-    if (NULL != next->proc) {
-        KASSERT(read_cr3() == next->proc->page_table);
     }
 
     cpu->thread = next;
