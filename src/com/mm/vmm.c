@@ -36,6 +36,8 @@ static inline com_vmm_context_t *vmm_current_context(void) {
 
 static inline com_vmm_context_t *
 vmm_ensure_context(com_vmm_context_t *context) {
+    KASSERT(&RootContext != context);
+
     if (NULL == context) {
         return vmm_current_context();
     }
@@ -55,12 +57,17 @@ com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable) {
 }
 
 void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
+    KASSERT(NULL != context);
+    KASSERT(&RootContext != context);
     arch_mmu_destroy_table(context->pagetable);
     com_mm_slab_free(context, sizeof(com_vmm_context_t));
 }
 
 com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context) {
-    context                      = vmm_ensure_context(context);
+    if (NULL == context) {
+        return com_mm_vmm_new_context(NULL);
+    }
+
     arch_mmu_pagetable_t *new_pt = arch_mmu_duplicate_table(context->pagetable);
     com_vmm_context_t    *new_vmm_ctx = com_mm_vmm_new_context(new_pt);
     new_vmm_ctx->anon_pages           = context->anon_pages;
@@ -87,6 +94,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 
     if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
         if (COM_MM_VMM_FLAGS_ANONYMOUS & vmm_flags) {
+            KASSERT(&RootContext != context);
             kspinlock_acquire(&context->lock);
             virt = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
                             CONFIG_VMM_ANON_START);

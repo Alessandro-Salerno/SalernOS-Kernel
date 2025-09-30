@@ -58,6 +58,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, curr_thread->xctx);
+    KASSERT(NULL != new_thread && NULL != new_proc && NULL != new_vmm_ctx && NULL != new_vmm_ctx->pagetable);
 
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != curr_proc->fd[i].file) {
