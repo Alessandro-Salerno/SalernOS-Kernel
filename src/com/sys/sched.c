@@ -36,6 +36,8 @@
 static khashmap_t              ZombieProcMap;
 static kspinlock_t             ZombieProcLock = KSPINLOCK_NEW();
 static struct com_thread_tailq ZombieThreadQueue;
+static struct com_thread_tailq ReaperThreadWaitlist;
+static size_t                  ReaperNumPending = 0;
 
 static void sched_idle(void) {
     ARCH_CPU_GET_THREAD()->lock_depth = 0;
@@ -46,89 +48,127 @@ static void sched_idle(void) {
 }
 
 static void sched_reaper_thread(void) {
+    struct com_thread_tailq local_zombies;
+    TAILQ_INIT(&local_zombies);
+
     while (true) {
         kspinlock_acquire(&ZombieProcLock);
+
+        // If there's no thread to kill, we just wait so we don't waste CPU time
+        if (TAILQ_EMPTY(&ZombieThreadQueue)) {
+            com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieProcLock);
+        }
+
+        com_thread_t *curr_thread      = ARCH_CPU_GET_THREAD();
+        size_t        num_done_threads = 0;
+
+        // We want to hold the lock as little as possible because while holding
+        // it, there's no preemption. So we move threads from the global queue
+        // (which is guarded by the lock) into a local queue that we can access
+        // freely after releasing the lock
         for (com_thread_t *zombie;
-             NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue));) {
+             NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue)) &&
+             num_done_threads < CONFIG_SCHED_REAPER_MAX_THREADS;
+             num_done_threads++) {
             kspinlock_acquire(&zombie->sched_lock);
-            ARCH_CPU_GET_THREAD()->lock_depth--;
-            com_proc_t *proc = zombie->proc;
+            curr_thread->lock_depth--;
             TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
+            TAILQ_INSERT_TAIL(&local_zombies, zombie, threads);
+        }
+
+        ReaperNumPending -= num_done_threads;
+        kspinlock_release(&ZombieProcLock);
+
+        com_thread_t *zombie, *_;
+        TAILQ_FOREACH_SAFE(zombie, &local_zombies, threads, _) {
+            com_proc_t *proc = zombie->proc;
+            TAILQ_REMOVE_HEAD(&local_zombies, threads);
             com_sys_thread_destroy(zombie);
             if (proc->exited) {
                 KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
             }
         }
-        kspinlock_release(&ZombieProcLock);
-        KHASHMAP_FOREACH(&ZombieProcMap) {
-            com_proc_t *proc = entry->value;
 
+        // This is not locked because we are the only ones accessing it
+        size_t num_done_procs = 0;
+        KHASHMAP_FOREACH(&ZombieProcMap) {
+            if (CONFIG_SCHED_REAPER_MAX_PROCS == num_done_procs) {
+                break;
+            }
+
+            com_proc_t *proc = entry->value;
             if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
                 KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
                 com_sys_proc_destroy(proc);
             }
+
+            num_done_procs++;
         }
+
         com_sys_sched_yield();
     }
 }
 
-void com_sys_sched_yield_nolock(void) {
-    arch_cpu_t *cpu = ARCH_CPU_GET();
-    kspinlock_acquire(&cpu->runqueue_lock);
-    com_thread_t *curr = cpu->thread;
-    KASSERT(NULL == curr || curr->sched_lock);
-    com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
+static inline bool sched_notify_reaper(void) {
+    arch_cpu_t   *curr_cpu = ARCH_CPU_GET();
+    com_thread_t *reaper   = TAILQ_FIRST(&ReaperThreadWaitlist);
 
-    if (NULL == curr) {
-        kspinlock_release(&cpu->runqueue_lock);
-        return;
+    if (NULL == reaper) {
+        return false;
     }
 
-    // NOTE: this seems like it would create a race condition, but it does not
-    // because the reaper thread first acquires the sched_lock, which we are
-    // holding here
+    kspinlock_acquire(&reaper->sched_lock);
+    TAILQ_REMOVE_HEAD(&ReaperThreadWaitlist, threads);
+    // Add to tail for "low priority"
+    TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, reaper, threads);
+    reaper->runnable     = true;
+    reaper->waiting_on   = NULL;
+    reaper->waiting_cond = NULL;
+    kspinlock_release(&reaper->sched_lock);
+
+    return true;
+}
+
+static inline com_thread_t *sched_handle_zombies(bool         *next_removed,
+                                                 arch_cpu_t   *cpu,
+                                                 com_thread_t *curr,
+                                                 com_thread_t *next) {
+    // NOTE: I have no idea why, but the reaper thread MUST hold the sched_lock
     bool zombie_acquired = false;
+
     if (curr->exited) {
         kspinlock_acquire(&ZombieProcLock);
+        // No remove from cpu rr since curr is not on the runqueue
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, curr, threads);
         zombie_acquired = true;
+        ReaperNumPending++;
     }
+
     while (NULL != next &&
            (next->exited || (NULL != next->proc && next->proc->exited))) {
         if (!zombie_acquired) {
             kspinlock_acquire(&ZombieProcLock);
             zombie_acquired = true;
+            *next_removed   = true;
         }
+        ReaperNumPending++;
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
         TAILQ_INSERT_TAIL(&ZombieThreadQueue, next, threads);
         next = TAILQ_FIRST(&cpu->sched_queue);
     }
+
     if (zombie_acquired) {
+        if (CONFIG_SCHED_REAPER_NOTIFY == ReaperNumPending) {
+            sched_notify_reaper();
+        }
         kspinlock_release(&ZombieProcLock);
     }
 
-    if (NULL == next) {
-        if (curr->runnable) {
-            kspinlock_release(&cpu->runqueue_lock);
-            kspinlock_release(&curr->sched_lock);
-            return;
-        }
+    return next;
+}
 
-        next = cpu->idle_thread;
-    } else {
-        KASSERT(next != cpu->idle_thread);
-        TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
-    }
-
-    KASSERT(curr != next);
-    KASSERT(!curr->exited || !curr->runnable);
-
-    if (curr->runnable && curr != cpu->idle_thread) {
-        TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
-    }
-
-    kspinlock_release(&cpu->runqueue_lock);
-
+static inline void sched_switch_vmm_context(com_thread_t *curr,
+                                            com_thread_t *next) {
     com_vmm_context_t *prev_vmm_ctx = NULL;
     com_vmm_context_t *next_vmm_ctx = NULL;
 
@@ -145,6 +185,46 @@ void com_sys_sched_yield_nolock(void) {
     } else if (NULL != next_vmm_ctx && next_vmm_ctx != prev_vmm_ctx) {
         com_mm_vmm_switch(next_vmm_ctx);
     }
+}
+
+void com_sys_sched_yield_nolock(void) {
+    arch_cpu_t *cpu = ARCH_CPU_GET();
+    kspinlock_acquire(&cpu->runqueue_lock);
+    com_thread_t *curr = cpu->thread;
+    KASSERT(NULL == curr || curr->sched_lock);
+    com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
+
+    if (NULL == curr) {
+        kspinlock_release(&cpu->runqueue_lock);
+        return;
+    }
+
+    bool next_removed = false;
+    next              = sched_handle_zombies(&next_removed, cpu, curr, next);
+
+    if (NULL == next) {
+        if (curr->runnable) {
+            kspinlock_release(&cpu->runqueue_lock);
+            kspinlock_release(&curr->sched_lock);
+            return;
+        }
+
+        next = cpu->idle_thread;
+    } else if (!next_removed) {
+        KASSERT(next != cpu->idle_thread);
+        TAILQ_REMOVE(&cpu->sched_queue, next, threads);
+    }
+
+    KASSERT(curr != next);
+    KASSERT(!curr->exited || !curr->runnable);
+
+    if (curr->runnable && curr != cpu->idle_thread) {
+        TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
+    }
+
+    kspinlock_release(&cpu->runqueue_lock);
+
+    sched_switch_vmm_context(curr, next);
 
     ARCH_CONTEXT_SAVE_EXTRA(curr->xctx);
     if (ARCH_CONTEXT_ISUSER(&next->ctx)) {
@@ -281,6 +361,8 @@ void com_sys_sched_init_base(void) {
     KLOG("initializing scheduler reaper");
     KHASHMAP_INIT(&ZombieProcMap);
     TAILQ_INIT(&ZombieThreadQueue);
+    TAILQ_INIT(&ReaperThreadWaitlist);
+
     com_thread_t *reaper_thread = com_sys_thread_new_kernel(
         NULL,
         sched_reaper_thread);

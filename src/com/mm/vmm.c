@@ -27,10 +27,14 @@
 
 static com_vmm_context_t RootContext = {0};
 
+// This lock guards the context queue and is used as condvar for the waitlist
 static kspinlock_t ZombieQueueLock = KSPINLOCK_NEW();
+// Queue of context pointers on which destroy() was called
 static TAILQ_HEAD(, com_vmm_context) ZombieContextQueue;
+// Waitlist used only by the vmm reaper thread to wait
 static struct com_thread_tailq ReaperThreadWaitlist;
-static size_t                  ReaperNumPending = 0;
+// Number of elements in the zombie context queue
+static size_t ReaperNumPending = 0;
 
 static inline com_vmm_context_t *vmm_current_context(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -68,7 +72,7 @@ static void vmm_reaper_thread(void) {
             com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieQueueLock);
         }
         TAILQ_FOREACH_SAFE(context, &ZombieContextQueue, reaper_entry, _) {
-            if (CONFIG_VMM_MAX_REAPER == num_done) {
+            if (CONFIG_VMM_REAPER_MAX == num_done) {
                 break;
             }
 
@@ -112,7 +116,7 @@ void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
     kspinlock_acquire(&ZombieQueueLock);
     TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
     ReaperNumPending++;
-    if (ReaperNumPending >= CONFIG_VMM_REAPER_NOTIFY) {
+    if (CONFIG_VMM_REAPER_NOTIFY == ReaperNumPending) {
         com_sys_sched_notify(&ReaperThreadWaitlist);
     }
     kspinlock_release(&ZombieQueueLock);
