@@ -47,7 +47,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     kspinlock_acquire(&curr_proc->fd_lock);
-    kspinlock_acquire(&curr_proc->vmm_context->lock);
+    // kspinlock_acquire(&curr_proc->vmm_context->lock);
 
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
         curr_proc->vmm_context);
@@ -58,8 +58,10 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx, curr_thread->xctx);
-    KASSERT(NULL != new_thread && NULL != new_proc && NULL != new_vmm_ctx && NULL != new_vmm_ctx->pagetable);
+    KASSERT(NULL != new_thread && NULL != new_proc && NULL != new_vmm_ctx &&
+            NULL != new_vmm_ctx->pagetable);
 
+    new_proc->next_fd = curr_proc->next_fd;
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != curr_proc->fd[i].file) {
             new_proc->fd[i].flags = curr_proc->fd[i].flags;
@@ -68,13 +70,10 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
         }
     }
 
-    new_proc->next_fd = curr_proc->next_fd;
-
     ARCH_CONTEXT_FORK(new_thread, *ctx);
-
     __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_SEQ_CST);
     kspinlock_release(&curr_proc->fd_lock);
-    kspinlock_release(&curr_proc->vmm_context->lock);
+    // kspinlock_release(&curr_proc->vmm_context->lock);
 
     kspinlock_acquire(&curr_proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {

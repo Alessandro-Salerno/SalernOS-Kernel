@@ -55,6 +55,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     kspinlock_acquire(&proc->signal_lock);
     // kspinlock_acquire(&thread->sched_lock);
 
+    com_vmm_context_t *old_vmm_ctx = proc->vmm_context;
     com_vmm_context_t *new_vmm_ctx = NULL;
     int                status      = com_sys_elf64_prepare_proc(&new_vmm_ctx,
                                             path,
@@ -71,8 +72,10 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     com_sys_proc_kill_other_threads(proc, thread);
     com_mm_vmm_switch(new_vmm_ctx);
-    com_mm_vmm_destroy_context(proc->vmm_context);
     proc->vmm_context = new_vmm_ctx;
+    KASSERT(proc->num_ref > 0);
+    KASSERT(2 == proc->num_ref);
+    com_mm_vmm_destroy_context(old_vmm_ctx);
 
     kspinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {

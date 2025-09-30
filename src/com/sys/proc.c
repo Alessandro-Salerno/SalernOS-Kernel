@@ -105,17 +105,24 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 }
 
 void com_sys_proc_destroy(com_proc_t *proc) {
+    KASSERT(0 == proc->num_ref);
+    KASSERT(proc->exited);
+
     com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
+
     if (NULL != parent) {
         __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
     }
+
     // TODO: Operation is unlocked now because PID recycling is not supported
     kradixtree_remove_nolock(&Processes, proc->pid - 1);
+
     kspinlock_acquire(&proc->pg_lock);
     if (NULL != proc->proc_group) {
         TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
     }
     kspinlock_fake_release();
+
     com_vmm_context_t *proc_vmm_ctx = proc->vmm_context;
     com_mm_slab_free(proc, sizeof(com_proc_t));
     com_mm_vmm_destroy_context(proc_vmm_ctx);
@@ -301,6 +308,7 @@ void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
     __atomic_add_fetch(&proc->num_ref, 1, __ATOMIC_SEQ_CST);
     kspinlock_release(&proc->threads_lock);
 }
+
 void com_sys_proc_remove_thread(com_proc_t *proc, com_thread_t *thread) {
     kspinlock_acquire(&proc->threads_lock);
     com_sys_proc_remove_thread_nolock(proc, thread);

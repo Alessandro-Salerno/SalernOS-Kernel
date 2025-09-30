@@ -278,7 +278,7 @@ void com_sys_sched_init(void) {
 }
 
 void com_sys_sched_init_base(void) {
-    KLOG("initializing scheduler (first)");
+    KLOG("initializing scheduler reaper");
     KHASHMAP_INIT(&ZombieProcMap);
     TAILQ_INIT(&ZombieThreadQueue);
     com_thread_t *reaper_thread = com_sys_thread_new_kernel(

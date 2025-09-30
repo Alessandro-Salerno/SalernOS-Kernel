@@ -217,6 +217,7 @@ void com_init_pid1(void) {
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     com_sys_sched_init_base();
+    com_mm_vmm_init_reaper();
 
     KASSERT(NULL != MainTerm);
     com_io_log_set_user_hook(NULL);

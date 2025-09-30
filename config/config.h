@@ -83,6 +83,7 @@
 #define CONFIG_SYMLINK_MAX        32
 #define CONFIG_PATH_MAX           256
 #define CONFIG_TTY_MAX            7
+#define CONFIG_VMM_MAX_REAPER     16
 #define CONFIG_PMM_ZERO           CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
 #define CONFIG_PMM_RSVRANGE_MAX   32
 #define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
@@ -94,4 +95,5 @@
 #define CONFIG_MUTEX_MODE         CONST_MUTEX_REAL
 #define CONFIG_UNIX_SOCK_RB_SIZE  (256UL * 1024UL)
 #define CONFIG_VMM_ANON_START     0x100000000
+#define CONFIG_VMM_REAPER_NOTIFY  8
 #define CONFIG_DEFAULT_KBD_LAYOUT en_us

@@ -19,7 +19,7 @@ section .text
 %assign i 0
 %rep 256
 x86_64_isr_%+i:
-    cli
+    cld
 ; Push a value to the stack in order to follow
 ; the guidelines of the Intel SDM on ISR stack contents
 %if i <> 8 && i <> 10 && i <> 11 && i <> 12 && i <> 13 && i <> 14
@@ -49,6 +49,7 @@ x86_64_isr_common:
   ; NOTE: some registers are moved into rax or
   ;       other general-purpose registers because
   ;       they cannot be pushed directly
+    cli
   push  rsi
   push  rdi
   push  r15

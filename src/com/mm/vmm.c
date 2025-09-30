@@ -21,9 +21,16 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/platform/mmu.h>
 
 static com_vmm_context_t RootContext = {0};
+
+static kspinlock_t ZombieQueueLock = KSPINLOCK_NEW();
+static TAILQ_HEAD(, com_vmm_context) ZombieContextQueue;
+static struct com_thread_tailq ReaperThreadWaitlist;
+static size_t                  ReaperNumPending = 0;
 
 static inline com_vmm_context_t *vmm_current_context(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -45,6 +52,44 @@ vmm_ensure_context(com_vmm_context_t *context) {
     return context;
 }
 
+static void vmm_reaper_thread(void) {
+    TAILQ_HEAD(, com_vmm_context) local_zombies;
+    TAILQ_INIT(&local_zombies);
+
+    while (true) {
+        size_t             num_done = 0;
+        com_vmm_context_t *context, *_;
+
+        // First, we move the zombies to a local queue. This way, we hold the
+        // lock as little as possible and don't bottleneck others wanting to add
+        // to the queue
+        kspinlock_acquire(&ZombieQueueLock);
+        if (TAILQ_EMPTY(&ZombieContextQueue)) {
+            com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieQueueLock);
+        }
+        TAILQ_FOREACH_SAFE(context, &ZombieContextQueue, reaper_entry, _) {
+            if (CONFIG_VMM_MAX_REAPER == num_done) {
+                break;
+            }
+
+            TAILQ_REMOVE(&ZombieContextQueue, context, reaper_entry);
+            TAILQ_INSERT_TAIL(&local_zombies, context, reaper_entry);
+            ReaperNumPending--;
+            num_done++;
+        }
+        kspinlock_release(&ZombieQueueLock);
+
+        // Then we destroy the ones in the local zombie queue
+        TAILQ_FOREACH_SAFE(context, &local_zombies, reaper_entry, _) {
+            arch_mmu_destroy_table(context->pagetable);
+            TAILQ_REMOVE_HEAD(&local_zombies, reaper_entry);
+            com_mm_slab_free(context, sizeof(com_vmm_context_t));
+        }
+
+        com_sys_sched_yield();
+    }
+}
+
 com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable) {
     if (NULL == pagetable) {
         pagetable = arch_mmu_new_table();
@@ -59,8 +104,18 @@ com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable) {
 void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
     KASSERT(NULL != context);
     KASSERT(&RootContext != context);
-    arch_mmu_destroy_table(context->pagetable);
-    com_mm_slab_free(context, sizeof(com_vmm_context_t));
+    KASSERT(RootContext.pagetable != context->pagetable);
+    KASSERT(context != vmm_current_context());
+    KASSERT(context->pagetable != arch_mmu_get_table());
+    KASSERT(NULL != context->pagetable);
+
+    kspinlock_acquire(&ZombieQueueLock);
+    TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
+    ReaperNumPending++;
+    if (ReaperNumPending >= CONFIG_VMM_REAPER_NOTIFY) {
+        com_sys_sched_notify(&ReaperThreadWaitlist);
+    }
+    kspinlock_release(&ZombieQueueLock);
 }
 
 com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context) {
@@ -95,6 +150,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
     if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
         if (COM_MM_VMM_FLAGS_ANONYMOUS & vmm_flags) {
             KASSERT(&RootContext != context);
+            KASSERT(RootContext.pagetable != context->pagetable);
             kspinlock_acquire(&context->lock);
             virt = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
                             CONFIG_VMM_ANON_START);
@@ -131,7 +187,10 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 }
 
 void com_mm_vmm_switch(com_vmm_context_t *context) {
-    context = vmm_ensure_context(context);
+    if (NULL == context) {
+        context = &RootContext;
+    }
+
     arch_mmu_switch(context->pagetable);
 }
 
@@ -144,4 +203,17 @@ void com_mm_vmm_init(void) {
     KLOG("initializing vmm");
     RootContext.pagetable = arch_mmu_get_table();
     RootContext.lock      = KSPINLOCK_NEW();
+
+    // This is here because destroy will add stuff to the queue even if this is
+    // not initialized!
+    TAILQ_INIT(&ZombieContextQueue);
+    TAILQ_INIT(&ReaperThreadWaitlist);
+}
+
+void com_mm_vmm_init_reaper(void) {
+    KLOG("initializing vmm reaper");
+    com_thread_t *reaper_thread = com_sys_thread_new_kernel(NULL,
+                                                            vmm_reaper_thread);
+    reaper_thread->runnable     = true;
+    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, reaper_thread, threads);
 }
