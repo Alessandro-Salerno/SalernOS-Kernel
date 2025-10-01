@@ -39,73 +39,91 @@ static struct com_thread_tailq ZombieThreadQueue;
 static struct com_thread_tailq ReaperThreadWaitlist;
 static size_t                  ReaperNumPending = 0;
 
+static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
+    size_t num_done_threads = 0;
+
+    // We want to hold the lock as little as possible because while holding
+    // it, there's no preemption. So we move threads from the global queue
+    // (which is guarded by the lock) into a local queue that we can access
+    // freely after releasing the lock
+    for (com_thread_t *zombie;
+         NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue)) &&
+         num_done_threads < CONFIG_SCHED_REAPER_MAX_THREADS;
+         num_done_threads++) {
+        TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
+        TAILQ_INSERT_TAIL(local_zombies, zombie, threads);
+    }
+
+    ReaperNumPending -= num_done_threads;
+    kspinlock_release(&ZombieProcLock);
+
+    com_thread_t *zombie, *_;
+    TAILQ_FOREACH_SAFE(zombie, local_zombies, threads, _) {
+        kspinlock_acquire(&zombie->sched_lock);
+        kspinlock_fake_release();
+
+        com_proc_t *proc = zombie->proc;
+        TAILQ_REMOVE_HEAD(local_zombies, threads);
+        com_sys_thread_destroy(zombie);
+        if (proc->exited) {
+            KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
+        }
+    }
+
+    // This is not locked because we are the only ones accessing it
+    size_t num_done_procs = 0;
+    KHASHMAP_FOREACH(&ZombieProcMap) {
+        if (CONFIG_SCHED_REAPER_MAX_PROCS == num_done_procs) {
+            break;
+        }
+
+        com_proc_t *proc = entry->value;
+        if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
+            KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
+            com_sys_proc_destroy(proc);
+            num_done_procs++;
+        }
+    }
+}
+
 static void sched_idle(void) {
-    ARCH_CPU_GET_THREAD()->lock_depth = 0;
+    struct com_thread_tailq local_zombies;
+    TAILQ_INIT(&local_zombies);
+
     for (;;) {
-        ARCH_CPU_ENABLE_INTERRUPTS();
+        ARCH_CPU_GET_THREAD()->lock_depth = 0;
+
+        kspinlock_acquire(&ZombieProcLock);
+        if (!TAILQ_EMPTY(&ZombieThreadQueue)) {
+            sched_reap_zombies(&local_zombies);
+        } else {
+            kspinlock_release(&ZombieProcLock);
+        }
+
         ARCH_CPU_HALT();
     }
 }
 
 static void sched_reaper_thread(void) {
+    bool                    already_done = false;
     struct com_thread_tailq local_zombies;
     TAILQ_INIT(&local_zombies);
 
     while (true) {
+        // Allow kernel preemption
+        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+        curr_thread->lock_depth   = 0;
+
         kspinlock_acquire(&ZombieProcLock);
 
         // If there's no thread to kill, we just wait so we don't waste CPU time
-        if (TAILQ_EMPTY(&ZombieThreadQueue)) {
+        if (TAILQ_EMPTY(&ZombieThreadQueue) || already_done) {
+            already_done = false;
             com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieProcLock);
         }
 
-        com_thread_t *curr_thread      = ARCH_CPU_GET_THREAD();
-        size_t        num_done_threads = 0;
-
-        // We want to hold the lock as little as possible because while holding
-        // it, there's no preemption. So we move threads from the global queue
-        // (which is guarded by the lock) into a local queue that we can access
-        // freely after releasing the lock
-        for (com_thread_t *zombie;
-             NULL != (zombie = TAILQ_FIRST(&ZombieThreadQueue)) &&
-             num_done_threads < CONFIG_SCHED_REAPER_MAX_THREADS;
-             num_done_threads++) {
-            kspinlock_acquire(&zombie->sched_lock);
-            curr_thread->lock_depth--;
-            TAILQ_REMOVE_HEAD(&ZombieThreadQueue, threads);
-            TAILQ_INSERT_TAIL(&local_zombies, zombie, threads);
-        }
-
-        ReaperNumPending -= num_done_threads;
-        kspinlock_release(&ZombieProcLock);
-
-        com_thread_t *zombie, *_;
-        TAILQ_FOREACH_SAFE(zombie, &local_zombies, threads, _) {
-            com_proc_t *proc = zombie->proc;
-            TAILQ_REMOVE_HEAD(&local_zombies, threads);
-            com_sys_thread_destroy(zombie);
-            if (proc->exited) {
-                KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
-            }
-        }
-
-        // This is not locked because we are the only ones accessing it
-        size_t num_done_procs = 0;
-        KHASHMAP_FOREACH(&ZombieProcMap) {
-            if (CONFIG_SCHED_REAPER_MAX_PROCS == num_done_procs) {
-                break;
-            }
-
-            com_proc_t *proc = entry->value;
-            if (0 == __atomic_load_n(&proc->num_ref, __ATOMIC_SEQ_CST)) {
-                KHASHMAP_REMOVE(&ZombieProcMap, &proc->pid);
-                com_sys_proc_destroy(proc);
-            }
-
-            num_done_procs++;
-        }
-
-        com_sys_sched_yield();
+        sched_reap_zombies(&local_zombies);
+        already_done = true;
     }
 }
 
@@ -158,7 +176,7 @@ static inline com_thread_t *sched_handle_zombies(bool         *next_removed,
     }
 
     if (zombie_acquired) {
-        if (CONFIG_SCHED_REAPER_NOTIFY == ReaperNumPending) {
+        if (ReaperNumPending >= CONFIG_SCHED_REAPER_NOTIFY) {
             sched_notify_reaper();
         }
         kspinlock_release(&ZombieProcLock);

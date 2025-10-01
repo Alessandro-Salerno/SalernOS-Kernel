@@ -24,6 +24,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <stdatomic.h>
 
 static com_vmm_context_t RootContext = {0};
 
@@ -57,10 +58,15 @@ vmm_ensure_context(com_vmm_context_t *context) {
 }
 
 static void vmm_reaper_thread(void) {
+    bool already_done = false;
     TAILQ_HEAD(, com_vmm_context) local_zombies;
     TAILQ_INIT(&local_zombies);
 
     while (true) {
+        // Allow kernel preemption
+        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+        curr_thread->lock_depth   = 0;
+
         size_t             num_done = 0;
         com_vmm_context_t *context, *_;
 
@@ -68,7 +74,8 @@ static void vmm_reaper_thread(void) {
         // lock as little as possible and don't bottleneck others wanting to add
         // to the queue
         kspinlock_acquire(&ZombieQueueLock);
-        if (TAILQ_EMPTY(&ZombieContextQueue)) {
+        if (TAILQ_EMPTY(&ZombieContextQueue) || already_done) {
+            already_done = false;
             com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieQueueLock);
         }
         TAILQ_FOREACH_SAFE(context, &ZombieContextQueue, reaper_entry, _) {
@@ -85,12 +92,15 @@ static void vmm_reaper_thread(void) {
 
         // Then we destroy the ones in the local zombie queue
         TAILQ_FOREACH_SAFE(context, &local_zombies, reaper_entry, _) {
+            KASSERT(context != vmm_current_context());
+            KASSERT(context->pagetable != arch_mmu_get_table());
+            KASSERT(NULL != context->pagetable);
             arch_mmu_destroy_table(context->pagetable);
             TAILQ_REMOVE_HEAD(&local_zombies, reaper_entry);
             com_mm_slab_free(context, sizeof(com_vmm_context_t));
         }
 
-        com_sys_sched_yield();
+        already_done = true;
     }
 }
 
@@ -115,8 +125,7 @@ void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
 
     kspinlock_acquire(&ZombieQueueLock);
     TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
-    ReaperNumPending++;
-    if (CONFIG_VMM_REAPER_NOTIFY == ReaperNumPending) {
+    if (ReaperNumPending++ >= CONFIG_VMM_REAPER_NOTIFY) {
         com_sys_sched_notify(&ReaperThreadWaitlist);
     }
     kspinlock_release(&ZombieQueueLock);

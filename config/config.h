@@ -87,8 +87,8 @@
 #define CONFIG_PATH_MAX                 256
 #define CONFIG_TTY_MAX                  7
 #define CONFIG_VMM_REAPER_MAX           16
-#define CONFIG_SCHED_REAPER_MAX_THREADS 128
-#define CONFIG_SCHED_REAPER_MAX_PROCS   32
+#define CONFIG_SCHED_REAPER_MAX_THREADS 32
+#define CONFIG_SCHED_REAPER_MAX_PROCS   8
 
 // Misc
 #define CONFIG_PMM_ZERO            CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */

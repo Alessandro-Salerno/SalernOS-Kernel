@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
@@ -30,7 +31,7 @@ COM_SYS_SYSCALL(com_sys_syscall_clock_get) {
     struct timespec *ts    = COM_SYS_SYSCALL_ARG(void *, 2);
 
     (void)clock; // TODO: what is this?
-    uintmax_t ns = com_sys_callout_get_time();
+    uintmax_t ns = ARCH_CPU_GET_TIME();
     ts->tv_nsec  = ns % KNANOS_PER_SEC;
     ts->tv_sec   = ns / KNANOS_PER_SEC;
 

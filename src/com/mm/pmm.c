@@ -215,17 +215,15 @@ void com_mm_pmm_free_many(void *base, size_t pages) {
         return;
     }
 
-    kspinlock_acquire(&Lock);
-
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
     kmemset((void *)ARCH_PHYS_TO_HHDM(base), ARCH_PAGE_SIZE * pages, 0);
 #endif
 
+    kspinlock_acquire(&Lock);
     for (size_t i = 0; i < pages; i++) {
         void *page = (void *)((uintptr_t)base + i * ARCH_PAGE_SIZE);
         unreserve_page(page, &UsedMem);
     }
-
     kspinlock_release(&Lock);
 }
 

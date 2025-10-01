@@ -83,11 +83,11 @@ void com_mm_slab_free(void *ptr, size_t size) {
     KASSERT(i < NUM_SLABS);
     slab_t *s = &Slabs[i];
 
-    kspinlock_acquire(&Lock);
     uintptr_t *new_head = ptr;
 #if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
     kmemset(new_head, size, 0);
 #endif
+    kspinlock_acquire(&Lock);
     *new_head = s->next;
     s->next   = (uintptr_t)new_head;
     kspinlock_release(&Lock);
