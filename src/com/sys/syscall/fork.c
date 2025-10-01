@@ -19,7 +19,6 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/mmu.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -46,9 +45,6 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    kspinlock_acquire(&curr_proc->fd_lock);
-    // kspinlock_acquire(&curr_proc->vmm_context->lock);
-
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
         curr_proc->vmm_context);
     com_proc_t *new_proc = com_sys_proc_new(new_vmm_ctx,
@@ -61,6 +57,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     KASSERT(NULL != new_thread && NULL != new_proc && NULL != new_vmm_ctx &&
             NULL != new_vmm_ctx->pagetable);
 
+    kspinlock_acquire(&curr_proc->fd_lock);
     new_proc->next_fd = curr_proc->next_fd;
     for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
         if (NULL != curr_proc->fd[i].file) {
@@ -69,11 +66,10 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
             new_proc->fd[i].file = curr_proc->fd[i].file;
         }
     }
+    kspinlock_release(&curr_proc->fd_lock);
 
     ARCH_CONTEXT_FORK(new_thread, *ctx);
     __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_SEQ_CST);
-    kspinlock_release(&curr_proc->fd_lock);
-    // kspinlock_release(&curr_proc->vmm_context->lock);
 
     kspinlock_acquire(&curr_proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {

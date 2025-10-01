@@ -50,7 +50,7 @@ The kernel itself supports the following features:
   - Memory management
     - [x] PMM
     - [x] Slab allocator
-    - [ ] VMM (currently I call MMU code directly)
+    - [x] VMM
     - [ ] Page cache (will be added soon)
   - System management
     - [x] System Call Interface

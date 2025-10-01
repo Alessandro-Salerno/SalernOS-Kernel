@@ -125,7 +125,7 @@ void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
 
     kspinlock_acquire(&ZombieQueueLock);
     TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
-    if (ReaperNumPending++ >= CONFIG_VMM_REAPER_NOTIFY) {
+    if (++ReaperNumPending >= CONFIG_VMM_REAPER_NOTIFY) {
         com_sys_sched_notify(&ReaperThreadWaitlist);
     }
     kspinlock_release(&ZombieQueueLock);

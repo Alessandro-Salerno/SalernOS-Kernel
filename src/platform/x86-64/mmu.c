@@ -21,12 +21,17 @@
 #include <arch/mmu.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/pmmcache.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <threads.h>
+
+#define PT_CACHE_INIT_SIZE     (4096 * 4)
+#define PT_CACHE_POOL_SIZE     (4096 * 2)
+#define PT_CACHE_MAX_POOL_SIZE (4096 * 16)
 
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
@@ -50,6 +55,15 @@ extern uint8_t _USER_DATA_START[];
 extern uint8_t _USER_DATA_END[];
 
 static arch_mmu_pagetable_t *RootTable = NULL;
+static com_pmm_cache_t       PageTableCache;
+
+static inline void *internal_alloc_phys(void) {
+    return com_mm_pmm_cache_alloc(&PageTableCache, 1);
+}
+
+static inline void internal_free_phys(void *page) {
+    com_mm_pmm_cache_free(&PageTableCache, page);
+}
 
 static inline uint64_t *next(uint64_t entry) {
     if (0 == entry) {
@@ -101,7 +115,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pdpt = next(pml4[pml4offset]);
     if (NULL == pdpt) {
-        pdpt = com_mm_pmm_alloc_zero();
+        pdpt = internal_alloc_phys();
         if (NULL == pdpt) {
             return false;
         }
@@ -117,7 +131,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pd = next(pdpt[pdptoffset]);
     if (NULL == pd) {
-        pd = com_mm_pmm_alloc_zero();
+        pd = internal_alloc_phys();
         if (NULL == pd) {
             return false;
         }
@@ -133,7 +147,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
     uint64_t *pt = next(pd[pdoffset]);
     if (NULL == pt) {
-        pt = com_mm_pmm_alloc_zero();
+        pt = internal_alloc_phys();
         if (NULL == pt) {
             return false;
         }
@@ -149,10 +163,10 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt  = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
-    uint64_t new    = (uint64_t)com_mm_pmm_alloc();
+    uint64_t new    = (uint64_t)internal_alloc_phys();
     uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
 
-    if (level == 0) {
+    if (0 == level) {
         kmemcpy(nvirt, virt, ARCH_PAGE_SIZE);
     } else {
         for (size_t i = 0; i < 512; i++) {
@@ -161,8 +175,6 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
                     virt[i],
                     level - 1,
                     addr | ((i << (12 + (level - 1) * 9))));
-            } else {
-                nvirt[i] = 0;
             }
         }
     }
@@ -180,13 +192,17 @@ void destroy_recursive(uint64_t entry, size_t level) {
                 destroy_recursive(directory[i], level - 1);
             }
         }
-    }
 
-    com_mm_pmm_free(phys);
+        internal_free_phys(phys);
+    } else {
+        // If we're at level 0, then this page is not part of the PT and needs
+        // to be returned to pmm
+        com_mm_pmm_free(phys);
+    }
 }
 
 arch_mmu_pagetable_t *arch_mmu_new_table(void) {
-    arch_mmu_pagetable_t *table = com_mm_pmm_alloc();
+    arch_mmu_pagetable_t *table = internal_alloc_phys();
 
     if (NULL == table) {
         return NULL;
@@ -205,7 +221,7 @@ void arch_mmu_destroy_table(arch_mmu_pagetable_t *pt) {
         }
     }
 
-    com_mm_pmm_free(pt);
+    internal_free_phys(pt);
 }
 
 arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt) {
@@ -263,14 +279,20 @@ arch_mmu_pagetable_t *arch_mmu_get_table(void) {
 void arch_mmu_init(void) {
     // Allocate the kernel (root) page table
     KLOG("initializing mmu");
-    RootTable = com_mm_pmm_alloc_zero();
+    com_mm_pmm_cache_init(&PageTableCache,
+                          PT_CACHE_INIT_SIZE,
+                          PT_CACHE_POOL_SIZE,
+                          PT_CACHE_MAX_POOL_SIZE,
+                          COM_MM_PMM_CACHE_LOCK,
+                          COM_MM_PMM_CACHE_NOMERGE);
+    RootTable = internal_alloc_phys();
     KASSERT(NULL != RootTable);
     RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
 
     // Map the higher half into the new page table
     KDEBUG("mapping higher half to kernel page table");
     for (uintmax_t i = 256; i < 512; i++) {
-        uint64_t *entry = com_mm_pmm_alloc_zero();
+        uint64_t *entry = internal_alloc_phys();
         KASSERT(NULL != entry);
         RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE |
                        ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_USER;
