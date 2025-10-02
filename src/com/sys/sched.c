@@ -64,6 +64,11 @@ static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
 
         com_proc_t *proc = zombie->proc;
         TAILQ_REMOVE_HEAD(local_zombies, threads);
+        KASSERT(zombie->exited);
+        KASSERT(NULL != zombie);
+        KASSERT(zombie != ARCH_CPU_GET_THREAD());
+        KASSERT(ARCH_CONTEXT_ISUSER(&zombie->ctx));
+        KASSERT(NULL != proc);
         com_sys_thread_destroy(zombie);
         if (proc->exited) {
             KHASHMAP_PUT(&ZombieProcMap, &proc->pid, proc);
@@ -87,19 +92,8 @@ static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
 }
 
 static void sched_idle(void) {
-    struct com_thread_tailq local_zombies;
-    TAILQ_INIT(&local_zombies);
-
     for (;;) {
-        ARCH_CPU_GET_THREAD()->lock_depth = 0;
-
-        kspinlock_acquire(&ZombieProcLock);
-        if (!TAILQ_EMPTY(&ZombieThreadQueue)) {
-            sched_reap_zombies(&local_zombies);
-        } else {
-            kspinlock_release(&ZombieProcLock);
-        }
-
+        ARCH_CPU_ENABLE_INTERRUPTS();
         ARCH_CPU_HALT();
     }
 }
