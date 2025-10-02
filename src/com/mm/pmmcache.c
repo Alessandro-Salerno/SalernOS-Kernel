@@ -22,6 +22,13 @@
 #include <lib/mem.h>
 #include <lib/util.h>
 
+#define HAS_AUTOLOCK(pmm_cache) \
+    (COM_MM_PMM_CACHE_FLAGS_AUTOLOCK & (pmm_cache)->private.flags)
+#define HAS_AUTOMERGE(pmm_cache) \
+    (COM_MM_PMM_CACHE_FLAGS_AUTOMERGE & (pmm_cache)->private.flags)
+#define HAS_AUTOALLOC(pmm_cache) \
+    (COM_MM_PMM_CACHE_FLAGS_AUTOALLOC & (pmm_cache)->private.flags)
+
 // NOTE: For those reading the code and wondering what this is for, it's
 // basically just batching calls to pmm to improve performance in multi CPU
 // contexts (mostly)
@@ -32,6 +39,11 @@ struct pmm_cache_pool {
 };
 
 static void *pmm_cache_new_pool(size_t pages) {
+#if CONFIG_PMM_CACHE_USE_ALLOC_MANY
+    struct pmm_cache_pool *pool = (void *)ARCH_PHYS_TO_HHDM(
+        com_mm_pmm_alloc_many_zero(pages));
+    pool->len = pages;
+#else
     struct pmm_cache_pool *pool = (void *)ARCH_PHYS_TO_HHDM(
         com_mm_pmm_alloc_zero());
     struct pmm_cache_pool *curr = pool;
@@ -46,35 +58,44 @@ static void *pmm_cache_new_pool(size_t pages) {
 
     curr->next = NULL;
     curr->len  = 1;
+#endif
     return pool;
 }
 
 void *com_mm_pmm_cache_alloc(com_pmm_cache_t *pmm_cache, size_t pages) {
     KASSERT(1 == pages);
 
-    if (pmm_cache->autolock) {
+    if (HAS_AUTOLOCK(pmm_cache)) {
         kspinlock_acquire(&pmm_cache->lock);
     }
 
-    if (NULL == pmm_cache->pool) {
+    void *ret = NULL;
+
+    if (NULL == pmm_cache->private.pool) {
         KASSERT(0 == pmm_cache->private.avail_pages);
-        pmm_cache->pool = pmm_cache_new_pool(pmm_cache->pool_size);
-        pmm_cache->private.avail_pages = pmm_cache->pool_size;
+
+        if (!HAS_AUTOALLOC(pmm_cache)) {
+            goto end;
+        }
+
+        pmm_cache->private.pool = pmm_cache_new_pool(
+            pmm_cache->private.pool_size);
+        pmm_cache->private.avail_pages = pmm_cache->private.pool_size;
     }
 
-    struct pmm_cache_pool *pool = pmm_cache->pool;
-    void                  *ret  = (void *)ARCH_HHDM_TO_PHYS(pool);
+    struct pmm_cache_pool *pool = pmm_cache->private.pool;
+    ret                         = (void *)ARCH_HHDM_TO_PHYS(pool);
     pmm_cache->private.avail_pages--;
     pool->len--;
 
     // If we ran out of space in the head poll
     if (0 == pool->len) {
         if (NULL != pool->next) {
-            pmm_cache->pool = pool->next;
+            pmm_cache->private.pool = pool->next;
         } else {
             // Next call will either happen after a free or have to allocate its
             // own stuff
-            pmm_cache->pool = NULL;
+            pmm_cache->private.pool = NULL;
         }
     } else {
         // If this pool still has space left, we need to move the pointer
@@ -84,15 +105,19 @@ void *com_mm_pmm_cache_alloc(com_pmm_cache_t *pmm_cache, size_t pages) {
         struct pmm_cache_pool *next_pool = (void *)next_addr;
         next_pool->len                   = pool->len;
         next_pool->next                  = pool->next;
-        pmm_cache->pool                  = next_pool;
+        pmm_cache->private.pool          = next_pool;
         // Length was decremented before
     }
 
-    if (pmm_cache->autolock) {
+end:
+    if (HAS_AUTOLOCK(pmm_cache)) {
         kspinlock_release(&pmm_cache->lock);
     }
 
-    *pool = (struct pmm_cache_pool){0};
+    if (NULL != ret) {
+        *pool = (struct pmm_cache_pool){0};
+    }
+
     return ret;
 }
 
@@ -101,26 +126,24 @@ void com_mm_pmm_cache_free(com_pmm_cache_t *pmm_cache, void *page) {
     // It is faster because preemption is enabled and it is safe because we
     // assume that merge is read-only
     struct pmm_cache_pool *virt_page = (void *)ARCH_PHYS_TO_HHDM(page);
-    if (!pmm_cache->merge) {
+    if (!HAS_AUTOMERGE(pmm_cache)) {
         kmemset(virt_page, ARCH_PAGE_SIZE, 0);
     }
 
-    if (pmm_cache->autolock) {
+    if (HAS_AUTOLOCK(pmm_cache)) {
         kspinlock_acquire(&pmm_cache->lock);
     }
 
-    if (pmm_cache->private.avail_pages > pmm_cache->max_pool_size) {
-        com_mm_pmm_free(page);
-    } else if (pmm_cache->merge) {
+    if (HAS_AUTOMERGE(pmm_cache)) {
         // TODO: try to merge into near entries
     } else {
-        virt_page->next = pmm_cache->pool;
-        virt_page->len  = 1;
-        pmm_cache->pool = virt_page;
+        virt_page->next         = pmm_cache->private.pool;
+        virt_page->len          = 1;
+        pmm_cache->private.pool = virt_page;
         pmm_cache->private.avail_pages++;
     }
 
-    if (pmm_cache->autolock) {
+    if (HAS_AUTOLOCK(pmm_cache)) {
         kspinlock_release(&pmm_cache->lock);
     }
 }
@@ -129,14 +152,12 @@ int com_mm_pmm_cache_init(com_pmm_cache_t *pmm_cache,
                           size_t           init_size,
                           size_t           pool_size,
                           size_t           max_pool_size,
-                          bool             autolock,
-                          bool             merge) {
-    pmm_cache->lock                = KSPINLOCK_NEW();
-    pmm_cache->autolock            = autolock;
-    pmm_cache->pool_size           = pool_size;
-    pmm_cache->max_pool_size       = max_pool_size;
-    pmm_cache->merge               = merge;
-    pmm_cache->pool                = pmm_cache_new_pool(init_size);
-    pmm_cache->private.avail_pages = init_size;
+                          int              flags) {
+    pmm_cache->lock                  = KSPINLOCK_NEW();
+    pmm_cache->private.pool_size     = pool_size;
+    pmm_cache->private.max_pool_size = max_pool_size;
+    pmm_cache->private.pool          = pmm_cache_new_pool(init_size);
+    pmm_cache->private.avail_pages   = init_size;
+    pmm_cache->private.flags         = flags;
     return 0;
 }

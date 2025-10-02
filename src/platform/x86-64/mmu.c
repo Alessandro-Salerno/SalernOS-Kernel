@@ -24,14 +24,15 @@
 #include <kernel/com/mm/pmmcache.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
+#include <kernel/platform/x86-64/mmu.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <threads.h>
 
-#define PT_CACHE_INIT_SIZE     (4096 * 4)
-#define PT_CACHE_POOL_SIZE     (4096 * 2)
-#define PT_CACHE_MAX_POOL_SIZE (4096 * 16)
+#define PT_CACHE_INIT_SIZE     1024
+#define PT_CACHE_POOL_SIZE     512
+#define PT_CACHE_MAX_POOL_SIZE 4096
 
 #define ADDRMASK (uint64_t)0x7ffffffffffff000
 #define PTMASK   (uint64_t)0b111111111000000000000
@@ -55,14 +56,15 @@ extern uint8_t _USER_DATA_START[];
 extern uint8_t _USER_DATA_END[];
 
 static arch_mmu_pagetable_t *RootTable = NULL;
-static com_pmm_cache_t       PageTableCache;
 
 static inline void *internal_alloc_phys(void) {
-    return com_mm_pmm_cache_alloc(&PageTableCache, 1);
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
+    return com_mm_pmm_cache_alloc(&curr_cpu->mmu_cache, 1);
 }
 
 static inline void internal_free_phys(void *page) {
-    com_mm_pmm_cache_free(&PageTableCache, page);
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
+    com_mm_pmm_cache_free(&curr_cpu->mmu_cache, page);
 }
 
 static inline uint64_t *next(uint64_t entry) {
@@ -285,12 +287,7 @@ arch_mmu_pagetable_t *arch_mmu_get_table(void) {
 void arch_mmu_init(void) {
     // Allocate the kernel (root) page table
     KLOG("initializing mmu");
-    com_mm_pmm_cache_init(&PageTableCache,
-                          PT_CACHE_INIT_SIZE,
-                          PT_CACHE_POOL_SIZE,
-                          PT_CACHE_MAX_POOL_SIZE,
-                          COM_MM_PMM_CACHE_LOCK,
-                          COM_MM_PMM_CACHE_NOMERGE);
+    x86_64_mmu_init_cpu();
     RootTable = internal_alloc_phys();
     KASSERT(NULL != RootTable);
     RootTable = (arch_mmu_pagetable_t *)ARCH_PHYS_TO_HHDM(RootTable);
@@ -379,4 +376,18 @@ void arch_mmu_init(void) {
 
     arch_mmu_switch((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable));
     ARCH_CPU_GET()->root_page_table = (void *)ARCH_HHDM_TO_PHYS(RootTable);
+}
+
+void x86_64_mmu_init_cpu(void) {
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
+    if (NULL != curr_cpu->mmu_cache.private.pool) {
+        return;
+    }
+
+    com_mm_pmm_cache_init(&curr_cpu->mmu_cache,
+                          PT_CACHE_INIT_SIZE,
+                          PT_CACHE_POOL_SIZE,
+                          PT_CACHE_MAX_POOL_SIZE,
+                          COM_MM_PMM_CACHE_FLAGS_AUTOALLOC |
+                              COM_MM_PMM_CACHE_FLAGS_AUTOLOCK);
 }

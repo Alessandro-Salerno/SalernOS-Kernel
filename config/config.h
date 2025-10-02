@@ -91,17 +91,18 @@
 #define CONFIG_SCHED_REAPER_MAX_PROCS   8
 
 // Misc
-#define CONFIG_PMM_ZERO            CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
-#define CONFIG_PMM_RSVRANGE_MAX    32
-#define CONFIG_TERM_FPS            60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC          1 /* Display kernel panic to fallback terminal */
-#define CONFIG_INIT_PATH           "/boot/init" /* Path to init executable */
-#define CONFIG_INIT_ARGV           NULL         /* Init program argv */
-#define CONFIG_INIT_ENV            NULL         /* Init program env */
-#define CONFIG_CALLOUT_MODE        CONST_CALLOUT_ONLY_BSP
-#define CONFIG_MUTEX_MODE          CONST_MUTEX_REAL
-#define CONFIG_UNIX_SOCK_RB_SIZE   (256UL * 1024UL)
-#define CONFIG_VMM_ANON_START      0x100000000
-#define CONFIG_VMM_REAPER_NOTIFY   8
-#define CONFIG_DEFAULT_KBD_LAYOUT  en_us
-#define CONFIG_SCHED_REAPER_NOTIFY 32
+#define CONFIG_PMM_ZERO                 CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
+#define CONFIG_PMM_RSVRANGE_MAX         32
+#define CONFIG_TERM_FPS                 60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC               1 /* Display kernel panic to fallback terminal */
+#define CONFIG_INIT_PATH                "/boot/init" /* Path to init executable */
+#define CONFIG_INIT_ARGV                NULL         /* Init program argv */
+#define CONFIG_INIT_ENV                 NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE             CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_MODE               CONST_MUTEX_REAL
+#define CONFIG_UNIX_SOCK_RB_SIZE        (256UL * 1024UL)
+#define CONFIG_VMM_ANON_START           0x100000000
+#define CONFIG_VMM_REAPER_NOTIFY        8
+#define CONFIG_DEFAULT_KBD_LAYOUT       en_us
+#define CONFIG_SCHED_REAPER_NOTIFY      32
+#define CONFIG_PMM_CACHE_USE_ALLOC_MANY 1

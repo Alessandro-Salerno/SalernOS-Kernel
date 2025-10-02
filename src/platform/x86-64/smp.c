@@ -26,6 +26,7 @@
 #include <kernel/platform/x86-64/gdt.h>
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/lapic.h>
+#include <kernel/platform/x86-64/mmu.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/mem.h>
@@ -56,6 +57,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     ARCH_CPU_SET(cpu);
     KDEBUG("initializing cpu %u", cpu->id);
 
+    x86_64_mmu_init_cpu();
     x86_64_gdt_init();
     x86_64_idt_init();
     x86_64_idt_reload();

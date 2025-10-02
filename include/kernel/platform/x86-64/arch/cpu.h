@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <kernel/com/mm/pmmcache.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/x86-64/arch/mmu.h>
@@ -57,9 +58,10 @@ typedef struct arch_cpu {
     uint64_t           id;
     uint32_t           lapic_id;
 
-    uint64_t     gdt[7];
-    x86_64_ist_t ist;
-    uint64_t     tsc_freq;
+    uint64_t        gdt[7];
+    x86_64_ist_t    ist;
+    uint64_t        tsc_freq;
+    com_pmm_cache_t mmu_cache;
 
     arch_mmu_pagetable_t *root_page_table;
 

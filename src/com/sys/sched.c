@@ -233,7 +233,19 @@ void com_sys_sched_yield_nolock(void) {
         TAILQ_REMOVE(&cpu->sched_queue, next, threads);
     }
 
-    KASSERT(curr != next);
+    // TODO: fix this as soon as I figure out why it's happening
+    if (curr == next) {
+        KURGENT("curr = %p, next = %p | curr->tid = %d, next->5id = %d | "
+                "IS_USER(curr) = %d, "
+                "IS_USER(next) = %d",
+                curr,
+                next,
+                curr->tid,
+                next->tid,
+                ARCH_CONTEXT_ISUSER(&curr->ctx),
+                ARCH_CONTEXT_ISUSER(&next->ctx));
+        KASSERT(curr != next);
+    }
     KASSERT(!curr->exited || !curr->runnable);
 
     if (curr->runnable && curr != cpu->idle_thread) {
