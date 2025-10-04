@@ -18,4 +18,9 @@
 
 #pragma once
 
+#include <kernel/com/sys/interrupt.h>
+
+#define X86_64_MMU_FLAGS_COW (1 << 9)
+
 void x86_64_mmu_init_cpu(void);
+void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx);

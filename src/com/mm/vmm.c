@@ -24,6 +24,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
+#include <lib/str.h>
 #include <stdatomic.h>
 
 static com_vmm_context_t RootContext = {0};
@@ -210,6 +211,74 @@ void com_mm_vmm_switch(com_vmm_context_t *context) {
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr) {
     context = vmm_ensure_context(context);
     return arch_mmu_get_physical(context->pagetable, virt_addr);
+}
+
+void com_mm_vmm_handle_fault(void           *fault_virt,
+                             void           *fault_phys,
+                             arch_context_t *fault_ctx,
+                             int             attr) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        com_sys_panic(fault_ctx,
+                      "unrecoverable page fault in kernel setup code on "
+                      "address (virt = %p, phys = %p)",
+                      fault_virt,
+                      fault_phys);
+    }
+
+    com_proc_t *curr_proc = curr_thread->proc;
+    bool        is_user   = ARCH_CONTEXT_ISUSER(&curr_thread->ctx);
+    if (!is_user || NULL == curr_proc) {
+    thread_fault:
+        com_sys_panic(fault_ctx,
+                      "unrecoverable page fault by %s thread (tid = %d) on "
+                      "address (virt = %p, phys = %p) in %s context",
+                      (is_user) ? "USER" : "KERNEL",
+                      curr_thread->tid,
+                      fault_virt,
+                      fault_phys,
+                      ARCH_CONTEXT_ISUSER(fault_ctx) ? "USER" : "KERNEL");
+        return;
+    }
+
+    if (COM_MM_VMM_FAULT_ATTR_COW & attr) {
+        kspinlock_acquire(&curr_proc->vmm_context->lock);
+        void *fault_virt_page = (void *)((uintptr_t)fault_virt &
+                                         ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        void *fault_phys_page = (void *)((uintptr_t)fault_phys &
+                                         ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        void *fault_hhdm      = (void *)ARCH_PHYS_TO_HHDM(fault_phys_page);
+        void *new_phys        = (void *)com_mm_pmm_alloc();
+        void *new_hhdm        = (void *)ARCH_PHYS_TO_HHDM(new_phys);
+        kmemcpy(new_hhdm, fault_hhdm, ARCH_PAGE_SIZE);
+        arch_mmu_map(curr_proc->vmm_context->pagetable,
+                     fault_virt_page,
+                     new_phys,
+                     ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_WRITE);
+        com_mm_vmm_switch(curr_proc->vmm_context);
+        KURGENT("COW mapped %p to pid = %d", fault_virt_page, curr_proc->pid);
+        // com_mm_pmm_free(fault_phys_page);
+        kspinlock_release(&curr_proc->vmm_context->lock);
+        return;
+    }
+
+    goto thread_fault;
+
+    KURGENT("sending SIGSEGV to pid=%d due to page fault on addr %p",
+            curr_proc->pid,
+            fault_virt);
+    com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
+
+    if (NULL != curr_proc->fd[2].file && NULL != curr_proc->fd[2].file->vnode) {
+        char *message = "kernel: page fault intercepted\n";
+        com_fs_vfs_write(NULL,
+                         curr_proc->fd[2].file->vnode,
+                         message,
+                         kstrlen(message),
+                         curr_proc->fd[2].file->off,
+                         0);
+    }
 }
 
 void com_mm_vmm_init(void) {

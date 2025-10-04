@@ -164,26 +164,25 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
-    uint64_t *virt = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
-    uint64_t new;
-    if (0 == level) {
-        // This is the actual page, so we call pmm directly
-        new = (uint64_t)com_mm_pmm_alloc_zero();
-    } else {
-        new = (uint64_t)internal_alloc_phys();
-    }
-    uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
+    uint64_t *virt           = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
+    bool      entry_writable = ARCH_MMU_FLAGS_WRITE & entry;
 
     if (0 == level) {
-        kmemcpy(nvirt, virt, ARCH_PAGE_SIZE);
-    } else {
-        for (size_t i = 0; i < 512; i++) {
-            if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
-                nvirt[i] = duplicate_recursive(
-                    virt[i],
-                    level - 1,
-                    addr | ((i << (12 + (level - 1) * 9))));
-            }
+        com_mm_pmm_hold((void *)(entry & ADDRMASK));
+        return (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable << 9);
+    }
+
+    uint64_t new    = (uint64_t)internal_alloc_phys();
+    uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
+
+    for (size_t i = 0; i < 512; i++) {
+        if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
+            // The parent should also be ovrridden since COW applies to them too
+            // now
+            virt[i] = nvirt[i] = duplicate_recursive(
+                virt[i],
+                level - 1,
+                addr | ((i << (12 + (level - 1) * 9))));
         }
     }
 
@@ -276,6 +275,22 @@ void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     }
     return (void *)((*entry & ADDRMASK) +
                     ((uintptr_t)virt_addr & (ARCH_PAGE_SIZE - 1)));
+}
+
+bool arch_mmu_is_cow(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
+    uint64_t *entry = get_page(pagetable, virt_addr);
+    if (NULL == entry) {
+        return false;
+    }
+    return X86_64_MMU_FLAGS_COW & *entry;
+}
+
+bool arch_mmu_is_executable(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
+    uint64_t *entry = get_page(pagetable, virt_addr);
+    if (NULL == entry) {
+        return false;
+    }
+    return !(ARCH_MMU_FLAGS_NOEXEC & *entry);
 }
 
 arch_mmu_pagetable_t *arch_mmu_get_table(void) {
@@ -390,4 +405,22 @@ void x86_64_mmu_init_cpu(void) {
                           PT_CACHE_MAX_POOL_SIZE,
                           COM_MM_PMM_CACHE_FLAGS_AUTOALLOC |
                               COM_MM_PMM_CACHE_FLAGS_AUTOLOCK);
+}
+
+void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
+    (void)isr;
+
+    arch_mmu_pagetable_t *curr_pt    = arch_mmu_get_table();
+    void                 *fault_virt = (void *)ctx->cr2;
+    void *fault_phys = arch_mmu_get_physical(curr_pt, fault_virt);
+
+    int vmm_attr = 0;
+    if (arch_mmu_is_cow(curr_pt, fault_virt)) {
+        vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW;
+    }
+    if (!arch_mmu_is_executable(curr_pt, fault_virt)) {
+        vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW_NOEXEC;
+    }
+
+    com_mm_vmm_handle_fault(fault_virt, fault_phys, ctx, vmm_attr);
 }

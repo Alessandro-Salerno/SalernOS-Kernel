@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <arch/context.h>
 #include <arch/mmu.h>
 #include <lib/spinlock.h>
 #include <stddef.h>
@@ -32,6 +33,9 @@
 #define COM_MM_VMM_FLAGS_SHARED    32
 #define COM_MM_VMM_FLAGS_REPLACE   64
 #define COM_MM_VMM_FLAGS_ALLOCATE  128
+
+#define COM_MM_VMM_FAULT_ATTR_COW        1 // COW enabled on the address
+#define COM_MM_VMM_FAULT_ATTR_COW_NOEXEC 2 // Whether to set NOEXEC in COW
 
 typedef struct com_vmm_context {
     arch_mmu_pagetable_t *pagetable;
@@ -53,3 +57,7 @@ void              *com_mm_vmm_map(com_vmm_context_t *context,
                                   arch_mmu_flags_t   mmu_flags);
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr);
 void  com_mm_vmm_switch(com_vmm_context_t *context);
+void  com_mm_vmm_handle_fault(void           *fault_virt,
+                              void           *fault_phys,
+                              arch_context_t *fault_ctx,
+                              int             attr);

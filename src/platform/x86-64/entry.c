@@ -32,6 +32,7 @@
 #include <kernel/platform/x86-64/idt.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/lapic.h>
+#include <kernel/platform/x86-64/mmu.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
@@ -43,33 +44,6 @@
 #include <vendor/tailq.h>
 
 static arch_cpu_t BspCpu = {0};
-
-KUSED void pgf_sig_test(com_isr_t *isr, arch_context_t *ctx) {
-    (void)isr;
-
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL == curr_thread) {
-        com_sys_panic(ctx, "cpu exception (page fault)");
-    }
-    com_proc_t *curr_proc = curr_thread->proc;
-
-    if (ARCH_CONTEXT_ISUSER(ctx) && NULL != curr_proc) {
-        KDEBUG("sending SIGSEGV to pid=%d", curr_proc->pid);
-        if (NULL != curr_proc->fd[2].file &&
-            NULL != curr_proc->fd[2].file->vnode) {
-            char *message = "SEGMENTATION FAULT\n";
-            com_fs_vfs_write(NULL,
-                             curr_proc->fd[2].file->vnode,
-                             message,
-                             kstrlen(message),
-                             curr_proc->fd[2].file->off,
-                             0);
-        }
-        com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
-    } else {
-        com_sys_panic(ctx, "cpu exception (page fault)");
-    }
-}
 
 void x86_64_entry(void) {
     // BSP CPU initialization
@@ -101,7 +75,7 @@ void x86_64_entry(void) {
     com_sys_interrupt_register(X86_64_LAPIC_SELF_IPI_INTERRUPT,
                                com_sys_sched_isr,
                                x86_64_lapic_eoi);
-    // com_sys_interrupt_register(0x0E, pgf_sig_test, NULL);
+    com_sys_interrupt_register(0x0E, x86_64_mmu_fault_isr, NULL);
     com_sys_syscall_init();
     x86_64_lapic_bsp_init();
     x86_64_tsc_bsp_init();
