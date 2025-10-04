@@ -229,20 +229,10 @@ void com_mm_vmm_handle_fault(void           *fault_virt,
     com_proc_t *curr_proc = curr_thread->proc;
     bool        is_user   = ARCH_CONTEXT_ISUSER(&curr_thread->ctx);
     if (!is_user || NULL == curr_proc) {
-    thread_fault:
-        com_sys_panic(fault_ctx,
-                      "unrecoverable page fault by %s thread (tid = %d) on "
-                      "address (virt = %p, phys = %p) in %s context",
-                      (is_user) ? "USER" : "KERNEL",
-                      curr_thread->tid,
-                      fault_virt,
-                      fault_phys,
-                      ARCH_CONTEXT_ISUSER(fault_ctx) ? "USER" : "KERNEL");
-        return;
+        goto kernel_thread;
     }
 
     if (COM_MM_VMM_FAULT_ATTR_COW & attr) {
-        kspinlock_acquire(&curr_proc->vmm_context->lock);
         void *fault_virt_page = (void *)((uintptr_t)fault_virt &
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
         void *fault_phys_page = (void *)((uintptr_t)fault_phys &
@@ -257,18 +247,9 @@ void com_mm_vmm_handle_fault(void           *fault_virt,
                      ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
                          ARCH_MMU_FLAGS_WRITE);
         com_mm_vmm_switch(curr_proc->vmm_context);
-        KURGENT("COW mapped %p to pid = %d", fault_virt_page, curr_proc->pid);
-        // com_mm_pmm_free(fault_phys_page);
-        kspinlock_release(&curr_proc->vmm_context->lock);
+        com_mm_pmm_free(fault_phys_page);
         return;
     }
-
-    goto thread_fault;
-
-    KURGENT("sending SIGSEGV to pid=%d due to page fault on addr %p",
-            curr_proc->pid,
-            fault_virt);
-    com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
 
     if (NULL != curr_proc->fd[2].file && NULL != curr_proc->fd[2].file->vnode) {
         char *message = "kernel: page fault intercepted\n";
@@ -279,6 +260,24 @@ void com_mm_vmm_handle_fault(void           *fault_virt,
                          curr_proc->fd[2].file->off,
                          0);
     }
+
+    if (ARCH_CONTEXT_ISUSER(fault_ctx)) {
+        KDEBUG("sending SIGSEGV to pid=%d due to page fault on addr %p",
+               curr_proc->pid,
+               fault_virt);
+        com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
+        return;
+    }
+
+kernel_thread:
+    com_sys_panic(fault_ctx,
+                  "unrecoverable page fault by %s thread (tid = %d) on "
+                  "address (virt = %p, phys = %p) in %s context",
+                  (is_user) ? "USER" : "KERNEL",
+                  curr_thread->tid,
+                  fault_virt,
+                  fault_phys,
+                  ARCH_CONTEXT_ISUSER(fault_ctx) ? "USER" : "KERNEL");
 }
 
 void com_mm_vmm_init(void) {

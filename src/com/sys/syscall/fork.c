@@ -47,6 +47,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
         curr_proc->vmm_context);
+    com_mm_vmm_switch(curr_proc->vmm_context);
     com_proc_t *new_proc = com_sys_proc_new(new_vmm_ctx,
                                             curr_proc->pid,
                                             curr_proc->root,

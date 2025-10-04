@@ -177,12 +177,15 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
 
     for (size_t i = 0; i < 512; i++) {
         if (ARCH_MMU_FLAGS_PRESENT & virt[i]) {
-            // The parent should also be ovrridden since COW applies to them too
-            // now
-            virt[i] = nvirt[i] = duplicate_recursive(
-                virt[i],
-                level - 1,
-                addr | ((i << (12 + (level - 1) * 9))));
+            nvirt[i] = duplicate_recursive(virt[i],
+                                           level - 1,
+                                           addr |
+                                               ((i << (12 + (level - 1) * 9))));
+            if (1 == level) {
+                virt[i] = nvirt[i];
+                // entry = (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable <<
+                // 9);
+            }
         }
     }
 

@@ -80,12 +80,13 @@ void com_sys_interrupt_free(com_isr_t *isr) {
 
 void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL != curr_thread) {
+    com_isr_t    *isr         = &InterruptTable[vec];
+    bool          eoi_after   = COM_SYS_INTERRUPT_FALGS_EOI_AFTER & isr->flags;
+    bool          no_reset    = COM_SYS_INTERRUPT_FALGS_NO_RESET & isr->flags;
+
+    if (NULL != curr_thread && !no_reset) {
         curr_thread->lock_depth = 1;
     }
-
-    com_isr_t *isr       = &InterruptTable[vec];
-    bool       eoi_after = COM_SYS_INTERRUPT_FALGS_EOI_AFTER & isr->flags;
 
     if (NULL == isr) {
         com_sys_panic(ctx, "isr not set for interrupt vector %u", vec);
@@ -107,7 +108,7 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
         com_ipc_signal_dispatch(ctx, curr_thread);
     }
 
-    if (NULL != curr_thread) {
+    if (NULL != curr_thread && !no_reset) {
         KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
         KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
         KASSERT(1 == curr_thread->lock_depth);

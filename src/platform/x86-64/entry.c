@@ -75,7 +75,10 @@ void x86_64_entry(void) {
     com_sys_interrupt_register(X86_64_LAPIC_SELF_IPI_INTERRUPT,
                                com_sys_sched_isr,
                                x86_64_lapic_eoi);
-    com_sys_interrupt_register(0x0E, x86_64_mmu_fault_isr, NULL);
+    com_isr_t *pf_iser = com_sys_interrupt_register(0x0E,
+                                                    x86_64_mmu_fault_isr,
+                                                    NULL);
+    pf_iser->flags |= COM_SYS_INTERRUPT_FALGS_NO_RESET;
     com_sys_syscall_init();
     x86_64_lapic_bsp_init();
     x86_64_tsc_bsp_init();

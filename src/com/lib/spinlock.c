@@ -46,9 +46,10 @@ static inline void decrement_lock_depth_tested(void) {
         int old_depth = curr_thread->lock_depth--;
 
         if (old_depth < 1) {
-            LOCK_ERROR(
-                "trying to unlock lock on thread with invalid lock depth %d",
-                old_depth);
+            LOCK_ERROR("trying to unlock lock on thread (tid = %d) with "
+                       "invalid lock depth %d",
+                       curr_thread->tid,
+                       old_depth);
         }
 
         if (1 == old_depth) {

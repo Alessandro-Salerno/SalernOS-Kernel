@@ -639,9 +639,9 @@ void com_mm_pmm_hold(void *page) {
 
 void com_mm_pmm_free(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
-    KASSERT(E_PAGE_STATE_TAKEN == page_meta->state);
 
-    if (0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_SEQ_CST)) {
+    if (E_PAGE_STATE_TAKEN != page_meta->state ||
+        0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_SEQ_CST)) {
         return;
     }
 

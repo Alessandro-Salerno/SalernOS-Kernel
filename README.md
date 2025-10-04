@@ -51,6 +51,7 @@ The kernel itself supports the following features:
     - [x] PMM
     - [x] Slab allocator
     - [x] VMM
+    - [x] Copy on write
     - [ ] Page cache (will be added soon)
   - System management
     - [x] System Call Interface

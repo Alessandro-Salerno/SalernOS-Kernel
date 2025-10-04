@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #define COM_SYS_INTERRUPT_FALGS_EOI_AFTER (1 << 8)
+#define COM_SYS_INTERRUPT_FALGS_NO_RESET  (1 << 9)
 
 typedef struct com_isr com_isr_t;
 typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
