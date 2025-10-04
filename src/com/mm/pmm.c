@@ -17,251 +17,690 @@
 *************************************************************************/
 
 #include <arch/info.h>
+#include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/panic.h>
+#include <kernel/com/sys/sched.h>
+#include <kernel/com/sys/thread.h>
 #include <kernel/platform/info.h>
+#include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/printf.h>
+#include <lib/searchtree.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
+#include <vendor/tailq.h>
 
-typedef struct Bitmap {
-    size_t    size;
-    uint8_t  *buffer;
-    uintmax_t index;
-} bmp_t;
+#define FREELIST_LOCK(freelist_head) kspinlock_acquire(&(freelist_head)->lock);
+#define FREELIST_UNLOCK(freelist_head) \
+    kspinlock_release(&(freelist_head)->lock);
 
-struct reserved_range {
-    uintptr_t base;
-    size_t    length;
+#define LAZYLIST_LOCK(lazylist_head) kspinlock_acquire(&(lazylist_head)->lock);
+#define LAZYLIST_UNLOCK(lazylist_head) \
+    kspinlock_release(&(lazylist_head)->lock);
+#define LAZYLIST_WAIT(lazylist_head)                   \
+    {                                                  \
+        LAZYLIST_LOCK(lazylist_head);                  \
+        com_sys_sched_wait(&(lazylist_head)->waitlist, \
+                           &(lazylist_head)->lock);    \
+        LAZYLIST_UNLOCK(lazylist_head);                \
+    }
+#define LAZYLIST_NOTIFY(lazylist_head)                    \
+    {                                                     \
+        LAZYLIST_LOCK(lazylist_head);                     \
+        com_sys_sched_notify(&(lazylist_head)->waitlist); \
+        LAZYLIST_UNLOCK(lazylist_head);                   \
+    }
+
+#define PHYS_TO_META_INDEX(page_phys) ((uintptr_t)(page_phys) / ARCH_PAGE_SIZE)
+#define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / ARCH_PAGE_SIZE)
+#define PAGE_META_ARRAY_SIZE(memsize) \
+    (PAGE_META_ARRAY_LEN(memsize) * sizeof(struct page_meta))
+
+#define UPDATE_STATS(field, diff)            \
+    __atomic_add_fetch(&MemoryStats.field,   \
+                       diff *ARCH_PAGE_SIZE, \
+                       __ATOMIC_SEQ_CST)
+#define READ_STATS(field) __atomic_load_n(&MemoryStats.field, __ATOMIC_SEQ_CST)
+
+// NOTE: the defrag thread is not implemented yet (see comments below), so to
+// avoid warnings I mark those functions as used. But to avoid confusion on
+// whether they're really used or not, I use this macro instead. You're welcome
+#define DEFRAG_NOT_IMPLEMENTED KUSED
+
+TAILQ_HEAD(freelist_tailq, freelist_entry);
+
+struct freelist_head {
+    struct freelist_tailq head;
+    KSEARCHTREE_ROOT(, freelist_entry) tree;
+    kspinlock_t lock;
 };
 
-// TODO: This PMM is 4 years old, get rid of all of this
-static bmp_t                 PageBitmap;
-static struct reserved_range ReservedRanges[CONFIG_PMM_RSVRANGE_MAX];
-static size_t                NumReservedRanges = 0;
+// A block of one or more contigous pages that points to two more such blocks
+// (one before, one after)
+struct freelist_entry {
+    TAILQ_ENTRY(freelist_entry) tqe;
+    KSEARCHTREE_NODE(freelist_entry, uintptr_t) stn;
+    size_t pages;
+};
 
-static uintmax_t MemSize     = 0;
-static uintmax_t UsableMem   = 0;
-static uintmax_t FreeMem     = 0;
-static uintmax_t ReservedMem = 0;
-static uintmax_t UsedMem     = 0;
+struct lazylist_head {
+    struct lazylist_entry  *first;
+    struct com_thread_tailq waitlist;
+    kspinlock_t             lock;
+};
 
-static kspinlock_t Lock = KSPINLOCK_NEW();
+// An entry into a lazy list, i.e. a list where each entry is a distinct page
+// which is waiting for lazy processing. This struct is mapped directly over the
+// page, using the first bytes of the buffer
+struct lazylist_entry {
+    struct lazylist_entry *next;
+    size_t                 pages;
+};
 
-static bool bmp_get(bmp_t *bmp, uintmax_t idx) {
-    uintmax_t byte_idx    = idx / 8;
-    uint8_t   bit_idx     = idx % 8;
-    uint8_t   bit_indexer = 1 << bit_idx;
+enum page_state {
+    // NOTE: this must be zero, since all memory is zeroed on boot, and all page
+    // structs in the array are assumed to report a free state
+    E_PAGE_STATE_FREE = 0,
+    E_PAGE_STATE_RESERVED,
+    E_PAGE_STATE_TAKEN
+};
 
-    return (bmp->buffer[byte_idx] & bit_indexer) > 0;
-}
+enum page_type {
+    E_PAGE_TYPE_ANONYMOUS,
+    E_PAGE_TYPE_FILE
+};
 
-static inline void bmp_set(bmp_t *bmp, uintmax_t idx, bool val) {
-    uintmax_t byte_idx    = idx >> 3;
-    uint8_t   bit_idx     = idx & 0b111;
-    uint8_t   bit_indexer = 1 << bit_idx;
+// An entry into the global page array that holds data about the page which is
+// situated outside the page tiself. The index into the array is calculated as
+// follows:
+//      idx = page_phys_addr / ARCH_PAGE_SIZE
+struct page_meta {
+    enum page_state state;
+    size_t          num_ref;
 
-    bmp->buffer[byte_idx] &= ~bit_indexer;
-    bmp->buffer[byte_idx] |= bit_indexer * val;
-}
+    enum page_type type;
+    union {};
+};
 
-static void add_reserved_range(uintptr_t base, size_t length) {
-    KASSERT(NumReservedRanges < CONFIG_PMM_RSVRANGE_MAX);
-    ReservedRanges[NumReservedRanges++] = (struct reserved_range){
-        .base   = base,
-        .length = length};
-}
+struct page_meta_array {
+    struct page_meta *buffer;
+    size_t            len;
+};
 
-static bool is_reserved(void *ptr, size_t pages) {
-    uintptr_t addr  = (uintptr_t)ptr;
-    size_t    bytes = pages * ARCH_PAGE_SIZE;
-    uintptr_t end   = addr + bytes;
+// GLOBAL VARIABLES
 
-    for (size_t i = 0; i < NumReservedRanges; i++) {
-        struct reserved_range *range = &ReservedRanges[i];
-        if ((addr >= range->base && addr < range->base + range->length) ||
-            (end >= range->base && end < range->base + range->length)) {
-            return true;
+// List of currently available blocks. This list is ordered by block size
+static struct freelist_head MainFreeList = {0};
+// List of pages to be zeroed by async thread
+static struct lazylist_head ZeroLazyList = {0};
+// List of pages that have been zeroed, but have yet to be inserted in the
+// correct order in the main free list
+static struct lazylist_head InsertLazyList = {0};
+// Array of page metadata. Initialized by the init() function to piont to a the
+// HHDM representation of a memory map entry large enough to hold it
+static struct page_meta_array PageMeta = {0};
+// Consolidated data for fast access. Should be accessed atomically after
+// initialization
+static com_pmm_stats_t MemoryStats = {0};
+// Background threads may go to sleep at some point to save CPU time, so they
+// need waitlists. But defrag is not on a lazylist, so it needs its own here
+static struct com_thread_tailq DefragThreadWaitlist;
+static kspinlock_t             DefragNotifyLock = KSPINLOCK_NEW();
+// To help the defrag thread, the insert thread tires to group pages a little
+static khashmap_t InsertThreadDefragMap;
+
+// UTILITY FUNCTIONS
+
+// Freelists are ordered, so insertion should be too
+static inline void freelist_add_ordered_nolock(struct freelist_head  *freelist,
+                                               struct freelist_entry *entry) {
+    // Fast path for 1-page sized inserts. These will always go to the end
+    if (1 == entry->pages) {
+        struct freelist_entry *curr_last = TAILQ_LAST(&freelist->head,
+                                                      freelist_tailq);
+        // If the freelist is empty, we just add the entry
+        if (NULL == curr_last) {
+            goto fallback;
+        }
+        // If it comes right after the last entry, we merge the two
+        if ((uintptr_t)entry ==
+            (uintptr_t)curr_last + curr_last->pages * ARCH_PAGE_SIZE) {
+            curr_last->pages++;
+            return;
+        }
+        // If it comes right before, we do the same
+        if ((uintptr_t)curr_last == (uintptr_t)entry + ARCH_PAGE_SIZE) {
+            entry->pages += curr_last->pages;
+            TAILQ_REMOVE(&freelist->head, curr_last, tqe);
+        }
+        // If the two entries exist, but are not contiguous, or the new entry is
+        // contiguous but comes before (last if statement), we ad the new entryu
+        // to the end
+        goto fallback;
+    }
+
+    struct freelist_entry *curr, *_;
+    TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
+        if (entry->pages >= curr->pages) {
+            TAILQ_INSERT_BEFORE(curr, entry, tqe);
+            return;
         }
     }
 
-    return false;
+fallback:
+    // Either the freelist is empty or this entry is the smallest. Either way,
+    // just add it to the end
+    TAILQ_INSERT_TAIL(&freelist->head, entry, tqe);
 }
 
-static inline void reserve_page(void *address, uintmax_t *rsvmemcount) {
-    uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
+// Freelists are not just ordered, they're faster if they contain fewer entries.
+// Thus, before adding an entry, we should check if it is just a continuation of
+// a preexisting entry. The reason why we keep the "basic oerdered" function is
+// that this one is slower, so it should be called as rarely as possiblle,
+// whereas the other one might be called by some allocation code.
+// NOTE: This functions does not perform defragmentation
+static inline void freelist_add_merged_nolock(struct freelist_head  *freelist,
+                                              struct freelist_entry *entry) {
+    uintptr_t entry_first_page = (uintptr_t)entry;
+    uintptr_t entry_last_page  = entry_first_page +
+                                (entry->pages - 1) * ARCH_PAGE_SIZE;
 
-    // KASSERT(!bmp_get(&PageBitmap, idx));
+    struct freelist_entry *curr, *_;
+    TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
+        uintptr_t curr_first_page = (uintptr_t)curr;
+        uintptr_t curr_last_page  = curr_first_page +
+                                   (entry->pages - 1) * ARCH_PAGE_SIZE;
 
-    bmp_set(&PageBitmap, idx, 1);
-    FreeMem -= ARCH_PAGE_SIZE;
-    *rsvmemcount += ARCH_PAGE_SIZE;
-}
+        if (curr_first_page == entry_last_page + ARCH_PAGE_SIZE) {
+            entry->pages += curr->pages;
+            TAILQ_INSERT_BEFORE(curr, entry, tqe);
+            TAILQ_REMOVE(&freelist->head, curr, tqe);
+            curr = entry;
+            return;
+        }
 
-static inline void unreserve_page(void *address, uintmax_t *rsvmemcount) {
-    uintmax_t idx = (uintmax_t)address / ARCH_PAGE_SIZE;
-
-    // KASSERT(bmp_get(&PageBitmap, idx));
-
-    bmp_set(&PageBitmap, idx, 0);
-    FreeMem += ARCH_PAGE_SIZE;
-    *rsvmemcount -= ARCH_PAGE_SIZE;
-
-    // This is a bit index
-    if (PageBitmap.index > idx) {
-        PageBitmap.index = idx;
-    }
-}
-
-static inline void alloc_pages(void *address, uint64_t pagecount) {
-    for (uintmax_t i = 0; i < pagecount; i++) {
-        reserve_page((void *)((uintptr_t)address + (i * ARCH_PAGE_SIZE)),
-                     &UsedMem);
-    }
-}
-
-void unreserve_pages(void *address, uint64_t pagecount) {
-    for (uintmax_t i = 0; i < pagecount; i++) {
-        unreserve_page((void *)((uintptr_t)address + (i * ARCH_PAGE_SIZE)),
-                       &ReservedMem);
-    }
-}
-
-void *com_mm_pmm_alloc(void) {
-    kspinlock_acquire(&Lock);
-    void *ret = NULL;
-
-    for (uintmax_t i = PageBitmap.index / 8; i < PageBitmap.size; i++) {
-        // Allocatrion fast path
-        if (0xff != PageBitmap.buffer[i]) {
-            uintmax_t bit_index   = __builtin_ctzl(~PageBitmap.buffer[i]);
-            uint8_t   bit_indexer = 1 << bit_index;
-            PageBitmap.buffer[i] |= bit_indexer;
-            PageBitmap.index = i * 8 + bit_index;
-            ret              = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
-            FreeMem -= ARCH_PAGE_SIZE;
-            UsedMem += ARCH_PAGE_SIZE;
-            break;
+        if (curr_last_page == entry_first_page - ARCH_PAGE_SIZE) {
+            curr->pages += entry->pages;
+            return;
         }
     }
 
-    kspinlock_release(&Lock);
+    // Could not be merged with any existing entry, so we jsut add it as a
+    // separate one
+    freelist_add_ordered_nolock(freelist, entry);
+}
+
+// Since the freelist is ordered, taking from the rear means taking from the
+// smaller chunks, which is good when allocating single pages
+static inline struct freelist_entry *
+freelist_pop_rear_nolock(struct freelist_head *freelist) {
+    struct freelist_entry *last = TAILQ_LAST(&MainFreeList.head,
+                                             freelist_tailq);
+    KASSERT(NULL != last);
+
+    if (1 == last->pages) {
+        TAILQ_REMOVE(&freelist->head, last, tqe);
+    } else {
+        last->pages--;
+        last = (void *)((uintptr_t)last + ARCH_PAGE_SIZE * last->pages);
+    }
+
+    return last;
+}
+
+// When allocating multiple pages, however, we take them from the front, because
+// it is more likelly that we'll find a match immediatelly
+static inline struct freelist_entry *
+freelist_pop_front_nolock(size_t               *out_alloc_size,
+                          struct freelist_head *freelist,
+                          size_t                num_pages) {
+    struct freelist_entry *ret = TAILQ_FIRST(&freelist->head);
     KASSERT(NULL != ret);
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
-    kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE, 0);
-#endif
-    return ret;
-}
+    size_t alloc_size = KMIN(num_pages, ret->pages);
 
-void *com_mm_pmm_alloc_many(size_t pages) {
-    kspinlock_acquire(&Lock);
-    void  *ret       = NULL;
-    size_t num_found = 0;
-    bool   was_free  = false;
+    struct freelist_entry *entry      = ret;
+    struct freelist_entry *next_entry = TAILQ_NEXT(entry, tqe);
 
-    for (; PageBitmap.index < PageBitmap.size * 8; PageBitmap.index++) {
-        bool is_free = 0 == bmp_get(&PageBitmap, PageBitmap.index);
-
-        if (is_free && num_found == pages) {
-            alloc_pages(ret, pages);
-            break;
-        } else if (is_free && was_free) {
-            num_found++;
-        } else if (is_free) {
-            ret       = (void *)(PageBitmap.index * ARCH_PAGE_SIZE);
-            num_found = 1;
-        } else {
-            ret       = NULL;
-            num_found = 0;
-        }
-
-        was_free = is_free;
+    if (alloc_size == ret->pages) {
+        TAILQ_REMOVE(&freelist->head, ret, tqe);
+    } else {
+        ret->pages -= alloc_size;
+        ret = (void *)((uintptr_t)ret + ARCH_PAGE_SIZE * ret->pages);
     }
 
-    kspinlock_release(&Lock);
-    KASSERT(NULL != ret);
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_ALLOC
-    kmemset((void *)ARCH_PHYS_TO_HHDM(ret), ARCH_PAGE_SIZE * pages, 0);
-#endif
+    // Since we decrement the number of pages in this entry, it may now longer
+    // be the largest
+    if (NULL != next_entry && next_entry->pages > entry->pages) {
+        TAILQ_REMOVE(&freelist->head, entry, tqe);
+        freelist_add_ordered_nolock(freelist, entry);
+    }
+
+    *out_alloc_size = alloc_size;
     return ret;
 }
 
-void *com_mm_pmm_alloc_zero(void) {
-    void *ret = com_mm_pmm_alloc();
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
-    kmemset(ret, ARCH_PAGE_SIZE, 0);
-#endif
-    return ret;
-}
+// Lazy lists are not ordered, this adds to the head of the list
+static inline void lazylist_add_nolock(struct lazylist_head  *lazylist,
+                                       struct lazylist_entry *entry) {
+    if (NULL == lazylist->first) {
+        goto fallback;
+    }
 
-void *com_mm_pmm_alloc_many_zero(size_t pages) {
-    void *ret = com_mm_pmm_alloc_many(pages);
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_OFF
-    kmemset(ret, ARCH_PAGE_SIZE * pages, 0);
-#endif
-    return ret;
-}
-
-void com_mm_pmm_free(void *page) {
-    com_mm_pmm_free_many(page, 1);
-}
-
-void com_mm_pmm_free_many(void *base, size_t pages) {
-    // Avoid freeing reserved pages
-    if (is_reserved(base, pages)) {
+    // Functiosns like memset scale better on larger blocks, so we try to merge
+    // these
+    if ((uintptr_t)entry ==
+        (uintptr_t)lazylist->first + lazylist->first->pages * ARCH_PAGE_SIZE) {
+        lazylist->first->pages++;
         return;
     }
 
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
-    kmemset((void *)ARCH_PHYS_TO_HHDM(base), ARCH_PAGE_SIZE * pages, 0);
-#endif
-
-    kspinlock_acquire(&Lock);
-    for (size_t i = 0; i < pages; i++) {
-        void *page = (void *)((uintptr_t)base + i * ARCH_PAGE_SIZE);
-        unreserve_page(page, &UsedMem);
+    if ((uintptr_t)lazylist->first ==
+        (uintptr_t)entry + entry->pages * ARCH_PAGE_SIZE) {
+        entry->next = lazylist->first->next;
+        entry->pages += lazylist->first->pages;
+        *lazylist->first = (struct lazylist_entry){0};
+        lazylist->first  = entry;
+        return;
     }
-    kspinlock_release(&Lock);
+
+fallback:
+    entry->next     = lazylist->first;
+    lazylist->first = entry;
 }
 
-void com_mm_pmm_get_info(uintmax_t *used_mem,
-                         uintmax_t *free_mem,
-                         uintmax_t *reserved_mem,
-                         uintmax_t *sys_mem,
-                         uintmax_t *mem_size) {
-    if (NULL != used_mem) {
-        *used_mem = UsedMem;
+// Take the lazy list as it is now,  then empty it. This way, the caller can
+// take a local pointer to the entire list, ensuring that the global lock is
+// held for as little as possible, but the contents are still thread-safe
+static inline struct lazylist_entry *
+lazylist_truncate_nolock(struct lazylist_head *lazylist) {
+    struct lazylist_entry *ret = lazylist->first;
+    lazylist->first            = NULL;
+    return ret;
+}
+
+static inline struct page_meta *page_meta_get(void *phys_addr) {
+    size_t index = PHYS_TO_META_INDEX(phys_addr);
+    KASSERT(index < PageMeta.len);
+    return &PageMeta.buffer[index];
+}
+
+static inline void
+page_meta_set(void *page_phys, struct page_meta *tocopy, size_t num_pages) {
+    uintptr_t end_addr = (uintptr_t)page_phys + num_pages * ARCH_PAGE_SIZE;
+    size_t    index1   = PHYS_TO_META_INDEX(page_phys);
+    size_t    index2   = PHYS_TO_META_INDEX(end_addr) - 1;
+    KASSERT(index1 < PageMeta.len);
+    KASSERT(index2 < PageMeta.len);
+
+    kmemrepcpy(page_meta_get(page_phys),
+               tocopy,
+               sizeof(struct page_meta),
+               num_pages);
+}
+
+// BACKGROUND TASKS
+
+DEFRAG_NOT_IMPLEMENTED static void
+pmm_notify_defrag_callout(com_callout_t *callout) {
+    kspinlock_acquire(&DefragNotifyLock);
+    com_sys_sched_notify(&DefragThreadWaitlist);
+    kspinlock_release(&DefragNotifyLock);
+    com_sys_callout_reschedule(callout,
+                               CONFIG_PMM_DEFRAG_TIMEOUT / 1000UL *
+                                   KNANOS_PER_SEC);
+}
+
+static void pmm_zero_thread(void) {
+    bool                   already_done = false;
+    struct lazylist_entry *to_zero      = NULL;
+    size_t zero_max = READ_STATS(usable) / 10000 * CONFIG_PMM_ZERO_MAX /
+                      ARCH_PAGE_SIZE;
+    size_t to_insert_notify = CONFIG_PMM_NOTIFY_INSERT * ARCH_PAGE_SIZE;
+
+    while (true) {
+        // Allow kernel preemption
+        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+        curr_thread->lock_depth   = 0;
+        ARCH_CPU_ENABLE_INTERRUPTS();
+
+        if (already_done) {
+            LAZYLIST_WAIT(&ZeroLazyList);
+            already_done = false;
+        }
+
+        if (NULL == to_zero) {
+            LAZYLIST_LOCK(&ZeroLazyList);
+            to_zero = lazylist_truncate_nolock(&ZeroLazyList);
+            LAZYLIST_UNLOCK(&ZeroLazyList);
+        }
+
+        // Repeated if because the values might have changed
+        if (NULL == to_zero) {
+            already_done = true;
+            continue;
+        }
+
+        size_t pages_zeroed = 0;
+        while (NULL != to_zero && pages_zeroed < zero_max) {
+            struct lazylist_entry *next          = to_zero->next;
+            size_t                 to_zero_pages = to_zero->pages;
+
+            // Memset only the part the insert thread doesn't need
+            kmemset(to_zero + 1,
+                    to_zero_pages * ARCH_PAGE_SIZE -
+                        sizeof(struct lazylist_entry),
+                    0);
+
+            // Pass it on to the insert thrtead
+            LAZYLIST_LOCK(&InsertLazyList);
+            lazylist_add_nolock(&InsertLazyList, to_zero);
+            LAZYLIST_UNLOCK(&InsertLazyList);
+
+            to_zero = next;
+            pages_zeroed += to_zero_pages;
+        }
+
+        UPDATE_STATS(to_zero, -pages_zeroed);
+        size_t to_insert = UPDATE_STATS(to_insert, +pages_zeroed);
+
+        if (to_insert >= to_insert_notify) {
+            LAZYLIST_NOTIFY(&InsertLazyList);
+        }
+
+        already_done = true;
+    }
+}
+
+static void pmm_insert_thread(void) {
+    bool                   already_done = false;
+    struct lazylist_entry *to_insert    = NULL;
+    size_t insert_max = READ_STATS(usable) / 10000 * CONFIG_PMM_ZERO_MAX /
+                        ARCH_PAGE_SIZE;
+    size_t to_defrag_notify = CONFIG_PMM_NOTIFY_DEFRAG * ARCH_PAGE_SIZE;
+
+    while (true) {
+        // Allow kernel preemption
+        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+        curr_thread->lock_depth   = 0;
+        ARCH_CPU_ENABLE_INTERRUPTS();
+
+        if (already_done) {
+            LAZYLIST_WAIT(&InsertLazyList);
+            already_done = false;
+        }
+
+        if (NULL == to_insert) {
+            LAZYLIST_LOCK(&InsertLazyList);
+            to_insert = lazylist_truncate_nolock(&InsertLazyList);
+            LAZYLIST_UNLOCK(&InsertLazyList);
+        }
+
+        // Repeated if because the values might have changed
+        if (NULL == to_insert) {
+            already_done = true;
+            continue;
+        }
+
+        // For each entry in the lazylist, we try to see if is contiguous with
+        // some previsouly added block, so that we already do a bit of defrag
+        // here
+        size_t pages_inserted = 0;
+        while (NULL != to_insert && pages_inserted < insert_max) {
+            struct lazylist_entry *next            = to_insert->next;
+            size_t                 to_insert_pages = to_insert->pages;
+            uintptr_t              to_insert_addr  = (uintptr_t)to_insert;
+            uintptr_t prev_page_addr = to_insert_addr - ARCH_PAGE_SIZE;
+            uintptr_t next_page_addr = to_insert_addr +
+                                       (to_insert_pages * ARCH_PAGE_SIZE);
+            bool add_to_hashmap = true;
+
+            struct lazylist_entry *prev_page_entry;
+            struct lazylist_entry *next_page_entry;
+            if (ENOENT != KHASHMAP_GET(&prev_page_entry,
+                                       &InsertThreadDefragMap,
+                                       &prev_page_addr)) {
+                prev_page_entry->pages += to_insert_pages;
+                to_insert      = prev_page_entry;
+                to_insert_addr = prev_page_addr;
+                add_to_hashmap = false;
+            }
+
+            if (ENOENT != KHASHMAP_GET(&next_page_entry,
+                                       &InsertThreadDefragMap,
+                                       &next_page_addr)) {
+                KHASHMAP_REMOVE(&InsertThreadDefragMap, &next_page_addr);
+                to_insert->pages += next_page_entry->pages;
+                *next_page_entry = (struct lazylist_entry){0};
+            }
+
+            if (add_to_hashmap) {
+                KHASHMAP_PUT(&InsertThreadDefragMap,
+                             &to_insert_addr,
+                             to_insert);
+            }
+
+            to_insert = next;
+            pages_inserted += to_insert_pages;
+        }
+
+        // Perform the actual insert process
+        KHASHMAP_FOREACH(&InsertThreadDefragMap) {
+            struct lazylist_entry *lazylist_entry = entry->value;
+            // Since we're using the address as key, but the address also
+            // contains the structure, then we're left with this unreadable
+            // mess. I'm sorry
+            uintptr_t entry_key = (uintptr_t)entry->value;
+            size_t    pages     = lazylist_entry->pages;
+            // We transform it into a freelist entry
+            struct freelist_entry *freelist_entry = entry->value;
+            freelist_entry->pages                 = pages;
+
+            // This is zeroeing, but we do it here because it is less fragmented
+            // and kernel lib likes that. No need to lock this since as long as
+            // the pages are not in the freelist, we're the only ones that will
+            // look into this buffer
+            struct page_meta *page_meta_base = page_meta_get(
+                (void *)ARCH_HHDM_TO_PHYS(freelist_entry));
+            kmemset(page_meta_base,
+                    freelist_entry->pages * sizeof(struct page_meta),
+                    0);
+
+            FREELIST_LOCK(&MainFreeList);
+            freelist_add_ordered_nolock(&MainFreeList, freelist_entry);
+            FREELIST_UNLOCK(&MainFreeList);
+
+            KHASHMAP_REMOVE(&InsertThreadDefragMap, &entry_key);
+        }
+
+        UPDATE_STATS(to_insert, -pages_inserted);
+        size_t to_defrag = UPDATE_STATS(to_defrag, +pages_inserted);
+
+        if (to_defrag >= to_defrag_notify) {
+            kspinlock_acquire(&DefragNotifyLock);
+            com_sys_sched_notify(&DefragThreadWaitlist);
+            kspinlock_release(&DefragNotifyLock);
+        }
+
+        already_done = true;
+    }
+}
+
+DEFRAG_NOT_IMPLEMENTED static void pmm_defrag_thread(void) {
+    // TODO: the insert thread tries to defragment things, but it would be
+    // better to also have this thread run every so often to fully defragment
+    // the structure. Say, after a certain amount of time (see callout function
+    // above), after a certain number of pages reinserted, or when the freelist
+    // reaches a certain number of entries. To speed this up, I could use the
+    // search tree (which is ordered by address instead of length) and perform
+    // an in-order visit while merging nodes
+}
+
+// INTERFACE FUNCTIONS
+
+void *com_mm_pmm_alloc(void) {
+    FREELIST_LOCK(&MainFreeList);
+    struct freelist_entry *virt_ret = freelist_pop_rear_nolock(&MainFreeList);
+    FREELIST_UNLOCK(&MainFreeList);
+
+    *virt_ret                   = (struct freelist_entry){0};
+    void             *phys      = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
+    struct page_meta *page_meta = page_meta_get(phys);
+
+    KASSERT(E_PAGE_STATE_FREE == page_meta->state);
+    KASSERT(0 == page_meta->num_ref);
+    page_meta->num_ref = 1;
+    page_meta->state   = E_PAGE_STATE_TAKEN;
+    page_meta->type    = E_PAGE_TYPE_ANONYMOUS;
+
+    UPDATE_STATS(used, +1);
+    UPDATE_STATS(free, -1);
+
+    return phys;
+}
+
+void *com_mm_pmm_alloc_many(size_t pages) {
+    if (1 == pages) {
+        return com_mm_pmm_alloc();
     }
 
-    if (NULL != free_mem) {
-        *free_mem = FreeMem;
+    FREELIST_LOCK(&MainFreeList);
+    size_t                 alloc_size;
+    struct freelist_entry *virt_ret = freelist_pop_front_nolock(&alloc_size,
+                                                                &MainFreeList,
+                                                                pages);
+    FREELIST_UNLOCK(&MainFreeList);
+    KASSERT(alloc_size == pages);
+
+    *virt_ret  = (struct freelist_entry){0};
+    void *phys = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
+
+    struct page_meta model = {.num_ref = 1,
+                              .state   = E_PAGE_STATE_TAKEN,
+                              .type    = E_PAGE_TYPE_ANONYMOUS};
+    page_meta_set(phys, &model, pages);
+
+    UPDATE_STATS(used, +pages);
+    UPDATE_STATS(free, -pages);
+
+    return phys;
+}
+
+void *com_mm_pmm_alloc_zero(void) {
+    return com_mm_pmm_alloc();
+}
+
+void *com_mm_pmm_alloc_many_zero(size_t pages) {
+    return com_mm_pmm_alloc_many(pages);
+}
+
+void *com_mm_pmm_alloc_max(size_t *out_alloc_size, size_t pages) {
+    if (1 == pages) {
+        return com_mm_pmm_alloc();
     }
 
-    if (NULL != reserved_mem) {
-        *reserved_mem = ReservedMem;
+    FREELIST_LOCK(&MainFreeList);
+    size_t                 alloc_size;
+    struct freelist_entry *virt_ret = freelist_pop_front_nolock(&alloc_size,
+                                                                &MainFreeList,
+                                                                pages);
+    FREELIST_UNLOCK(&MainFreeList);
+
+    *virt_ret  = (struct freelist_entry){0};
+    void *phys = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
+
+    struct page_meta model = {.num_ref = 1,
+                              .state   = E_PAGE_STATE_TAKEN,
+                              .type    = E_PAGE_TYPE_ANONYMOUS};
+    page_meta_set(phys, &model, alloc_size);
+
+    UPDATE_STATS(used, +alloc_size);
+    UPDATE_STATS(free, -alloc_size);
+
+    if (NULL != out_alloc_size) {
+        *out_alloc_size = alloc_size;
     }
 
-    if (NULL != sys_mem) {
-        *sys_mem = UsableMem;
+    return phys;
+}
+
+void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages) {
+    return com_mm_pmm_alloc_max(out_alloc_size, pages);
+}
+
+void com_mm_pmm_hold(void *page) {
+    struct page_meta *page_meta = page_meta_get(page);
+    KASSERT(E_PAGE_STATE_FREE != page_meta->state);
+    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST);
+}
+
+void com_mm_pmm_free(void *page) {
+    struct page_meta *page_meta = page_meta_get(page);
+    KASSERT(E_PAGE_STATE_TAKEN == page_meta->state);
+
+    if (0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_SEQ_CST)) {
+        return;
     }
 
-    if (NULL != mem_size) {
-        *mem_size = MemSize;
+    struct lazylist_entry *entry = (void *)ARCH_PHYS_TO_HHDM(page);
+    entry->pages                 = 1;
+
+    LAZYLIST_LOCK(&ZeroLazyList);
+    lazylist_add_nolock(&ZeroLazyList, entry);
+    LAZYLIST_UNLOCK(&ZeroLazyList);
+
+    size_t to_zero_notify = READ_STATS(usable) / 10000 * CONFIG_PMM_NOTIFY_ZERO;
+    if (UPDATE_STATS(to_zero, +1) >= to_zero_notify) {
+        LAZYLIST_NOTIFY(&ZeroLazyList);
     }
+}
+
+void com_mm_pmm_free_many(void *base, size_t pages) {
+    for (size_t i = 0; i < pages; i++) {
+        com_mm_pmm_free((uint8_t *)base + i * ARCH_PAGE_SIZE);
+    }
+}
+
+void com_mm_pmm_get_stats(com_pmm_stats_t *out) {
+    *out = MemoryStats;
+}
+
+void com_mm_pmm_init_threads(void) {
+    KLOG("initializing pmm threads");
+    TAILQ_INIT(&ZeroLazyList.waitlist);
+    TAILQ_INIT(&InsertLazyList.waitlist);
+    TAILQ_INIT(&DefragThreadWaitlist);
+    KHASHMAP_INIT(&InsertThreadDefragMap);
+
+    // Zero thread
+    com_thread_t *zero_thread = com_sys_thread_new_kernel(NULL,
+                                                          pmm_zero_thread);
+    zero_thread->runnable     = true;
+    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, zero_thread, threads);
+
+    // Insert thread
+    com_thread_t *insert_thread = com_sys_thread_new_kernel(NULL,
+                                                            pmm_insert_thread);
+    insert_thread->runnable     = true;
+    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, insert_thread, threads);
+
+    // Defrag thread
 }
 
 void com_mm_pmm_init(void) {
     KLOG("initializing pmm");
     arch_memmap_t *memmap       = arch_info_get_memmap();
     uintptr_t      highest_addr = 0;
+    TAILQ_INIT(&MainFreeList.head);
+    KSEARCHTREE_INIT(&MainFreeList.tree);
 
-    // Calculate memory map & bitmap size
+    // Calculate memory map & page meta array size
     for (uintmax_t i = 0; i < memmap->entry_count; i++) {
         arch_memmap_entry_t *entry = memmap->entries[i];
-        MemSize += entry->length;
+        MemoryStats.total += entry->length;
         uintptr_t seg_top = entry->base + entry->length;
 
         KDEBUG("segment: base=%p top=%p usable=%u length=%u",
@@ -270,77 +709,106 @@ void com_mm_pmm_init(void) {
                ARCH_MEMMAP_IS_USABLE(entry),
                entry->length);
 
-        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
-            ReservedMem += entry->length;
-            add_reserved_range(entry->base, entry->length);
-            continue;
-        }
-
-#if CONFIG_PMM_ZERO == CONST_PMM_ZERO_ON_FREE
-        kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
-#endif
-
-        UsableMem += entry->length;
         if (seg_top > highest_addr) {
             highest_addr = seg_top;
         }
+
+        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
+            MemoryStats.reserved += entry->length;
+            continue;
+        }
+
+        kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
+        MemoryStats.usable += entry->length;
     }
 
+    MemoryStats.total = highest_addr;
     KDEBUG("searched all segments, found highest address at %p", highest_addr);
 
-    // Compute the actual size of the bitmap
-    uintptr_t highest_pgindex = highest_addr / ARCH_PAGE_SIZE;
-    size_t    bmp_sz          = highest_pgindex / 8 + 1;
+    // Compute the actual size of the page meta array
+    size_t page_meta_size  = PAGE_META_ARRAY_SIZE(highest_addr);
+    size_t page_meta_pages = (page_meta_size + ARCH_PAGE_SIZE - 1) /
+                             ARCH_PAGE_SIZE;
+    size_t page_meta_aligned_size = page_meta_pages * ARCH_PAGE_SIZE;
+    KDEBUG("page meta array size = %u byte(s) = %u page(s) = %u aligned "
+           "byte(s)",
+           page_meta_size,
+           page_meta_pages,
+           page_meta_aligned_size);
 
-    KDEBUG("memory is %u pages, bitmap needs %u bytes",
-           highest_pgindex,
-           bmp_sz);
-
-    // Find a segment that fits the bitmap and allocate it there
+    // Find a segment that fits the array and allocate it there
     for (uintmax_t i = 0; i < memmap->entry_count; i++) {
         arch_memmap_entry_t *entry = memmap->entries[i];
 
-        if (ARCH_MEMMAP_IS_USABLE(entry) && entry->length >= bmp_sz) {
-            uintptr_t transbase = ARCH_PHYS_TO_HHDM(entry->base);
-            KDEBUG("bitmap: base=%p size=%u segment=%u", transbase, bmp_sz, i);
-            PageBitmap.buffer = (uint8_t *)transbase;
-            PageBitmap.size   = bmp_sz;
+        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
+            continue;
+        }
 
-            // Reserve the entire memory space
-            kmemset((void *)PageBitmap.buffer, bmp_sz, 0xff);
-            add_reserved_range(entry->base, bmp_sz);
+        if (NULL == PageMeta.buffer &&
+            entry->length >= page_meta_aligned_size) {
+            PageMeta.buffer = (void *)ARCH_PHYS_TO_HHDM(entry->base);
+            PageMeta.len    = PAGE_META_ARRAY_LEN(highest_addr);
+            // Already zeroed before. Remember, 0 == E_PAGE_STATE_FREE
 
-            // If a good-enough segment has been found
-            // there's no need to continue
-            break;
+            // We now reserve the pages used for this array
+            struct page_meta model = {.num_ref = 1,
+                                      .state   = E_PAGE_STATE_RESERVED};
+            page_meta_set((void *)entry->base, &model, page_meta_pages);
+            MemoryStats.usable -= page_meta_aligned_size;
+            MemoryStats.reserved += page_meta_aligned_size;
+
+            // We also add this to the freelist. This list entry of couse is
+            // a little special since a part of it has been reserved. The
+            // address is rounded down to the nearest fully free page
+            // boundary to guarantee that allocations will always return
+            // aligned addresses. This is only performed if there is still
+            // at least one page elft
+            if (entry->length >= page_meta_aligned_size + ARCH_PAGE_SIZE) {
+                size_t remaining_length = entry->length -
+                                          page_meta_aligned_size;
+                size_t remaining_pages = remaining_length / ARCH_PAGE_SIZE;
+
+                struct freelist_entry
+                    *list_entry   = (void *)(ARCH_PHYS_TO_HHDM(entry->base) +
+                                           page_meta_aligned_size);
+                list_entry->pages = remaining_pages;
+                freelist_add_ordered_nolock(&MainFreeList, list_entry);
+            }
+
+            KDEBUG("page meta array: base=%p, segment=%u, length=%u",
+                   PageMeta.buffer,
+                   i,
+                   PageMeta.len);
+            continue;
+        }
+
+        // If we got here, it means the entire entry is free for us!
+        struct freelist_entry *list_entry = (void *)(ARCH_PHYS_TO_HHDM(
+            entry->base));
+        list_entry->pages                 = entry->length / ARCH_PAGE_SIZE;
+        freelist_add_ordered_nolock(&MainFreeList, list_entry);
+    }
+
+    KDEBUG("reserving remaining unusable pages");
+
+    // We couldn't reserve all unusable regions before because the array
+    // might not have been set yet. But we can not
+    for (uintmax_t i = 0; i < memmap->entry_count; i++) {
+        arch_memmap_entry_t *entry = memmap->entries[i];
+
+        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
+            struct page_meta model = {.num_ref = 1,
+                                      .state   = E_PAGE_STATE_RESERVED};
+            page_meta_set((void *)entry->base,
+                          &model,
+                          entry->length / ARCH_PAGE_SIZE);
         }
     }
 
-    KDEBUG("freeing usable pages");
+    MemoryStats.free = MemoryStats.usable;
 
-    // Unreserve free memory
-    uintmax_t max_len = 0;
-    for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-        arch_memmap_entry_t *entry = memmap->entries[i];
-        void                *base  = (void *)entry->base;
-        uintmax_t            len   = entry->length;
-
-        // Avoid unreserving the page bitmap
-        // you don't want that
-        if ((void *)ARCH_HHDM_TO_PHYS(PageBitmap.buffer) == base) {
-            base += PageBitmap.size;
-            len -= PageBitmap.size;
-        }
-
-        if (ARCH_MEMMAP_IS_USABLE(entry)) {
-            unreserve_pages(base, len / ARCH_PAGE_SIZE);
-
-            kmemset((void *)base, len, 0);
-
-            if (len > max_len) {
-                max_len          = len;
-                PageBitmap.index = (uintptr_t)base / ARCH_PAGE_SIZE;
-            }
-        }
+    struct freelist_entry *e, *_;
+    TAILQ_FOREACH_SAFE(e, &MainFreeList.head, tqe, _) {
+        KDEBUG("freelist entry %p has %u pages", e, e->pages);
     }
 }

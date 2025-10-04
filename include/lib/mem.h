@@ -27,3 +27,4 @@ void  *kmemcpy(void *dst, const void *src, size_t buffsize);
 void  *kmemchr(const void *str, int c, size_t n);
 void  *kmemrchr(const void *str, int c, size_t n);
 void  *kmemmove(void *dst, void *src, size_t n);
+void  *kmemrepcpy(void *dst, const void *src, size_t buffsize, size_t rep);

@@ -50,11 +50,6 @@
 #define CONST_ASSERT_SOFT   2 /* Only print warning on assertion fail */
 #define CONST_ASSERT_PANIC  3 /* Panic on assertion fail */
 
-// PMM zero policies
-#define CONST_PMM_ZERO_ON_ALLOC 0 /* Pages are zeroed on allocation */
-#define CONST_PMM_ZERO_ON_FREE  1 /* Pages are zeroed on boot and on free */
-#define CONST_PMM_ZERO_OFF      2 /* Pages are not zeroed by PMM */
-
 // Callout modes
 #define CONST_CALLOUT_ONLY_BSP 0
 #define CONST_CALLOUT_PER_CPU  1
@@ -89,20 +84,25 @@
 #define CONFIG_VMM_REAPER_MAX           16
 #define CONFIG_SCHED_REAPER_MAX_THREADS 32
 #define CONFIG_SCHED_REAPER_MAX_PROCS   8
+#define CONFIG_PMM_ZERO_MAX             400
+#define CONFIG_PMM_INSERT_MAX           200
+#define CONFIG_PMM_DEFRAG_MAX           500
 
 // Misc
-#define CONFIG_PMM_ZERO                 CONST_PMM_ZERO_ON_FREE /* PMM page zeroeing policy */
-#define CONFIG_PMM_RSVRANGE_MAX         32
-#define CONFIG_TERM_FPS                 60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC               1 /* Display kernel panic to fallback terminal */
-#define CONFIG_INIT_PATH                "/boot/init" /* Path to init executable */
-#define CONFIG_INIT_ARGV                NULL         /* Init program argv */
-#define CONFIG_INIT_ENV                 NULL         /* Init program env */
-#define CONFIG_CALLOUT_MODE             CONST_CALLOUT_ONLY_BSP
-#define CONFIG_MUTEX_MODE               CONST_MUTEX_REAL
-#define CONFIG_UNIX_SOCK_RB_SIZE        (256UL * 1024UL)
-#define CONFIG_VMM_ANON_START           0x100000000
-#define CONFIG_VMM_REAPER_NOTIFY        8
-#define CONFIG_DEFAULT_KBD_LAYOUT       en_us
-#define CONFIG_SCHED_REAPER_NOTIFY      32
-#define CONFIG_PMM_CACHE_USE_ALLOC_MANY 1
+#define CONFIG_TERM_FPS             60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC           1 /* Display kernel panic to fallback terminal */
+#define CONFIG_INIT_PATH            "/boot/init" /* Path to init executable */
+#define CONFIG_INIT_ARGV            NULL         /* Init program argv */
+#define CONFIG_INIT_ENV             NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE         CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_MODE           CONST_MUTEX_REAL
+#define CONFIG_UNIX_SOCK_RB_SIZE    (256UL * 1024UL)
+#define CONFIG_VMM_ANON_START       0x100000000
+#define CONFIG_VMM_REAPER_NOTIFY    8
+#define CONFIG_DEFAULT_KBD_LAYOUT   en_us
+#define CONFIG_SCHED_REAPER_NOTIFY  32
+#define CONFIG_PMM_NOTIFY_ZERO      200 /* % of memory to zero before notify */
+#define CONFIG_PMM_NOTIFY_INSERT    200 /* % of memory to free before notify */
+#define CONFIG_PMM_NOTIFY_DEFRAG    400 /* % of max pages freed since defrag */
+#define CONFIG_PMM_DEFRAG_TIMEOUT   10000 /* max time since last defrag (ms) */
+#define CONFIG_PMM_DEFRAG_THRESHOLD 100   /* min % of memory since defrag */

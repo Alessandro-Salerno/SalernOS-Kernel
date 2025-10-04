@@ -25,11 +25,10 @@
 #include <stdint.h>
 
 struct sysinfo {
-    char      cpu[64];
-    char      gpu[64];
-    char      kernel[64];
-    uintmax_t used_mem;
-    uintmax_t sys_mem;
+    char            cpu[64];
+    char            gpu[64];
+    char            kernel[64];
+    com_pmm_stats_t memory;
 };
 
 // SYSCALL: sysinfo(struct sysinfo *buf)
@@ -44,12 +43,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
     kmemset(sysinfo->cpu, 64, 0);
     kmemset(sysinfo->gpu, 64, 0);
     kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.4 (indev)");
-
-    com_mm_pmm_get_info(&sysinfo->used_mem,
-                        NULL,
-                        NULL,
-                        &sysinfo->sys_mem,
-                        NULL);
+    com_mm_pmm_get_stats(&sysinfo->memory);
 
     return COM_SYS_SYSCALL_OK(0);
 }

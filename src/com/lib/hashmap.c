@@ -24,8 +24,8 @@
 #include <lib/mem.h>
 #include <lib/util.h>
 
-#define FNV1OFFSET 0xcbf29ce484222325ull
-#define FNV1PRIME  0x100000001b3ull
+#define FNV1OFFSET 0xcbf29ce484222325ULL
+#define FNV1PRIME  0x100000001b3ULL
 
 static inline uintmax_t get_hash(void *buffer, size_t size) {
     uint8_t *ptr = buffer;
@@ -42,7 +42,7 @@ static inline uintmax_t get_hash(void *buffer, size_t size) {
 
 static khashmap_entry_t *
 get_entry(khashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
-    uintmax_t                    off         = hash % hashmap->capacity;
+    uintmax_t                    off         = hash & (hashmap->capacity - 1);
     struct khashmap_entry_tailq *entry_queue = &hashmap->entries[off];
 
     khashmap_entry_t *entry, *_;
@@ -58,8 +58,8 @@ get_entry(khashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
 
 int khashmap_init(khashmap_t *hashmap, size_t size) {
     hashmap->capacity = size;
-    hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(
-        com_mm_pmm_alloc_many(sizeof(khashmap_entry_t) * size / 4096 + 1));
+    hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(
+        sizeof(khashmap_entry_t) * size / ARCH_PAGE_SIZE + 1));
 
     if (NULL == hashmap->entries) {
         return ENOMEM;
@@ -90,7 +90,7 @@ int khashmap_put(khashmap_t *hashmap, void *key, size_t key_size, void *value) {
     }
 
     uintmax_t         hash  = get_hash(key, key_size);
-    uintmax_t         off   = hash % hashmap->capacity;
+    uintmax_t         off   = hash & (hashmap->capacity - 1);
     khashmap_entry_t *entry = com_mm_slab_alloc(sizeof(khashmap_entry_t));
 
     if (NULL == entry) {
@@ -128,7 +128,7 @@ int khashmap_get(void **out, khashmap_t *hashmap, void *key, size_t key_size) {
 
 int khashmap_remove(khashmap_t *hashmap, void *key, size_t key_size) {
     uintmax_t                    hash        = get_hash(key, key_size);
-    uintmax_t                    off         = hash % hashmap->capacity;
+    uintmax_t                    off         = hash & (hashmap->capacity - 1);
     struct khashmap_entry_tailq *bucket_head = &hashmap->entries[off];
     khashmap_entry_t *entry = get_entry(hashmap, key, key_size, hash);
 

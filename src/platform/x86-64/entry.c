@@ -20,6 +20,7 @@
 #include <arch/info.h>
 #include <kernel/com/init.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/opt/flanterm.h>

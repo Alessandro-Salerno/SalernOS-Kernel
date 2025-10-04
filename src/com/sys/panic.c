@@ -43,13 +43,13 @@ com_sys_panic(arch_context_t *ctx, const char *fmt, ...) {
         kprintf("\n\n");
     }
 
-    size_t used_mem, free_mem, rsv_mem, sys_mem, mem_size;
-    com_mm_pmm_get_info(&used_mem, &free_mem, &rsv_mem, &sys_mem, &mem_size);
-    kprintf("used memory: %u byte(s)\n", used_mem);
-    kprintf("free memory: %u byte(s)\n", free_mem);
-    kprintf("reserved memory: %u byte(s)\n", rsv_mem);
-    kprintf("system memory: %u byte(s)\n", sys_mem);
-    kprintf("total memory: %u byte(s)\n", mem_size);
+    com_pmm_stats_t memstats;
+    com_mm_pmm_get_stats(&memstats);
+    kprintf("used memory: %u byte(s)\n", memstats.used);
+    kprintf("free memory: %u byte(s)\n", memstats.free);
+    kprintf("reserved memory: %u byte(s)\n", memstats.reserved);
+    kprintf("system memory: %u byte(s)\n", memstats.usable);
+    kprintf("total memory: %u byte(s)\n", memstats.total);
     kprintf("\n");
 
     if (NULL == ctx && NULL != curr_thread) {

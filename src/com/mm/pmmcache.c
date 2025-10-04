@@ -33,32 +33,33 @@
 // basically just batching calls to pmm to improve performance in multi CPU
 // contexts (mostly)
 
-struct pmm_cache_pool {
-    struct pmm_cache_pool *next;
-    size_t                 len;
+struct pool {
+    struct pool *next;
+    size_t       len;
 };
 
 static void *pmm_cache_new_pool(size_t pages) {
-#if CONFIG_PMM_CACHE_USE_ALLOC_MANY
-    struct pmm_cache_pool *pool = (void *)ARCH_PHYS_TO_HHDM(
-        com_mm_pmm_alloc_many_zero(pages));
-    pool->len = pages;
-#else
-    struct pmm_cache_pool *pool = (void *)ARCH_PHYS_TO_HHDM(
-        com_mm_pmm_alloc_zero());
-    struct pmm_cache_pool *curr = pool;
+    struct pool *pool = NULL;
+    struct pool *prev = NULL;
 
-    for (size_t i = 0; i < pages - 1; i++) {
-        struct pmm_cache_pool *next = (void *)ARCH_PHYS_TO_HHDM(
-            com_mm_pmm_alloc_zero());
-        curr->next = next;
-        curr->len  = 1;
-        curr       = next;
+    for (size_t allocated = 0; allocated < pages;) {
+        size_t       curr_size;
+        struct pool *curr = (void *)ARCH_PHYS_TO_HHDM(
+            com_mm_pmm_alloc_max_zero(&curr_size, pages));
+        curr->next = NULL;
+        curr->len  = curr_size;
+
+        if (NULL == prev) {
+            pool = curr;
+            prev = curr;
+        } else {
+            prev->next = curr;
+        }
+
+        prev = curr;
+        allocated += curr_size;
     }
 
-    curr->next = NULL;
-    curr->len  = 1;
-#endif
     return pool;
 }
 
@@ -83,8 +84,8 @@ void *com_mm_pmm_cache_alloc(com_pmm_cache_t *pmm_cache, size_t pages) {
         pmm_cache->private.avail_pages = pmm_cache->private.pool_size;
     }
 
-    struct pmm_cache_pool *pool = pmm_cache->private.pool;
-    ret                         = (void *)ARCH_HHDM_TO_PHYS(pool);
+    struct pool *pool = pmm_cache->private.pool;
+    ret               = (void *)ARCH_HHDM_TO_PHYS(pool);
     pmm_cache->private.avail_pages--;
     pool->len--;
 
@@ -100,12 +101,12 @@ void *com_mm_pmm_cache_alloc(com_pmm_cache_t *pmm_cache, size_t pages) {
     } else {
         // If this pool still has space left, we need to move the pointer
         // forwards
-        uintptr_t              head_addr = (uintptr_t)pool;
-        uintptr_t              next_addr = head_addr + ARCH_PAGE_SIZE;
-        struct pmm_cache_pool *next_pool = (void *)next_addr;
-        next_pool->len                   = pool->len;
-        next_pool->next                  = pool->next;
-        pmm_cache->private.pool          = next_pool;
+        uintptr_t    head_addr  = (uintptr_t)pool;
+        uintptr_t    next_addr  = head_addr + ARCH_PAGE_SIZE;
+        struct pool *next_pool  = (void *)next_addr;
+        next_pool->len          = pool->len;
+        next_pool->next         = pool->next;
+        pmm_cache->private.pool = next_pool;
         // Length was decremented before
     }
 
@@ -115,7 +116,7 @@ end:
     }
 
     if (NULL != ret) {
-        *pool = (struct pmm_cache_pool){0};
+        *pool = (struct pool){0};
     }
 
     return ret;
@@ -125,7 +126,7 @@ void com_mm_pmm_cache_free(com_pmm_cache_t *pmm_cache, void *page) {
     // We do this before acquiring the lock!
     // It is faster because preemption is enabled and it is safe because we
     // assume that merge is read-only
-    struct pmm_cache_pool *virt_page = (void *)ARCH_PHYS_TO_HHDM(page);
+    struct pool *virt_page = (void *)ARCH_PHYS_TO_HHDM(page);
     if (!HAS_AUTOMERGE(pmm_cache)) {
         kmemset(virt_page, ARCH_PAGE_SIZE, 0);
     }

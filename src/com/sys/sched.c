@@ -89,6 +89,8 @@ static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
             num_done_procs++;
         }
     }
+
+    KASSERT(TAILQ_EMPTY(local_zombies));
 }
 
 static void sched_idle(void) {

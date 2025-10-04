@@ -102,3 +102,24 @@ void *kmemmove(void *dst, void *src, size_t n) {
 
     return dst;
 }
+
+void *kmemrepcpy(void *dst, const void *src, size_t buffsize, size_t rep) {
+    if (0 == rep || 0 == buffsize) {
+        return NULL;
+    }
+
+    kmemcpy(dst, src, buffsize);
+    size_t copied   = buffsize;
+    size_t dst_size = buffsize * rep;
+
+    while (copied < dst_size) {
+        size_t to_copy = copied;
+        if (copied + to_copy > dst_size) {
+            to_copy = dst_size - copied;
+        }
+        kmemcpy((uint8_t *)dst + copied, dst, to_copy);
+        copied += to_copy;
+    }
+
+    return dst;
+}

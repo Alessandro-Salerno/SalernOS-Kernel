@@ -18,18 +18,36 @@
 
 #pragma once
 
+#include <arch/info.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define COM_MM_PMM_ALLOC_BYTES(bytes) \
+    com_mm_pmm_alloc_many_zero((bytes + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE)
+#define COM_MM_PMM_FREE_BYTES(ptr, bytes) \
+    com_mm_pmm_free_many(ptr, (bytes + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE)
+
+typedef struct com_pmm_stats {
+    size_t total;
+    size_t usable;
+    size_t reserved;
+    size_t free;
+    size_t used;
+    size_t evictable;
+    size_t to_zero;
+    size_t to_insert;
+    size_t to_defrag;
+} com_pmm_stats_t;
 
 void *com_mm_pmm_alloc(void);
 void *com_mm_pmm_alloc_many(size_t pages);
 void *com_mm_pmm_alloc_zero(void);
 void *com_mm_pmm_alloc_many_zero(size_t pages);
+void *com_mm_pmm_alloc_max(size_t *out_alloc_size, size_t pages);
+void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages);
+void  com_mm_pmm_hold(void *page);
 void  com_mm_pmm_free(void *page);
 void  com_mm_pmm_free_many(void *base, size_t pages);
-void  com_mm_pmm_get_info(uintmax_t *used_mem,
-                          uintmax_t *free_mem,
-                          uintmax_t *reserved_mem,
-                          uintmax_t *sys_mem,
-                          uintmax_t *mem_size);
+void  com_mm_pmm_get_stats(com_pmm_stats_t *out);
+void  com_mm_pmm_init_threads(void);
 void  com_mm_pmm_init(void);
