@@ -346,7 +346,7 @@ void x86_64_ps2_keyboard_init(void) {
     Ps2Keyboard        = com_io_keyboard_new(NULL);
     com_isr_t *kbd_isr = com_sys_interrupt_allocate(ps2_keyboard_isr,
                                                     x86_64_lapic_eoi);
-    kbd_isr->flags |= COM_SYS_INTERRUPT_FALGS_EOI_AFTER;
+    kbd_isr->flags |= COM_SYS_INTERRUPT_FLAGS_EOI_AFTER;
     x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_KEYBOARD,
                           kbd_isr->vec & 0xff,
                           ARCH_CPU_GET_HARDWARE_ID(),
@@ -404,7 +404,7 @@ void x86_64_ps2_mouse_init(void) {
     Ps2Mouse.has_wheel   = false;
     com_isr_t *mouse_isr = com_sys_interrupt_allocate(ps2_mouse_isr,
                                                       x86_64_lapic_eoi);
-    mouse_isr->flags |= COM_SYS_INTERRUPT_FALGS_EOI_AFTER;
+    mouse_isr->flags |= COM_SYS_INTERRUPT_FLAGS_EOI_AFTER;
     x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_MOUSE,
                           mouse_isr->vec & 0xff,
                           ARCH_CPU_GET_HARDWARE_ID(),

@@ -86,7 +86,7 @@ void com_sys_thread_exit_nolock(com_thread_t *thread) {
     thread->runnable = false;
     thread->exited   = true;
     if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
-        ARCH_CPU_SEND_IPI(thread->cpu);
+        ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_RESCHEDULE);
     }
 }
 

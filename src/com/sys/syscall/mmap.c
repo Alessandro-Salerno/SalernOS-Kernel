@@ -49,7 +49,7 @@ static com_syscall_ret_t file_mmap(com_proc_t      *curr_proc,
                                   file->vnode,
                                   hint,
                                   size,
-                                  vmm_flags,
+                                  vmm_flags | COM_MM_VMM_FLAGS_FILE,
                                   mmu_flags,
                                   off);
     if (0 != vfs_err) {

@@ -41,11 +41,16 @@
 
 #define ARCH_CPU_PAUSE() asm volatile("pause")
 
+#define ARCH_CPU_IPI_RESCHEDULE 0x31
+#define ARCH_CPU_IPI_SIGNAL     0x32
+#define ARCH_CPU_IPI_PANIC      0x33
+
 #define ARCH_CPU_DISABLE_INTERRUPTS() asm volatile("cli")
 #define ARCH_CPU_ENABLE_INTERRUPTS()  asm volatile("sti")
-#define ARCH_CPU_SELF_IPI()           x86_64_lapic_selfipi()
-#define ARCH_CPU_SEND_IPI(dst_cpu) \
-    x86_64_lapic_send_ipi((dst_cpu)->lapic_id, X86_64_LAPIC_SELF_IPI_INTERRUPT);
+#define ARCH_CPU_SELF_IPI(ipi)        x86_64_lapic_selfipi(ipi)
+#define ARCH_CPU_SEND_IPI(dst_cpu, ipi) \
+    x86_64_lapic_send_ipi((dst_cpu)->lapic_id, ipi);
+#define ARCH_CPU_BROADCAST_IPI(ipi) x86_64_lapic_broadcast_ipi(ipi)
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
 

@@ -98,11 +98,11 @@ void x86_64_lapic_init(void) {
     periodic(ARCH_TIMER_NS, X86_64_LAPIC_TIMER_INTERRUPT);
 }
 
-void x86_64_lapic_selfipi(void) {
+void x86_64_lapic_selfipi(uint8_t vector) {
     while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
     lapic_write(E_LAPIC_REG_ICR_LOW,
-                X86_64_LAPIC_SELF_IPI_INTERRUPT | LAPIC_ICR_DEST_SELF |
-                    LAPIC_ICR_ASSERT | LAPIC_ICR_EDGE);
+                vector | LAPIC_ICR_DEST_SELF | LAPIC_ICR_ASSERT |
+                    LAPIC_ICR_EDGE);
     lapic_write(E_LAPIC_REG_ICR_HIGH, 0);
 }
 
@@ -117,6 +117,19 @@ void x86_64_lapic_send_ipi(uint8_t apic_id, uint8_t vector) {
     lapic_write(E_LAPIC_REG_ICR_LOW,
                 vector | LAPIC_ICR_ASSERT |
                     LAPIC_ICR_EDGE); // Fixed delivery mode by default (000)
+
+    // Wait for the IPI to be delivered
+    while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
+}
+
+void x86_64_lapic_broadcast_ipi(uint8_t vector) {
+    // Wait until the previous IPI has been sent
+    while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);
+
+    // high not used in broadcast shorthand
+    lapic_write(E_LAPIC_REG_ICR_HIGH, 0);
+    lapic_write(E_LAPIC_REG_ICR_LOW,
+                vector | LAPIC_ICR_ASSERT | LAPIC_ICR_EDGE | (0b11 << 18));
 
     // Wait for the IPI to be delivered
     while (lapic_read(E_LAPIC_REG_ICR_LOW) & 0x1000);

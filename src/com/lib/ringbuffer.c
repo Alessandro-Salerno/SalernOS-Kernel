@@ -113,7 +113,7 @@ static int write_blocking(kringbuffer_t *rb,
             callback(cb_arg);
         }
 
-        ARCH_CPU_SELF_IPI();
+        ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
     }
 
     *buflen = bytes_written;
@@ -153,7 +153,7 @@ static int write_nonblocking(kringbuffer_t *rb,
     }
 
     *buflen = can_write;
-    ARCH_CPU_SELF_IPI();
+    ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
     return 0;
 }
 

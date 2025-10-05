@@ -98,7 +98,7 @@ int com_fs_pipefs_read(void        *buf,
         }
 
         com_sys_sched_notify(&pipe->writers);
-        // ARCH_CPU_SELF_IPI();
+        // ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
     }
 
 end:
@@ -161,7 +161,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         write_count += writesz;
 
         com_sys_sched_notify(&pipe->readers);
-        // ARCH_CPU_SELF_IPI();
+        // ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
     }
 
 end:

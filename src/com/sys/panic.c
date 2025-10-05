@@ -31,6 +31,7 @@
 __attribute__((noreturn)) void
 com_sys_panic(arch_context_t *ctx, const char *fmt, ...) {
     ARCH_CPU_DISABLE_INTERRUPTS();
+    ARCH_CPU_BROADCAST_IPI(ARCH_CPU_IPI_PANIC);
     com_io_term_panic();
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());

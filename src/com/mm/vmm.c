@@ -153,6 +153,14 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
         phys = NULL;
     }
 
+#ifdef ARCH_MMU_EXTRA_FLAGS_SHARED
+    if ((COM_MM_VMM_FLAGS_SHARED | COM_MM_VMM_FLAGS_FILE) & vmm_flags) {
+        mmu_flags |= ARCH_MMU_EXTRA_FLAGS_SHARED;
+    }
+#else
+#warning "no support for architectures without ARCH_MMU_EXTRA_FLAGS_SHARED yet"
+#endif
+
     void     *page_paddr = (void *)((uintptr_t)phys &
                                 ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     uintptr_t page_off   = (uintptr_t)phys % ARCH_PAGE_SIZE;
@@ -213,10 +221,11 @@ void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr) {
     return arch_mmu_get_physical(context->pagetable, virt_addr);
 }
 
-void com_mm_vmm_handle_fault(void           *fault_virt,
-                             void           *fault_phys,
-                             arch_context_t *fault_ctx,
-                             int             attr) {
+void com_mm_vmm_handle_fault(void            *fault_virt,
+                             void            *fault_phys,
+                             arch_context_t  *fault_ctx,
+                             arch_mmu_flags_t mmu_flags_hint,
+                             int              attr) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL == curr_thread) {
         com_sys_panic(fault_ctx,
@@ -244,8 +253,7 @@ void com_mm_vmm_handle_fault(void           *fault_virt,
         arch_mmu_map(curr_proc->vmm_context->pagetable,
                      fault_virt_page,
                      new_phys,
-                     ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
-                         ARCH_MMU_FLAGS_WRITE);
+                     mmu_flags_hint);
         com_mm_vmm_switch(curr_proc->vmm_context);
         com_mm_pmm_free(fault_phys_page);
         return;

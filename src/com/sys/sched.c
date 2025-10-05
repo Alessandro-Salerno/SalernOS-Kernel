@@ -93,13 +93,6 @@ static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
     KASSERT(TAILQ_EMPTY(local_zombies));
 }
 
-static void sched_idle(void) {
-    for (;;) {
-        ARCH_CPU_ENABLE_INTERRUPTS();
-        ARCH_CPU_HALT();
-    }
-}
-
 static void sched_reaper_thread(void) {
     bool                    already_done = false;
     struct com_thread_tailq local_zombies;
@@ -143,6 +136,16 @@ static inline bool sched_notify_reaper(void) {
     return true;
 }
 
+static void sched_idle(void) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+
+    for (;;) {
+        curr_thread->lock_depth = 0;
+        ARCH_CPU_ENABLE_INTERRUPTS();
+        ARCH_CPU_HALT();
+    }
+}
+
 static inline com_thread_t *sched_handle_zombies(bool         *next_removed,
                                                  arch_cpu_t   *cpu,
                                                  com_thread_t *curr,
@@ -158,8 +161,7 @@ static inline com_thread_t *sched_handle_zombies(bool         *next_removed,
         ReaperNumPending++;
     }
 
-    while (NULL != next &&
-           (next->exited || (NULL != next->proc && next->proc->exited))) {
+    while (NULL != next && next->exited) {
         if (!zombie_acquired) {
             kspinlock_acquire(&ZombieProcLock);
             zombie_acquired = true;
@@ -297,6 +299,7 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
 void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
                         kspinlock_t             *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    KASSERT(1 == curr->lock_depth);
     kspinlock_acquire(&curr->sched_lock);
 
     // curr->cpu is nulled and curr is removed from runqueue in sched, no need

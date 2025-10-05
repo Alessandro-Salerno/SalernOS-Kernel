@@ -39,5 +39,10 @@
 #define ARCH_MMU_FLAGS_UC (1 << 4)
 #define ARCH_MMU_FLAGS_WC ((1 << 7) | ARCH_MMU_FLAGS_WT)
 
+// Common code (arch-agnostic) should NOT assume the presence of these flags.
+// However, it may use after checking with guards. The kernel is expected to
+// provide a fallback (but currently does not)
+#define ARCH_MMU_EXTRA_FLAGS_SHARED (1 << 10)
+
 typedef uint64_t arch_mmu_pagetable_t;
 typedef uint64_t arch_mmu_flags_t;

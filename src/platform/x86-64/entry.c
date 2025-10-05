@@ -45,6 +45,17 @@
 
 static arch_cpu_t BspCpu = {0};
 
+static void cpu_panic(com_isr_t *isr, arch_context_t *ctx) {
+    (void)isr;
+    (void)ctx;
+    kprintf("halting cpu %d\n", ARCH_CPU_GET()->id);
+
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    while (true) {
+        ARCH_CPU_HALT();
+    }
+}
+
 void x86_64_entry(void) {
     // BSP CPU initialization
     x86_64_tsc_boot();
@@ -72,13 +83,18 @@ void x86_64_entry(void) {
     com_sys_interrupt_register(X86_64_LAPIC_TIMER_INTERRUPT,
                                com_sys_callout_isr,
                                x86_64_lapic_eoi);
-    com_sys_interrupt_register(X86_64_LAPIC_SELF_IPI_INTERRUPT,
+    com_sys_interrupt_register(ARCH_CPU_IPI_RESCHEDULE,
                                com_sys_sched_isr,
                                x86_64_lapic_eoi);
     com_isr_t *pf_iser = com_sys_interrupt_register(0x0E,
                                                     x86_64_mmu_fault_isr,
                                                     NULL);
-    pf_iser->flags |= COM_SYS_INTERRUPT_FALGS_NO_RESET;
+    pf_iser->flags |= COM_SYS_INTERRUPT_FLAGS_NO_RESET;
+    com_isr_t *sig_isr = com_sys_interrupt_register(ARCH_CPU_IPI_SIGNAL,
+                                                    NULL,
+                                                    NULL);
+    sig_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
+    com_sys_interrupt_register(ARCH_CPU_IPI_PANIC, cpu_panic, NULL);
     com_sys_syscall_init();
     x86_64_lapic_bsp_init();
     x86_64_tsc_bsp_init();

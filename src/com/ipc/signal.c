@@ -93,11 +93,12 @@ static int send_to_thread(com_thread_t *thread, int sig) {
         kspinlock_release(wait_cond);
     } else if (!thread->runnable) {
         com_sys_thread_ready_nolock(thread);
-    }
-
-    if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
-        ARCH_CPU_SEND_IPI(thread->cpu);
-    }
+    } /*else if (NULL != thread->cpu) {
+        KURGENT("signal ipi to thread %d on cpu %d",
+                thread->tid,
+                thread->cpu->id);
+        ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
+    }*/
 
     kspinlock_release(&thread->sched_lock);
     return 0;

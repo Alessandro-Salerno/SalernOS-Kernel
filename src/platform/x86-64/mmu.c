@@ -165,11 +165,14 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt           = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
+    bool      entry_shared   = ARCH_MMU_EXTRA_FLAGS_SHARED & entry;
     bool      entry_writable = ARCH_MMU_FLAGS_WRITE & entry;
 
     if (0 == level) {
         com_mm_pmm_hold((void *)(entry & ADDRMASK));
-        return (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable << 9);
+        return (entry_shared)
+                   ? entry
+                   : (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable << 9);
     }
 
     uint64_t new    = (uint64_t)internal_alloc_phys();
@@ -183,8 +186,6 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
                                                ((i << (12 + (level - 1) * 9))));
             if (1 == level) {
                 virt[i] = nvirt[i];
-                // entry = (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable <<
-                // 9);
             }
         }
     }
@@ -413,17 +414,25 @@ void x86_64_mmu_init_cpu(void) {
 void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
 
-    arch_mmu_pagetable_t *curr_pt    = arch_mmu_get_table();
-    void                 *fault_virt = (void *)ctx->cr2;
-    void *fault_phys = arch_mmu_get_physical(curr_pt, fault_virt);
+    arch_mmu_pagetable_t *curr_pt        = arch_mmu_get_table();
+    void                 *fault_virt     = (void *)ctx->cr2;
+    uint64_t              entry          = *get_page(curr_pt, fault_virt);
+    void                 *fault_phys     = (void *)(entry & ADDRMASK);
+    arch_mmu_flags_t      mmu_flags_hint = entry & ~ADDRMASK;
 
     int vmm_attr = 0;
-    if (arch_mmu_is_cow(curr_pt, fault_virt)) {
+    if (X86_64_MMU_FLAGS_COW & entry) {
+        mmu_flags_hint &= ~X86_64_MMU_FLAGS_COW;
+        mmu_flags_hint |= ARCH_MMU_FLAGS_WRITE;
         vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW;
     }
-    if (!arch_mmu_is_executable(curr_pt, fault_virt)) {
+    if (ARCH_MMU_FLAGS_NOEXEC & entry) {
         vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW_NOEXEC;
     }
 
-    com_mm_vmm_handle_fault(fault_virt, fault_phys, ctx, vmm_attr);
+    com_mm_vmm_handle_fault(fault_virt,
+                            fault_phys,
+                            ctx,
+                            mmu_flags_hint,
+                            vmm_attr);
 }
