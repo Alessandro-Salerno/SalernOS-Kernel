@@ -33,9 +33,17 @@
 #define COM_MM_VMM_FLAGS_SHARED    32
 #define COM_MM_VMM_FLAGS_REPLACE   64
 #define COM_MM_VMM_FLAGS_ALLOCATE  128
+#define COM_MM_VMM_FLAGS_PRIVATE   256
 
-#define COM_MM_VMM_FAULT_ATTR_COW        1 // COW enabled on the address
-#define COM_MM_VMM_FAULT_ATTR_COW_NOEXEC 2 // Whether to set NOEXEC in COW
+#define COM_MM_VMM_FAULT_ATTR_COW 1 // COW enabled on the address
+#define COM_MM_VMM_FAULT_ATTR_MAP 2 // Map on page fault
+
+// Doing this now, but using one big range regardless
+typedef enum com_vmm_range_type {
+    E_COM_VMM_RANGE_TYPE_ANONYMOUS,
+    E_COM_VMM_RANGE_TYPE_SHARED,
+    E_COM_VMM_RANGE_TYPE_FILE
+} com_vmm_range_type_t;
 
 typedef struct com_vmm_context {
     arch_mmu_pagetable_t *pagetable;
@@ -62,3 +70,6 @@ void  com_mm_vmm_handle_fault(void            *fault_virt,
                               arch_context_t  *fault_ctx,
                               arch_mmu_flags_t mmu_flags_hint,
                               int              attr);
+void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
+                                com_vmm_range_type_t rangetype,
+                                size_t               len);

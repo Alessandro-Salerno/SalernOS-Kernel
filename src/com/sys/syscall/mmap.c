@@ -76,14 +76,30 @@ static inline int make_vmm_flags(int flags, int prot) {
         vmm_flags |= COM_MM_VMM_FLAGS_ANONYMOUS;
     }
 
+    if (MAP_SHARED & flags) {
+        vmm_flags |= COM_MM_VMM_FLAGS_SHARED;
+    } else if (MAP_PRIVATE & flags) {
+        vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
+    }
+
     return vmm_flags;
 }
 
-// TODO: properly handle flags, prot, off
 static inline arch_mmu_flags_t make_mmu_flags(int flags, int prot) {
     (void)flags;
-    (void)prot;
-    return ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE;
+
+    arch_mmu_flags_t mmu_prot = ARCH_MMU_FLAGS_PRESENT | ARCH_MMU_FLAGS_USER;
+    if (PROT_WRITE & prot) {
+        mmu_prot |= ARCH_MMU_FLAGS_WRITE;
+    }
+    if (PROT_READ & prot) {
+        mmu_prot |= ARCH_MMU_FLAGS_READ;
+    }
+    /*if (!(PROT_EXEC & prot)) {
+        mmu_prot |= ARCH_MMU_FLAGS_NOEXEC;
+    }*/
+
+    return mmu_prot;
 }
 
 // SYSCALL: mmap(void *hint, size_t size, int flags, int prot, int fd, off_t

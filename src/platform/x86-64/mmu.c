@@ -286,7 +286,7 @@ bool arch_mmu_is_cow(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     if (NULL == entry) {
         return false;
     }
-    return X86_64_MMU_FLAGS_COW & *entry;
+    return ARCH_MMU_EXTRA_FLAGS_PRIVATE & *entry;
 }
 
 bool arch_mmu_is_executable(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
@@ -421,13 +421,17 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
     arch_mmu_flags_t      mmu_flags_hint = entry & ~ADDRMASK;
 
     int vmm_attr = 0;
-    if (X86_64_MMU_FLAGS_COW & entry) {
-        mmu_flags_hint &= ~X86_64_MMU_FLAGS_COW;
+    if (ARCH_MMU_EXTRA_FLAGS_PRIVATE & entry) {
+        mmu_flags_hint &= ~ARCH_MMU_EXTRA_FLAGS_PRIVATE;
         mmu_flags_hint |= ARCH_MMU_FLAGS_WRITE;
         vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW;
     }
-    if (ARCH_MMU_FLAGS_NOEXEC & entry) {
-        vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW_NOEXEC;
+    if (ARCH_MMU_EXTRA_FLAGS_NOCOPY & entry) {
+        // We still want the vmm to map, but we don't want to copy the zero page
+        // into a page taht's laready been zeroed. So we remove COW (copy on
+        // write) and add MAP
+        vmm_attr &= ~COM_MM_VMM_FAULT_ATTR_COW;
+        vmm_attr |= COM_MM_VMM_FAULT_ATTR_MAP;
     }
 
     com_mm_vmm_handle_fault(fault_virt,

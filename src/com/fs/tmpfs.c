@@ -81,7 +81,8 @@ static com_vnode_ops_t TmpfsNodeOps = {.create   = com_fs_tmpfs_create,
                                        .truncate = com_fs_tmpfs_truncate,
                                        .readdir  = com_fs_tmpfs_readdir,
                                        .vnctl    = com_fs_tmpfs_vnctl,
-                                       .mksocket = com_fs_tmpfs_mksocket};
+                                       .mksocket = com_fs_tmpfs_mksocket,
+                                       .mmap     = com_fs_tmpfs_mmap};
 
 // SUPPORT FUNCTIONS
 
@@ -651,6 +652,42 @@ int com_fs_tmpfs_mksocket(com_vnode_t **out,
         kspinlock_release(&parent->lock);
     }
 
+    return 0;
+}
+
+int com_fs_tmpfs_mmap(void           **out,
+                      com_vnode_t     *node,
+                      uintptr_t        hint,
+                      size_t           size,
+                      int              vmm_flags,
+                      arch_mmu_flags_t mmu_flags,
+                      uintmax_t        off) {
+    struct tmpfs_node *file       = node->extra;
+    void              *range_base = (void *)hint;
+
+    if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
+        vmm_flags &= ~COM_MM_VMM_FLAGS_NOHINT;
+        range_base = com_mm_vmm_prealloc_range(NULL,
+                                               E_COM_VMM_RANGE_TYPE_FILE,
+                                               size);
+    }
+
+    for (uintmax_t curr = off; curr < off + size; curr += ARCH_PAGE_SIZE) {
+        uintptr_t page;
+        bool      present = com_fs_pagecache_get(&page,
+                                            file->file.data,
+                                            curr / ARCH_PAGE_SIZE);
+        // If it is NULL or undefined, we'll ignore it thanks to FLAGS_ALLOCATE
+        void *page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
+        com_mm_vmm_map(NULL,
+                       range_base + (curr - off),
+                       page_phys,
+                       ARCH_PAGE_SIZE,
+                       vmm_flags | ((present) ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
+                       mmu_flags);
+    }
+
+    *out = (void *)((uintptr_t)range_base + (off % ARCH_PAGE_SIZE));
     return 0;
 }
 

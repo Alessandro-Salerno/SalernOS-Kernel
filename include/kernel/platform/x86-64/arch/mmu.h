@@ -42,7 +42,9 @@
 // Common code (arch-agnostic) should NOT assume the presence of these flags.
 // However, it may use after checking with guards. The kernel is expected to
 // provide a fallback (but currently does not)
-#define ARCH_MMU_EXTRA_FLAGS_SHARED (1 << 10)
+#define ARCH_MMU_EXTRA_FLAGS_SHARED  (1 << 10)
+#define ARCH_MMU_EXTRA_FLAGS_PRIVATE (1 << 9) // same as COW
+#define ARCH_MMU_EXTRA_FLAGS_NOCOPY  (1 << 11)
 
 typedef uint64_t arch_mmu_pagetable_t;
 typedef uint64_t arch_mmu_flags_t;

@@ -28,6 +28,7 @@
 #include <stdatomic.h>
 
 static com_vmm_context_t RootContext = {0};
+static void             *ZeroPage    = NULL;
 
 // This lock guards the context queue and is used as condvar for the waitlist
 static kspinlock_t ZombieQueueLock = KSPINLOCK_NEW();
@@ -154,11 +155,29 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
     }
 
 #ifdef ARCH_MMU_EXTRA_FLAGS_SHARED
-    if ((COM_MM_VMM_FLAGS_SHARED | COM_MM_VMM_FLAGS_FILE) & vmm_flags) {
+    if (COM_MM_VMM_FLAGS_SHARED & vmm_flags) {
         mmu_flags |= ARCH_MMU_EXTRA_FLAGS_SHARED;
     }
 #else
 #warning "no support for architectures without ARCH_MMU_EXTRA_FLAGS_SHARED yet"
+#endif
+
+    if (COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags) {
+        vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
+#ifdef ARCH_MMU_EXTRA_FLAGS_NOCOPY
+#else
+#warning "no support for architectures without ARCH_MMU_EXTRA_FLAGS_NOCOPY yet"
+#endif
+    }
+
+#ifdef ARCH_MMU_EXTRA_FLAGS_PRIVATE
+    if (COM_MM_VMM_FLAGS_PRIVATE & vmm_flags &&
+        ARCH_MMU_FLAGS_WRITE & mmu_flags) {
+        mmu_flags &= ~ARCH_MMU_FLAGS_WRITE;
+        mmu_flags |= ARCH_MMU_EXTRA_FLAGS_PRIVATE;
+    }
+#else
+#warning "no support for architectures without ARCH_MMU_EXTRA_FLAGS_PRIVATE yet"
 #endif
 
     void     *page_paddr = (void *)((uintptr_t)phys &
@@ -191,10 +210,8 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
         uintptr_t offset = i * ARCH_PAGE_SIZE;
         void     *vaddr  = (void *)((uintptr_t)virt + offset);
 
-        void *paddr;
-        if (COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags) {
-            paddr = com_mm_pmm_alloc_zero();
-        } else {
+        void *paddr = ZeroPage;
+        if (!(COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags)) {
             paddr = (void *)((uintptr_t)page_paddr + offset);
         }
 
@@ -259,6 +276,18 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
         return;
     }
 
+    if (COM_MM_VMM_FAULT_ATTR_MAP & attr) {
+        void *fault_virt_page = (void *)((uintptr_t)fault_virt &
+                                         ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        void *new_phys        = (void *)com_mm_pmm_alloc();
+        arch_mmu_map(curr_proc->vmm_context->pagetable,
+                     fault_virt_page,
+                     new_phys,
+                     mmu_flags_hint);
+        com_mm_vmm_switch(curr_proc->vmm_context);
+        return;
+    }
+
     if (NULL != curr_proc->fd[2].file && NULL != curr_proc->fd[2].file->vnode) {
         char *message = "kernel: page fault intercepted\n";
         com_fs_vfs_write(NULL,
@@ -292,11 +321,29 @@ void com_mm_vmm_init(void) {
     KLOG("initializing vmm");
     RootContext.pagetable = arch_mmu_get_table();
     RootContext.lock      = KSPINLOCK_NEW();
+    ZeroPage              = com_mm_pmm_alloc_zero();
 
     // This is here because destroy will add stuff to the queue even if this is
     // not initialized!
     TAILQ_INIT(&ZombieContextQueue);
     TAILQ_INIT(&ReaperThreadWaitlist);
+}
+
+void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
+                                com_vmm_range_type_t rangetype,
+                                size_t               len) {
+    (void)rangetype;
+    context = vmm_ensure_context(context);
+    KASSERT(&RootContext != context);
+    KASSERT(RootContext.pagetable != context->pagetable);
+
+    kspinlock_acquire(&context->lock);
+    void *range_base = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
+                                CONFIG_VMM_ANON_START);
+    context->anon_pages += (len + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    kspinlock_release(&context->lock);
+
+    return range_base;
 }
 
 void com_mm_vmm_init_reaper(void) {
