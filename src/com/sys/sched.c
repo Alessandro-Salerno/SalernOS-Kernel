@@ -207,7 +207,7 @@ void com_sys_sched_yield_nolock(void) {
     arch_cpu_t *cpu = ARCH_CPU_GET();
     kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
-    KASSERT(NULL == curr || curr->sched_lock);
+    KASSERT(NULL == curr || KSPINLOCK_IS_HELD(&curr->sched_lock));
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
@@ -278,7 +278,7 @@ void com_sys_sched_yield_nolock(void) {
     //        which it was called, in fact, quite the opposite.
     next->lock_depth--;
     // This must drop the lock on curr->sched_lock
-    ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx, &curr->sched_lock);
+    ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx, &curr->sched_lock.lock);
 }
 
 void com_sys_sched_yield(void) {
@@ -340,11 +340,12 @@ void com_sys_sched_notify(struct com_thread_tailq *waiters) {
 }
 
 void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    arch_cpu_t   *currcpu     = ARCH_CPU_GET();
-    kspinlock_acquire(&curr_thread->sched_lock);
+    // com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    arch_cpu_t *currcpu = ARCH_CPU_GET();
+    // kspinlock_acquire(&curr_thread->sched_lock);
 
-    for (com_thread_t *next; NULL != (next = TAILQ_FIRST(waiters));) {
+    com_thread_t *next, *_;
+    TAILQ_FOREACH_SAFE(next, waiters, threads, _) {
         kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
         TAILQ_REMOVE_HEAD(waiters, threads);
@@ -358,7 +359,7 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
         kspinlock_release(&next->sched_lock);
     }
 
-    kspinlock_release(&curr_thread->sched_lock);
+    // kspinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {

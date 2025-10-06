@@ -23,7 +23,7 @@
 #include <kernel/platform/syscall.h>
 #include <kernel/platform/x86-64/msr.h>
 
-void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
+void x86_64_syscall_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
 
     ARCH_CPU_GET_THREAD()->lock_depth = 0;
@@ -34,6 +34,31 @@ void arch_syscall_handle(com_isr_t *isr, arch_context_t *ctx) {
                                                    ctx->rsi,
                                                    ctx->rdx,
                                                    ctx->rcx,
+                                                   0,
+                                                   0,
+                                                   ctx->rip);
+
+    if (!ret.discarded) {
+        ctx->rax = ret.value;
+        ctx->rdx = ret.err;
+    }
+
+    KASSERT(0 == ARCH_CPU_GET_THREAD()->lock_depth);
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    ARCH_CPU_GET_THREAD()->lock_depth = 1;
+}
+
+void x86_64_syscall_handle_sce(arch_context_t *ctx) {
+    ARCH_CPU_GET_THREAD()->lock_depth = 0;
+    ARCH_CPU_ENABLE_INTERRUPTS();
+    com_syscall_ret_t ret = com_sys_syscall_invoke(ctx->rax,
+                                                   ctx,
+                                                   ctx->rdi,
+                                                   ctx->rsi,
+                                                   ctx->rdx,
+                                                   ctx->r10,
+                                                   ctx->r8,
+                                                   ctx->r9,
                                                    ctx->rip);
 
     if (!ret.discarded) {

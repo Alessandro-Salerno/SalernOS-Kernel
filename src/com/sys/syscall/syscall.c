@@ -132,12 +132,14 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg2,
                                          arch_syscall_arg_t arg3,
                                          arch_syscall_arg_t arg4,
+                                         arch_syscall_arg_t arg5,
+                                         arch_syscall_arg_t arg6,
                                          uintptr_t          invoke_ip) {
     KASSERT(number < CONFIG_SYSCALL_MAX);
     volatile com_syscall_t *syscall = &SyscallTable[number];
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
-    arch_syscall_arg_t args[4] = {arg1, arg2, arg3, arg4};
+    arch_syscall_arg_t args[6] = {arg1, arg2, arg3, arg4, arg5, arg6};
 #if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
@@ -153,7 +155,8 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     (void)invoke_ip;
 #endif
 
-    com_syscall_ret_t ret = syscall->handler(ctx, arg1, arg2, arg3, arg4);
+    com_syscall_ret_t
+        ret = syscall->handler(ctx, arg1, arg2, arg3, arg4, arg5, arg6);
 #ifdef DO_SYSCALL_LOG_AFTER
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
@@ -261,15 +264,19 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x0A,
                              "mmap",
                              com_sys_syscall_mmap,
-                             4,
+                             6,
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "hint",
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "size",
-                             COM_SYS_SYSCALL_TYPE_LONGFLAGS,
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
                              "flags",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "prot",
                              COM_SYS_SYSCALL_TYPE_INT,
-                             "fd");
+                             "fd",
+                             COM_SYS_SYSCALL_TYPE_OFFT,
+                             "off");
 
     com_sys_syscall_register(0x0B,
                              "set_tls",
@@ -657,6 +664,4 @@ void com_sys_syscall_init(void) {
                              "addr",
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "max_addrlen");
-
-    com_sys_interrupt_register(0x80, arch_syscall_handle, NULL);
 }

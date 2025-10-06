@@ -21,9 +21,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef int kspinlock_t;
+#define KSPINLOCK_HELD_VALUE 144
+#define KSPINLOCK_FREE_VALUE 0
 
-#define KSPINLOCK_NEW() 0
+#define KSPINLOCK_NEW()                                  \
+    (kspinlock_t){.lock          = KSPINLOCK_FREE_VALUE, \
+                  .holder_thread = (void *)0xAAAAAAA}
+#define KSPINLOCK_IS_HELD(lockptr) (KSPINLOCK_HELD_VALUE == (lockptr)->lock)
+
+typedef struct kspinlock {
+    int   lock;
+    void *holder_thread;
+    void *last_acquire_ip;
+    void *last_release_ip;
+} kspinlock_t;
 
 void kspinlock_acquire(kspinlock_t *lock);
 bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns);

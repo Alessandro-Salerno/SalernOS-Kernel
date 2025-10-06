@@ -72,7 +72,7 @@ static inline int make_vmm_flags(int flags, int prot) {
         vmm_flags |= COM_MM_VMM_FLAGS_NOHINT;
     }
 
-    if ((MAP_ANONYMOUS | MAP_FILE) & flags) {
+    if (MAP_ANONYMOUS & flags) {
         vmm_flags |= COM_MM_VMM_FLAGS_ANONYMOUS;
     }
 
@@ -86,17 +86,17 @@ static inline arch_mmu_flags_t make_mmu_flags(int flags, int prot) {
     return ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE;
 }
 
-// SYSCALL: mmap(void *hint, size_t size, uintmax_t flags, int fd, ...)
+// SYSCALL: mmap(void *hint, size_t size, int flags, int prot, int fd, off_t
+// off)
 COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
 
     uintptr_t hint  = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
     size_t    size  = COM_SYS_SYSCALL_ARG(size_t, 2);
-    uintmax_t flags = COM_SYS_SYSCALL_ARG(uintmax_t, 3);
-    int       fd    = COM_SYS_SYSCALL_ARG(int, 4);
-
-    int prot = (flags >> 32) & 0xffffffff;
-    flags &= 0xffffffff;
+    int       flags = COM_SYS_SYSCALL_ARG(int, 3);
+    int       prot  = COM_SYS_SYSCALL_ARG(int, 4);
+    int       fd    = COM_SYS_SYSCALL_ARG(int, 5);
+    off_t     off   = COM_SYS_SYSCALL_ARG(off_t, 6);
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
@@ -105,7 +105,7 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
 
     if (-1 != fd) {
         vmm_flags |= COM_MM_VMM_FLAGS_ANONYMOUS;
-        return file_mmap(curr_proc, fd, size, vmm_flags, mmu_flags, 0, hint);
+        return file_mmap(curr_proc, fd, size, vmm_flags, mmu_flags, off, hint);
     }
 
     // Allocate anonymous pages

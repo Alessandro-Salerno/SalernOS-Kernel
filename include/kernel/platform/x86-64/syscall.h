@@ -18,11 +18,8 @@
 
 #pragma once
 
-#include <arch/context.h>
 #include <kernel/com/sys/interrupt.h>
-#include <kernel/com/sys/syscall.h>
-#include <stdint.h>
 
-// SYSCALLS
-
-COM_SYS_SYSCALL(arch_syscall_set_tls);
+void x86_64_syscall_isr(com_isr_t *isr, arch_context_t *ctx);
+void x86_64_syscall_handle_sce(arch_context_t *ctx);
+void x86_64_syscall_sce_entry();

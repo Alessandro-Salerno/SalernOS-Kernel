@@ -28,6 +28,7 @@
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/mmu.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/mem.h>
 #include <lib/spinlock.h>
@@ -36,7 +37,8 @@
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
-#define MAX_CPUS ARCH_PAGE_SIZE / sizeof(arch_cpu_t)
+#define EFER_SYSCALLENABLE 1
+#define MAX_CPUS           ARCH_PAGE_SIZE / sizeof(arch_cpu_t)
 
 __attribute__((
     used,
@@ -63,6 +65,21 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     x86_64_idt_reload();
     x86_64_idt_set_user_invocable(0x80);
     ARCH_CPU_SET_INTERRUPT_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
+
+    KLOG("initializing sce");
+    uint64_t efer = X86_64_MSR_READ(X86_64_MSR_EFER);
+    efer |= EFER_SYSCALLENABLE;
+    X86_64_MSR_WRITE(X86_64_MSR_EFER, efer);
+
+    uint64_t star = 0;
+    star |= (uint64_t)0x13 << 48;
+    star |= (uint64_t)0x08 << 32;
+
+    X86_64_MSR_WRITE(X86_64_MSR_STAR, star);
+    X86_64_MSR_WRITE(X86_64_MSR_LSTAR, (uint64_t)x86_64_syscall_sce_entry);
+    X86_64_MSR_WRITE(X86_64_MSR_CSTAR,
+                     0); // no compatibility mode syscall handler
+    X86_64_MSR_WRITE(X86_64_MSR_FMASK, 0x200); // disable interrupts on syscall
 
     KLOG("initializing sse");
     X86_64_CR_W0((X86_64_CR_R0() & ~(1 << 2)) | (1 << 1));

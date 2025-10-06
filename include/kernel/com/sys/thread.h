@@ -39,6 +39,7 @@ typedef struct com_thread_timer {
 } com_thread_timer_t;
 
 typedef struct com_thread {
+    void                *kernel_stack;
     arch_context_t       ctx;
     arch_context_extra_t xctx;
     kspinlock_t          sched_lock;
@@ -46,7 +47,6 @@ typedef struct com_thread {
     struct arch_cpu     *cpu;
     bool                 runnable;
     bool                 exited;
-    void                *kernel_stack;
     TAILQ_ENTRY(com_thread) threads;
     TAILQ_ENTRY(com_thread) proc_threads;
     int   lock_depth;

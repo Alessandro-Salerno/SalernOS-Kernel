@@ -33,6 +33,7 @@
 // SYSCALL: fstatat(int dir_fd, const char *path, struct stat *buf, int flags)
 COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(5);
 
     int          dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
     const char  *path   = COM_SYS_SYSCALL_ARG(void *, 2);

@@ -28,14 +28,22 @@
                            arch_syscall_arg_t __syscall_a1,  \
                            arch_syscall_arg_t __syscall_a2,  \
                            arch_syscall_arg_t __syscall_a3,  \
-                           arch_syscall_arg_t __syscall_a4)
+                           arch_syscall_arg_t __syscall_a4,  \
+                           arch_syscall_arg_t __syscall_a5,  \
+                           arch_syscall_arg_t __syscall_a6)
 #define COM_SYS_SYSCALL_CONTEXT()        (__syscall_ctx)
 #define COM_SYS_SYSCALL_ARG(type, num)   ((type)(__syscall_a##num))
 #define COM_SYS_SYSCALL_UNUSED_CONTEXT() (void)(COM_SYS_SYSCALL_CONTEXT())
 #define COM_SYS_SYSCALL_UNUSED_START(first_unused) \
     __COM_SYS_SYSCALL_UNUSED_##first_unused
 
-#define __COM_SYS_SYSCALL_UNUSED_4 (void)(__syscall_a4)
+#define __COM_SYS_SYSCALL_UNUSED_6 (void)(__syscall_a6)
+#define __COM_SYS_SYSCALL_UNUSED_5 \
+    __COM_SYS_SYSCALL_UNUSED_6;    \
+    (void)(__syscall_a5)
+#define __COM_SYS_SYSCALL_UNUSED_4 \
+    __COM_SYS_SYSCALL_UNUSED_5;    \
+    (void)(__syscall_a4)
 #define __COM_SYS_SYSCALL_UNUSED_3 \
     __COM_SYS_SYSCALL_UNUSED_4;    \
     (void)(__syscall_a3)
@@ -88,14 +96,16 @@ typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
                                                 arch_syscall_arg_t a1,
                                                 arch_syscall_arg_t a2,
                                                 arch_syscall_arg_t a3,
-                                                arch_syscall_arg_t a4);
+                                                arch_syscall_arg_t a4,
+                                                arch_syscall_arg_t a5,
+                                                arch_syscall_arg_t a6);
 
 typedef struct com_syscall {
     com_intf_syscall_t handler;
     size_t             num_args;
     const char        *name;
-    const char        *arg_names[4];
-    int                arg_types[4];
+    const char        *arg_names[6];
+    int                arg_types[6];
 } com_syscall_t;
 
 void              com_sys_syscall_register(uintmax_t          number,
@@ -109,6 +119,8 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg2,
                                          arch_syscall_arg_t arg3,
                                          arch_syscall_arg_t arg4,
+                                         arch_syscall_arg_t a5,
+                                         arch_syscall_arg_t a6,
                                          uintptr_t          invoke_ip);
 void              com_sys_syscall_init(void);
 

@@ -749,7 +749,7 @@ uacpi_handle uacpi_kernel_create_spinlock(void) {
 
 void uacpi_kernel_free_spinlock(uacpi_handle handle) {
     kspinlock_t *spinlock = (void *)handle;
-    KASSERT(0 == *spinlock);
+    KASSERT(0 == spinlock->lock);
     com_mm_slab_free(spinlock, sizeof(*spinlock));
 }
 

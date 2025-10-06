@@ -36,6 +36,7 @@
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/ps2.h>
 #include <kernel/platform/x86-64/smp.h>
+#include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/printf.h>
 #include <lib/str.h>
@@ -96,6 +97,7 @@ void x86_64_entry(void) {
     sig_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
     com_sys_interrupt_register(ARCH_CPU_IPI_PANIC, cpu_panic, NULL);
     com_sys_syscall_init();
+    com_sys_interrupt_register(0x80, x86_64_syscall_isr, NULL);
     x86_64_lapic_bsp_init();
     x86_64_tsc_bsp_init();
     x86_64_smp_init();

@@ -64,14 +64,21 @@ void kspinlock_acquire(kspinlock_t *lock) {
 
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
-        if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
-            return;
+        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&lock->lock,
+                                                        KSPINLOCK_HELD_VALUE,
+                                                        __ATOMIC_ACQUIRE)) {
+            break;
         }
         // spin with no ordering constraints
-        while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
+        while (KSPINLOCK_HELD_VALUE ==
+               __atomic_load_n(&lock->lock, __ATOMIC_RELAXED)) {
             ARCH_CPU_PAUSE();
         }
     }
+
+    lock->holder_thread   = ARCH_CPU_GET_THREAD();
+    lock->last_acquire_ip = (void *)__builtin_return_address(0);
+    lock->last_release_ip = NULL;
 }
 
 bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {
@@ -83,17 +90,25 @@ bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {
 
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
-        if (!__atomic_exchange_n(lock, 1, __ATOMIC_ACQUIRE)) {
-            return true;
+        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&lock->lock,
+                                                        KSPINLOCK_HELD_VALUE,
+                                                        __ATOMIC_ACQUIRE)) {
+            break;
         }
         // spin with no ordering constraints
-        while (__atomic_load_n(lock, __ATOMIC_RELAXED)) {
+        while (KSPINLOCK_HELD_VALUE ==
+               __atomic_load_n(&lock->lock, __ATOMIC_RELAXED)) {
             if (end_ns <= ARCH_CPU_GET_TIME()) {
                 goto fail;
             }
             ARCH_CPU_PAUSE();
         }
     }
+
+    lock->holder_thread   = ARCH_CPU_GET_THREAD();
+    lock->last_acquire_ip = (void *)__builtin_return_address(0);
+    lock->last_release_ip = NULL;
+    return true;
 
 fail:
     // Control reaches here only in case of timeout
@@ -102,15 +117,18 @@ fail:
 }
 
 void kspinlock_release(kspinlock_t *lock) {
-    if (0 == *lock) {
+    if (KSPINLOCK_FREE_VALUE == lock->lock) {
         LOCK_ERROR("trying to unlock unlocked lock %p", lock);
     }
 
-    if (1 != *lock) {
-        LOCK_ERROR("lock at %p has impossible value %d", lock, *lock);
+    if (KSPINLOCK_HELD_VALUE != lock->lock) {
+        LOCK_ERROR("lock at %p has impossible value %d", lock, lock->lock);
     }
 
-    __atomic_store_n(lock, 0, __ATOMIC_RELEASE);
+    lock->last_release_ip = (void *)__builtin_return_address(0);
+    lock->holder_thread   = NULL;
+    lock->last_acquire_ip = NULL;
+    __atomic_store_n(&lock->lock, KSPINLOCK_FREE_VALUE, __ATOMIC_RELEASE);
     decrement_lock_depth_tested();
 }
 
