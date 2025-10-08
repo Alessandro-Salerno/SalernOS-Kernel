@@ -60,6 +60,7 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 break;
             }
             case COM_SYS_SYSCALL_TYPE_STR:
+#if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
                 if (NULL != (void *)args[i]) {
                     // TODO: poor man's usercopy, if the string is longer than
                     // ARCH_PAGE_SIZE this may still crash
@@ -72,6 +73,9 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 } else {
                     kprintf("NULL");
                 }
+#else
+                kprintf("**UNSAFE**");
+#endif
                 break;
             case COM_SYS_SYSCALL_TYPE_FLAGS:
             case COM_SYS_SYSCALL_TYPE_MODE:
@@ -161,7 +165,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
     log_syscall(syscall, args);
-    kprintf(" -> {ret = %u, errno = %u}\n", ret.value, ret.err);
+    kprintf(" -> {ret = %p, errno = %u}\n", ret.value, ret.err);
     KRESET_COLOR();
     com_io_log_unlock();
 #undef DO_SYSCALL_LOG_AFTER

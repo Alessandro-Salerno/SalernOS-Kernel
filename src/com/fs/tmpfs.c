@@ -24,6 +24,7 @@
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
 #include <lib/spinlock.h>
@@ -679,6 +680,7 @@ int com_fs_tmpfs_mmap(void           **out,
                                             curr / ARCH_PAGE_SIZE);
         // If it is NULL or undefined, we'll ignore it thanks to FLAGS_ALLOCATE
         void *page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
+        com_mm_pmm_hold(page_phys);
         com_mm_vmm_map(NULL,
                        range_base + (curr - off),
                        page_phys,

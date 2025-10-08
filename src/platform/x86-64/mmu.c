@@ -354,6 +354,7 @@ void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
         next_cpu->mmu_shootdown_counter = &shootdown_counter;
         next_cpu->mmu_shootdown_virt    = virt;
         next_cpu->mmu_shootdown_pages   = pages;
+        kspinlock_fake_release();
         // lock released by ISR
         num_other_cpus++;
     }

@@ -1,4 +1,4 @@
-/*************************************************************************
+/*************************************************************************vmm.c
 | SalernOS Kernel                                                        |
 | Copyright (C) 2021 - 2025 Alessandro Salerno                           |
 |                                                                        |
@@ -271,7 +271,9 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
                      fault_virt_page,
                      new_phys,
                      mmu_flags_hint);
-        com_mm_vmm_switch(curr_proc->vmm_context);
+        arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
+                            fault_virt_page,
+                            1);
         com_mm_pmm_free(fault_phys_page);
         return;
     }
