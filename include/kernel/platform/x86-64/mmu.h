@@ -22,5 +22,8 @@
 
 #define X86_64_MMU_FLAGS_COW (1 << 9)
 
+#define X86_64_MMU_IPI_INVALIDATE 0x34
+
 void x86_64_mmu_init_cpu(void);
 void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx);
+void x86_64_mmu_invalidate_isr(com_isr_t *isr, arch_context_t *ctx);

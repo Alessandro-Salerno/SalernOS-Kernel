@@ -189,10 +189,16 @@ static inline void sched_switch_vmm_context(com_thread_t *curr,
     com_vmm_context_t *next_vmm_ctx = NULL;
 
     if (NULL != curr->proc) {
+        __atomic_add_fetch(&curr->proc->num_running_threads,
+                           -1,
+                           __ATOMIC_SEQ_CST);
         prev_vmm_ctx = curr->proc->vmm_context;
     }
 
     if (NULL != next->proc) {
+        __atomic_add_fetch(&next->proc->num_running_threads,
+                           1,
+                           __ATOMIC_SEQ_CST);
         next_vmm_ctx = next->proc->vmm_context;
     }
 

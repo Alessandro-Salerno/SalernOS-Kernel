@@ -25,6 +25,7 @@
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/mmu.h>
+#include <kernel/platform/x86-64/smp.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -162,6 +163,26 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
     return true;
 }
 
+// This must be called with the guarantee that the target of the TLB shootdown
+// is the current CPU. i.e., only if curr_pt == shootdown_pt
+static inline void internal_invalidate(void *virt, size_t pages) {
+    if (NULL == virt || pages > 32) {
+        // this puts the current cr3 back into cr3 which causes a full TLB
+        // shootdown
+        asm volatile("mov %%cr3, %%rax; mov %%rax, %%cr3;"
+                     :
+                     :
+                     : "rax", "memory");
+        return;
+    }
+
+    // If we have a smaller invalidation, it is faster to perform invlpg
+    for (size_t i = 0; i < pages; i++) {
+        uintptr_t ptr = (uintptr_t)virt + i * ARCH_PAGE_SIZE;
+        asm volatile("invlpg (%%rax)" : : "a"(ptr) : "memory");
+    }
+}
+
 // CREDIT: vloxei64/ke
 static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     uint64_t *virt           = (uint64_t *)ARCH_PHYS_TO_HHDM(entry & ADDRMASK);
@@ -261,6 +282,95 @@ bool arch_mmu_map(arch_mmu_pagetable_t *pt,
                   void                 *phys,
                   arch_mmu_flags_t      flags) {
     return add_page(pt, virt, ((uint64_t)phys & ADDRMASK) | flags, 0);
+}
+
+bool arch_mmu_chflags(arch_mmu_flags_t *pt,
+                      void             *virt,
+                      arch_mmu_flags_t  new_flags) {
+    uint64_t *entry = get_page(pt, virt);
+    if (NULL == entry) {
+        return false;
+    }
+    *entry = (*entry & ADDRMASK) | new_flags;
+    return true;
+}
+
+bool arch_mmu_unmap(arch_mmu_pagetable_t *pt, void *virt) {
+    uint64_t *entry = get_page(pt, virt);
+    if (NULL == entry) {
+        return false;
+    }
+    com_mm_pmm_free((void *)(*entry & ADDRMASK));
+    *entry = 0;
+    return true;
+}
+
+// CREDIT: Mathewnd/Astral
+void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
+    com_thread_t         *curr_thread = ARCH_CPU_GET_THREAD();
+    arch_cpu_t           *curr_cpu    = ARCH_CPU_GET();
+    arch_mmu_pagetable_t *curr_pt     = arch_mmu_get_table();
+
+    // as of kernel 0.2.4, NULL is still almost always a legal userspace
+    // addres since we don't have ELF slide working properly, so that check
+    // is redundant, but we'll keep it just in case.
+    bool is_user = virt > ARCH_MMU_USERSPACE_START &&
+                   (virt + pages * ARCH_PAGE_SIZE) < ARCH_MMU_KERNELSPACE_START;
+    bool do_shootdown = NULL != curr_thread &&
+                        (virt >= ARCH_MMU_KERNELSPACE_START ||
+                         ((NULL == virt || is_user) &&
+                          NULL != curr_thread->proc &&
+                          __atomic_load_n(
+                              &curr_thread->proc->num_running_threads,
+                              __ATOMIC_SEQ_CST) > 1));
+    // numer of other CPUs that have completed the shootdown
+    size_t shootdown_counter = 0;
+    // expected number of CPUs to compelte the shootdown
+    size_t num_other_cpus = 0;
+
+    arch_cpu_t *next_cpu;
+    for (size_t i = 0;
+         do_shootdown && NULL != (next_cpu = x86_64_smp_get_cpu(i));
+         i++) {
+        // Skipp current CPU, we'll do that later
+        if (next_cpu->id == curr_cpu->id) {
+            continue;
+        }
+        // Skip CPUs that are not running any process or are running a different
+        // process then the one we're targetting
+        kspinlock_acquire(&next_cpu->runqueue_lock);
+        com_thread_t *next_cpu_thread = next_cpu->thread;
+        if (NULL == next_cpu_thread || NULL == next_cpu_thread->proc ||
+            pt != next_cpu_thread->proc->vmm_context->pagetable) {
+            kspinlock_release(&next_cpu->runqueue_lock);
+            continue;
+        }
+        kspinlock_release(&next_cpu->runqueue_lock);
+
+        // Now here we know we have ourselves a CPU we can target. At the very
+        // worst it will context switch and receivea spurious IPI and we loose a
+        // little bit of performance
+        kspinlock_acquire(&next_cpu->mmu_shootdown_lock);
+        next_cpu->mmu_shootdown_counter = &shootdown_counter;
+        next_cpu->mmu_shootdown_virt    = virt;
+        next_cpu->mmu_shootdown_pages   = pages;
+        // lock released by ISR
+        num_other_cpus++;
+    }
+
+    // If we also have to perform a shootdown
+    if (pt == curr_pt) {
+        kspinlock_acquire(&curr_cpu->mmu_shootdown_lock);
+        internal_invalidate(virt, pages);
+        kspinlock_release(&curr_cpu->mmu_shootdown_lock);
+    }
+
+    // And finally, we wait for all others to complete
+    while (do_shootdown &&
+           __atomic_load_n(&shootdown_counter, __ATOMIC_RELAXED) !=
+               num_other_cpus) {
+        ARCH_CPU_PAUSE();
+    }
 }
 
 void arch_mmu_switch(arch_mmu_pagetable_t *pt) {
@@ -439,4 +549,17 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
                             ctx,
                             mmu_flags_hint,
                             vmm_attr);
+}
+
+void x86_64_mmu_invalidate_isr(com_isr_t *isr, arch_context_t *ctx) {
+    (void)isr;
+    (void)ctx;
+
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
+    kspinlock_fake_acquire(); // acquired by sender
+    internal_invalidate(curr_cpu->mmu_shootdown_virt,
+                        curr_cpu->mmu_shootdown_pages);
+    KASSERT(KSPINLOCK_IS_HELD(&curr_cpu->mmu_shootdown_lock));
+    __atomic_add_fetch(curr_cpu->mmu_shootdown_counter, 1, __ATOMIC_SEQ_CST);
+    kspinlock_release(&curr_cpu->mmu_shootdown_lock); // realeased by us
 }

@@ -168,5 +168,9 @@ arch_cpu_t *x86_64_smp_get_random(void) {
 }
 
 arch_cpu_t *x86_64_smp_get_cpu(size_t cpu) {
-    return &Cpus[cpu];
+    if (cpu < NumCpus) {
+        return &Cpus[cpu];
+    }
+
+    return NULL;
 }

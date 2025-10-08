@@ -39,4 +39,5 @@ typedef struct kspinlock {
 void kspinlock_acquire(kspinlock_t *lock);
 bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns);
 void kspinlock_release(kspinlock_t *lock);
-void kspinlock_fake_release();
+void kspinlock_fake_acquire(void);
+void kspinlock_fake_release(void);

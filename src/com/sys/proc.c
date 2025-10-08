@@ -72,9 +72,10 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     proc->parent_pid    = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
-    proc->root    = root;
-    proc->cwd     = cwd;
-    proc->num_ref = 1; // 1 because of the parent
+    proc->root                = root;
+    proc->cwd                 = cwd;
+    proc->num_ref             = 1; // 1 because of the parent
+    proc->num_running_threads = 0;
     TAILQ_INIT(&proc->notifications);
 
     proc->threads_lock = KSPINLOCK_NEW();

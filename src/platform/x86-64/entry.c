@@ -93,9 +93,13 @@ void x86_64_entry(void) {
     pf_iser->flags |= COM_SYS_INTERRUPT_FLAGS_NO_RESET;
     com_isr_t *sig_isr = com_sys_interrupt_register(ARCH_CPU_IPI_SIGNAL,
                                                     NULL,
-                                                    NULL);
+                                                    x86_64_lapic_eoi);
     sig_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
-    com_sys_interrupt_register(ARCH_CPU_IPI_PANIC, cpu_panic, NULL);
+    com_sys_interrupt_register(ARCH_CPU_IPI_PANIC, cpu_panic, x86_64_lapic_eoi);
+    com_isr_t *inv_isr = com_sys_interrupt_register(X86_64_MMU_IPI_INVALIDATE,
+                                                    x86_64_mmu_invalidate_isr,
+                                                    x86_64_lapic_eoi);
+    inv_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
     com_sys_syscall_init();
     com_sys_interrupt_register(0x80, x86_64_syscall_isr, NULL);
     x86_64_lapic_bsp_init();

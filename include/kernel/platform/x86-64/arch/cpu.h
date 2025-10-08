@@ -67,6 +67,10 @@ typedef struct arch_cpu {
     x86_64_ist_t    ist;
     uint64_t        tsc_freq;
     com_pmm_cache_t mmu_cache;
+    size_t         *mmu_shootdown_counter;
+    kspinlock_t     mmu_shootdown_lock;
+    void           *mmu_shootdown_virt;
+    size_t          mmu_shootdown_pages;
 
     arch_mmu_pagetable_t *root_page_table;
 

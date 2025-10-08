@@ -683,7 +683,8 @@ int com_fs_tmpfs_mmap(void           **out,
                        range_base + (curr - off),
                        page_phys,
                        ARCH_PAGE_SIZE,
-                       vmm_flags | ((present) ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
+                       vmm_flags | COM_MM_VMM_FLAGS_PRIVATE |
+                           ((present) ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
                        mmu_flags);
     }
 

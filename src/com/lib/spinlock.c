@@ -132,6 +132,11 @@ void kspinlock_release(kspinlock_t *lock) {
     decrement_lock_depth_tested();
 }
 
-void kspinlock_fake_release() {
+void kspinlock_fake_acquire(void) {
+    ARCH_CPU_DISABLE_INTERRUPTS();
+    INCREMENT_CURR_LOCK_DEPTH();
+}
+
+void kspinlock_fake_release(void) {
     decrement_lock_depth_tested();
 }

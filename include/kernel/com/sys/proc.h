@@ -74,6 +74,7 @@ typedef struct com_proc {
     kspinlock_t             threads_lock;
     struct com_thread_tailq threads;
     size_t                  num_ref;
+    size_t                  num_running_threads;
 
     kspinlock_t       pg_lock;
     com_proc_group_t *proc_group;
