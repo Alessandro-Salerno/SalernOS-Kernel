@@ -295,13 +295,13 @@ bool arch_mmu_chflags(arch_mmu_flags_t *pt,
     return true;
 }
 
-bool arch_mmu_unmap(arch_mmu_pagetable_t *pt, void *virt) {
+bool arch_mmu_unmap(void **out_old_phys, arch_mmu_pagetable_t *pt, void *virt) {
     uint64_t *entry = get_page(pt, virt);
     if (NULL == entry) {
         return false;
     }
-    com_mm_pmm_free((void *)(*entry & ADDRMASK));
-    *entry = 0;
+    *out_old_phys = (void *)((*entry) & ADDRMASK);
+    *entry        = 0;
     return true;
 }
 

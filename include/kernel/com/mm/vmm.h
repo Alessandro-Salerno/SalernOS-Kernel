@@ -65,6 +65,7 @@ void              *com_mm_vmm_map(com_vmm_context_t *context,
                                   arch_mmu_flags_t   mmu_flags);
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr);
 void  com_mm_vmm_switch(com_vmm_context_t *context);
+void  com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len);
 void  com_mm_vmm_handle_fault(void            *fault_virt,
                               void            *fault_phys,
                               arch_context_t  *fault_ctx,

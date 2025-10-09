@@ -16,27 +16,36 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
-
+#include <arch/cpu.h>
+#include <arch/info.h>
 #include <arch/mmu.h>
-#include <stddef.h>
+#include <errno.h>
+#include <kernel/com/mm/pmm.h>
+#include <kernel/com/mm/vmm.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/syscall.h>
+#include <kernel/platform/mmu.h>
+#include <lib/spinlock.h>
+#include <lib/util.h>
+#include <stdint.h>
+#include <sys/mman.h>
 
-void                  arch_mmu_init(void);
-arch_mmu_pagetable_t *arch_mmu_new_table(void);
-void                  arch_mmu_destroy_table(arch_mmu_pagetable_t *pt);
-arch_mmu_pagetable_t *arch_mmu_duplicate_table(arch_mmu_pagetable_t *pt);
-bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
-                                   void                 *virt,
-                                   void                 *phys,
-                                   arch_mmu_flags_t      flags);
-bool                  arch_mmu_chflags(arch_mmu_flags_t *pt,
-                                       void             *virt,
-                                       arch_mmu_flags_t  new_flags);
-bool  arch_mmu_unmap(void **out_old_phys, arch_mmu_pagetable_t *pt, void *virt);
-void  arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages);
-void  arch_mmu_switch(arch_mmu_pagetable_t *pt);
-void  arch_mmu_switch_default(void);
-void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr);
-bool  arch_mmu_is_cow(arch_mmu_pagetable_t *pagetable, void *virt_addr);
-bool  arch_mmu_is_executable(arch_mmu_pagetable_t *pagetable, void *virt_addr);
-arch_mmu_pagetable_t *arch_mmu_get_table(void);
+COM_SYS_SYSCALL(com_sys_syscall_munmap) {
+    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+    COM_SYS_SYSCALL_UNUSED_START(3);
+
+    void  *addr = COM_SYS_SYSCALL_ARG(void *, 1);
+    size_t len  = COM_SYS_SYSCALL_ARG(size_t, 2);
+
+    if (0 != (uintptr_t)addr % ARCH_PAGE_SIZE ||
+        addr > ARCH_MMU_KERNELSPACE_START || 0 == len ||
+        addr + len > ARCH_MMU_KERNELSPACE_START) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_proc_t   *curr_proc   = curr_thread->proc;
+
+    com_mm_vmm_unmap(curr_proc->vmm_context, addr, len);
+    return COM_SYS_SYSCALL_OK(0);
+}

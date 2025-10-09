@@ -668,4 +668,13 @@ void com_sys_syscall_init(void) {
                              "addr",
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "max_addrlen");
+
+    com_sys_syscall_register(0x37,
+                             "munmap",
+                             com_sys_syscall_munmap,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "addr",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "len");
 }

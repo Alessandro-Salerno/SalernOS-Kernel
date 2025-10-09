@@ -356,7 +356,6 @@ void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
         KASSERT(NULL == next->cpu);
         TAILQ_REMOVE_HEAD(waiters, threads);
         kspinlock_acquire(&currcpu->runqueue_lock);
-        next->cpu = currcpu;
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
         next->runnable     = true;
         next->waiting_on   = NULL;

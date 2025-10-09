@@ -27,6 +27,8 @@
 #include <lib/str.h>
 #include <stdatomic.h>
 
+#define UNMAP_MAX_ARRAY_ON_STACK 64
+
 static com_vmm_context_t RootContext = {0};
 static void             *ZeroPage    = NULL;
 
@@ -236,6 +238,47 @@ void com_mm_vmm_switch(com_vmm_context_t *context) {
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr) {
     context = vmm_ensure_context(context);
     return arch_mmu_get_physical(context->pagetable, virt_addr);
+}
+
+void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
+    context = vmm_ensure_context(context);
+
+    uintptr_t page_off   = (uintptr_t)virt % ARCH_PAGE_SIZE;
+    size_t    size_p_off = page_off + len;
+    size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+
+    void  *tmp_phys_array[UNMAP_MAX_ARRAY_ON_STACK];
+    void **tmp_phys_buf       = tmp_phys_array;
+    size_t tmp_phys_buf_pages = (size_in_pages * sizeof(void *) +
+                                 ARCH_PAGE_SIZE - 1) /
+                                ARCH_PAGE_SIZE;
+    size_t unmaps_done = 0;
+    if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
+        tmp_phys_buf = (void *)ARCH_PHYS_TO_HHDM(
+            com_mm_pmm_alloc_many(tmp_phys_buf_pages));
+    }
+
+    for (size_t i = 0; i < size_in_pages; i++) {
+        size_t offset = i * ARCH_PAGE_SIZE;
+        if (!arch_mmu_unmap(&tmp_phys_buf[i],
+                            context->pagetable,
+                            virt + offset)) {
+            tmp_phys_buf[i] = NULL;
+            break;
+        }
+        unmaps_done++;
+    }
+
+    arch_mmu_invalidate(context->pagetable, virt, unmaps_done);
+
+    for (size_t i = 0; i < unmaps_done; i++) {
+        com_mm_pmm_free(tmp_phys_buf[i]);
+    }
+
+    if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
+        com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(tmp_phys_buf),
+                             tmp_phys_buf_pages);
+    }
 }
 
 void com_mm_vmm_handle_fault(void            *fault_virt,
