@@ -167,6 +167,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
     if (COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags) {
         vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
 #ifdef ARCH_MMU_EXTRA_FLAGS_NOCOPY
+        mmu_flags |= ARCH_MMU_EXTRA_FLAGS_NOCOPY;
 #else
 #warning "no support for architectures without ARCH_MMU_EXTRA_FLAGS_NOCOPY yet"
 #endif
@@ -212,9 +213,10 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
         uintptr_t offset = i * ARCH_PAGE_SIZE;
         void     *vaddr  = (void *)((uintptr_t)virt + offset);
 
-        void *paddr = ZeroPage;
-        if (!(COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags)) {
-            paddr = (void *)((uintptr_t)page_paddr + offset);
+        void *paddr = (void *)((uintptr_t)page_paddr + offset);
+        if (COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags) {
+            paddr = ZeroPage;
+            com_mm_pmm_hold(ZeroPage);
         }
 
         bool success = arch_mmu_map(context->pagetable,
@@ -246,6 +248,7 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     uintptr_t page_off   = (uintptr_t)virt % ARCH_PAGE_SIZE;
     size_t    size_p_off = page_off + len;
     size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+    virt = (void *)((uintptr_t)virt & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
 
     void  *tmp_phys_array[UNMAP_MAX_ARRAY_ON_STACK];
     void **tmp_phys_buf       = tmp_phys_array;
@@ -324,7 +327,7 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
     if (COM_MM_VMM_FAULT_ATTR_MAP & attr) {
         void *fault_virt_page = (void *)((uintptr_t)fault_virt &
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
-        void *new_phys        = (void *)com_mm_pmm_alloc();
+        void *new_phys        = com_mm_pmm_alloc_zero();
         arch_mmu_map(curr_proc->vmm_context->pagetable,
                      fault_virt_page,
                      new_phys,
@@ -332,6 +335,7 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
         arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
                             fault_virt_page,
                             1);
+        com_mm_pmm_free(ZeroPage);
         return;
     }
 

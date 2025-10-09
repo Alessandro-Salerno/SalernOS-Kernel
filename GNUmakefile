@@ -20,7 +20,7 @@ CC := cc
 LD := ld
 
 # User controllable C flags.
-CFLAGS := -g3 -pipe -O0
+CFLAGS := -g3 -pipe -O2
 
 # User controllable C preprocessor flags. We set none by default.
 CPPFLAGS :=

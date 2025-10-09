@@ -189,6 +189,10 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
     bool      entry_shared   = ARCH_MMU_EXTRA_FLAGS_SHARED & entry;
     bool      entry_writable = ARCH_MMU_FLAGS_WRITE & entry;
 
+    if (!(ARCH_MMU_FLAGS_PRESENT & entry)) {
+        return 0;
+    }
+
     if (0 == level) {
         com_mm_pmm_hold((void *)(entry & ADDRMASK));
         return (entry_shared)
@@ -541,6 +545,7 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
         // We still want the vmm to map, but we don't want to copy the zero page
         // into a page taht's laready been zeroed. So we remove COW (copy on
         // write) and add MAP
+        mmu_flags_hint &= ~ARCH_MMU_EXTRA_FLAGS_NOCOPY;
         vmm_attr &= ~COM_MM_VMM_FAULT_ATTR_COW;
         vmm_attr |= COM_MM_VMM_FAULT_ATTR_MAP;
     }

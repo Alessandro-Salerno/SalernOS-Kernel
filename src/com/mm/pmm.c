@@ -508,12 +508,11 @@ static void pmm_insert_thread(void) {
             kmemset(page_meta_base,
                     freelist_entry->pages * sizeof(struct page_meta),
                     0);
+            KHASHMAP_REMOVE(&InsertThreadDefragMap, &entry_key);
 
             FREELIST_LOCK(&MainFreeList);
             freelist_add_ordered_nolock(&MainFreeList, freelist_entry);
             FREELIST_UNLOCK(&MainFreeList);
-
-            KHASHMAP_REMOVE(&InsertThreadDefragMap, &entry_key);
         }
 
         UPDATE_STATS(to_insert, -pages_inserted);
@@ -634,7 +633,8 @@ void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages) {
 void com_mm_pmm_hold(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
     KASSERT(E_PAGE_STATE_FREE != page_meta->state);
-    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST);
+    KASSERT(E_PAGE_STATE_RESERVED == page_meta->state ||
+            1 != __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST));
 }
 
 void com_mm_pmm_free(void *page) {
@@ -801,7 +801,8 @@ void com_mm_pmm_init(void) {
                                       .state   = E_PAGE_STATE_RESERVED};
             page_meta_set((void *)entry->base,
                           &model,
-                          entry->length / ARCH_PAGE_SIZE);
+                          (entry->length + ARCH_PAGE_SIZE - 1) /
+                              ARCH_PAGE_SIZE);
         }
     }
 
