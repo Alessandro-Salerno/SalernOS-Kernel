@@ -52,7 +52,7 @@ KUSED static int uacpi_util_status_to_posix(uacpi_status status) {
         case UACPI_STATUS_OK:
             return 0;
         default:
-            KDEBUG("wtf, got %u", status);
+            KDEBUG("wtf, got %zu", status);
             KASSERT(false);
     }
 }

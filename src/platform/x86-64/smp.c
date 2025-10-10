@@ -57,7 +57,7 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
     cpu->runqueue_lock = KSPINLOCK_NEW();
     ARCH_CPU_SET(cpu);
-    KDEBUG("initializing cpu %u", cpu->id);
+    KDEBUG("initializing cpu %zu", cpu->id);
 
     x86_64_mmu_init_cpu();
     x86_64_gdt_init();
@@ -126,7 +126,7 @@ void x86_64_smp_init(void) {
     size_t      avail_cpus = KMIN(MAX_CPUS, smp->cpu_count);
     Cpus                   = cpus;
     NumCpus                = avail_cpus;
-    KDEBUG("found %u cpus, using max = %u, initializing %u cpus",
+    KDEBUG("found %zu cpus, using max = %zu, initializing %zu cpus",
            smp->cpu_count,
            MAX_CPUS,
            avail_cpus);

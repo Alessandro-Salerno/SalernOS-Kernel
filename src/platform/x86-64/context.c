@@ -19,10 +19,10 @@
 #include <arch/context.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/platform/x86-64/context.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 
 void arch_context_print(arch_context_t *ctx) {
-    kprintf("\ncr2: %p  gs: %p\nrax: %p  fs: %p\nrbx: %p  es: "
+    printf("\ncr2: %p  gs: %p\nrax: %p  fs: %p\nrbx: %p  es: "
             "%p\nrcx: %p  ds: %p\nrdx: %p  cs: %p\n r8: %p  ss: "
             "%p\n r9: %p r10: %p\nr11: %p r12: %p\nr13: %p "
             "r14: %p\nr15: %p rdi: %p\nrsi: %p rbp: %p\nrip: "
@@ -54,8 +54,8 @@ void arch_context_print(arch_context_t *ctx) {
             ctx->error,
             ctx->rflags);
 
-    // kprintf("instruction at (%%rip):\n\t");
-    // kprintf("%p %p\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
+    // printf("instruction at (%%rip):\n\t");
+    // printf("%p %p\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
 }
 
 void arch_context_alloc_sigframe(com_sigframe_t **sframe,

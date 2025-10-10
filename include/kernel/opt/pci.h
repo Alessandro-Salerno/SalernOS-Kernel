@@ -90,7 +90,7 @@
 #define OPT_PCI_ENUM_WRITE32(e, off, v) \
     __PCI_ENUM_WRITE(opt_pci_write32, e, off, v)
 
-#define OPT_PCI_ADDR_PRINTF_FMT "%x:%x:%x"
+#define OPT_PCI_ADDR_PRINTF_FMT "%02X:%02X:%02X"
 #define OPT_PCI_ADDR_PRINTF_VALUES(addr) \
     (addr).bus, (addr).device, (addr).function
 
@@ -125,7 +125,7 @@ typedef struct opt_pci_cap {
 } opt_pci_cap_t;
 
 typedef struct opt_pci_bar {
-    uintptr_t address;
+    uintptr_t virtual;
     uintptr_t physical;
     size_t    length;
     bool      mmio;

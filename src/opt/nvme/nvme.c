@@ -27,7 +27,7 @@ static int nvme_init_device(opt_pci_enum_t *device) {
     NVME_LOG("(info) found device " OPT_PCI_ADDR_PRINTF_FMT,
              OPT_PCI_ADDR_PRINTF_VALUES(device->addr));
     uint16_t msix_entries = opt_pci_msix_init(device);
-    NVME_LOG("(debug) found %u msix entries", msix_entries);
+    NVME_LOG("(debug) found %zu msix entries", msix_entries);
     return 0;
 }
 

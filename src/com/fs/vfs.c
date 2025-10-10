@@ -22,7 +22,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stdbool.h>

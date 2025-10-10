@@ -61,7 +61,7 @@ static int text_tty_echo(size_t     *bytes_written,
     com_text_tty_t *tty = passthrough;
     com_io_term_putsn(tty->term, buf, buflen);
 #if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
-    kprintf("%.*s", (int)buflen, buf);
+    printf("%.*s", (int)buflen, buf);
 #endif
     *bytes_written = buflen;
     return 0;
@@ -420,7 +420,7 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
         return 0;
     }
 
-    KDEBUG("unsupported ioctl 0x%x", op);
+    KDEBUG("unsupported ioctl 0x%X", op);
     return ENOSYS;
 }
 
@@ -746,7 +746,7 @@ int com_io_tty_init_text(com_vnode_t **out,
                          com_tty_t   **out_tty,
                          com_term_t   *term) {
     size_t tty_num = __atomic_fetch_add(&NextttyNum, 1, __ATOMIC_SEQ_CST);
-    KLOG("initializing text tty %u", tty_num);
+    KLOG("initializing text tty %zu", tty_num);
 
     com_tty_t *tty_data  = com_mm_slab_alloc(sizeof(com_tty_t));
     tty_data->type       = E_COM_TTY_TYPE_TEXT;
@@ -779,7 +779,7 @@ int com_io_tty_init_text(com_vnode_t **out,
 
     tty_dev->type   = E_COM_VNODE_TYPE_CHARDEV;
     tty_data->vnode = tty_dev;
-    KDEBUG("tty vn=%x");
+    KDEBUG("tty vn=%X");
 
     size_t rows, cols;
     com_io_term_get_size(term, &rows, &cols);

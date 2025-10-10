@@ -177,7 +177,7 @@ void x86_64_ioapic_init(void) {
     OverrideCount = madt_getcount(
         ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE);
     IOAPICCount = madt_getcount(ACPI_MADT_ENTRY_TYPE_IOAPIC);
-    KDEBUG("found %u overrides and %u ioapics", OverrideCount, IOAPICCount);
+    KDEBUG("found %zu overrides and %zu ioapics", OverrideCount, IOAPICCount);
 
     for (size_t i = 0; i < IOAPICCount; i++) {
         struct acpi_madt_ioapic *entry = madt_getentry(

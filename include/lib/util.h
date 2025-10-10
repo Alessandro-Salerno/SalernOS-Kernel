@@ -59,7 +59,7 @@
     com_io_log_lock();              \
     kinitlog("URGENT", "\033[35m"); \
     __LOG_LOCATION();               \
-    kprintf(__VA_ARGS__);           \
+    printf(__VA_ARGS__);           \
     KRESET_COLOR();                 \
     com_io_log_putc_nolock('\n');   \
     com_io_log_unlock();
@@ -70,7 +70,7 @@
     com_io_log_lock();            \
     kinitlog("INFO", "\033[32m"); \
     __LOG_LOCATION();             \
-    kprintf(__VA_ARGS__);         \
+    printf(__VA_ARGS__);         \
     KRESET_COLOR();               \
     com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
@@ -83,7 +83,7 @@
     com_io_log_lock();             \
     kinitlog(optname, "\033[94m"); \
     __LOG_LOCATION();              \
-    kprintf(__VA_ARGS__);          \
+    printf(__VA_ARGS__);          \
     KRESET_COLOR();                \
     com_io_log_unlock();
 #else
@@ -95,7 +95,7 @@
     com_io_log_lock();            \
     kinitlog("DEBUG", "");        \
     __LOG_LOCATION();             \
-    kprintf(__VA_ARGS__);         \
+    printf(__VA_ARGS__);         \
     KRESET_COLOR();               \
     com_io_log_putc_nolock('\n'); \
     com_io_log_unlock();
@@ -129,7 +129,7 @@
         com_io_log_puts_nolock(":" KSTR(__LINE__) ": " #statement \
                                                   " failed\n");   \
         com_sys_panic(NULL,                                       \
-                      "assertion failed: %s:%s:%u: %s",           \
+                      "assertion failed: %s:%s:%zu: %s",           \
                       __FILE__,                                   \
                       __func__,                                   \
                       __LINE__,                                   \

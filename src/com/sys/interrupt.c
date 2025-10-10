@@ -23,7 +23,7 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -34,7 +34,7 @@ static com_isr_t   InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
 static com_isr_t *interrupt_register_nolock(uintmax_t      vec,
                                             com_intf_isr_t func,
                                             com_intf_eoi_t eoi) {
-    KDEBUG("registering handler at %p for vector %u (%p)", func, vec, vec);
+    KDEBUG("registering handler at %p for vector %zu (%p)", func, vec, vec);
     com_isr_t *isr = &InterruptTable[vec];
     isr->func      = func;
     isr->eoi       = eoi;
@@ -89,7 +89,7 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     }
 
     if (NULL == isr) {
-        com_sys_panic(ctx, "isr not set for interrupt vector %u", vec);
+        com_sys_panic(ctx, "isr not set for interrupt vector %zu", vec);
     }
 
     if (!eoi_after && NULL != isr->eoi) {

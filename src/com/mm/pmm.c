@@ -27,7 +27,7 @@
 #include <kernel/platform/info.h>
 #include <lib/hashmap.h>
 #include <lib/mem.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <lib/searchtree.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
@@ -633,8 +633,7 @@ void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages) {
 void com_mm_pmm_hold(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
     KASSERT(E_PAGE_STATE_FREE != page_meta->state);
-    KASSERT(E_PAGE_STATE_RESERVED == page_meta->state ||
-            1 != __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST));
+    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST);
 }
 
 void com_mm_pmm_free(void *page) {
@@ -703,7 +702,7 @@ void com_mm_pmm_init(void) {
         MemoryStats.total += entry->length;
         uintptr_t seg_top = entry->base + entry->length;
 
-        KDEBUG("segment: base=%p top=%p usable=%u length=%u",
+        KDEBUG("segment: base=%p top=%p usable=%zu length=%zu",
                entry->base,
                seg_top,
                ARCH_MEMMAP_IS_USABLE(entry),
@@ -730,7 +729,7 @@ void com_mm_pmm_init(void) {
     size_t page_meta_pages = (page_meta_size + ARCH_PAGE_SIZE - 1) /
                              ARCH_PAGE_SIZE;
     size_t page_meta_aligned_size = page_meta_pages * ARCH_PAGE_SIZE;
-    KDEBUG("page meta array size = %u byte(s) = %u page(s) = %u aligned "
+    KDEBUG("page meta array size = %zu byte(s) = %zu page(s) = %zu aligned "
            "byte(s)",
            page_meta_size,
            page_meta_pages,
@@ -775,7 +774,7 @@ void com_mm_pmm_init(void) {
                 freelist_add_ordered_nolock(&MainFreeList, list_entry);
             }
 
-            KDEBUG("page meta array: base=%p, segment=%u, length=%u",
+            KDEBUG("page meta array: base=%p, segment=%zu, length=%zu",
                    PageMeta.buffer,
                    i,
                    PageMeta.len);
@@ -810,6 +809,6 @@ void com_mm_pmm_init(void) {
 
     struct freelist_entry *e, *_;
     TAILQ_FOREACH_SAFE(e, &MainFreeList.head, tqe, _) {
-        KDEBUG("freelist entry %p has %u pages", e, e->pages);
+        KDEBUG("freelist entry %p has %zu pages", e, e->pages);
     }
 }

@@ -210,7 +210,7 @@ int com_sys_elf64_load(com_elf_data_t    *out,
 
         switch (phdr.type) {
             case PT_INTERP:
-                KDEBUG("found PT_INTERP at offset %u", phdr_off);
+                KDEBUG("found PT_INTERP at offset %zu", phdr_off);
                 ret = com_fs_vfs_read(out->interpreter_path,
                                       phdr.file_sz,
                                       &bytes_read,
@@ -228,7 +228,7 @@ int com_sys_elf64_load(com_elf_data_t    *out,
 
             case PT_LOAD:
                 KDEBUG(
-                    "found PT_LOAD at offset %u with segment at offset %u and "
+                    "found PT_LOAD at offset %zu with segment at offset %zu and "
                     "virt %p",
                     phdr_off,
                     phdr.off,

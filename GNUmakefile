@@ -40,6 +40,8 @@ override CFLAGS += \
 	-include config/config.h \
 	-Wall \
 	-Wextra \
+	-Wformat \
+	-Wformat=2 \
 	-std=gnu11 \
 	-ffreestanding \
 	-fno-stack-protector \
@@ -53,7 +55,8 @@ override CFLAGS += \
 	-mno-sse \
 	-mno-sse2 \
 	-mno-red-zone \
-	-mcmodel=kernel
+	-mcmodel=kernel \
+	-DPRINTF_DISABLE_SUPPORT_FLOAT
 
 # Internal C preprocessor flags that should not be changed by the user.
 override CPPFLAGS := \

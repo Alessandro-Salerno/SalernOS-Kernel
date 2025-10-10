@@ -145,7 +145,7 @@ int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt) {
 
 com_mouse_t *com_io_mouse_new(void) {
     size_t mouse_num = __atomic_fetch_add(&NextMouseNum, 1, __ATOMIC_SEQ_CST);
-    KLOG("initializing mouse in /dev/mouse%u", mouse_num);
+    KLOG("initializing mouse in /dev/mouse%zu", mouse_num);
 
     // Poor man's sprintf
     char mouse_num_str[24];

@@ -17,7 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stddef.h>
@@ -28,10 +28,10 @@ void kinitlog(const char *category, const char *color) {
 
 #if CONFIG_LOG_ALLOW_COLORS
     KRESET_COLOR();
-    kprintf("%s[%s  ", color, category);
+    printf("%s[%s  ", color, category);
 #else
     (void)color;
-    kprintf("[%s  ", category);
+    printf("[%s  ", category);
 #endif
 
     ssize_t cat_len = kstrlen(category);
@@ -41,25 +41,25 @@ void kinitlog(const char *category, const char *color) {
     }
 
     if (NULL == curr_cpu) {
-        kprintf("**NOCPU**");
+        printf("**NOCPU**");
         goto log;
     }
 
-    kprintf("cpu=%d/", curr_cpu->id);
+    printf("cpu=%d/", curr_cpu->id);
 
     if (NULL == curr_thread) {
-        kprintf("KERNEL");
+        printf("KERNEL");
         goto log;
     }
 
-    kprintf("tid=%d/", curr_thread->tid);
+    printf("tid=%d/", curr_thread->tid);
 
     if (NULL == curr_thread->proc) {
-        kprintf("KERNEL");
+        printf("KERNEL");
         goto log;
     }
 
-    kprintf("pid=%d", curr_thread->proc->pid);
+    printf("pid=%d", curr_thread->proc->pid);
 log:
-    kprintf("]\t");
+    printf("]\t");
 }

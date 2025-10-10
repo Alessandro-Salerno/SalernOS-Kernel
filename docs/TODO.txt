@@ -36,7 +36,7 @@ Structure of include/ directory:
             com/
 
     The lib/ directory contains headers for "support libraries" that are an integral
-    part of the kernel and are developed alongisde it (e.g., kprintf).
+    part of the kernel and are developed alongisde it (e.g., printf).
     The vendor/ directory contains headers from foreign source trees (e.g., limine.h).
     The kernel/ directory holds headers that directly belong to the kernel. It is
     subdivided into platform/ and com/.

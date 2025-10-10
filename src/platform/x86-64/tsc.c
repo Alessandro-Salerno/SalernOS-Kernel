@@ -91,5 +91,5 @@ calibrate:;
     curr_cpu->tsc_freq  = (end_tsc - start_tsc) / meas_pit *
                          X86_64_PIT_FREQUENCY;
 
-    KDEBUG("tsc has %u hz measured with pit=%u", curr_cpu->tsc_freq, meas_pit);
+    KDEBUG("tsc has %zu hz measured with pit=%zu", curr_cpu->tsc_freq, meas_pit);
 }

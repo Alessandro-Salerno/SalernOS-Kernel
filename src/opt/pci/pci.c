@@ -14,7 +14,7 @@
 |                                                                        |
 | You should have received a copy of the GNU General Public License      |
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
+************************************************************************/
 
 #include <arch/info.h>
 #include <errno.h>
@@ -106,7 +106,7 @@ static void *pci_map_bar(opt_pci_bar_t bar) {
                                                      : ARCH_MMU_FLAGS_UC);
     return com_mm_vmm_map(NULL,
                           NULL,
-                          (void *)bar.address,
+                          (void *)bar.physical,
                           bar.length,
                           COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
                           ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
@@ -158,7 +158,8 @@ static void enumerate_function(uint32_t bus, uint32_t dev, uint32_t func) {
 
     LIST_INSERT_HEAD(&PCIEnumeratorList, e, tqe_enums);
 
-    PCI_LOG("(info) device: %x:%x.%x %x %x %x:%x (rev = %x) (interrupt = %s)",
+    PCI_LOG("(info) device: %02X:%02X.%X %02X %02X %04X:%04X (rev = %2X) "
+            "(interrupt = %4s)",
             bus,
             dev,
             func,
@@ -273,7 +274,7 @@ opt_pci_bar_t opt_pci_get_bar(opt_pci_enum_t *e, size_t index) {
         ret.mmio         = false;
         ret.prefetchable = false;
         ret.is64bits     = false;
-        ret.address      = bar & 0xfffffffc;
+        ret.physical     = bar & 0xfffffffc;
         OPT_PCI_ENUM_WRITE32(e, off, 0xffffffff);
         ret.length = -1;
         OPT_PCI_ENUM_WRITE32(e, off, bar);
@@ -282,18 +283,18 @@ opt_pci_bar_t opt_pci_get_bar(opt_pci_enum_t *e, size_t index) {
 
     ret.mmio         = true;
     ret.prefetchable = PCI_BAR_PREFETCHABLE & bar;
-    ret.address = ret.physical = bar & 0xfffffff0;
-    ret.length                 = -1;
-    ret.is64bits = PCI_BAR_TYPE_64BIT == (bar & PCI_BAR_TYPE_MASK);
+    ret.physical     = bar & 0xfffffff0;
+    ret.length       = -1;
+    ret.is64bits     = PCI_BAR_TYPE_64BIT == (bar & PCI_BAR_TYPE_MASK);
 
     if (ret.is64bits) {
-        ret.address |= (uint64_t)OPT_PCI_ENUM_READ32(e, off + 4) << 32;
+        ret.physical |= (uint64_t)OPT_PCI_ENUM_READ32(e, off + 4) << 32;
     }
 
     OPT_PCI_ENUM_WRITE32(e, off, 0xffffffff);
     ret.length = ~(OPT_PCI_ENUM_READ32(e, off) & 0xfffffff0) + 1;
     OPT_PCI_ENUM_WRITE32(e, off, bar);
-    ret.address = (uintptr_t)pci_map_bar(ret);
+    ret.virtual = (uintptr_t)pci_map_bar(ret);
 
 end:
     e->bar[index] = ret;
@@ -331,7 +332,7 @@ void opt_pci_msix_add(opt_pci_enum_t *e,
     // something the PCI people will look into, not me.
     opt_pci_bar_t bir = opt_pci_get_bar(e, e->irq.msix.bir);
     volatile struct msix_message
-        *msix_table = (void *)(bir.address + e->irq.msix.table_offset);
+        *msix_table = (void *)(bir.virtual + e->irq.msix.table_offset);
     volatile struct msix_message *msix_entry = &msix_table[msixvec];
 
     uint32_t data;

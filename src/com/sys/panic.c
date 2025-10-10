@@ -24,9 +24,9 @@
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
 #include <kernel/platform/context.h>
-#include <lib/printf.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <vendor/printf.h>
 
 __attribute__((noreturn)) void
 com_sys_panic(arch_context_t *ctx, const char *fmt, ...) {
@@ -34,29 +34,29 @@ com_sys_panic(arch_context_t *ctx, const char *fmt, ...) {
     ARCH_CPU_BROADCAST_IPI(ARCH_CPU_IPI_PANIC);
     com_io_term_panic();
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    kprintf("kernel panic on cpu %u\n", ARCH_CPU_GET_ID());
+    printf("kernel panic on cpu %zu\n", ARCH_CPU_GET_ID());
 
     if (NULL != fmt) {
         va_list args;
         va_start(args, fmt);
-        kvprintf(fmt, args);
+        vprintf(fmt, args);
         va_end(args);
-        kprintf("\n\n");
+        printf("\n\n");
     }
 
     com_pmm_stats_t memstats;
     com_mm_pmm_get_stats(&memstats);
-    kprintf("used memory: %u byte(s)\n", memstats.used);
-    kprintf("free memory: %u byte(s)\n", memstats.free);
-    kprintf("reserved memory: %u byte(s)\n", memstats.reserved);
-    kprintf("system memory: %u byte(s)\n", memstats.usable);
-    kprintf("total memory: %u byte(s)\n", memstats.total);
-    kprintf("\n");
+    printf("used memory: %zu byte(s)\n", memstats.used);
+    printf("free memory: %zu byte(s)\n", memstats.free);
+    printf("reserved memory: %zu byte(s)\n", memstats.reserved);
+    printf("system memory: %zu byte(s)\n", memstats.usable);
+    printf("total memory: %zu byte(s)\n", memstats.total);
+    printf("\n");
 
     if (NULL == ctx && NULL != curr_thread) {
-        kprintf("note: cpu context data refers to kernel stack for tid=%d, "
-                "since context was not provided\n",
-                curr_thread->tid);
+        printf("note: cpu context data refers to kernel stack for tid=%d, "
+               "since context was not provided\n",
+               curr_thread->tid);
         ctx = &curr_thread->ctx;
     }
 

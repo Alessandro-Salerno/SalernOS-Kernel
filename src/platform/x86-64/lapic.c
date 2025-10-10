@@ -27,7 +27,7 @@
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/pit.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <stddef.h>
 #include <stdint.h>
 

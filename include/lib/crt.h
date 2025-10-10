@@ -19,7 +19,7 @@
 #pragma once
 
 #include <lib/mem.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <lib/str.h>
 
 #define memcpy(dst, src, sz) kmemcpy((dst), (src), (sz))
@@ -30,7 +30,5 @@
 
 #define strlen(s)      kstrlen((s))
 #define strcmp(s1, s2) kstrcmp((s1), (s2))
-
-#define printf(...) kprintf(__VA_ARGS__)
 
 #define FLANTERM_CUSTOM_CRT

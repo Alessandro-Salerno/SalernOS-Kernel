@@ -114,7 +114,7 @@ int com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
 
 com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout) {
     size_t kbd_num = __atomic_fetch_add(&NextKeyboardNum, 1, __ATOMIC_SEQ_CST);
-    KLOG("initializing keyboard in /dev/keyboard%u", kbd_num);
+    KLOG("initializing keyboard in /dev/keyboard%zu", kbd_num);
 
     // Poor man's sprintf
     char kbd_num_str[24];

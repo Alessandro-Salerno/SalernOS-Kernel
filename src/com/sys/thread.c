@@ -108,7 +108,7 @@ void com_sys_thread_ready_nolock(com_thread_t *thread) {
     thread->waiting_on   = NULL;
     thread->waiting_cond = NULL;
     kspinlock_release(&curr_cpu->runqueue_lock);
-    KDEBUG("thread with tid=%u is now runnable on cpu %u",
+    KDEBUG("thread with tid=%zu is now runnable on cpu %zu",
            thread->tid,
            curr_cpu->id);
 }

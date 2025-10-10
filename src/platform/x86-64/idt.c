@@ -85,7 +85,7 @@ void x86_64_idt_init() {
 }
 
 void x86_64_idt_set_user_invocable(uintmax_t vec) {
-    KDEBUG("allowing user invocation of interrupt %u", vec);
+    KDEBUG("allowing user invocation of interrupt %zu", vec);
     Idt[vec].flags = 0xEE;
 }
 

@@ -1,4 +1,5 @@
 #include <lib/crt.h>
+#include <vendor/printf.h>
 
 // Using __VA_ARGS__ cause it's easier and the result is the same
 #define uacpi_memcpy(...)  memcpy(__VA_ARGS__)

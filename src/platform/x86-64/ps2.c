@@ -385,7 +385,7 @@ void x86_64_ps2_mouse_init(void) {
     uint8_t sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
     if (PS2_MOUSECTL_PULSE10 != sample_rate) {
         KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
-               "%x, got %x",
+               "%X, got %X",
                PS2_MOUSECTL_PULSE10,
                sample_rate);
     }
@@ -395,7 +395,7 @@ void x86_64_ps2_mouse_init(void) {
     sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
     if (PS2_MOUSECTL_PULSE10 != sample_rate) {
         KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
-               "%x, got %x",
+               "%X, got %X",
                PS2_MOUSECTL_PULSE10,
                sample_rate);
     }

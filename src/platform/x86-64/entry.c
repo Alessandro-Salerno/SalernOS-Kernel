@@ -38,7 +38,7 @@
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
-#include <lib/printf.h>
+#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <vendor/limine.h>
@@ -49,7 +49,7 @@ static arch_cpu_t BspCpu = {0};
 static void cpu_panic(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
-    kprintf("halting cpu %d\n", ARCH_CPU_GET()->id);
+    printf("halting cpu %d\n", ARCH_CPU_GET()->id);
 
     ARCH_CPU_DISABLE_INTERRUPTS();
     while (true) {

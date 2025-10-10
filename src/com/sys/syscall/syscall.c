@@ -32,30 +32,30 @@ volatile com_syscall_t SyscallTable[CONFIG_SYSCALL_MAX];
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
 static void log_syscall(volatile com_syscall_t *syscall,
                         arch_syscall_arg_t      args[]) {
-    kprintf("%s(", syscall->name);
+    printf("%s(", syscall->name);
 
     for (size_t i = 0; i < syscall->num_args; i++) {
         int         arg_type = syscall->arg_types[i];
         const char *arg_name = syscall->arg_names[i];
-        kprintf("%s = ", arg_name);
+        printf("%s = ", arg_name);
 
         com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
         switch (arg_type) {
             case COM_SYS_SYSCALL_TYPE_INT:
-                kprintf("%d", (int)args[i]);
+                printf("%d", (int)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_UINTMAX:
-                kprintf("%u", (uintmax_t)args[i]);
+                printf("%zu", (uintmax_t)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_SIZET:
-                kprintf("%u", (size_t)args[i]);
+                printf("%zu", (size_t)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_PTR: {
                 if (NULL != (void *)args[i]) {
-                    kprintf("%p", (void *)args[i]);
+                    printf("%p", (void *)args[i]);
                 } else {
-                    kprintf("NULL");
+                    printf("NULL");
                 }
                 break;
             }
@@ -66,41 +66,41 @@ static void log_syscall(volatile com_syscall_t *syscall,
                     // ARCH_PAGE_SIZE this may still crash
                     if (NULL != com_mm_vmm_get_physical(curr_proc->vmm_context,
                                                         (void *)args[i])) {
-                        kprintf("\"%s\"", (void *)args[i]);
+                        printf("\"%s\"", (void *)args[i]);
                     } else {
-                        kprintf("**UNMAPPED**");
+                        printf("**UNMAPPED**");
                     }
                 } else {
-                    kprintf("NULL");
+                    printf("NULL");
                 }
 #else
-                kprintf("**UNSAFE**");
+                printf("**UNSAFE**");
 #endif
                 break;
             case COM_SYS_SYSCALL_TYPE_FLAGS:
             case COM_SYS_SYSCALL_TYPE_MODE:
-                kprintf("0x%x", (int)args[i]);
+                printf("0x%X", (int)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_LONGFLAGS:
-                kprintf("0x%x", (uintmax_t)args[i]);
+                printf("0x%X", (uintmax_t)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_OFFT:
-                kprintf("%d", (off_t)args[i]);
+                printf("%d", (off_t)args[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_UINT32:
-                kprintf("%u", (uint32_t)args[i]);
+                printf("%zu", (uint32_t)args[i]);
                 break;
             default:
-                kprintf("?");
+                printf("?");
                 break;
         }
 
         if (i != syscall->num_args - 1) {
-            kprintf(", ");
+            printf(", ");
         }
     }
 
-    kprintf(")");
+    printf(")");
 }
 #endif
 
@@ -148,7 +148,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
     log_syscall(syscall, args);
-    kprintf(" at %p\n", invoke_ip);
+    printf(" at %p\n", invoke_ip);
     KRESET_COLOR();
     com_io_log_unlock();
 #else
@@ -165,7 +165,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
     log_syscall(syscall, args);
-    kprintf(" -> {ret = %p, errno = %u}\n", ret.value, ret.err);
+    printf(" -> {ret = %p, errno = %zu}\n", ret.value, ret.err);
     KRESET_COLOR();
     com_io_log_unlock();
 #undef DO_SYSCALL_LOG_AFTER
