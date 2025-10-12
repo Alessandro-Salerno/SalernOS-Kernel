@@ -38,10 +38,10 @@
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
-#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <vendor/limine.h>
+#include <vendor/printf.h>
 #include <vendor/tailq.h>
 
 static arch_cpu_t BspCpu = {0};

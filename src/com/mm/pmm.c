@@ -27,11 +27,11 @@
 #include <kernel/platform/info.h>
 #include <lib/hashmap.h>
 #include <lib/mem.h>
-#include <vendor/printf.h>
 #include <lib/searchtree.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
+#include <vendor/printf.h>
 #include <vendor/tailq.h>
 
 #define FREELIST_LOCK(freelist_head) kspinlock_acquire(&(freelist_head)->lock);

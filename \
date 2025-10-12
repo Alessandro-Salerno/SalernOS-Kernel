@@ -29,6 +29,10 @@
 
 // TAKEN: vloxei64/ke
 // CREDIT: vloxei64/ke
+// I am not going to read ~800 pages of spec and am not going to try to
+// understand thousends of lines of code from other people withot knowing much
+// about the spec (since I have not read it), so I am taking this which is less
+// advanced but easier to understand and adapt
 
 #define NVME_LOG(fmt, ...) KOPTMSG("NVME", fmt "\n", __VA_ARGS__)
 #define NVME_PANIC()       com_sys_panic(NULL, "nvme error")
@@ -182,7 +186,7 @@ static bool nvme_queue_done_nobarrier(struct nvme_queue *q) {
            q->cq_phase;
 }
 
-static bool nvme_queue_done(struct nvme_queue *q) {
+static bool vnme_queue_done(struct nvme_queue *q) {
     ARCH_BARRIER_GENERIC_READ();
     return nvme_queue_done_nobarrier(q);
 }
@@ -201,8 +205,8 @@ static void nvme_submit_and_wait(struct nvme_queue *q, void *in) {
 
     q->cq_idx++;
     if (q->cq_idx == q->qe) {
-        q->cq_idx = 0;
-        q->cq_phase ^= 1;
+        q->cq_idx   = 0;
+        q->cq_phase = !q->cq_phase;
     }
     nvme_write32(q->cq_doorbell, q->cq_idx);
 }
@@ -245,8 +249,8 @@ nvme_read_page(struct nvme_device *drive, void *buf, size_t pageno) {
 
     drive->queues[0].cq_idx++;
     if (drive->queues[0].cq_idx == drive->queues[0].qe) {
-        drive->queues[0].cq_idx = 0;
-        drive->queues[0].cq_phase ^= 1;
+        drive->queues[0].cq_idx   = 0;
+        drive->queues[0].cq_phase = !drive->queues[0].cq_phase;
     }
     nvme_write32(drive->queues[0].cq_doorbell, drive->queues[0].cq_idx);
 
@@ -297,15 +301,9 @@ static int nvme_init_device(opt_pci_enum_t *device) {
     com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, NULL);
     opt_pci_msix_add(device, 0, devisr->vec, OPT_PCI_MSIFMT_EDGE_TRIGGER);
 
-    // Misc
-    struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
-    TAILQ_INIT(&dev->queues[0].irq_waiters);
-    dev->queues[0].lock = KSPINLOCK_NEW();
-    devisr->extra       = dev;
-
-    // Init NVMe (1.0e)
+    // Init NVME (1.0e)
     opt_pci_bar_t bar0 = opt_pci_get_bar(device, 0);
-    uintptr_t     base = bar0.physical;
+    uintptr_t     base = bar0.virtual;
     nvme_write32(base + NVME_REG32_CC,
                  ~NVME_REG32_CC_EN & nvme_read32(base + NVME_REG32_CC));
     // Wait for reset to complete
@@ -317,19 +315,18 @@ static int nvme_init_device(opt_pci_enum_t *device) {
     uint16_t mqes     = nvme_read64(base + NVME_REG64_CAP) & 0xFFFF;
     uint32_t qe       = KMIN(mqes, 4096 / 64);
     uint64_t dstrd    = (nvme_read64(base + NVME_REG64_CAP) >> 32) & 0xF;
-    void    *asq_phys = com_mm_pmm_alloc_zero();
-    void    *acq_phys = com_mm_pmm_alloc_zero();
+    uint64_t asq_phys = com_mm_pmm_alloc_zero();
+    uint64_t acq_phys = com_mm_pmm_alloc_zero();
     nvme_write32(base + NVME_REG32_AQA,
-                 ((qe - 1) << 16) |
-                     (qe - 1)); // CQ size is at 16, SQ size is at 0
-    nvme_write64(base + NVME_REG64_ASQ, (uintptr_t)asq_phys);
-    nvme_write64(base + NVME_REG64_ACQ, (uintptr_t)acq_phys);
+                 (qe << 16) | qe); // CQ size is at 16, SQ size is at 0
+    nvme_write64(base + NVME_REG64_ASQ, asq_phys);
+    nvme_write64(base + NVME_REG64_ACQ, acq_phys);
 
     // Enable and wait for readiness
     nvme_write32(base + NVME_REG32_CC,
                  NVME_REG32_CC_EN | (6 << NVME_REG32_CC_IOSQES_SHIFT) |
                      (4 << NVME_REG32_CC_IOCQES_SHIFT));
-    while (!(NVME_REG32_CSTS_RDY & nvme_read32(base + NVME_REG32_CSTS)));
+    while (!(rd32(base + NVME_REG32_CSTS) & NVME_REG32_CSTS_RDY));
 
     struct nvme_queue admin_queue = {0};
     admin_queue.cq                = (void *)ARCH_PHYS_TO_HHDM(acq_phys);
@@ -341,54 +338,58 @@ static int nvme_init_device(opt_pci_enum_t *device) {
     admin_queue.cq_doorbell = base + 0x1000 +
                               ((2 * admin_queue.qid + 1) << (2 + dstrd));
 
-    void *temp_buf = com_mm_pmm_alloc_zero();
-
+    uint64_t temp_buf = com_mm_pmm_alloc_zero();
     // issue NS0 Identify command
     struct nvme_identify_sqe ident_in = {.opcode = 0x06,
                                          .nsid   = 1,
                                          .cns    = 0,
-                                         .prp1   = (uintptr_t)temp_buf};
-    nvme_submit_and_wait(&admin_queue, &ident_in);
-    struct nvme_identify_ns *ident = (void *)ARCH_PHYS_TO_HHDM(temp_buf);
-    dev->num_blocks                = ident->nsze;
-    dev->blocks_shift              = ident->lbaf[ident->flbas & 0b11111].ds;
-    dev->size = (uint64_t)dev->num_blocks << dev->blocks_shift;
-    NVME_LOG("(debug) %d blocks, size %d, %d MiB\n",
-             dev->num_blocks,
-             1 << dev->blocks_shift,
-             dev->size / (1024 * 1024));
+                                         .prp1   = temp_buf};
+    submit_and_wait(&admin_queue, &ident_in);
+    struct nvme_identify_ns *ident = phys2virt(void *, temp_buf);
+    g_nvme_blocks                  = ident->nsze;
+    assert(g_nvme_blksize_shift <= 12);
+    g_nvme_blksize_shift = ident->lbaf[ident->flbas & 0b11111].ds;
+    g_nvme_size          = (u64)g_nvme_blocks << g_nvme_blksize_shift;
+    printf("%d blocks, size %d, %d MiB\n",
+           g_nvme_blocks,
+           1 << g_nvme_blksize_shift,
+           (g_nvme_blocks << g_nvme_blksize_shift) / (1024 * 1024));
 
     // create CQ0
-    void                     *sq0_phys = com_mm_pmm_alloc_zero();
-    void                     *cq0_phys = com_mm_pmm_alloc_zero();
-    struct nvme_create_cq_sqe ccq_in   = {.opcode = NVME_OPCODE_ADMIN_CREATE_CQ,
-                                          .prp1   = (uintptr_t)cq0_phys,
+    u64                       sq0_phys = pmm_alloc_phys();
+    u64                       cq0_phys = pmm_alloc_phys();
+    struct nvme_create_cq_sqe ccq_in   = {.opcode = OPCODE_ADMIN_CREATE_CQ,
+                                          .prp1   = cq0_phys,
                                           .qid    = 1,
                                           .qsize  = qe - 1,
-                                          .iv     = 0, // msix vector 0
-                                          .flags  = NVME_CQ_CREATE_FLAGS_IEN |
-                                                   NVME_CQ_CREATE_FLAGS_PC};
-    nvme_submit_and_wait(&admin_queue, &ccq_in);
+                                          .iv     = vector,
+                                          .flags  = CREATE_CQ_FLAGS_IEN |
+                                                   CREATE_CQ_FLAGS_PC};
+    submit_and_wait(&admin_queue, &ccq_in);
     // create SQ0
-    struct nvme_create_sq_sqe csq_in = {.opcode = NVME_OPCODE_ADMIN_CREATE_SQ,
-                                        .prp1   = (uintptr_t)sq0_phys,
+    struct nvme_create_sq_sqe csq_in = {.opcode = OPCODE_ADMIN_CREATE_SQ,
+                                        .prp1   = sq0_phys,
                                         .qid    = 1,
                                         .cqid   = 1,
                                         .qsize  = qe - 1,
-                                        .flags  = NVME_CQ_CREATE_FLAGS_PC};
-    nvme_submit_and_wait(&admin_queue, &csq_in);
-    com_mm_pmm_free(temp_buf);
+                                        .flags  = CREATE_SQ_FLAGS_PC};
+    submit_and_wait(&admin_queue, &csq_in);
+    pmm_free_phys(temp_buf);
 
-    dev->queues[0].cq          = (void *)ARCH_PHYS_TO_HHDM(cq0_phys);
-    dev->queues[0].sq          = (void *)ARCH_PHYS_TO_HHDM(sq0_phys);
-    dev->queues[0].qid         = 1;
-    dev->queues[0].qe          = qe;
-    dev->queues[0].sq_doorbell = base + 0x1000 +
-                                 ((2 * dev->queues[0].qid) << (2 + dstrd));
-    dev->queues[0].cq_doorbell = base + 0x1000 +
-                                 ((2 * dev->queues[0].qid + 1) << (2 + dstrd));
+    g_queue0.cq          = phys2virt(void *, cq0_phys);
+    g_queue0.sq          = phys2virt(void *, sq0_phys);
+    g_queue0.qid         = 1;
+    g_queue0.qe          = qe;
+    g_queue0.sq_doorbell = base + 0x1000 + ((2 * g_queue0.qid) << (2 + dstrd));
+    g_queue0.cq_doorbell = base + 0x1000 +
+                           ((2 * g_queue0.qid + 1) << (2 + dstrd));
 
     // Init devfs
+    struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
+    TAILQ_INIT(&dev->queues[0].irq_waiters);
+    dev->queues[0].lock = KSPINLOCK_NEW();
+    devisr->extra       = dev;
+
     char devname[32];
     int  namelen = snprintf(
         devname,

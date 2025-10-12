@@ -205,8 +205,7 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
                           (void *)addr,
                           len,
                           COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
-                          ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                              ARCH_MMU_FLAGS_NOEXEC);
+                          ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE);
 }
 
 /*
