@@ -663,6 +663,21 @@ void com_mm_pmm_free_many(void *base, size_t pages) {
     }
 }
 
+void com_mm_pmm_unreserve_many(void *base, size_t pages) {
+    struct page_meta      *page_meta_base = page_meta_get(base);
+    struct freelist_entry *entry          = (void *)ARCH_PHYS_TO_HHDM(base);
+    kmemset(entry, pages * ARCH_PAGE_SIZE, 0);
+    kmemset(page_meta_base, pages * sizeof(struct page_meta), 0);
+    entry->pages = pages;
+
+    FREELIST_LOCK(&MainFreeList);
+    freelist_add_ordered_nolock(&MainFreeList, entry);
+    FREELIST_UNLOCK(&MainFreeList);
+
+    UPDATE_STATS(reserved, -pages);
+    UPDATE_STATS(free, +pages);
+}
+
 void com_mm_pmm_get_stats(com_pmm_stats_t *out) {
     *out = MemoryStats;
 }

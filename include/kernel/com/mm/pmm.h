@@ -48,6 +48,7 @@ void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages);
 void  com_mm_pmm_hold(void *page);
 void  com_mm_pmm_free(void *page);
 void  com_mm_pmm_free_many(void *base, size_t pages);
+void  com_mm_pmm_unreserve_many(void *base, size_t pages);
 void  com_mm_pmm_get_stats(com_pmm_stats_t *out);
 void  com_mm_pmm_init_threads(void);
 void  com_mm_pmm_init(void);

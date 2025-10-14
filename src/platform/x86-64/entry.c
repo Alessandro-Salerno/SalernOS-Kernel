@@ -26,6 +26,7 @@
 #include <kernel/opt/flanterm.h>
 #include <kernel/opt/nvme.h>
 #include <kernel/opt/uacpi.h>
+#include <kernel/platform/info.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/gdt.h>
@@ -109,6 +110,12 @@ void x86_64_entry(void) {
     // PHASE 3: user program interface
     com_init_filesystem();
     com_init_tty(opt_flanterm_new_context);
+
+    // Reclaim initrd modules memory
+    arch_file_t *initrd = arch_info_get_initrd();
+    KLOG("reclaiming %zu bytes from initrd", initrd->size);
+    com_mm_pmm_unreserve_many((void *)ARCH_HHDM_TO_PHYS(initrd->address),
+                              initrd->size / ARCH_PAGE_SIZE);
 
     // PHASE 4: devices
     opt_uacpi_init(0);

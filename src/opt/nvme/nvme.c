@@ -220,6 +220,7 @@ static void nvme_submit(struct nvme_queue *q, void *in) {
 static void nvme_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)ctx;
     struct nvme_device *drive = isr->extra;
+    KURGENT("isr received");
     kspinlock_acquire(&drive->queues[0].lock);
     com_sys_sched_notify(&drive->queues[0].irq_waiters);
     kspinlock_release(&drive->queues[0].lock);
@@ -261,6 +262,25 @@ static int nvme_read(void     *buf,
                      void     *devdata,
                      uintmax_t off,
                      uintmax_t flags) {
+    KURGENT("read on device %p", devdata);
+    struct nvme_device *device  = devdata;
+    void               *tmp_buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    size_t              base_page  = off / ARCH_PAGE_SIZE;
+    size_t              rem        = off % ARCH_PAGE_SIZE;
+    size_t              rem_buflen = buflen;
+
+    for (size_t i = 0; i < (buflen + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+         i++) {
+        size_t read_size = KMIN(ARCH_PAGE_SIZE - rem, rem_buflen);
+        nvme_read_page(device, tmp_buf, base_page + i);
+        kmemcpy(buf, tmp_buf + rem, read_size);
+        buf += read_size;
+        *bytes_read += read_size;
+        rem_buflen -= read_size;
+        rem = 0;
+    }
+
+    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(tmp_buf));
     return 0;
 }
 
@@ -288,23 +308,26 @@ static com_dev_ops_t NVMEDevOps = {.read  = nvme_read,
                                    .write = nvme_write,
                                    .stat  = nvme_stat};
 
-static int nvme_init_device(opt_pci_enum_t *device) {
-    // Init PCI
+static int nvme_init_device(opt_pci_enum_t *pci_enum) {
     NVME_LOG("(info) found device " OPT_PCI_ADDR_PRINTF_FMT,
-             OPT_PCI_ADDR_PRINTF_VALUES(device->addr));
-    uint16_t msix_entries = opt_pci_msix_init(device);
+             OPT_PCI_ADDR_PRINTF_VALUES(pci_enum->addr));
+    uint16_t msix_entries = opt_pci_msix_init(pci_enum);
     NVME_LOG("(debug) found %zu msix entries", msix_entries);
-    com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, NULL);
-    opt_pci_msix_add(device, 0, devisr->vec, OPT_PCI_MSIFMT_EDGE_TRIGGER);
 
-    // Misc
+    com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, x86_64_lapic_eoi);
     struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
     TAILQ_INIT(&dev->queues[0].irq_waiters);
     dev->queues[0].lock = KSPINLOCK_NEW();
     devisr->extra       = dev;
 
+    opt_pci_msix_add(pci_enum, 0, devisr->vec, OPT_PCI_MSIFMT_EDGE_TRIGGER);
+    opt_pci_set_command(pci_enum,
+                        OPT_PCI_COMMAND_MMIO | OPT_PCI_COMMAND_BUSMASTER |
+                            OPT_PCI_COMMAND_IRQDISABLE,
+                        OPT_PCI_MASKMODE_SET);
+
     // Init NVMe (1.0e)
-    opt_pci_bar_t bar0 = opt_pci_get_bar(device, 0);
+    opt_pci_bar_t bar0 = opt_pci_get_bar(pci_enum, 0);
     uintptr_t     base = bar0.physical;
     nvme_write32(base + NVME_REG32_CC,
                  ~NVME_REG32_CC_EN & nvme_read32(base + NVME_REG32_CC));
@@ -353,7 +376,7 @@ static int nvme_init_device(opt_pci_enum_t *device) {
     dev->num_blocks                = ident->nsze;
     dev->blocks_shift              = ident->lbaf[ident->flbas & 0b11111].ds;
     dev->size = (uint64_t)dev->num_blocks << dev->blocks_shift;
-    NVME_LOG("(debug) %d blocks, size %d, %d MiB\n",
+    NVME_LOG("(debug) %zu blocks, block size %zu, %zu MiB",
              dev->num_blocks,
              1 << dev->blocks_shift,
              dev->size / (1024 * 1024));
@@ -375,7 +398,7 @@ static int nvme_init_device(opt_pci_enum_t *device) {
                                         .qid    = 1,
                                         .cqid   = 1,
                                         .qsize  = qe - 1,
-                                        .flags  = NVME_CQ_CREATE_FLAGS_PC};
+                                        .flags  = NVME_SQ_CREATE_FLAGS_PC};
     nvme_submit_and_wait(&admin_queue, &csq_in);
     com_mm_pmm_free(temp_buf);
 
@@ -396,12 +419,7 @@ static int nvme_init_device(opt_pci_enum_t *device) {
         "nvme%zu",
         __atomic_fetch_add(&NextDriveId, 1, __ATOMIC_SEQ_CST));
     com_vnode_t *nvme_vn;
-    com_fs_devfs_register(&nvme_vn,
-                          NULL,
-                          devname,
-                          namelen,
-                          &NVMEDevOps,
-                          device);
+    com_fs_devfs_register(&nvme_vn, NULL, devname, namelen, &NVMEDevOps, dev);
 
     return 0;
 }
