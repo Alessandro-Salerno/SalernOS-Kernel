@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <kernel/opt/pci.h>
+#include <kernel/platform/x86-64/lapic.h>
 
 uint64_t
 arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags) {
@@ -27,4 +28,8 @@ arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags) {
     *data = (edge_trigger ? 0 : (1 << 15)) | (deassert ? 0 : (1 << 14)) |
             intvec;
     return 0xfee00000 | (ARCH_CPU_GET_HARDWARE_ID() << 12);
+}
+
+void arch_pci_msi_eoi(com_isr_t *isr) {
+    x86_64_lapic_eoi(isr);
 }

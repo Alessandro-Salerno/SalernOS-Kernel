@@ -98,11 +98,11 @@ struct nvme_create_cq_sqe {
     uint16_t cid;
     uint8_t  _rsv[20];
     uint64_t prp1;
-    uint8_t  _rsv2[8];
-    uint64_t qid;
+    uint64_t _rsv2;
+    uint16_t qid;
     uint16_t qsize;
     uint16_t flags; // IEN and PC
-    uint16_t iv;
+    uint8_t  iv;
     uint8_t  _rsv3[16];
 };
 
@@ -220,10 +220,10 @@ static void nvme_submit(struct nvme_queue *q, void *in) {
 static void nvme_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)ctx;
     struct nvme_device *drive = isr->extra;
-    KURGENT("isr received");
     kspinlock_acquire(&drive->queues[0].lock);
     com_sys_sched_notify(&drive->queues[0].irq_waiters);
     kspinlock_release(&drive->queues[0].lock);
+    ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
 }
 
 static void
@@ -256,15 +256,16 @@ nvme_read_page(struct nvme_device *drive, void *buf, size_t pageno) {
 
 // /dev/nvme%z DEVICE OPERATIONS
 
+// TODO: fix the most terrible read implementation ever
 static int nvme_read(void     *buf,
                      size_t    buflen,
                      size_t   *bytes_read,
                      void     *devdata,
                      uintmax_t off,
                      uintmax_t flags) {
-    KURGENT("read on device %p", devdata);
-    struct nvme_device *device  = devdata;
-    void               *tmp_buf = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    struct nvme_device *device     = devdata;
+    void               *tmp_phys   = com_mm_pmm_alloc();
+    void               *tmp_hhdm   = (void *)ARCH_PHYS_TO_HHDM(tmp_phys);
     size_t              base_page  = off / ARCH_PAGE_SIZE;
     size_t              rem        = off % ARCH_PAGE_SIZE;
     size_t              rem_buflen = buflen;
@@ -272,15 +273,15 @@ static int nvme_read(void     *buf,
     for (size_t i = 0; i < (buflen + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
          i++) {
         size_t read_size = KMIN(ARCH_PAGE_SIZE - rem, rem_buflen);
-        nvme_read_page(device, tmp_buf, base_page + i);
-        kmemcpy(buf, tmp_buf + rem, read_size);
+        nvme_read_page(device, tmp_phys, base_page + i);
+        kmemcpy(buf, tmp_hhdm + rem, read_size);
         buf += read_size;
         *bytes_read += read_size;
         rem_buflen -= read_size;
         rem = 0;
     }
 
-    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(tmp_buf));
+    com_mm_pmm_free(tmp_phys);
     return 0;
 }
 
@@ -314,7 +315,7 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
     uint16_t msix_entries = opt_pci_msix_init(pci_enum);
     NVME_LOG("(debug) found %zu msix entries", msix_entries);
 
-    com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, x86_64_lapic_eoi);
+    com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, arch_pci_msi_eoi);
     struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
     TAILQ_INIT(&dev->queues[0].irq_waiters);
     dev->queues[0].lock = KSPINLOCK_NEW();
@@ -380,6 +381,12 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
              dev->num_blocks,
              1 << dev->blocks_shift,
              dev->size / (1024 * 1024));
+
+    nvme_write32(base + NVME_REG32_INTMC, 0xFFFFFFFF);
+    opt_pci_set_command(pci_enum,
+                        OPT_PCI_COMMAND_IRQDISABLE,
+                        OPT_PCI_MASKMODE_UNSET);
+    opt_pci_msix_set_mask(pci_enum, OPT_PCI_MASKMODE_UNSET);
 
     // create CQ0
     void                     *sq0_phys = com_mm_pmm_alloc_zero();

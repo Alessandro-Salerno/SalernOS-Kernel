@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <kernel/com/sys/interrupt.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -187,4 +188,5 @@ void opt_pci_enumate(uint32_t start_bus, uint32_t end_bus);
 
 // platform interface functions
 uint64_t
-arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags);
+     arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags);
+void arch_pci_msi_eoi(com_isr_t *isr);
