@@ -217,20 +217,13 @@ static void nvme_submit(struct nvme_queue *q, void *in) {
     nvme_write32(q->sq_doorbell, q->sq_idx);
 }
 
-static void nvme_isr(com_isr_t *isr, arch_context_t *ctx) {
-    (void)ctx;
-    struct nvme_device *drive = isr->extra;
-    kspinlock_acquire(&drive->queues[0].lock);
-    com_sys_sched_notify(&drive->queues[0].irq_waiters);
-    kspinlock_release(&drive->queues[0].lock);
-    ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
-}
-
-static void
-nvme_read_page(struct nvme_device *drive, void *buf, size_t pageno) {
+static void nvme_submit_page_command_sync(struct nvme_device *drive,
+                                          void               *buf,
+                                          size_t              pageno,
+                                          uint8_t             opcode) {
     uint64_t           lba   = pageno << (12 - drive->blocks_shift);
     uint64_t           count = 1 << (12 - drive->blocks_shift);
-    struct nvme_rw_sqe rw_in = {.opcode = NVME_OPCODE_READ,
+    struct nvme_rw_sqe rw_in = {.opcode = opcode,
                                 .nsid   = 1,
                                 .prp1   = (uint64_t)buf,
                                 .slba   = lba,
@@ -254,6 +247,29 @@ nvme_read_page(struct nvme_device *drive, void *buf, size_t pageno) {
     kspinlock_release(&drive->queues[0].lock);
 }
 
+static void nvme_submit_multipage_command_sync(struct nvme_device *drive,
+                                               void               *buf,
+                                               size_t              pageno,
+                                               size_t              num_pages,
+                                               uint8_t             opcode) {
+    for (size_t i = 0; i < num_pages; i++) {
+        nvme_submit_page_command_sync(drive,
+                                      com_mm_vmm_get_physical(NULL, buf),
+                                      pageno + i,
+                                      opcode);
+        buf += ARCH_PAGE_SIZE;
+    }
+}
+
+static void nvme_isr(com_isr_t *isr, arch_context_t *ctx) {
+    (void)ctx;
+    struct nvme_device *drive = isr->extra;
+    kspinlock_acquire(&drive->queues[0].lock);
+    com_sys_sched_notify(&drive->queues[0].irq_waiters);
+    kspinlock_release(&drive->queues[0].lock);
+    com_sys_sched_yield();
+}
+
 // /dev/nvme%z DEVICE OPERATIONS
 
 // TODO: fix the most terrible read implementation ever
@@ -263,17 +279,48 @@ static int nvme_read(void     *buf,
                      void     *devdata,
                      uintmax_t off,
                      uintmax_t flags) {
-    struct nvme_device *device     = devdata;
-    void               *tmp_phys   = com_mm_pmm_alloc();
-    void               *tmp_hhdm   = (void *)ARCH_PHYS_TO_HHDM(tmp_phys);
-    size_t              base_page  = off / ARCH_PAGE_SIZE;
-    size_t              rem        = off % ARCH_PAGE_SIZE;
-    size_t              rem_buflen = buflen;
+    struct nvme_device *device = devdata;
+
+    if (off >= device->size) {
+        *bytes_read = 0;
+        return 0;
+    }
+
+    if (off + buflen >= device->size) {
+        buflen = device->size - off;
+    }
+
+    if (0 == buflen) {
+        *bytes_read = 0;
+        return 0;
+    }
+
+    size_t base_page  = off / ARCH_PAGE_SIZE;
+    size_t rem        = off % ARCH_PAGE_SIZE;
+    size_t rem_buflen = buflen;
+
+    // Fast path if the buffer is aligned
+    if (0 == rem && 0 == buflen % ARCH_PAGE_SIZE &&
+        0 == (uintptr_t)buf % ARCH_PAGE_SIZE) {
+        nvme_submit_multipage_command_sync(device,
+                                           buf,
+                                           base_page,
+                                           buflen / ARCH_PAGE_SIZE,
+                                           NVME_OPCODE_READ);
+        *bytes_read = buflen;
+        return 0;
+    }
+
+    void *tmp_phys = com_mm_pmm_alloc();
+    void *tmp_hhdm = (void *)ARCH_PHYS_TO_HHDM(tmp_phys);
 
     for (size_t i = 0; i < (buflen + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
          i++) {
         size_t read_size = KMIN(ARCH_PAGE_SIZE - rem, rem_buflen);
-        nvme_read_page(device, tmp_phys, base_page + i);
+        nvme_submit_page_command_sync(device,
+                                      tmp_phys,
+                                      base_page + i,
+                                      NVME_OPCODE_READ);
         kmemcpy(buf, tmp_hhdm + rem, read_size);
         buf += read_size;
         *bytes_read += read_size;
@@ -291,6 +338,60 @@ static int nvme_write(size_t   *bytes_written,
                       size_t    buflen,
                       uintmax_t off,
                       uintmax_t flags) {
+    struct nvme_device *device = devdata;
+
+    if (off >= device->size) {
+        *bytes_written = 0;
+        return 0;
+    }
+
+    if (off + buflen >= device->size) {
+        buflen = device->size - off;
+    }
+
+    if (0 == buflen) {
+        *bytes_written = 0;
+        return 0;
+    }
+
+    size_t base_page  = off / ARCH_PAGE_SIZE;
+    size_t rem        = off % ARCH_PAGE_SIZE;
+    size_t rem_buflen = buflen;
+
+    // Fast path if the buffer is aligned
+    if (0 == rem && 0 == buflen % ARCH_PAGE_SIZE &&
+        0 == (uintptr_t)buf % ARCH_PAGE_SIZE) {
+        nvme_submit_multipage_command_sync(device,
+                                           buf,
+                                           base_page,
+                                           buflen / ARCH_PAGE_SIZE,
+                                           NVME_OPCODE_WRITE);
+        *bytes_written = buflen;
+        return 0;
+    }
+
+    void *tmp_phys = com_mm_pmm_alloc();
+    void *tmp_hhdm = (void *)ARCH_PHYS_TO_HHDM(tmp_phys);
+
+    for (size_t i = 0; i < (buflen + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+         i++) {
+        size_t read_size = KMIN(ARCH_PAGE_SIZE - rem, rem_buflen);
+        nvme_submit_page_command_sync(device,
+                                      tmp_phys,
+                                      base_page + i,
+                                      NVME_OPCODE_READ);
+        kmemcpy(tmp_hhdm + rem, buf, read_size);
+        nvme_submit_page_command_sync(device,
+                                      tmp_phys,
+                                      base_page + i,
+                                      NVME_OPCODE_WRITE);
+        buf += read_size;
+        *bytes_written += read_size;
+        rem_buflen -= read_size;
+        rem = 0;
+    }
+
+    com_mm_pmm_free(tmp_phys);
     return 0;
 }
 
@@ -338,7 +439,7 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
     // Setup admin queue
 
     // Maximum Queue Entries Supported
-    uint16_t mqes     = nvme_read64(base + NVME_REG64_CAP) & 0xFFFF;
+    uint16_t mqes     = nvme_read64(base + NVME_REG63_CAP) & 0xFFFF;
     uint32_t qe       = KMIN(mqes, 4096 / 64);
     uint64_t dstrd    = (nvme_read64(base + NVME_REG64_CAP) >> 32) & 0xF;
     void    *asq_phys = com_mm_pmm_alloc_zero();

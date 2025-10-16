@@ -33,11 +33,10 @@ static int dev_null_read(void     *buf,
                          uintmax_t off,
                          uintmax_t flags) {
     (void)buf;
-    (void)buflen;
     (void)devdata;
     (void)off;
     (void)flags;
-    *bytes_read = 0;
+    *bytes_read = buflen;
     return 0;
 }
 
