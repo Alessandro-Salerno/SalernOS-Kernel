@@ -91,7 +91,7 @@ The kernel itself supports the following features:
     - [x] Virtual File System (VFS)
     - [x] initrd
     - [x] iovec (optional)
-    - [x] piepfs
+    - [x] pipefs
     - [x] sockfs
     - [x] tmpfs
     - [x] devfs
@@ -109,7 +109,7 @@ The kernel itself supports the following features:
   - [x] ACPI
   - [x] [uACPI](https://github.com/uACPI/uACPI)
   - [x] PCI/PCIe
-  - [ ] NVMe
+  - [x] NVMe (basic 1.0e support)
   - [ ] XHCI
   - [ ] USB
 - Build system and source structure
