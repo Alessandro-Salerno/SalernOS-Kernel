@@ -439,7 +439,7 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
     // Setup admin queue
 
     // Maximum Queue Entries Supported
-    uint16_t mqes     = nvme_read64(base + NVME_REG63_CAP) & 0xFFFF;
+    uint16_t mqes     = nvme_read64(base + NVME_REG64_CAP) & 0xFFFF;
     uint32_t qe       = KMIN(mqes, 4096 / 64);
     uint64_t dstrd    = (nvme_read64(base + NVME_REG64_CAP) >> 32) & 0xF;
     void    *asq_phys = com_mm_pmm_alloc_zero();

@@ -63,6 +63,8 @@ void x86_64_tsc_bsp_init(void) {
 
 void x86_64_tsc_init(void) {
     if (!tsc_probe()) {
+        // Set some random but realistic frequency for TSC
+        ARCH_CPU_GET()->tsc_freq = 3 * 1000UL * 1000UL * 1000UL;
         return;
     }
 
@@ -91,5 +93,7 @@ calibrate:;
     curr_cpu->tsc_freq  = (end_tsc - start_tsc) / meas_pit *
                          X86_64_PIT_FREQUENCY;
 
-    KDEBUG("tsc has %zu hz measured with pit=%zu", curr_cpu->tsc_freq, meas_pit);
+    KDEBUG("tsc has %zu hz measured with pit=%zu",
+           curr_cpu->tsc_freq,
+           meas_pit);
 }
