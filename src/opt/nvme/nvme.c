@@ -253,8 +253,17 @@ static void nvme_submit_multipage_command_sync(struct nvme_device *drive,
                                                size_t              num_pages,
                                                uint8_t             opcode) {
     for (size_t i = 0; i < num_pages; i++) {
+        // DMA does not trigger page faults, so we must do it ourselves if this
+        // page was not writable or COW or similar. This value will be
+        // overridden by DMA anyway
+        if (NVME_OPCODE_READ == opcode) {
+            *(uint8_t *)buf = 0;
+        }
+
         nvme_submit_page_command_sync(drive,
-                                      com_mm_vmm_get_physical(NULL, buf),
+                                      (buf > ARCH_MMU_KERNELSPACE_START)
+                                          ? (void *)ARCH_HHDM_TO_PHYS(buf)
+                                          : com_mm_vmm_get_physical(NULL, buf),
                                       pageno + i,
                                       opcode);
         buf += ARCH_PAGE_SIZE;
@@ -307,6 +316,51 @@ static int nvme_read(void     *buf,
                                            base_page,
                                            buflen / ARCH_PAGE_SIZE,
                                            NVME_OPCODE_READ);
+        *bytes_read = buflen;
+        return 0;
+    }
+
+    // Other fast path: the buffe and length may not be aligned, but
+    // the buffer is long enough to contain at least one full physical page. In
+    // this case, we can do the same as above, but only for  those full pages.
+    // If buflen >= 2 pages, we know that the buffer must have the following
+    // structure: <unaligned base> [<aligned pages>] [<unaligned tail>]. This
+    // means we have to load in the base and tail separately
+    if (0 == rem && buflen >= 2 * ARCH_PAGE_SIZE) {
+        void  *rounded_buf    = (void *)(((uintptr_t)buf + ARCH_PAGE_SIZE - 1) &
+                                     ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        void  *rounded_last   = (void *)(((uintptr_t)buf + buflen) &
+                                      ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        size_t rounded_buflen = (uintptr_t)(rounded_last - rounded_buf);
+        size_t rounded_pages  = rounded_buflen / ARCH_PAGE_SIZE;
+        size_t head_size      = (uintptr_t)rounded_buf - (uintptr_t)buf;
+        size_t tail_size = (uintptr_t)buf + buflen - (uintptr_t)rounded_last;
+        // Read the contiguous block
+        nvme_submit_multipage_command_sync(device,
+                                           rounded_buf,
+                                           base_page +
+                                               ((buf != rounded_buf) ? 1 : 0),
+                                           rounded_pages,
+                                           NVME_OPCODE_READ);
+        // Read base and tail
+        void *tmp_phys = com_mm_pmm_alloc();
+        void *tmp_hhdm = (void *)ARCH_PHYS_TO_HHDM(tmp_phys);
+        // No need to copy base/head if the buffer was aligned because we
+        // already did before
+        if (buf != rounded_buf) {
+            nvme_submit_page_command_sync(device,
+                                          tmp_phys,
+                                          base_page,
+                                          NVME_OPCODE_READ);
+            kmemcpy(buf, tmp_hhdm, head_size);
+        }
+        // Tail must always be copied however
+        nvme_submit_page_command_sync(device,
+                                      tmp_phys,
+                                      base_page + rounded_pages,
+                                      NVME_OPCODE_READ);
+        kmemcpy(rounded_last, tmp_hhdm, tail_size);
+        com_mm_pmm_free(tmp_phys);
         *bytes_read = buflen;
         return 0;
     }
