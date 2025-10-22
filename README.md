@@ -30,7 +30,7 @@
 </div>
 
 ## Features
-As of kernel release 0.2.4 (indev), it is now possible to run a variety of programs. Ports for some well-known applications are available in the [SalernOS](https://github.com/Alessandro-Salerno/SalernOS) repository (as redistributions of those used by [Gloire](https://github.com/Ironclad-Project/Gloire) and [Astral](https;//github.com/Mathewnd/Astral)). Included are ports for the likes of Xorg, Vim, GNU Coreutils, GCC, GNU Binutils, mlibc, xterm, and more.
+As of kernel release 0.2.4, it is now possible to run a variety of programs. Ports for some well-known applications are available in the [SalernOS](https://github.com/Alessandro-Salerno/SalernOS) repository (as redistributions of those used by [Gloire](https://github.com/Ironclad-Project/Gloire) and [Astral](https;//github.com/Mathewnd/Astral)). Included are ports for the likes of Xorg, Vim, GNU Coreutils, GCC, GNU Binutils, mlibc, xterm, and more.
 
 The kernel itself supports the following features:
 
@@ -45,14 +45,15 @@ The kernel itself supports the following features:
     - [x] MMU (4-level paging)
     - [x] Invariant TSC
     - [x] PS/2 keyboard & mouse
-    - [x] QEMU I/o Port `0xE9` logging 
+    - [x] QEMU I/O Port `0xE9` logging 
+    - [x] SCE (System Call Extension)
 - Common code
   - Memory management
     - [x] PMM
     - [x] Slab allocator
     - [x] VMM
     - [x] Copy on write
-    - [ ] Page cache (will be added soon)
+    - [ ] Page cache
   - System management
     - [x] System Call Interface
     - [x] Callout (Timer multiplexer)
