@@ -26,7 +26,7 @@
 </div>
 
 <div align="center">
-  <img src=".github/Kernel-024-Mid.png" width="100%">
+  <img src=".github/Kernel-024.png" width="100%">
 </div>
 
 ## Features
