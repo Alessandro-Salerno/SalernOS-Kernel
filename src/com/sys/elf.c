@@ -227,12 +227,12 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                 break;
 
             case PT_LOAD:
-                KDEBUG(
-                    "found PT_LOAD at offset %zu with segment at offset %zu and "
-                    "virt %p",
-                    phdr_off,
-                    phdr.off,
-                    phdr.virt_addr);
+                KDEBUG("found PT_LOAD at offset %zu with segment at offset %zu "
+                       "and "
+                       "virt %p",
+                       phdr_off,
+                       phdr.off,
+                       phdr.virt_addr);
                 ret = load(vaddr, &phdr, elf_file, vmm_context);
                 if (0 != ret) {
                     goto cleanup;
@@ -249,6 +249,9 @@ cleanup:
 }
 
 // CREDIT: vloxei64/ke
+// TODO: this is VERY unsafe!! It uses the HHDM to write to the new process's
+// stack, but this causes wild memory corruption if auxv contents exceed
+// ARCH_PAGE_SIZE bytes
 uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
                                       size_t         stack_end_phys,
                                       size_t         stack_end_virt,
