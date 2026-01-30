@@ -49,7 +49,8 @@ void x86_64_syscall_isr(com_isr_t *isr, arch_context_t *ctx) {
 }
 
 void x86_64_syscall_handle_sce(arch_context_t *ctx) {
-    ARCH_CPU_GET_THREAD()->lock_depth = 0;
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    curr_thread->lock_depth   = 0;
     ARCH_CPU_ENABLE_INTERRUPTS();
     com_syscall_ret_t ret = com_sys_syscall_invoke(ctx->rax,
                                                    ctx,
@@ -66,9 +67,11 @@ void x86_64_syscall_handle_sce(arch_context_t *ctx) {
         ctx->rdx = ret.err;
     }
 
-    KASSERT(0 == ARCH_CPU_GET_THREAD()->lock_depth);
+    com_ipc_signal_dispatch(ctx, curr_thread);
+
+    KASSERT(0 == curr_thread->lock_depth);
     ARCH_CPU_DISABLE_INTERRUPTS();
-    ARCH_CPU_GET_THREAD()->lock_depth = 1;
+    curr_thread->lock_depth = 1;
 }
 
 COM_SYS_SYSCALL(arch_syscall_set_tls) {

@@ -63,7 +63,7 @@
  * ****************************************************************************/
 
 // Logging
-#define CONFIG_LOG_LEVEL        CONST_LOG_LEVEL_USER /* Kernel log level */
+#define CONFIG_LOG_LEVEL        CONST_LOG_LEVEL_OPTION /* Kernel log level */
 #define CONFIG_LOG_ALLOW_COLORS 1 /* Allow colors in logging */
 #define CONFIG_LOG_SEP_LEN      7 /* Length of the separator spaces in logs */
 #define CONFIG_LOG_USE_SERIAL   1 /* Use serial output for kernel logging */
@@ -71,7 +71,7 @@
 #define CONFIG_LOG_USE_SCREEN   1
 #define CONFIG_LOG_SHOW_SPLASH  1
 #define CONFIG_LOG_SYSCALL_MODE CONST_LOG_SYSCALL_BEFORE
-#define CONFIG_LOG_LOCATION     CONST_LOG_LOCATION_NONE
+#define CONFIG_LOG_LOCATION     CONST_LOG_LOCATION_ALL
 #define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
 
 // Max
