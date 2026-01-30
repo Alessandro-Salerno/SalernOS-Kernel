@@ -42,7 +42,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
     // kstrcpy(sysinfo->gpu, "Not implemented");
     kmemset(sysinfo->cpu, 64, 0);
     kmemset(sysinfo->gpu, 64, 0);
-    kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.4");
+    kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.5 (indev)");
     com_mm_pmm_get_stats(&sysinfo->memory);
 
     return COM_SYS_SYSCALL_OK(0);
