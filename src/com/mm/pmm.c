@@ -129,6 +129,12 @@ struct page_meta {
 struct page_meta_array {
     struct page_meta *buffer;
     size_t            len;
+    // Having a page meta array the size of physical memory is too expensive. We
+    // thus have an array that goes up to the highest could-be-usable address.
+    // Everything above that is an imaginary reserved entry
+    size_t           reserved_start;
+    size_t           extended_len;
+    struct page_meta fake_entry;
 };
 
 // GLOBAL VARIABLES
@@ -324,8 +330,13 @@ lazylist_truncate_nolock(struct lazylist_head *lazylist) {
 
 static inline struct page_meta *page_meta_get(void *phys_addr) {
     size_t index = PHYS_TO_META_INDEX(phys_addr);
-    KASSERT(index < PageMeta.len);
-    return &PageMeta.buffer[index];
+    KASSERT(index < PageMeta.extended_len);
+
+    if (index < PageMeta.reserved_start) {
+        return &PageMeta.buffer[index];
+    }
+
+    return &PageMeta.fake_entry;
 }
 
 static inline void
@@ -706,10 +717,16 @@ void com_mm_pmm_init_threads(void) {
 
 void com_mm_pmm_init(void) {
     KLOG("initializing pmm");
-    arch_memmap_t *memmap       = arch_info_get_memmap();
-    uintptr_t      highest_addr = 0;
+    arch_memmap_t *memmap               = arch_info_get_memmap();
+    uintptr_t      highest_addr         = 0;
+    uintptr_t      highest_indexed_addr = 0;
     TAILQ_INIT(&MainFreeList.head);
     KSEARCHTREE_INIT(&MainFreeList.tree);
+
+    // Setup the fake entry in the page meta array
+    PageMeta.fake_entry.type    = E_PAGE_TYPE_ANONYMOUS;
+    PageMeta.fake_entry.state   = E_PAGE_STATE_RESERVED;
+    PageMeta.fake_entry.num_ref = 1;
 
     // Calculate memory map & page meta array size
     for (uintmax_t i = 0; i < memmap->entry_count; i++) {
@@ -723,8 +740,10 @@ void com_mm_pmm_init(void) {
                ARCH_MEMMAP_IS_USABLE(entry),
                entry->length);
 
-        if (seg_top > highest_addr) {
-            highest_addr = seg_top;
+        highest_addr = KMAX(highest_addr, seg_top);
+
+        if (ARCH_MEMMAP_IS_RECLAIMABLE(entry)) {
+            highest_indexed_addr = KMAX(highest_indexed_addr, seg_top);
         }
 
         if (!ARCH_MEMMAP_IS_USABLE(entry)) {
@@ -734,13 +753,14 @@ void com_mm_pmm_init(void) {
 
         kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
         MemoryStats.usable += entry->length;
+        highest_indexed_addr = KMAX(highest_indexed_addr, seg_top);
     }
 
     MemoryStats.total = highest_addr;
     KDEBUG("searched all segments, found highest address at %p", highest_addr);
 
     // Compute the actual size of the page meta array
-    size_t page_meta_size  = PAGE_META_ARRAY_SIZE(highest_addr);
+    size_t page_meta_size  = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
     size_t page_meta_pages = (page_meta_size + ARCH_PAGE_SIZE - 1) /
                              ARCH_PAGE_SIZE;
     size_t page_meta_aligned_size = page_meta_pages * ARCH_PAGE_SIZE;
@@ -760,8 +780,10 @@ void com_mm_pmm_init(void) {
 
         if (NULL == PageMeta.buffer &&
             entry->length >= page_meta_aligned_size) {
-            PageMeta.buffer = (void *)ARCH_PHYS_TO_HHDM(entry->base);
-            PageMeta.len    = PAGE_META_ARRAY_LEN(highest_addr);
+            PageMeta.buffer         = (void *)ARCH_PHYS_TO_HHDM(entry->base);
+            PageMeta.len            = PAGE_META_ARRAY_LEN(highest_indexed_addr);
+            PageMeta.reserved_start = PHYS_TO_META_INDEX(highest_indexed_addr);
+            PageMeta.extended_len   = PAGE_META_ARRAY_LEN(highest_addr);
             // Already zeroed before. Remember, 0 == E_PAGE_STATE_FREE
 
             // We now reserve the pages used for this array
@@ -810,7 +832,8 @@ void com_mm_pmm_init(void) {
     for (uintmax_t i = 0; i < memmap->entry_count; i++) {
         arch_memmap_entry_t *entry = memmap->entries[i];
 
-        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
+        if (!ARCH_MEMMAP_IS_USABLE(entry) &&
+            entry->base + entry->length < highest_indexed_addr) {
             struct page_meta model = {.num_ref = 1,
                                       .state   = E_PAGE_STATE_RESERVED};
             page_meta_set((void *)entry->base,

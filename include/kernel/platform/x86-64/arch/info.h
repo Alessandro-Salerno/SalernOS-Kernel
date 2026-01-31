@@ -30,8 +30,9 @@
     ((uintptr_t)(addr) - (uintptr_t)0xffff800000000000)
 
 #define ARCH_MEMMAP_IS_USABLE(entry) (LIMINE_MEMMAP_USABLE == entry->type)
-#define ARCH_MEMMAP_IS_RECLAIMABLE(entry) \
-    (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type)
+#define ARCH_MEMMAP_IS_RECLAIMABLE(entry)                   \
+    (LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
+     LIMINE_MEMMAP_KERNEL_AND_MODULES == entry->type)
 #define ARCH_MEMMAP_IS_MAPPABLE(entry)                      \
     (LIMINE_MEMMAP_USABLE == entry->type ||                 \
      LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE == entry->type || \
