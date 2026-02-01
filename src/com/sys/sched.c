@@ -324,6 +324,33 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
     kspinlock_acquire(cond);
 }
 
+void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
+                              kmutex_t                *mutex) {
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    kspinlock_acquire(&curr->sched_lock);
+
+    // curr->cpu is nulled and curr is removed from runqueue in sched, no need
+    // to do it here. In fact, this has caused issues, specifically with
+    // testjoin 1000
+
+    curr->waiting_on = waiting_on;
+    // TODO: this is used by signal code to alert a process waiting on a
+    // condvar. BUT I can't think of how to do this with mutexes because 1)
+    // signal code can't acquire mutexes I think, 2) Even if it could, I'm not
+    // sure how to properly layer this (I don't want signal code to have a huge
+    // if to chose whether to acquire a mutex or a spinlock from the thread
+    // struct) curr->waiting_cond = cond;
+    curr->runnable = false;
+    TAILQ_INSERT_TAIL(waiting_on, curr, threads);
+
+    kmutex_release(mutex);
+    com_sys_sched_yield_nolock();
+
+    // This point is reached AFTER the thread is notified
+    // We can do this because sched_lock is dropped by sched_yield
+    kmutex_acquire(mutex);
+}
+
 void com_sys_sched_notify(struct com_thread_tailq *waiters) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     arch_cpu_t   *currcpu     = ARCH_CPU_GET();

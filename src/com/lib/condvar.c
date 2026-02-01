@@ -16,20 +16,40 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#pragma once
+#include <kernel/com/sys/sched.h>
+#include <lib/condvar.h>
 
-#include <lib/spinlock.h>
-#include <stddef.h>
-
-#define KMUTEX_NEW()                           \
-    (struct kmutex) {                          \
-        .lock = KSPINLOCK_NEW(), .owner = NULL \
+void kcondvar_acquire(kcondvar_t *condvar) {
+    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
+        kmutex_acquire(&condvar->lock.mutex);
+    } else {
+        kspinlock_acquire(&condvar->lock.spinlock);
     }
+}
 
-typedef struct kmutex {
-    kspinlock_t        lock;
-    struct com_thread *owner;
-} kmutex_t;
+void kcondvar_release(kcondvar_t *condvar) {
+    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
+        kmutex_release(&condvar->lock.mutex);
+    } else {
+        kspinlock_release(&condvar->lock.spinlock);
+    }
+}
 
-void kmutex_acquire(kmutex_t *mutex);
-void kmutex_release(kmutex_t *mutex);
+void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
+    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
+        com_sys_sched_wait_mutex(waitlist, &condvar->lock.mutex);
+    } else {
+        com_sys_sched_wait(waitlist, &condvar->lock.spinlock);
+    }
+}
+
+void kcondvar_notifY(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
+    (void)condvar;
+    com_sys_sched_notify(waitlist);
+}
+
+void kcondvar_notify_all(kcondvar_t              *condvar,
+                         struct com_thread_tailq *waitlist) {
+    (void)condvar;
+    com_sys_sched_notify_all(waitlist);
+}

@@ -25,29 +25,37 @@
 // TODO: why doesn't this work at boot time?
 
 void kmutex_acquire(kmutex_t *mutex) {
-#if CONFIG_MUTEX_MODE == CONST_MUTEX_SPINLOCK
-    kspinlock_acquire(&mutex->lock);
-#elif CONFIG_MUTEX_MODE == CONST_MUTEX_REAL
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
+
+    for (size_t i = 0; i < CONFIG_MUTEX_RETRIES; i++) {
+        kspinlock_acquire(&mutex->lock);
+        if (!mutex->locked) {
+            goto take;
+        }
+        // TODO: check if owner is running on the same CPU and go straight to
+        // wait. This cannot be odne right now because, logically, if we are
+        // running, no other thread is running on this CPU, so mutex->owner->cpu
+        // will be NULL. We need a new field in the thread struct to hold last
+        // CPU.
+        kspinlock_release(&mutex->lock);
+        ARCH_CPU_PAUSE();
+    }
 
     kspinlock_acquire(&mutex->lock);
     while (mutex->locked) {
         com_sys_sched_wait(&mutex->waiters, &mutex->lock);
     }
 
+take:
     mutex->locked = true;
     mutex->owner  = curr_thread;
     kspinlock_release(&mutex->lock);
-#endif
 }
 
 void kmutex_release(kmutex_t *mutex) {
-#if CONFIG_MUTEX_MODE == CONST_MUTEX_SPINLOCK
-    kspinlock_release(&mutex->lock);
-#elif CONFIG_MUTEX_MODE == CONST_MUTEX_REAL
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
+    // com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    // KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
     kspinlock_acquire(&mutex->lock);
     KASSERT(mutex->locked);
@@ -55,6 +63,5 @@ void kmutex_release(kmutex_t *mutex) {
     mutex->owner  = NULL;
     com_sys_sched_notify(&mutex->waiters);
     kspinlock_release(&mutex->lock);
-    com_sys_sched_yield();
-#endif
+    // com_sys_sched_yield();
 }

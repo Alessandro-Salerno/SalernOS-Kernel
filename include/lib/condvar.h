@@ -18,23 +18,32 @@
 
 #pragma once
 
-#include <arch/context.h>
-#include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/mutex.h>
 #include <lib/spinlock.h>
 
-void com_sys_sched_yield_nolock(void);
-void com_sys_sched_yield(void);
-void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
+#define KCONDVAR_FLAGS_MUTEX 1
 
-void com_sys_sched_wait(struct com_thread_tailq *waiting_on, kspinlock_t *cond);
-void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
-                              kmutex_t                *mutex);
-void com_sys_sched_notify(struct com_thread_tailq *waiters);
-void com_sys_sched_notify_all(struct com_thread_tailq *waiters);
-void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
-void com_sys_sched_notify_thread(com_thread_t *thread);
+#define KCONDVAR_INIT_BASE(cv, flags) (cv)->flags = flags
 
-void com_sys_sched_init(void);
-void com_sys_sched_init_base(void);
+#define KCONDVAR_INIT_MUTEX(cv)                   \
+    KCONDVAR_INIT_BASE(cv, KCONDVAR_FLAGS_MUTEX); \
+    KMUTEX_INIT(&(cv)->lock.mutex)
+
+#define KCONDVAR_INIT_SPINLOCK(cv) \
+    KCONDVAR_INIT_BASE(cv, 0);     \
+    (cv)->lock.spinlock = KSPINLOCK_NEW()
+
+typedef struct kcondvar {
+    union {
+        kmutex_t    mutex;
+        kspinlock_t spinlock;
+    } lock;
+    int flags;
+} kcondvar_t;
+
+void kcondvar_acquire(kcondvar_t *condvar);
+void kcondvar_release(kcondvar_t *condvar);
+void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist);
+void kcondvar_notifY(kcondvar_t *condvar, struct com_thread_tailq *waiters);
+void kcondvar_notify_all(kcondvar_t *condvar, struct com_thread_tailq *waiters);
