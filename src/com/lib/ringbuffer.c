@@ -71,7 +71,7 @@ static int write_blocking(kringbuffer_t *rb,
     while (to_write > 0) {
         CHECK_HANGUP_GENERIC(buflen, 0, rb, KRINGBUFFER_OP_WRITE, hu_arg);
         while (KRINGBUFFER_AVAIL_WRITE(rb) < atomic_size) {
-            com_sys_sched_wait(&rb->write.queue, &rb->lock);
+            kcondvar_wait(&rb->condvar, &rb->write.queue);
 
             int sig = com_ipc_signal_check();
             if (COM_IPC_SIGNAL_NONE != sig) {
@@ -107,7 +107,7 @@ static int write_blocking(kringbuffer_t *rb,
         to_write -= can_write;
         bytes_written += can_write;
 
-        com_sys_sched_notify(&rb->read.queue);
+        kcondvar_notifY(&rb->condvar, &rb->read.queue);
 
         if (NULL != callback) {
             callback(cb_arg);
@@ -204,7 +204,7 @@ int kringbuffer_write(size_t        *bytes_written,
                       void (*callback)(void *),
                       void *cb_arg,
                       void *hu_arg) {
-    kspinlock_acquire(&rb->lock);
+    kcondvar_acquire(&rb->condvar);
     int ret = kringbuffer_write_nolock(bytes_written,
                                        rb,
                                        buf,
@@ -214,7 +214,7 @@ int kringbuffer_write(size_t        *bytes_written,
                                        callback,
                                        cb_arg,
                                        hu_arg);
-    kspinlock_release(&rb->lock);
+    kcondvar_release(&rb->condvar);
     return ret;
 }
 
@@ -246,7 +246,7 @@ int kringbuffer_read_nolock(void          *dst,
             goto end;
         }
 
-        com_sys_sched_wait(&rb->read.queue, &rb->lock);
+        kcondvar_wait(&rb->condvar, &rb->read.queue);
         CHECK_HANGUP_GENERIC(&nbytes, nbytes, rb, KRINGBUFFER_OP_READ, hu_arg);
 
         if (rb->is_eof) {
@@ -280,7 +280,7 @@ int kringbuffer_read_nolock(void          *dst,
     rb->read.index += can_read;
     nbytes = can_read;
 
-    com_sys_sched_notify(&rb->write.queue);
+    kcondvar_notifY(&rb->condvar, &rb->write.queue);
 
     if (NULL != callback) {
         callback(cb_arg);
@@ -303,7 +303,7 @@ int kringbuffer_read(void          *dst,
                      void (*callback)(void *),
                      void *cb_arg,
                      void *hu_arg) {
-    kspinlock_acquire(&rb->lock);
+    kcondvar_acquire(&rb->condvar);
     int ret = kringbuffer_read_nolock(dst,
                                       bytes_read,
                                       rb,
@@ -313,6 +313,6 @@ int kringbuffer_read(void          *dst,
                                       callback,
                                       cb_arg,
                                       hu_arg);
-    kspinlock_release(&rb->lock);
+    kcondvar_release(&rb->condvar);
     return ret;
 }

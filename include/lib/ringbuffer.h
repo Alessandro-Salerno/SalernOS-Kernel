@@ -20,7 +20,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/spinlock.h>
+#include <lib/condvar.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -39,7 +39,6 @@
 #define KRINGBUFFER_NOATOMIC 1
 
 #define KRINGBUFFER_INIT(rb_ptr)                           \
-    (rb_ptr)->lock            = KSPINLOCK_NEW();           \
     (rb_ptr)->write.index     = 0;                         \
     (rb_ptr)->read.index      = 0;                         \
     (rb_ptr)->is_eof          = false;                     \
@@ -47,11 +46,11 @@
     (rb_ptr)->fallback_hu_arg = NULL;                      \
     (rb_ptr)->buffer          = (rb_ptr)->internal.buffer; \
     (rb_ptr)->buffer_size     = KRINGBUFFER_SIZE;          \
+    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);            \
     TAILQ_INIT(&(rb_ptr)->write.queue);                    \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
 #define KRINGBUFFER_INIT_CUSTOM(rb_ptr, buffptr, buffsz) \
-    (rb_ptr)->lock            = KSPINLOCK_NEW();         \
     (rb_ptr)->write.index     = 0;                       \
     (rb_ptr)->read.index      = 0;                       \
     (rb_ptr)->is_eof          = false;                   \
@@ -59,6 +58,7 @@
     (rb_ptr)->fallback_hu_arg = NULL;                    \
     (rb_ptr)->buffer          = buffptr;                 \
     (rb_ptr)->buffer_size     = buffsz;                  \
+    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);          \
     TAILQ_INIT(&(rb_ptr)->write.queue);                  \
     TAILQ_INIT(&(rb_ptr)->read.queue)
 
@@ -68,9 +68,9 @@ typedef struct kringbuffer {
         uint8_t buffer[KRINGBUFFER_SIZE];
     } internal;
 
-    uint8_t    *buffer;
-    size_t      buffer_size;
-    kspinlock_t lock;
+    uint8_t   *buffer;
+    size_t     buffer_size;
+    kcondvar_t condvar;
 
     struct {
         struct com_thread_tailq queue;

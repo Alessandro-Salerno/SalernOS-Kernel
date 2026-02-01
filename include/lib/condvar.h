@@ -24,7 +24,7 @@
 
 #define KCONDVAR_FLAGS_MUTEX 1
 
-#define KCONDVAR_INIT_BASE(cv, flags) (cv)->flags = flags
+#define KCONDVAR_INIT_BASE(cv, f) (cv)->flags = f
 
 #define KCONDVAR_INIT_MUTEX(cv)                   \
     KCONDVAR_INIT_BASE(cv, KCONDVAR_FLAGS_MUTEX); \

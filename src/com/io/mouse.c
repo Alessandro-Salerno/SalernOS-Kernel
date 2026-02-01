@@ -51,7 +51,7 @@ static int mouse_read(void     *buf,
     int          ret   = 0;
     // TODO: sanitize buflen and make sure it's a multiple of the packet size,
     // otherwise we leave garbage in the rb
-    kspinlock_acquire(&mouse->rb.lock);
+    kcondvar_acquire(&mouse->rb.condvar);
 
     if (0 == KRINGBUFFER_AVAIL_READ(&mouse->rb) &&
         mouse->consolidated.present) {
@@ -74,7 +74,7 @@ static int mouse_read(void     *buf,
                                   NULL);
 
 end:
-    kspinlock_release(&mouse->rb.lock);
+    kcondvar_release(&mouse->rb.condvar);
     return ret;
 }
 
@@ -89,11 +89,11 @@ static int mouse_poll(short *revents, void *devdata, short events) {
     com_mouse_t *mouse = devdata;
     short        out   = 0;
 
-    kspinlock_acquire(&mouse->rb.lock);
+    kcondvar_acquire(&mouse->rb.condvar);
     if (KRINGBUFFER_AVAIL_READ(&mouse->rb) > 0 || mouse->consolidated.present) {
         out |= POLLIN;
     }
-    kspinlock_release(&mouse->rb.lock);
+    kcondvar_release(&mouse->rb.condvar);
 
     *revents = out;
     return 0;
@@ -116,7 +116,7 @@ static com_dev_ops_t MouseDevOps = {.read      = mouse_read,
                                     .stat      = mouse_stat};
 
 int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt) {
-    kspinlock_acquire(&mouse->rb.lock);
+    kcondvar_acquire(&mouse->rb.condvar);
     int rb_err = kringbuffer_write_nolock(NULL,
                                           &mouse->rb,
                                           pkt,
@@ -139,7 +139,7 @@ int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt) {
         rb_err = 0;
     }
 
-    kspinlock_release(&mouse->rb.lock);
+    kcondvar_release(&mouse->rb.condvar);
     return rb_err;
 }
 

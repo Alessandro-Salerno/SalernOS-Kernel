@@ -411,20 +411,20 @@ static int unix_socket_destroy(com_socket_t *socket) {
     kspinlock_acquire(&unix_socket->socket.lock);
     unix_socket->peer = NULL;
     kspinlock_release(&unix_socket->socket.lock);
-    kspinlock_acquire(&unix_socket->rb.lock);
+    kcondvar_acquire(&unix_socket->rb.condvar);
     com_sys_sched_notify_all(&unix_socket->rb.read.queue);
     com_sys_sched_notify_all(&unix_socket->rb.write.queue);
-    kspinlock_release(&unix_socket->rb.lock);
+    kcondvar_release(&unix_socket->rb.condvar);
     unix_socket_poll_callback(unix_socket);
 
     if (NULL != peer) {
         kspinlock_acquire(&peer->socket.lock);
         peer->peer = NULL;
         kspinlock_release(&peer->socket.lock);
-        kspinlock_acquire(&peer->rb.lock);
+        kcondvar_acquire(&peer->rb.condvar);
         com_sys_sched_notify_all(&peer->rb.read.queue);
         com_sys_sched_notify_all(&peer->rb.write.queue);
-        kspinlock_release(&peer->rb.lock);
+        kcondvar_release(&peer->rb.condvar);
         unix_socket_poll_callback(unix_socket);
     }
 
