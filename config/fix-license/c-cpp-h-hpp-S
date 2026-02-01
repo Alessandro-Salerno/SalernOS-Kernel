@@ -15,23 +15,3 @@
 | You should have received a copy of the GNU General Public License      |
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
-
-#include <kernel/opt/acpi.h>
-#include <uacpi/tables.h>
-#include <uacpi/uacpi.h>
-
-#include "uacpi_util.h"
-
-int opt_acpi_impl_find_table_by_signature(opt_acpi_table_t *out,
-                                          const char       *signature) {
-    uacpi_table  tbl;
-    uacpi_status ret = uacpi_table_find_by_signature(signature, &tbl);
-    if (UACPI_STATUS_OK != ret) {
-        goto end;
-    }
-
-    out->phys_addr = tbl.ptr;
-    out->virt_addr = (void *)tbl.virt_addr;
-end:
-    return uacpi_util_status_to_posix(ret);
-}

@@ -33,6 +33,6 @@ if [ ! -f "./config/compile-flags/$1.txt" ]; then
   error "unknown platform '$1'"
 fi
 
-rm compile_flags.txt
+rm -f compile_flags.txt
 ln -s "./config/compile-flags/$1.txt" "compile_flags.txt"
 echo "compile_flags.txt linked to config/compile-flags/$1.txt"
