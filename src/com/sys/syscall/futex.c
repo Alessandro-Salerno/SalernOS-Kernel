@@ -143,7 +143,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
             } else {
                 // TODO: this is a bit slow, but it works
                 for (size_t i = 0; i < value; i++) {
-                    kcondvar_notifY(&futex->condvar, &futex->waiters);
+                    kcondvar_notify(&futex->condvar, &futex->waiters);
                 }
             }
             kcondvar_release(&futex->condvar);

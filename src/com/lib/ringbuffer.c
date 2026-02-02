@@ -107,7 +107,7 @@ static int write_blocking(kringbuffer_t *rb,
         to_write -= can_write;
         bytes_written += can_write;
 
-        kcondvar_notifY(&rb->condvar, &rb->read.queue);
+        kcondvar_notify(&rb->condvar, &rb->read.queue);
 
         if (NULL != callback) {
             callback(cb_arg);
@@ -280,7 +280,7 @@ int kringbuffer_read_nolock(void          *dst,
     rb->read.index += can_read;
     nbytes = can_read;
 
-    kcondvar_notifY(&rb->condvar, &rb->write.queue);
+    kcondvar_notify(&rb->condvar, &rb->write.queue);
 
     if (NULL != callback) {
         callback(cb_arg);

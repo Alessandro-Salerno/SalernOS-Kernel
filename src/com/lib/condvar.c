@@ -43,7 +43,7 @@ void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
     }
 }
 
-void kcondvar_notifY(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
+void kcondvar_notify(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
     (void)condvar;
     com_sys_sched_notify(waitlist);
 }
