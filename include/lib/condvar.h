@@ -47,6 +47,6 @@ typedef struct kcondvar {
 
 void kcondvar_acquire(kcondvar_t *condvar);
 void kcondvar_release(kcondvar_t *condvar);
-void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist);
-void kcondvar_notify(kcondvar_t *condvar, struct com_thread_tailq *waiters);
-void kcondvar_notify_all(kcondvar_t *condvar, struct com_thread_tailq *waiters);
+void kcondvar_wait(kcondvar_t *condvar, struct com_waitlist *waitlist);
+void kcondvar_notify(kcondvar_t *condvar, struct com_waitlist *waiters);
+void kcondvar_notify_all(kcondvar_t *condvar, struct com_waitlist *waiters);

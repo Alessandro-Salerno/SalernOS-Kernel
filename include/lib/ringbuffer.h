@@ -47,20 +47,20 @@
     (rb_ptr)->buffer          = (rb_ptr)->internal.buffer; \
     (rb_ptr)->buffer_size     = KRINGBUFFER_SIZE;          \
     KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);            \
-    TAILQ_INIT(&(rb_ptr)->write.queue);                    \
-    TAILQ_INIT(&(rb_ptr)->read.queue)
+    COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue);  \
+    COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
-#define KRINGBUFFER_INIT_CUSTOM(rb_ptr, buffptr, buffsz) \
-    (rb_ptr)->write.index     = 0;                       \
-    (rb_ptr)->read.index      = 0;                       \
-    (rb_ptr)->is_eof          = false;                   \
-    (rb_ptr)->check_hangup    = NULL;                    \
-    (rb_ptr)->fallback_hu_arg = NULL;                    \
-    (rb_ptr)->buffer          = buffptr;                 \
-    (rb_ptr)->buffer_size     = buffsz;                  \
-    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);          \
-    TAILQ_INIT(&(rb_ptr)->write.queue);                  \
-    TAILQ_INIT(&(rb_ptr)->read.queue)
+#define KRINGBUFFER_INIT_CUSTOM(rb_ptr, buffptr, buffsz)  \
+    (rb_ptr)->write.index     = 0;                        \
+    (rb_ptr)->read.index      = 0;                        \
+    (rb_ptr)->is_eof          = false;                    \
+    (rb_ptr)->check_hangup    = NULL;                     \
+    (rb_ptr)->fallback_hu_arg = NULL;                     \
+    (rb_ptr)->buffer          = buffptr;                  \
+    (rb_ptr)->buffer_size     = buffsz;                   \
+    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);           \
+    COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue); \
+    COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
 typedef struct kringbuffer {
     struct {
@@ -73,12 +73,12 @@ typedef struct kringbuffer {
     kcondvar_t condvar;
 
     struct {
-        struct com_thread_tailq queue;
-        size_t                  index;
+        com_waitlist_t queue;
+        size_t         index;
     } write;
     struct {
-        struct com_thread_tailq queue;
-        size_t                  index;
+        com_waitlist_t queue;
+        size_t         index;
     } read;
     bool is_eof;
 

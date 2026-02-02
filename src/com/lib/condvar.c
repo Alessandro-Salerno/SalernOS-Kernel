@@ -35,7 +35,7 @@ void kcondvar_release(kcondvar_t *condvar) {
     }
 }
 
-void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
+void kcondvar_wait(kcondvar_t *condvar, com_waitlist_t *waitlist) {
     if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
         com_sys_sched_wait_mutex(waitlist, &condvar->lock.mutex);
     } else {
@@ -43,13 +43,12 @@ void kcondvar_wait(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
     }
 }
 
-void kcondvar_notify(kcondvar_t *condvar, struct com_thread_tailq *waitlist) {
+void kcondvar_notify(kcondvar_t *condvar, com_waitlist_t *waitlist) {
     (void)condvar;
     com_sys_sched_notify(waitlist);
 }
 
-void kcondvar_notify_all(kcondvar_t              *condvar,
-                         struct com_thread_tailq *waitlist) {
+void kcondvar_notify_all(kcondvar_t *condvar, com_waitlist_t *waitlist) {
     (void)condvar;
     com_sys_sched_notify_all(waitlist);
 }

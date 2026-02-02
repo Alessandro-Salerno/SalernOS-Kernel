@@ -28,11 +28,10 @@ void com_sys_sched_yield_nolock(void);
 void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 
-void com_sys_sched_wait(struct com_thread_tailq *waiting_on, kspinlock_t *cond);
-void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
-                              kmutex_t                *mutex);
-void com_sys_sched_notify(struct com_thread_tailq *waiters);
-void com_sys_sched_notify_all(struct com_thread_tailq *waiters);
+void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond);
+void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex);
+void com_sys_sched_notify(com_waitlist_t *waitlist);
+void com_sys_sched_notify_all(com_waitlist_t *waitlist);
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread(com_thread_t *thread);
 

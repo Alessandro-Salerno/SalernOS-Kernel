@@ -19,8 +19,13 @@
 #pragma once
 
 #include <vendor/tailq.h>
+
 struct com_thread;
 TAILQ_HEAD(com_thread_tailq, com_thread);
+
+#define COM_SYS_THREAD_WAITLIST_INIT(wl_ptr) \
+    TAILQ_INIT(&(wl_ptr)->queue);            \
+    (wl_ptr)->lock = KSPINLOCK_NEW()
 
 #include <arch/context.h>
 #include <arch/cpu.h>
@@ -38,6 +43,11 @@ typedef struct com_thread_timer {
     uintmax_t        ctime; // when it was created
 } com_thread_timer_t;
 
+typedef struct com_waitlist {
+    struct com_thread_tailq queue;
+    kspinlock_t             lock;
+} com_waitlist_t;
+
 typedef struct com_thread {
     void                *kernel_stack;
     arch_context_t       ctx;
@@ -52,8 +62,7 @@ typedef struct com_thread {
     int   lock_depth;
     pid_t tid;
 
-    struct com_thread_tailq *waiting_on;
-    kspinlock_t             *waiting_cond;
+    com_waitlist_t *waiting_on;
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;

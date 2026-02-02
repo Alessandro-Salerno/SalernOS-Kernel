@@ -39,8 +39,8 @@
 #define FUTEX_WAKE 1
 
 struct futex {
-    kcondvar_t              condvar;
-    struct com_thread_tailq waiters;
+    kcondvar_t     condvar;
+    com_waitlist_t waiters;
 };
 
 enum futex_init_stage {
@@ -103,7 +103,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 if (ENOENT == get_ret) {
                     struct futex *default_futex = com_mm_slab_alloc(
                         sizeof(struct futex));
-                    TAILQ_INIT(&default_futex->waiters);
+                    COM_SYS_THREAD_WAITLIST_INIT(&default_futex->waiters);
                     KCONDVAR_INIT_MUTEX(&default_futex->condvar);
 
                     KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));

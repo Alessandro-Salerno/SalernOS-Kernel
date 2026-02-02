@@ -302,8 +302,7 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_sys_sched_yield();
 }
 
-void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
-                        kspinlock_t             *cond) {
+void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     KASSERT(1 == curr->lock_depth);
     kspinlock_acquire(&curr->sched_lock);
@@ -312,10 +311,11 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
     // to do it here. In fact, this has caused issues, specifically with
     // testjoin 1000
 
-    curr->waiting_on   = waiting_on;
-    curr->waiting_cond = cond;
-    curr->runnable     = false;
-    TAILQ_INSERT_TAIL(waiting_on, curr, threads);
+    curr->waiting_on = waitlist;
+    curr->runnable   = false;
+    kspinlock_acquire(&waitlist->lock);
+    TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
+    kspinlock_release(&waitlist->lock);
 
     kspinlock_release(cond);
     com_sys_sched_yield_nolock();
@@ -324,8 +324,7 @@ void com_sys_sched_wait(struct com_thread_tailq *waiting_on,
     kspinlock_acquire(cond);
 }
 
-void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
-                              kmutex_t                *mutex) {
+void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     kspinlock_acquire(&curr->sched_lock);
 
@@ -333,15 +332,11 @@ void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
     // to do it here. In fact, this has caused issues, specifically with
     // testjoin 1000
 
-    curr->waiting_on = waiting_on;
-    // TODO: this is used by signal code to alert a process waiting on a
-    // condvar. BUT I can't think of how to do this with mutexes because 1)
-    // signal code can't acquire mutexes I think, 2) Even if it could, I'm not
-    // sure how to properly layer this (I don't want signal code to have a huge
-    // if to chose whether to acquire a mutex or a spinlock from the thread
-    // struct) curr->waiting_cond = cond;
-    curr->runnable = false;
-    TAILQ_INSERT_TAIL(waiting_on, curr, threads);
+    curr->waiting_on = waitlist;
+    curr->runnable   = false;
+    kspinlock_acquire(&waitlist->lock);
+    TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
+    kspinlock_release(&waitlist->lock);
 
     kmutex_release(mutex);
     com_sys_sched_yield_nolock();
@@ -351,59 +346,66 @@ void com_sys_sched_wait_mutex(struct com_thread_tailq *waiting_on,
     kmutex_acquire(mutex);
 }
 
-void com_sys_sched_notify(struct com_thread_tailq *waiters) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    arch_cpu_t   *currcpu     = ARCH_CPU_GET();
-    com_thread_t *next        = TAILQ_FIRST(waiters);
+void com_sys_sched_notify(com_waitlist_t *waitlist) {
+    arch_cpu_t *currcpu = ARCH_CPU_GET();
+
+    kspinlock_acquire(&waitlist->lock);
+    com_thread_t *next = TAILQ_FIRST(&waitlist->queue);
+    TAILQ_REMOVE_HEAD(&waitlist->queue, threads);
+    kspinlock_release(&waitlist->lock);
 
     if (NULL != next) {
-        kspinlock_acquire(&curr_thread->sched_lock);
         kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
-        TAILQ_REMOVE_HEAD(waiters, threads);
         kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-        next->runnable     = true;
-        next->waiting_on   = NULL;
-        next->waiting_cond = NULL;
+        next->runnable   = true;
+        next->waiting_on = NULL;
         kspinlock_release(&currcpu->runqueue_lock);
         kspinlock_release(&next->sched_lock);
-        kspinlock_release(&curr_thread->sched_lock);
     }
 }
 
-void com_sys_sched_notify_all(struct com_thread_tailq *waiters) {
-    // com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
     arch_cpu_t *currcpu = ARCH_CPU_GET();
-    // kspinlock_acquire(&curr_thread->sched_lock);
+
+    // Move everything to a local queue. This is both good for lock order (let's
+    // avoid acquiring sched_lock while holding a waitlist lock), and for
+    // performance
+    kspinlock_acquire(&waitlist->lock);
+    struct com_thread_tailq local_queue;
+    TAILQ_INIT(&local_queue);
+    TAILQ_CONCAT(&local_queue, &waitlist->queue, threads);
+    kspinlock_release(&waitlist->lock);
 
     com_thread_t *next, *_;
-    TAILQ_FOREACH_SAFE(next, waiters, threads, _) {
+    TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
         kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
-        TAILQ_REMOVE_HEAD(waiters, threads);
+        TAILQ_REMOVE_HEAD(&local_queue, threads);
         kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
-        next->runnable     = true;
-        next->waiting_on   = NULL;
-        next->waiting_cond = NULL;
+        next->runnable   = true;
+        next->waiting_on = NULL;
         kspinlock_release(&currcpu->runqueue_lock);
         kspinlock_release(&next->sched_lock);
     }
-
-    // kspinlock_release(&curr_thread->sched_lock);
 }
 
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
     arch_cpu_t *currcpu = ARCH_CPU_GET();
+
     if (NULL != thread->waiting_on) {
         KASSERT(NULL == thread->cpu);
-        TAILQ_REMOVE(thread->waiting_on, thread, threads);
+
+        kspinlock_acquire(&thread->waiting_on->lock);
+        TAILQ_REMOVE(&thread->waiting_on->queue, thread, threads);
+        kspinlock_release(&thread->waiting_on->lock);
+
         kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, thread, threads);
-        thread->runnable     = true;
-        thread->waiting_on   = NULL;
-        thread->waiting_cond = NULL;
+        thread->runnable   = true;
+        thread->waiting_on = NULL;
         kspinlock_release(&currcpu->runqueue_lock);
     }
 }
