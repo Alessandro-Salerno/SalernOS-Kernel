@@ -27,8 +27,8 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
+#include <lib/condvar.h>
 #include <lib/hashmap.h>
-#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <limits.h>
 #include <stdatomic.h>
@@ -39,33 +39,48 @@
 #define FUTEX_WAKE 1
 
 struct futex {
+    kcondvar_t              condvar;
     struct com_thread_tailq waiters;
 };
 
-// TODO: use per-futex locks
-static kspinlock_t FutexLock = KSPINLOCK_NEW();
-static khashmap_t  FutexMap;
-static bool        FutexInit = false;
+enum futex_init_stage {
+    FUTEX_INIT_NONE = 0,
+    FUTEX_INIT_DOING,
+    FUTEX_INIT_DONE
+};
+
+static kmutex_t              FutexLock;
+static khashmap_t            FutexMap;
+static enum futex_init_stage FutexInitStage = FUTEX_INIT_NONE;
 
 // SYSCALL: futex(uint32_t *word_ptr, int op, uint32_t val)
 COM_SYS_SYSCALL(com_sys_syscall_futex) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
+    // TODO: validate and pre-fault this to avoid issues with CoW zero page
     uint32_t *word_ptr = COM_SYS_SYSCALL_ARG(uint32_t *, 1);
     int       op       = COM_SYS_SYSCALL_ARG(int, 2);
     uint32_t  value    = COM_SYS_SYSCALL_ARG(uint32_t, 3);
 
-    com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,
                                                         word_ptr);
 
-    kspinlock_acquire(&FutexLock);
-
-    if (!FutexInit) {
-        KHASHMAP_INIT(&FutexMap);
-        FutexInit = true;
+    // TODO: this has a bit of unnecessary overhead, can be fixed by AOT init
+    while (FUTEX_INIT_DONE !=
+           __atomic_load_n(&FutexInitStage, __ATOMIC_SEQ_CST)) {
+        if (FUTEX_INIT_NONE == __atomic_exchange_n(&FutexInitStage,
+                                                   FUTEX_INIT_DOING,
+                                                   __ATOMIC_SEQ_CST)) {
+            KHASHMAP_INIT(&FutexMap);
+            KMUTEX_INIT(&FutexLock);
+            __atomic_store_n(&FutexInitStage,
+                             FUTEX_INIT_DONE,
+                             __ATOMIC_SEQ_CST);
+        } else {
+            ARCH_CPU_PAUSE();
+        }
     }
 
     uint32_t temp = value;
@@ -81,51 +96,63 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     __ATOMIC_SEQ_CST  // memory order for failure
                     )) {
                 struct futex *futex;
-                int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+
+                kmutex_acquire(&FutexLock);
+                int get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+
                 if (ENOENT == get_ret) {
                     struct futex *default_futex = com_mm_slab_alloc(
                         sizeof(struct futex));
                     TAILQ_INIT(&default_futex->waiters);
+                    KCONDVAR_INIT_MUTEX(&default_futex->condvar);
 
                     KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
                     futex = default_futex;
                 } else if (0 != get_ret) {
-                    ret = COM_SYS_SYSCALL_ERR(get_ret);
-                    goto end;
+                    kmutex_release(&FutexLock);
+                    return COM_SYS_SYSCALL_ERR(get_ret);
                 }
-                com_sys_sched_wait(&futex->waiters, &FutexLock);
+
+                kmutex_release(&FutexLock);
+                kcondvar_acquire(&futex->condvar);
+                kcondvar_wait(&futex->condvar, &futex->waiters);
+                kcondvar_release(&futex->condvar);
+
                 if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
-                    ret = COM_SYS_SYSCALL_ERR(EINTR);
-                    goto end;
+                    return COM_SYS_SYSCALL_ERR(EINTR);
                 }
+            } else {
+                return COM_SYS_SYSCALL_ERR(EAGAIN);
             }
             break;
 
         case FUTEX_WAKE: {
             struct futex *futex;
-            int           get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
-            if (ENOENT == get_ret) {
-                goto end;
-            } else if (0 != get_ret) {
-                ret = COM_SYS_SYSCALL_ERR(get_ret);
-                goto end;
+
+            kmutex_acquire(&FutexLock);
+            int get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+            kmutex_release(&FutexLock);
+
+            if (0 != get_ret) {
+                return COM_SYS_SYSCALL_OK(0);
             }
+
+            kcondvar_acquire(&futex->condvar);
             if (INT_MAX == value) {
-                com_sys_sched_notify_all(&futex->waiters);
-            } else if (1 == value) {
-                com_sys_sched_notify(&futex->waiters);
+                kcondvar_notify_all(&futex->condvar, &futex->waiters);
             } else {
-                ret = COM_SYS_SYSCALL_ERR(EINVAL);
+                // TODO: this is a bit slow, but it works
+                for (size_t i = 0; i < value; i++) {
+                    kcondvar_notifY(&futex->condvar, &futex->waiters);
+                }
             }
-            break;
+            kcondvar_release(&futex->condvar);
+            return COM_SYS_SYSCALL_OK(value);
         }
 
         default:
-            ret = COM_SYS_SYSCALL_ERR(ENOSYS);
-            goto end;
+            return COM_SYS_SYSCALL_ERR(ENOSYS);
     }
 
-end:
-    kspinlock_release(&FutexLock);
-    return ret;
+    return COM_SYS_SYSCALL_OK(0);
 }

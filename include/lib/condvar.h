@@ -34,6 +34,9 @@
     KCONDVAR_INIT_BASE(cv, 0);     \
     (cv)->lock.spinlock = KSPINLOCK_NEW()
 
+#define KCONDVAR_NEW_SPINLOCK() \
+    (kcondvar_t){.lock.spinlock = KSPINLOCK_NEW(), .flags = 0}
+
 typedef struct kcondvar {
     union {
         kmutex_t    mutex;

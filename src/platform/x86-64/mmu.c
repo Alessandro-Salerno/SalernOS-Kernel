@@ -361,6 +361,7 @@ void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
         kspinlock_fake_release();
         // lock released by ISR
         num_other_cpus++;
+        ARCH_CPU_SEND_IPI(next_cpu, X86_64_MMU_IPI_INVALIDATE);
     }
 
     // If we also have to perform a shootdown
