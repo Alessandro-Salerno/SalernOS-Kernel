@@ -137,7 +137,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 return COM_SYS_SYSCALL_OK(0);
             }
 
-            kcondvar_acquire(&futex->condvar);
             if (INT_MAX == value) {
                 kcondvar_notify_all(&futex->condvar, &futex->waiters);
             } else {
@@ -146,7 +145,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     kcondvar_notify(&futex->condvar, &futex->waiters);
                 }
             }
-            kcondvar_release(&futex->condvar);
+
             return COM_SYS_SYSCALL_OK(value);
         }
 

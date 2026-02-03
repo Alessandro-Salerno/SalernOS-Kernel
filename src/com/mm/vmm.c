@@ -339,16 +339,6 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
         return;
     }
 
-    if (NULL != curr_proc->fd[2].file && NULL != curr_proc->fd[2].file->vnode) {
-        char *message = "kernel: page fault intercepted\n";
-        com_fs_vfs_write(NULL,
-                         curr_proc->fd[2].file->vnode,
-                         message,
-                         kstrlen(message),
-                         curr_proc->fd[2].file->off,
-                         0);
-    }
-
     if (ARCH_CONTEXT_ISUSER(fault_ctx)) {
         KDEBUG("sending SIGSEGV to pid=%d due to page fault on addr %p",
                curr_proc->pid,

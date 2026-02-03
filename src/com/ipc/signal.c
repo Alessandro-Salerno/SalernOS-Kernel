@@ -90,12 +90,9 @@ static int send_to_thread(com_thread_t *thread, int sig) {
         com_sys_sched_notify_thread_nolock(thread);
     } else if (!thread->runnable) {
         com_sys_thread_ready_nolock(thread);
-    } /*else if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
-        KURGENT("signal ipi to thread %d on cpu %d",
-                thread->tid,
-                thread->cpu->id);
+    } else if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
         ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
-    }*/
+    }
 
     kspinlock_release(&thread->sched_lock);
     return 0;
@@ -208,7 +205,8 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
-            com_sys_proc_terminate(proc, sig);
+            proc->stop_signal = sig;
+            com_sys_proc_terminate(proc, 0);
             com_sys_sched_yield();
 
             // This should never be reached
