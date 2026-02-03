@@ -22,31 +22,31 @@
 #include <lib/mutex.h>
 #include <lib/spinlock.h>
 
-#define KCONDVAR_FLAGS_MUTEX 1
+#define KSYNC_FLAGS_MUTEX 1
 
-#define KCONDVAR_INIT_BASE(cv, f) (cv)->flags = f
+#define KSYNC_INIT_BASE(so_ptr, f) (so_ptr)->flags = f
 
-#define KCONDVAR_INIT_MUTEX(cv)                   \
-    KCONDVAR_INIT_BASE(cv, KCONDVAR_FLAGS_MUTEX); \
-    KMUTEX_INIT(&(cv)->lock.mutex)
+#define KSYNC_INIT_MUTEX(so_ptr)                   \
+    KSYNC_INIT_BASE(so_ptr, KSYNC_FLAGS_MUTEX); \
+    KMUTEX_INIT(&(so_ptr)->lock.mutex)
 
-#define KCONDVAR_INIT_SPINLOCK(cv) \
-    KCONDVAR_INIT_BASE(cv, 0);     \
-    (cv)->lock.spinlock = KSPINLOCK_NEW()
+#define KSYNC_INIT_SPINLOCK(so_ptr) \
+    KSYNC_INIT_BASE(so_ptr, 0);     \
+    (so_ptr)->lock.spinlock = KSPINLOCK_NEW()
 
-#define KCONDVAR_NEW_SPINLOCK() \
-    (kcondvar_t){.lock.spinlock = KSPINLOCK_NEW(), .flags = 0}
+#define KSYNC_NEW_SPINLOCK() \
+    (ksync_t){.lock.spinlock = KSPINLOCK_NEW(), .flags = 0}
 
-typedef struct kcondvar {
+typedef struct ksync {
     union {
         kmutex_t    mutex;
         kspinlock_t spinlock;
     } lock;
     int flags;
-} kcondvar_t;
+} ksync_t;
 
-void kcondvar_acquire(kcondvar_t *condvar);
-void kcondvar_release(kcondvar_t *condvar);
-void kcondvar_wait(kcondvar_t *condvar, struct com_waitlist *waitlist);
-void kcondvar_notify(kcondvar_t *condvar, struct com_waitlist *waiters);
-void kcondvar_notify_all(kcondvar_t *condvar, struct com_waitlist *waiters);
+void ksync_acquire(ksync_t *sync);
+void ksync_release(ksync_t *sync);
+void ksync_wait(ksync_t *sync, struct com_waitlist *waitlist);
+void ksync_notify(ksync_t *sync, struct com_waitlist *waiters);
+void ksync_notify_all(ksync_t *sync, struct com_waitlist *waiters);

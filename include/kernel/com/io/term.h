@@ -20,7 +20,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -49,7 +49,7 @@ typedef struct com_term_backend {
 
 typedef struct com_term {
     com_term_backend_t backend;
-    kcondvar_t         lock;
+    ksync_t         lock;
     bool               enabled;
     struct {
         bool           enabled;

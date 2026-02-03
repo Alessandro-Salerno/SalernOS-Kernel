@@ -17,38 +17,38 @@
 *************************************************************************/
 
 #include <kernel/com/sys/sched.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 
-void kcondvar_acquire(kcondvar_t *condvar) {
-    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
-        kmutex_acquire(&condvar->lock.mutex);
+void ksync_acquire(ksync_t *sync) {
+    if (KSYNC_FLAGS_MUTEX & sync->flags) {
+        kmutex_acquire(&sync->lock.mutex);
     } else {
-        kspinlock_acquire(&condvar->lock.spinlock);
+        kspinlock_acquire(&sync->lock.spinlock);
     }
 }
 
-void kcondvar_release(kcondvar_t *condvar) {
-    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
-        kmutex_release(&condvar->lock.mutex);
+void ksync_release(ksync_t *sync) {
+    if (KSYNC_FLAGS_MUTEX & sync->flags) {
+        kmutex_release(&sync->lock.mutex);
     } else {
-        kspinlock_release(&condvar->lock.spinlock);
+        kspinlock_release(&sync->lock.spinlock);
     }
 }
 
-void kcondvar_wait(kcondvar_t *condvar, com_waitlist_t *waitlist) {
-    if (KCONDVAR_FLAGS_MUTEX & condvar->flags) {
-        com_sys_sched_wait_mutex(waitlist, &condvar->lock.mutex);
+void ksync_wait(ksync_t *sync, com_waitlist_t *waitlist) {
+    if (KSYNC_FLAGS_MUTEX & sync->flags) {
+        com_sys_sched_wait_mutex(waitlist, &sync->lock.mutex);
     } else {
-        com_sys_sched_wait(waitlist, &condvar->lock.spinlock);
+        com_sys_sched_wait(waitlist, &sync->lock.spinlock);
     }
 }
 
-void kcondvar_notify(kcondvar_t *condvar, com_waitlist_t *waitlist) {
-    (void)condvar;
+void ksync_notify(ksync_t *sync, com_waitlist_t *waitlist) {
+    (void)sync;
     com_sys_sched_notify(waitlist);
 }
 
-void kcondvar_notify_all(kcondvar_t *condvar, com_waitlist_t *waitlist) {
-    (void)condvar;
+void ksync_notify_all(ksync_t *sync, com_waitlist_t *waitlist) {
+    (void)sync;
     com_sys_sched_notify_all(waitlist);
 }

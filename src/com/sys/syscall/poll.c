@@ -58,10 +58,10 @@ static void poll_timeout(com_callout_t *callout) {
         return;
     }
 
-    kcondvar_acquire(&data->poller->lock);
+    ksync_acquire(&data->poller->lock);
     data->expired = true;
-    kcondvar_release(&data->poller->lock);
-    kcondvar_notify_all(&data->poller->lock, &data->poller->waiters);
+    ksync_release(&data->poller->lock);
+    ksync_notify_all(&data->poller->lock, &data->poller->waiters);
     // here the struct is not freed because the function will use it, and it
     // will be responsible for cleaning up the memory
 }
@@ -82,7 +82,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     struct poll_timeout_arg *timeout_arg = NULL;
     com_poller_t             poller      = {0};
     COM_SYS_THREAD_WAITLIST_INIT(&poller.waiters);
-    KCONDVAR_INIT_SPINLOCK(&poller.lock);
+    KSYNC_INIT_SPINLOCK(&poller.lock);
 
     bool do_wait = true;
     if (NULL != timeout) {
@@ -93,9 +93,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
                                  timeout->tv_nsec;
             timeout_arg = com_mm_slab_alloc(sizeof(struct poll_timeout_arg));
             timeout_arg->poller = &poller;
-            kcondvar_acquire(&poller.lock);
+            ksync_acquire(&poller.lock);
             com_sys_callout_add(poll_timeout, timeout_arg, delay_ns);
-            kcondvar_release(&poller.lock);
+            ksync_release(&poller.lock);
         }
     }
 
@@ -164,27 +164,27 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             break;
         }
 
-        kcondvar_acquire(&poller.lock);
+        ksync_acquire(&poller.lock);
 
         // If timeout expired before we got here
         if (NULL != timeout_arg && timeout_arg->expired) {
-            kcondvar_release(&poller.lock);
+            ksync_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
             timeout_arg = NULL; // do not invalidate freed memory
             break;
         }
 
-        kcondvar_wait(&poller.lock, &poller.waiters);
+        ksync_wait(&poller.lock, &poller.waiters);
 
         // If we were notified by the callout
         if (NULL != timeout_arg && timeout_arg->expired) {
-            kcondvar_release(&poller.lock);
+            ksync_release(&poller.lock);
             com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
             timeout_arg = NULL; // do not invalidate freed memory
             break;
         }
 
-        kcondvar_release(&poller.lock);
+        ksync_release(&poller.lock);
         sig = com_ipc_signal_check();
 
         if (COM_IPC_SIGNAL_NONE != sig) {

@@ -27,7 +27,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 #include <lib/hashmap.h>
 #include <lib/util.h>
 #include <limits.h>
@@ -39,7 +39,7 @@
 #define FUTEX_WAKE 1
 
 struct futex {
-    kcondvar_t     condvar;
+    ksync_t     condvar;
     com_waitlist_t waiters;
 };
 
@@ -104,7 +104,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     struct futex *default_futex = com_mm_slab_alloc(
                         sizeof(struct futex));
                     COM_SYS_THREAD_WAITLIST_INIT(&default_futex->waiters);
-                    KCONDVAR_INIT_MUTEX(&default_futex->condvar);
+                    KSYNC_INIT_MUTEX(&default_futex->condvar);
 
                     KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
                     futex = default_futex;
@@ -114,9 +114,9 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 }
 
                 kmutex_release(&FutexLock);
-                kcondvar_acquire(&futex->condvar);
-                kcondvar_wait(&futex->condvar, &futex->waiters);
-                kcondvar_release(&futex->condvar);
+                ksync_acquire(&futex->condvar);
+                ksync_wait(&futex->condvar, &futex->waiters);
+                ksync_release(&futex->condvar);
 
                 if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                     return COM_SYS_SYSCALL_ERR(EINTR);
@@ -138,11 +138,11 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
             }
 
             if (INT_MAX == value) {
-                kcondvar_notify_all(&futex->condvar, &futex->waiters);
+                ksync_notify_all(&futex->condvar, &futex->waiters);
             } else {
                 // TODO: this is a bit slow, but it works
                 for (size_t i = 0; i < value; i++) {
-                    kcondvar_notify(&futex->condvar, &futex->waiters);
+                    ksync_notify(&futex->condvar, &futex->waiters);
                 }
             }
 

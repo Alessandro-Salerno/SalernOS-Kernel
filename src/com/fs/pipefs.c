@@ -26,7 +26,7 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 #include <lib/mem.h>
 #include <lib/util.h>
 #include <stddef.h>
@@ -39,7 +39,7 @@ struct pipefs_node {
     uint8_t       *buf;
     size_t         read;
     size_t         write;
-    kcondvar_t     condvar;
+    ksync_t     condvar;
     com_waitlist_t readers;
     com_waitlist_t writers;
     com_vnode_t   *read_end;
@@ -60,14 +60,14 @@ int com_fs_pipefs_read(void        *buf,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    kcondvar_acquire(&pipe->condvar);
+    ksync_acquire(&pipe->condvar);
 
     size_t read_count = 0;
     int    ret        = 0;
 
     for (size_t left = buflen; left > 0;) {
         while (pipe->write == pipe->read && NULL != pipe->write_end) {
-            kcondvar_wait(&pipe->condvar, &pipe->readers);
+            ksync_wait(&pipe->condvar, &pipe->readers);
 
             if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == read_count) {
@@ -97,11 +97,11 @@ int com_fs_pipefs_read(void        *buf,
             break;
         }
 
-        kcondvar_notify(&pipe->condvar, &pipe->writers);
+        ksync_notify(&pipe->condvar, &pipe->writers);
     }
 
 end:
-    kcondvar_release(&pipe->condvar);
+    ksync_release(&pipe->condvar);
     *bytes_read = read_count;
     if (NULL == pipe->read_end && NULL == pipe->write_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
@@ -120,7 +120,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    kcondvar_acquire(&pipe->condvar);
+    ksync_acquire(&pipe->condvar);
 
     size_t req_space   = buflen;
     size_t write_count = 0;
@@ -135,7 +135,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         size_t av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
 
         while (av_space < req_space) {
-            kcondvar_wait(&pipe->condvar, &pipe->writers);
+            ksync_wait(&pipe->condvar, &pipe->writers);
 
             if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == write_count) {
@@ -160,11 +160,11 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         left -= writesz;
         write_count += writesz;
 
-        kcondvar_notify(&pipe->condvar, &pipe->readers);
+        ksync_notify(&pipe->condvar, &pipe->readers);
     }
 
 end:
-    kcondvar_release(&pipe->condvar);
+    ksync_release(&pipe->condvar);
     *bytes_written = write_count;
     if (NULL == pipe->read_end && NULL == pipe->write_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
@@ -177,19 +177,19 @@ end:
 int com_fs_pipefs_close(com_vnode_t *vnode) {
     struct pipefs_node *pipe         = vnode->extra;
     bool                has_notified = false;
-    kcondvar_acquire(&pipe->condvar);
+    ksync_acquire(&pipe->condvar);
 
     if (vnode == pipe->read_end) {
         has_notified   = !COM_SYS_THREAD_WAITLIST_EMPTY(&pipe->writers);
         pipe->read_end = NULL;
-        kcondvar_notify(&pipe->condvar, &pipe->writers);
+        ksync_notify(&pipe->condvar, &pipe->writers);
     } else if (vnode == pipe->write_end) {
         has_notified    = !COM_SYS_THREAD_WAITLIST_EMPTY(&pipe->readers);
         pipe->write_end = NULL;
-        kcondvar_notify(&pipe->condvar, &pipe->readers);
+        ksync_notify(&pipe->condvar, &pipe->readers);
     }
 
-    kcondvar_release(&pipe->condvar);
+    ksync_release(&pipe->condvar);
     if (!has_notified && NULL == pipe->write_end && NULL == pipe->read_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
         com_mm_slab_free(vnode, sizeof(com_vnode_t));
@@ -200,7 +200,7 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
-    KCONDVAR_INIT_SPINLOCK(&pipe->condvar);
+    KSYNC_INIT_SPINLOCK(&pipe->condvar);
     COM_SYS_THREAD_WAITLIST_INIT(&pipe->readers);
     COM_SYS_THREAD_WAITLIST_INIT(&pipe->writers);
     pipe->read  = 0;

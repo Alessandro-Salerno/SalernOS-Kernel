@@ -166,7 +166,7 @@ int kioviter_read_to_ringbuffer(size_t        *bytes_written,
                                 void       *hu_arg,
                                 kioviter_t *ioviter,
                                 size_t      nbytes) {
-    kcondvar_acquire(&rb->condvar);
+    ksync_acquire(&rb->condvar);
     int ret = kioviter_read_to_ringbuffer_nolock(bytes_written,
                                                  rb,
                                                  atomic_size,
@@ -176,7 +176,7 @@ int kioviter_read_to_ringbuffer(size_t        *bytes_written,
                                                  hu_arg,
                                                  ioviter,
                                                  nbytes);
-    kcondvar_release(&rb->condvar);
+    ksync_release(&rb->condvar);
     return ret;
 }
 
@@ -238,7 +238,7 @@ int kioviter_write_from_ringbuffer(kioviter_t    *ioviter,
                                    void (*callback)(void *),
                                    void *cb_arg,
                                    void *hu_arg) {
-    kcondvar_acquire(&rb->condvar);
+    ksync_acquire(&rb->condvar);
     int ret = kioviter_write_from_ringbuffer_nolock(ioviter,
                                                     nbytes,
                                                     bytes_written,
@@ -248,7 +248,7 @@ int kioviter_write_from_ringbuffer(kioviter_t    *ioviter,
                                                     callback,
                                                     cb_arg,
                                                     hu_arg);
-    kcondvar_release(&rb->condvar);
+    ksync_release(&rb->condvar);
     return ret;
 }
 

@@ -20,7 +20,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -46,7 +46,7 @@
     (rb_ptr)->fallback_hu_arg = NULL;                      \
     (rb_ptr)->buffer          = (rb_ptr)->internal.buffer; \
     (rb_ptr)->buffer_size     = KRINGBUFFER_SIZE;          \
-    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);            \
+    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);            \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue);  \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
@@ -58,7 +58,7 @@
     (rb_ptr)->fallback_hu_arg = NULL;                     \
     (rb_ptr)->buffer          = buffptr;                  \
     (rb_ptr)->buffer_size     = buffsz;                   \
-    KCONDVAR_INIT_SPINLOCK(&(rb_ptr)->condvar);           \
+    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);           \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue); \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
@@ -70,7 +70,7 @@ typedef struct kringbuffer {
 
     uint8_t   *buffer;
     size_t     buffer_size;
-    kcondvar_t condvar;
+    ksync_t condvar;
 
     struct {
         com_waitlist_t queue;

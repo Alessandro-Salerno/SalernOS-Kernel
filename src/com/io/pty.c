@@ -300,10 +300,10 @@ static int pts_close(void *devdata) {
     com_pty_t       *pty       = pty_slave->pty;
 
     if (0 == __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST)) {
-        kcondvar_acquire(&pty->master_rb.condvar);
+        ksync_acquire(&pty->master_rb.condvar);
         com_sys_sched_notify_all(&pty->master_rb.read.queue);
         com_sys_sched_notify_all(&pty->master_rb.write.queue);
-        kcondvar_release(&pty->master_rb.condvar);
+        ksync_release(&pty->master_rb.condvar);
         ptm_poll_callback(pty);
     }
 

@@ -23,7 +23,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/condvar.h>
+#include <lib/sync.h>
 #include <lib/ringbuffer.h>
 #include <lib/str.h>
 #include <poll.h>
@@ -50,7 +50,7 @@ struct unix_socket {
 struct unix_socket_binding {
     struct unix_socket *server;
     com_vnode_t        *vnode;
-    kcondvar_t          lock;
+    ksync_t          lock;
 };
 
 // Foward declaration, defined below
@@ -102,7 +102,7 @@ static void unix_socket_poll_callback(void *arg) {
     kspinlock_acquire(&sock->pollhead.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &sock->pollhead.polled_list, polled_list, _) {
-        kcondvar_notify_all(&polled->poller->lock, &polled->poller->waiters);
+        ksync_notify_all(&polled->poller->lock, &polled->poller->waiters);
     }
     kspinlock_release(&sock->pollhead.lock);
 }
@@ -111,7 +111,7 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
     struct unix_socket *unix_socket = (void *)socket;
     com_proc_t         *curr_proc   = ARCH_CPU_GET_THREAD()->proc;
     int                 ret         = 0;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     struct unix_socket_binding *binding = com_mm_slab_alloc(
         sizeof(struct unix_socket_binding));
@@ -135,28 +135,28 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
     socket_vn->binding                      = binding;
     unix_socket->srv_binding                = binding;
     unix_socket->binding_path.local.pathlen = addr->local.pathlen;
-    KCONDVAR_INIT_SPINLOCK(&binding->lock);
+    KSYNC_INIT_SPINLOCK(&binding->lock);
     kmemcpy(unix_socket->binding_path.local.path,
             addr->local.path,
             addr->local.pathlen);
     unix_socket->socket.state = E_COM_SOCKET_STATE_BOUND;
 
 end:
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return ret;
 }
 
 static int unix_socket_send(com_socket_t *socket, com_socket_desc_t *desc) {
     struct unix_socket *unix_socket = (void *)socket;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state ||
         NULL == unix_socket->peer) {
-        kcondvar_release(&unix_socket->socket.lock);
+        ksync_release(&unix_socket->socket.lock);
         return ENOTCONN;
     }
 
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return kioviter_read_to_ringbuffer(&desc->count_done,
                                        &unix_socket->peer->rb,
                                        KRINGBUFFER_NOATOMIC,
@@ -170,14 +170,14 @@ static int unix_socket_send(com_socket_t *socket, com_socket_desc_t *desc) {
 
 static int unix_socket_recv(com_socket_t *socket, com_socket_desc_t *desc) {
     struct unix_socket *unix_socket = (void *)socket;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state) {
-        kcondvar_release(&unix_socket->socket.lock);
+        ksync_release(&unix_socket->socket.lock);
         return ENOTCONN;
     }
 
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return kioviter_write_from_ringbuffer(desc->ioviter,
                                           desc->count,
                                           &desc->count_done,
@@ -194,7 +194,7 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     com_proc_t         *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     com_vnode_t        *server_vn = NULL;
     int                 ret       = 0;
-    kcondvar_acquire(&client->socket.lock);
+    ksync_acquire(&client->socket.lock);
 
     if (E_COM_SOCKET_STATE_CONNECTED == client->socket.state) {
         ret = EISCONN;
@@ -227,19 +227,19 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
         goto end;
     }
 
-    kcondvar_acquire(&binding->lock);
+    ksync_acquire(&binding->lock);
     struct unix_socket *server = binding->server;
-    kcondvar_release(&binding->lock);
+    ksync_release(&binding->lock);
 
     if (NULL == server) {
         ret = ECONNREFUSED;
         goto end;
     }
 
-    kcondvar_acquire(&server->socket.lock);
+    ksync_acquire(&server->socket.lock);
     if (E_COM_SOCKET_STATE_LISTENING != server->socket.state) {
         ret = ECONNREFUSED;
-        kcondvar_release(&server->socket.lock);
+        ksync_release(&server->socket.lock);
         goto end;
     }
 
@@ -259,12 +259,12 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     // The server may do accept() and be on the waitlist or may be polling and
     // thus be on the poll queue, but cannot do both at the same time. So we
     // call both, since only one will have effect
-    kcondvar_notify(&server->socket.lock, &server->srv_acceptwait);
-    kcondvar_release(&server->socket.lock);
+    ksync_notify(&server->socket.lock, &server->srv_acceptwait);
+    ksync_release(&server->socket.lock);
     unix_socket_poll_callback(server);
 
 end:
-    kcondvar_release(&client->socket.lock);
+    ksync_release(&client->socket.lock);
     COM_FS_VFS_VNODE_RELEASE(server_vn);
     return ret;
 }
@@ -272,7 +272,7 @@ end:
 static int unix_socket_listen(com_socket_t *socket, size_t max_connections) {
     struct unix_socket *unix_socket = (void *)socket;
     int                 ret         = 0;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     // Calling listen twice is a no-op
     if (E_COM_SOCKET_STATE_LISTENING == unix_socket->socket.state) {
@@ -288,7 +288,7 @@ static int unix_socket_listen(com_socket_t *socket, size_t max_connections) {
     unix_socket->srv_maxconns = max_connections;
 
 end:
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return ret;
 }
 
@@ -300,7 +300,7 @@ static int unix_socket_accept(com_socket_t     **out_peer,
     struct unix_socket *server     = (void *)socket;
     int                 ret        = 0;
     struct unix_socket *new_client = NULL;
-    kcondvar_acquire(&server->socket.lock);
+    ksync_acquire(&server->socket.lock);
 
     if (E_COM_SOCKET_STATE_LISTENING != server->socket.state) {
         ret = EINVAL;
@@ -319,7 +319,7 @@ static int unix_socket_accept(com_socket_t     **out_peer,
 
     // Here we know no client did connect() and we have to block
     while (NULL == new_client) {
-        kcondvar_wait(&server->socket.lock, &server->srv_acceptwait);
+        ksync_wait(&server->socket.lock, &server->srv_acceptwait);
         new_client = TAILQ_FIRST(&server->srv_acceptq);
     }
 
@@ -333,14 +333,14 @@ end:
         *out_peer = (void *)new_client;
     }
 
-    kcondvar_release(&server->socket.lock);
+    ksync_release(&server->socket.lock);
     return ret;
 }
 
 static int unix_socket_getname(com_socket_addr_t *out, com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
     int                 ret         = 0;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     if (NULL == unix_socket->srv_binding) {
         out->local.path[0] = 0;
@@ -354,7 +354,7 @@ static int unix_socket_getname(com_socket_addr_t *out, com_socket_t *socket) {
             unix_socket->binding_path.local.pathlen);
 
 end:
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return ret;
 }
 
@@ -362,7 +362,7 @@ static int unix_socket_getpeername(com_socket_addr_t *out,
                                    com_socket_t      *socket) {
     struct unix_socket *unix_socket = (void *)socket;
     int                 ret         = 0;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state) {
         out->local.path[0] = 0;
@@ -376,7 +376,7 @@ static int unix_socket_getpeername(com_socket_addr_t *out,
             unix_socket->peer->binding_path.local.pathlen);
 
 end:
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     return ret;
 }
 
@@ -386,7 +386,7 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
 
     struct unix_socket *unix_socket = (void *)socket;
     short               out         = 0;
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
 
     if (!TAILQ_EMPTY(&unix_socket->srv_acceptq)) {
         out |= POLLIN;
@@ -398,7 +398,7 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
         out |= POLLOUT;
     }
 
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
     *revents = out;
     return 0;
 }
@@ -407,22 +407,22 @@ static int unix_socket_destroy(com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
     struct unix_socket *peer        = unix_socket->peer;
 
-    kcondvar_acquire(&unix_socket->socket.lock);
+    ksync_acquire(&unix_socket->socket.lock);
     unix_socket->peer = NULL;
-    kcondvar_release(&unix_socket->socket.lock);
+    ksync_release(&unix_socket->socket.lock);
 
-    kcondvar_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.read.queue);
-    kcondvar_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.write.queue);
+    ksync_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.read.queue);
+    ksync_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.write.queue);
 
     unix_socket_poll_callback(unix_socket);
 
     if (NULL != peer) {
-        kcondvar_acquire(&peer->socket.lock);
+        ksync_acquire(&peer->socket.lock);
         peer->peer = NULL;
-        kcondvar_release(&peer->socket.lock);
+        ksync_release(&peer->socket.lock);
 
-        kcondvar_notify_all(&peer->rb.condvar, &peer->rb.read.queue);
-        kcondvar_notify_all(&peer->rb.condvar, &peer->rb.write.queue);
+        ksync_notify_all(&peer->rb.condvar, &peer->rb.read.queue);
+        ksync_notify_all(&peer->rb.condvar, &peer->rb.write.queue);
 
         unix_socket_poll_callback(unix_socket);
     }
