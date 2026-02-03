@@ -20,7 +20,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/spinlock.h>
+#include <lib/condvar.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -49,13 +49,13 @@ typedef struct com_term_backend {
 
 typedef struct com_term {
     com_term_backend_t backend;
-    kspinlock_t        lock;
+    kcondvar_t         lock;
     bool               enabled;
     struct {
-        bool                    enabled;
-        char                    buffer[COM_IO_TERM_BUFSZ];
-        size_t                  index;
-        struct com_thread_tailq waiters;
+        bool           enabled;
+        char           buffer[COM_IO_TERM_BUFSZ];
+        size_t         index;
+        com_waitlist_t waiters;
     } buffering;
 } com_term_t;
 

@@ -36,7 +36,7 @@
 static khashmap_t              ZombieProcMap;
 static kspinlock_t             ZombieProcLock = KSPINLOCK_NEW();
 static struct com_thread_tailq ZombieThreadQueue;
-static struct com_thread_tailq ReaperThreadWaitlist;
+static com_waitlist_t          ReaperThreadWaitlist;
 static size_t                  ReaperNumPending = 0;
 
 static void sched_reap_zombies(struct com_thread_tailq *local_zombies) {
@@ -117,6 +117,7 @@ static void sched_reaper_thread(void) {
 }
 
 static inline bool sched_notify_reaper(void) {
+    /*
     arch_cpu_t   *curr_cpu = ARCH_CPU_GET();
     com_thread_t *reaper   = TAILQ_FIRST(&ReaperThreadWaitlist);
 
@@ -132,6 +133,7 @@ static inline bool sched_notify_reaper(void) {
     reaper->waiting_on   = NULL;
     reaper->waiting_cond = NULL;
     kspinlock_release(&reaper->sched_lock);
+    */
 
     return true;
 }
@@ -317,11 +319,16 @@ void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond) {
     TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
     kspinlock_release(&waitlist->lock);
 
-    kspinlock_release(cond);
+    if (NULL != cond) {
+        kspinlock_release(cond);
+    }
+
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
-    kspinlock_acquire(cond);
+    if (NULL != cond) {
+        kspinlock_acquire(cond);
+    }
 }
 
 void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
@@ -338,12 +345,17 @@ void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
     TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
     kspinlock_release(&waitlist->lock);
 
-    kmutex_release(mutex);
+    if (NULL != mutex) {
+        kmutex_release(mutex);
+    }
+
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
     // We can do this because sched_lock is dropped by sched_yield
-    kmutex_acquire(mutex);
+    if (NULL != mutex) {
+        kmutex_acquire(mutex);
+    }
 }
 
 void com_sys_sched_notify(com_waitlist_t *waitlist) {
@@ -425,7 +437,7 @@ void com_sys_sched_init_base(void) {
     KLOG("initializing scheduler reaper");
     KHASHMAP_INIT(&ZombieProcMap);
     TAILQ_INIT(&ZombieThreadQueue);
-    TAILQ_INIT(&ReaperThreadWaitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&ReaperThreadWaitlist);
 
     com_thread_t *reaper_thread = com_sys_thread_new_kernel(
         NULL,

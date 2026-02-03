@@ -88,9 +88,9 @@ struct freelist_entry {
 };
 
 struct lazylist_head {
-    struct lazylist_entry  *first;
-    struct com_thread_tailq waitlist;
-    kspinlock_t             lock;
+    struct lazylist_entry *first;
+    com_waitlist_t         waitlist;
+    kspinlock_t            lock;
 };
 
 // An entry into a lazy list, i.e. a list where each entry is a distinct page
@@ -154,8 +154,8 @@ static struct page_meta_array PageMeta = {0};
 static com_pmm_stats_t MemoryStats = {0};
 // Background threads may go to sleep at some point to save CPU time, so they
 // need waitlists. But defrag is not on a lazylist, so it needs its own here
-static struct com_thread_tailq DefragThreadWaitlist;
-static kspinlock_t             DefragNotifyLock = KSPINLOCK_NEW();
+static com_waitlist_t DefragThreadWaitlist;
+static kspinlock_t    DefragNotifyLock = KSPINLOCK_NEW();
 // To help the defrag thread, the insert thread tires to group pages a little
 static khashmap_t InsertThreadDefragMap;
 
@@ -695,9 +695,9 @@ void com_mm_pmm_get_stats(com_pmm_stats_t *out) {
 
 void com_mm_pmm_init_threads(void) {
     KLOG("initializing pmm threads");
-    TAILQ_INIT(&ZeroLazyList.waitlist);
-    TAILQ_INIT(&InsertLazyList.waitlist);
-    TAILQ_INIT(&DefragThreadWaitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&ZeroLazyList.waitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&InsertLazyList.waitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&DefragThreadWaitlist);
     KHASHMAP_INIT(&InsertThreadDefragMap);
 
     // Zero thread

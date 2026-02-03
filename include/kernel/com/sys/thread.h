@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <lib/spinlock.h>
 #include <vendor/tailq.h>
 
 struct com_thread;
@@ -27,12 +28,18 @@ TAILQ_HEAD(com_thread_tailq, com_thread);
     TAILQ_INIT(&(wl_ptr)->queue);            \
     (wl_ptr)->lock = KSPINLOCK_NEW()
 
+#define COM_SYS_THREAD_WAITLIST_EMPTY(wl_ptr) TAILQ_EMPTY(&(wl_ptr)->queue)
+
+typedef struct com_waitlist {
+    struct com_thread_tailq queue;
+    kspinlock_t             lock;
+} com_waitlist_t;
+
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/proc.h>
-#include <lib/spinlock.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <sys/time.h>
@@ -42,11 +49,6 @@ typedef struct com_thread_timer {
     struct itimerval itimerval;
     uintmax_t        ctime; // when it was created
 } com_thread_timer_t;
-
-typedef struct com_waitlist {
-    struct com_thread_tailq queue;
-    kspinlock_t             lock;
-} com_waitlist_t;
 
 typedef struct com_thread {
     void                *kernel_stack;

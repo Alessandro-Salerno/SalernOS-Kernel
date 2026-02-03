@@ -138,17 +138,17 @@ struct nvme_rw_sqe {
 };
 
 struct nvme_queue {
-    uint8_t                *sq;
-    uint8_t                *cq;
-    uint64_t                qe;
-    uint64_t                sq_doorbell;
-    uint64_t                cq_doorbell;
-    uint32_t                sq_idx;
-    uint32_t                cq_idx;
-    uint32_t                qid;
-    bool                    cq_phase;
-    struct com_thread_tailq irq_waiters;
-    kspinlock_t             lock;
+    uint8_t       *sq;
+    uint8_t       *cq;
+    uint64_t       qe;
+    uint64_t       sq_doorbell;
+    uint64_t       cq_doorbell;
+    uint32_t       sq_idx;
+    uint32_t       cq_idx;
+    uint32_t       qid;
+    bool           cq_phase;
+    com_waitlist_t irq_waiters;
+    kspinlock_t    lock;
 };
 
 struct nvme_device {
@@ -472,7 +472,7 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
 
     com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, arch_pci_msi_eoi);
     struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
-    TAILQ_INIT(&dev->queues[0].irq_waiters);
+    COM_SYS_THREAD_WAITLIST_INIT(&dev->queues[0].irq_waiters);
     dev->queues[0].lock = KSPINLOCK_NEW();
     devisr->extra       = dev;
 

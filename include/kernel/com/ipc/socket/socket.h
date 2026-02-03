@@ -21,8 +21,8 @@
 #include <errno.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
+#include <lib/condvar.h>
 #include <lib/ioviter.h>
-#include <lib/spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -71,7 +71,7 @@ typedef union com_socket_addr {
 typedef struct com_socket {
     com_socket_type_t      type;
     struct com_socket_ops *ops;
-    kspinlock_t            lock;
+    kcondvar_t             lock;
     com_socket_state_t     state;
     com_poll_head_t        pollhead;
 } com_socket_t;

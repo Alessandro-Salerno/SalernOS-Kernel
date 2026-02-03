@@ -482,9 +482,7 @@ void com_io_tty_text_backend_poll_callback(void *data) {
     kspinlock_acquire(&backend->slave_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &backend->slave_ph.polled_list, polled_list, _) {
-        kspinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify_all(&polled->poller->waiters);
-        kspinlock_release(&polled->poller->lock);
     }
     kspinlock_release(&backend->slave_ph.lock);
 }

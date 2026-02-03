@@ -87,10 +87,7 @@ static int send_to_thread(com_thread_t *thread, int sig) {
 
     kspinlock_acquire(&thread->sched_lock);
     if (NULL != thread->waiting_on) {
-        kspinlock_t *wait_cond = thread->waiting_cond;
-        kspinlock_acquire(wait_cond);
         com_sys_sched_notify_thread_nolock(thread);
-        kspinlock_release(wait_cond);
     } else if (!thread->runnable) {
         com_sys_thread_ready_nolock(thread);
     } /*else if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {

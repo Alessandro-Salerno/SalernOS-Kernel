@@ -20,12 +20,12 @@
 
 #include <kernel/com/fs/file.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/spinlock.h>
+#include <lib/condvar.h>
 #include <vendor/tailq.h>
 
 typedef struct com_poller {
-    struct com_thread_tailq waiters;
-    kspinlock_t             lock;
+    com_waitlist_t waiters;
+    kcondvar_t     lock;
 } com_poller_t;
 
 typedef struct com_polled {

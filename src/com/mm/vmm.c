@@ -37,7 +37,7 @@ static kspinlock_t ZombieQueueLock = KSPINLOCK_NEW();
 // Queue of context pointers on which destroy() was called
 static TAILQ_HEAD(, com_vmm_context) ZombieContextQueue;
 // Waitlist used only by the vmm reaper thread to wait
-static struct com_thread_tailq ReaperThreadWaitlist;
+static com_waitlist_t ReaperThreadWaitlist;
 // Number of elements in the zombie context queue
 static size_t ReaperNumPending = 0;
 
@@ -377,7 +377,7 @@ void com_mm_vmm_init(void) {
     // This is here because destroy will add stuff to the queue even if this is
     // not initialized!
     TAILQ_INIT(&ZombieContextQueue);
-    TAILQ_INIT(&ReaperThreadWaitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&ReaperThreadWaitlist);
 }
 
 void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,

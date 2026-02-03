@@ -116,9 +116,7 @@ static void ptm_poll_callback(void *arg) {
     kspinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
-        kspinlock_acquire(&polled->poller->lock);
         com_sys_sched_notify(&polled->poller->waiters);
-        kspinlock_release(&polled->poller->lock);
     }
     kspinlock_release(&pty->master_ph.lock);
 }

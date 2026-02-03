@@ -27,13 +27,13 @@
     (mutexptr)->lock   = KSPINLOCK_NEW(); \
     (mutexptr)->owner  = NULL;            \
     (mutexptr)->locked = false;           \
-    TAILQ_INIT(&(mutexptr)->waiters)
+    COM_SYS_THREAD_WAITLIST_INIT(&(mutexptr)->waiters)
 
 typedef struct kmutex {
-    kspinlock_t             lock;
-    bool                    locked;
-    struct com_thread      *owner;
-    struct com_thread_tailq waiters;
+    kspinlock_t        lock;
+    bool               locked;
+    struct com_thread *owner;
+    com_waitlist_t     waiters;
 } kmutex_t;
 
 void kmutex_acquire(kmutex_t *mutex);

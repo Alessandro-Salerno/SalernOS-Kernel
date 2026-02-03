@@ -68,8 +68,8 @@ _Static_assert(__builtin_types_compatible_p(uacpi_io_addr, opt_uacpi_io_addr_t),
                "uacpi_io_addr must be the same as opt_uacpi_phys_io_t");
 
 struct uacpi_glue_waitlist {
-    struct com_thread_tailq waitlist;
-    kspinlock_t             condvar;
+    com_waitlist_t waitlist;
+    kspinlock_t    condvar;
 };
 
 struct uacpi_glue_isr_extra {
@@ -273,8 +273,10 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
 uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
     switch (current_init_lvl) {
         case UACPI_INIT_LEVEL_EARLY:
-            TAILQ_INIT(&InFlightInterruptWaitlist.waitlist.waitlist);
-            TAILQ_INIT(&ScheduledWorkWaitlist.waitlist.waitlist);
+            COM_SYS_THREAD_WAITLIST_INIT(
+                &InFlightInterruptWaitlist.waitlist.waitlist);
+            COM_SYS_THREAD_WAITLIST_INIT(
+                &ScheduledWorkWaitlist.waitlist.waitlist);
             InFlightInterruptWaitlist.waitlist.condvar = KSPINLOCK_NEW();
             ScheduledWorkWaitlist.waitlist.condvar     = KSPINLOCK_NEW();
             break;
@@ -535,7 +537,7 @@ void uacpi_kernel_stall(uacpi_u8 usec) {
  */
 void uacpi_kernel_sleep(uacpi_u64 msec) {
     struct uacpi_glue_waitlist waitlist;
-    TAILQ_INIT(&waitlist.waitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&waitlist.waitlist);
     waitlist.condvar = KSPINLOCK_NEW();
     kspinlock_acquire(&waitlist.condvar);
     com_sys_callout_add(uacpi_glue_sleep_timeout,
@@ -561,13 +563,13 @@ void uacpi_kernel_free_mutex(uacpi_handle handle) {
 uacpi_handle uacpi_kernel_create_event(void) {
     struct uacpi_glue_waitlist *waitlist = com_mm_slab_alloc(sizeof(*waitlist));
     waitlist->condvar                    = KSPINLOCK_NEW();
-    TAILQ_INIT(&waitlist->waitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&waitlist->waitlist);
     return (uacpi_handle)waitlist;
 }
 
 void uacpi_kernel_free_event(uacpi_handle handle) {
     struct uacpi_glue_waitlist *waitlist = (void *)handle;
-    KASSERT(TAILQ_EMPTY(&waitlist->waitlist));
+    KASSERT(COM_SYS_THREAD_WAITLIST_EMPTY(&waitlist->waitlist));
     com_mm_slab_free(waitlist, sizeof(*waitlist));
 }
 
@@ -670,7 +672,7 @@ void uacpi_kernel_reset_event(uacpi_handle handle) {
     // it in d different moment than what I think it does
     struct uacpi_glue_waitlist *waitlist = (void *)handle;
     kspinlock_acquire(&waitlist->condvar);
-    KASSERT(TAILQ_EMPTY(&waitlist->waitlist));
+    KASSERT(COM_SYS_THREAD_WAITLIST_EMPTY(&waitlist->waitlist));
     kspinlock_release(&waitlist->condvar);
 }
 

@@ -69,7 +69,7 @@ typedef struct com_proc {
     int                    next_fd;
     com_filedesc_t         fd[CONFIG_OPEN_MAX];
 
-    struct com_thread_tailq notifications;
+    struct com_waitlist notifications;
 
     kspinlock_t             threads_lock;
     struct com_thread_tailq threads;

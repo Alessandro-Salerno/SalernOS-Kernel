@@ -26,8 +26,8 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/condvar.h>
 #include <lib/mem.h>
-#include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -36,14 +36,14 @@
 #define PIPE_BUF_SZ ARCH_PAGE_SIZE
 
 struct pipefs_node {
-    uint8_t                *buf;
-    size_t                  read;
-    size_t                  write;
-    kspinlock_t             lock;
-    struct com_thread_tailq readers;
-    struct com_thread_tailq writers;
-    com_vnode_t            *read_end;
-    com_vnode_t            *write_end;
+    uint8_t       *buf;
+    size_t         read;
+    size_t         write;
+    kcondvar_t     condvar;
+    com_waitlist_t readers;
+    com_waitlist_t writers;
+    com_vnode_t   *read_end;
+    com_vnode_t   *write_end;
 };
 
 static com_vnode_ops_t PipefsNodeOps = {.read  = com_fs_pipefs_read,
@@ -60,14 +60,14 @@ int com_fs_pipefs_read(void        *buf,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    kspinlock_acquire(&pipe->lock);
+    kcondvar_acquire(&pipe->condvar);
 
     size_t read_count = 0;
     int    ret        = 0;
 
     for (size_t left = buflen; left > 0;) {
         while (pipe->write == pipe->read && NULL != pipe->write_end) {
-            com_sys_sched_wait(&pipe->readers, &pipe->lock);
+            kcondvar_wait(&pipe->condvar, &pipe->readers);
 
             if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == read_count) {
@@ -97,12 +97,11 @@ int com_fs_pipefs_read(void        *buf,
             break;
         }
 
-        com_sys_sched_notify(&pipe->writers);
-        // ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
+        kcondvar_notify(&pipe->condvar, &pipe->writers);
     }
 
 end:
-    kspinlock_release(&pipe->lock);
+    kcondvar_release(&pipe->condvar);
     *bytes_read = read_count;
     if (NULL == pipe->read_end && NULL == pipe->write_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
@@ -121,7 +120,7 @@ int com_fs_pipefs_write(size_t      *bytes_written,
     (void)flags;
 
     struct pipefs_node *pipe = node->extra;
-    kspinlock_acquire(&pipe->lock);
+    kcondvar_acquire(&pipe->condvar);
 
     size_t req_space   = buflen;
     size_t write_count = 0;
@@ -136,7 +135,8 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         size_t av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
 
         while (av_space < req_space) {
-            com_sys_sched_wait(&pipe->writers, &pipe->lock);
+            kcondvar_wait(&pipe->condvar, &pipe->writers);
+
             if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                 if (0 == write_count) {
                     ret = EINTR;
@@ -160,12 +160,11 @@ int com_fs_pipefs_write(size_t      *bytes_written,
         left -= writesz;
         write_count += writesz;
 
-        com_sys_sched_notify(&pipe->readers);
-        // ARCH_CPU_SELF_IPI(ARCH_CPU_IPI_RESCHEDULE);
+        kcondvar_notify(&pipe->condvar, &pipe->readers);
     }
 
 end:
-    kspinlock_release(&pipe->lock);
+    kcondvar_release(&pipe->condvar);
     *bytes_written = write_count;
     if (NULL == pipe->read_end && NULL == pipe->write_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
@@ -178,33 +177,34 @@ end:
 int com_fs_pipefs_close(com_vnode_t *vnode) {
     struct pipefs_node *pipe         = vnode->extra;
     bool                has_notified = false;
-    kspinlock_acquire(&pipe->lock);
+    kcondvar_acquire(&pipe->condvar);
 
     if (vnode == pipe->read_end) {
-        has_notified   = !TAILQ_EMPTY(&pipe->writers);
+        has_notified   = !COM_SYS_THREAD_WAITLIST_EMPTY(&pipe->writers);
         pipe->read_end = NULL;
-        com_sys_sched_notify(&pipe->writers);
+        kcondvar_notify(&pipe->condvar, &pipe->writers);
     } else if (vnode == pipe->write_end) {
-        has_notified    = !TAILQ_EMPTY(&pipe->readers);
+        has_notified    = !COM_SYS_THREAD_WAITLIST_EMPTY(&pipe->readers);
         pipe->write_end = NULL;
-        com_sys_sched_notify(&pipe->readers);
+        kcondvar_notify(&pipe->condvar, &pipe->readers);
     }
 
-    kspinlock_release(&pipe->lock);
+    kcondvar_release(&pipe->condvar);
     if (!has_notified && NULL == pipe->write_end && NULL == pipe->read_end) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
         com_mm_slab_free(vnode, sizeof(com_vnode_t));
     }
+
     return 0;
 }
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
-    TAILQ_INIT(&pipe->readers);
-    TAILQ_INIT(&pipe->writers);
+    KCONDVAR_INIT_SPINLOCK(&pipe->condvar);
+    COM_SYS_THREAD_WAITLIST_INIT(&pipe->readers);
+    COM_SYS_THREAD_WAITLIST_INIT(&pipe->writers);
     pipe->read  = 0;
     pipe->write = 0;
-    pipe->lock  = KSPINLOCK_NEW();
     pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
     com_vnode_t *r  = com_mm_slab_alloc(sizeof(com_vnode_t));
