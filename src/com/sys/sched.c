@@ -117,23 +117,20 @@ static void sched_reaper_thread(void) {
 }
 
 static inline bool sched_notify_reaper(void) {
-    /*
     arch_cpu_t   *curr_cpu = ARCH_CPU_GET();
-    com_thread_t *reaper   = TAILQ_FIRST(&ReaperThreadWaitlist);
+    com_thread_t *reaper   = TAILQ_FIRST(&ReaperThreadWaitlist.queue);
 
     if (NULL == reaper) {
         return false;
     }
 
     kspinlock_acquire(&reaper->sched_lock);
-    TAILQ_REMOVE_HEAD(&ReaperThreadWaitlist, threads);
+    TAILQ_REMOVE_HEAD(&ReaperThreadWaitlist.queue, threads);
     // Add to tail for "low priority"
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, reaper, threads);
-    reaper->runnable     = true;
-    reaper->waiting_on   = NULL;
-    reaper->waiting_cond = NULL;
+    reaper->runnable   = true;
+    reaper->waiting_on = NULL;
     kspinlock_release(&reaper->sched_lock);
-    */
 
     return true;
 }
@@ -319,16 +316,11 @@ void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond) {
     TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
     kspinlock_release(&waitlist->lock);
 
-    if (NULL != cond) {
-        kspinlock_release(cond);
-    }
-
+    kspinlock_release(cond);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
-    if (NULL != cond) {
-        kspinlock_acquire(cond);
-    }
+    kspinlock_acquire(cond);
 }
 
 void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
@@ -345,17 +337,13 @@ void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
     TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
     kspinlock_release(&waitlist->lock);
 
-    if (NULL != mutex) {
-        kmutex_release(mutex);
-    }
+    kmutex_release(mutex);
 
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
     // We can do this because sched_lock is dropped by sched_yield
-    if (NULL != mutex) {
-        kmutex_acquire(mutex);
-    }
+    kmutex_acquire(mutex);
 }
 
 void com_sys_sched_notify(com_waitlist_t *waitlist) {
@@ -363,7 +351,9 @@ void com_sys_sched_notify(com_waitlist_t *waitlist) {
 
     kspinlock_acquire(&waitlist->lock);
     com_thread_t *next = TAILQ_FIRST(&waitlist->queue);
-    TAILQ_REMOVE_HEAD(&waitlist->queue, threads);
+    if (NULL != next) {
+        TAILQ_REMOVE_HEAD(&waitlist->queue, threads);
+    }
     kspinlock_release(&waitlist->lock);
 
     if (NULL != next) {
@@ -394,7 +384,7 @@ void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
     TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
         kspinlock_acquire(&next->sched_lock);
         KASSERT(NULL == next->cpu);
-        TAILQ_REMOVE_HEAD(&local_queue, threads);
+        TAILQ_REMOVE(&local_queue, next, threads);
         kspinlock_acquire(&currcpu->runqueue_lock);
         TAILQ_INSERT_HEAD(&currcpu->sched_queue, next, threads);
         next->runnable   = true;

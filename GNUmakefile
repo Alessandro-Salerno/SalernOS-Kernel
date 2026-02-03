@@ -26,7 +26,7 @@ CFLAGS := -g3 -pipe -O2
 CPPFLAGS :=
 
 # User controllable nasm flags.
-NASMFLAGS := -felf64 -g
+NASMFLAGS := -felf64
 
 # User controllable linker flags. We set none by default.
 LDFLAGS :=
