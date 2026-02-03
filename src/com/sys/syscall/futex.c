@@ -27,8 +27,8 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
-#include <lib/sync.h>
 #include <lib/hashmap.h>
+#include <lib/sync.h>
 #include <lib/util.h>
 #include <limits.h>
 #include <stdatomic.h>
@@ -39,7 +39,7 @@
 #define FUTEX_WAKE 1
 
 struct futex {
-    ksync_t     condvar;
+    ksync_t        condvar;
     com_waitlist_t waiters;
 };
 

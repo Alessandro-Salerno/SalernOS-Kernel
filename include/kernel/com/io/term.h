@@ -49,7 +49,7 @@ typedef struct com_term_backend {
 
 typedef struct com_term {
     com_term_backend_t backend;
-    ksync_t         lock;
+    ksync_t            lock;
     bool               enabled;
     struct {
         bool           enabled;

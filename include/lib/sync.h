@@ -26,7 +26,7 @@
 
 #define KSYNC_INIT_BASE(so_ptr, f) (so_ptr)->flags = f
 
-#define KSYNC_INIT_MUTEX(so_ptr)                   \
+#define KSYNC_INIT_MUTEX(so_ptr)                \
     KSYNC_INIT_BASE(so_ptr, KSYNC_FLAGS_MUTEX); \
     KMUTEX_INIT(&(so_ptr)->lock.mutex)
 

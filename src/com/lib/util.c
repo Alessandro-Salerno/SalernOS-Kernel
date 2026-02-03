@@ -17,10 +17,10 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stddef.h>
+#include <vendor/printf.h>
 
 void kinitlog(const char *category, const char *color) {
     struct arch_cpu   *curr_cpu    = ARCH_CPU_GET();

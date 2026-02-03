@@ -24,4 +24,7 @@ if [ "$1" == "?" ]; then
   exit 0
 fi
 
-find ./ -iname '*.h' -o -iname '*.c' | xargs clang-format -i
+find ./src/com -iname '*.h' -o -iname '*.c' | xargs clang-format -i
+find ./src/platform -iname '*.h' -o -iname '*.c' | xargs clang-format -i
+find ./include/kernel -iname '*.h' -o -iname '*.c' | xargs clang-format -i
+find ./include/lib -iname '*.h' -o -iname '*.c' | xargs clang-format -i

@@ -25,7 +25,7 @@
 
 typedef struct com_poller {
     com_waitlist_t waiters;
-    ksync_t     lock;
+    ksync_t        lock;
 } com_poller_t;
 
 typedef struct com_polled {

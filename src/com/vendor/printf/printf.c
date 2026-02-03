@@ -1,3 +1,4 @@
+// clang-format off
 #include <stdbool.h>
 #include <stdint.h>
 

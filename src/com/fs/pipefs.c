@@ -26,8 +26,8 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/sync.h>
 #include <lib/mem.h>
+#include <lib/sync.h>
 #include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -39,7 +39,7 @@ struct pipefs_node {
     uint8_t       *buf;
     size_t         read;
     size_t         write;
-    ksync_t     condvar;
+    ksync_t        condvar;
     com_waitlist_t readers;
     com_waitlist_t writers;
     com_vnode_t   *read_end;

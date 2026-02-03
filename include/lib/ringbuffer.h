@@ -46,7 +46,7 @@
     (rb_ptr)->fallback_hu_arg = NULL;                      \
     (rb_ptr)->buffer          = (rb_ptr)->internal.buffer; \
     (rb_ptr)->buffer_size     = KRINGBUFFER_SIZE;          \
-    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);            \
+    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);               \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue);  \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
@@ -58,7 +58,7 @@
     (rb_ptr)->fallback_hu_arg = NULL;                     \
     (rb_ptr)->buffer          = buffptr;                  \
     (rb_ptr)->buffer_size     = buffsz;                   \
-    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);           \
+    KSYNC_INIT_SPINLOCK(&(rb_ptr)->condvar);              \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->write.queue); \
     COM_SYS_THREAD_WAITLIST_INIT(&(rb_ptr)->read.queue)
 
@@ -68,9 +68,9 @@ typedef struct kringbuffer {
         uint8_t buffer[KRINGBUFFER_SIZE];
     } internal;
 
-    uint8_t   *buffer;
-    size_t     buffer_size;
-    ksync_t condvar;
+    uint8_t *buffer;
+    size_t   buffer_size;
+    ksync_t  condvar;
 
     struct {
         com_waitlist_t queue;

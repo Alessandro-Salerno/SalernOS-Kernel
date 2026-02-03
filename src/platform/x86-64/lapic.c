@@ -27,9 +27,9 @@
 #include <kernel/platform/x86-64/lapic.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <kernel/platform/x86-64/pit.h>
-#include <vendor/printf.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <vendor/printf.h>
 
 #define LAPIC_ICR_EDGE      0x00000
 #define LAPIC_ICR_DEST_SELF 0x40000

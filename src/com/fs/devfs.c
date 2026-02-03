@@ -65,7 +65,7 @@ int com_fs_devfs_create(com_vnode_t **out,
                         uintmax_t     attr,
                         uintmax_t     fsattr) {
     com_vnode_t *new = NULL;
-    int ret          = com_fs_tmpfs_create(&new,
+    int          ret = com_fs_tmpfs_create(&new,
                                   dir,
                                   name,
                                   namelen,
@@ -95,7 +95,7 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
     }
 
     com_vnode_t *new = NULL;
-    int ret          = com_fs_tmpfs_mkdir(&new,
+    int          ret = com_fs_tmpfs_mkdir(&new,
                                  parent,
                                  name,
                                  namelen,

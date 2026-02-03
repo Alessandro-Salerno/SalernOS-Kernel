@@ -23,36 +23,36 @@
 
 void arch_context_print(arch_context_t *ctx) {
     printf("\ncr2: %p  gs: %p\nrax: %p  fs: %p\nrbx: %p  es: "
-            "%p\nrcx: %p  ds: %p\nrdx: %p  cs: %p\n r8: %p  ss: "
-            "%p\n r9: %p r10: %p\nr11: %p r12: %p\nr13: %p "
-            "r14: %p\nr15: %p rdi: %p\nrsi: %p rbp: %p\nrip: "
-            "%p rsp: %p\nerr: %p rfl: %p\n\n",
-            ctx->cr2,
-            ctx->gs,
-            ctx->rax,
-            ctx->fs,
-            ctx->rbx,
-            ctx->es,
-            ctx->rcx,
-            ctx->ds,
-            ctx->rdx,
-            ctx->cs,
-            ctx->r8,
-            ctx->ss,
-            ctx->r9,
-            ctx->r10,
-            ctx->r11,
-            ctx->r12,
-            ctx->r13,
-            ctx->r14,
-            ctx->r15,
-            ctx->rdi,
-            ctx->rsi,
-            ctx->rbp,
-            ctx->rip,
-            ctx->rsp,
-            ctx->error,
-            ctx->rflags);
+           "%p\nrcx: %p  ds: %p\nrdx: %p  cs: %p\n r8: %p  ss: "
+           "%p\n r9: %p r10: %p\nr11: %p r12: %p\nr13: %p "
+           "r14: %p\nr15: %p rdi: %p\nrsi: %p rbp: %p\nrip: "
+           "%p rsp: %p\nerr: %p rfl: %p\n\n",
+           ctx->cr2,
+           ctx->gs,
+           ctx->rax,
+           ctx->fs,
+           ctx->rbx,
+           ctx->es,
+           ctx->rcx,
+           ctx->ds,
+           ctx->rdx,
+           ctx->cs,
+           ctx->r8,
+           ctx->ss,
+           ctx->r9,
+           ctx->r10,
+           ctx->r11,
+           ctx->r12,
+           ctx->r13,
+           ctx->r14,
+           ctx->r15,
+           ctx->rdi,
+           ctx->rsi,
+           ctx->rbp,
+           ctx->rip,
+           ctx->rsp,
+           ctx->error,
+           ctx->rflags);
 
     // printf("instruction at (%%rip):\n\t");
     // printf("%p %p\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));

@@ -22,11 +22,11 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
 #include <lib/mem.h>
-#include <vendor/printf.h>
 #include <lib/str.h>
 #include <lib/util.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <vendor/printf.h>
 
 #define SKIP_SEPARATORS(path, end)        \
     while (path != end && '/' == *path) { \

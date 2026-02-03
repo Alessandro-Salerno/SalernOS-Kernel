@@ -19,8 +19,8 @@
 #pragma once
 
 #include <lib/mem.h>
-#include <vendor/printf.h>
 #include <lib/str.h>
+#include <vendor/printf.h>
 
 #define memcpy(dst, src, sz) kmemcpy((dst), (src), (sz))
 #define memset(dst, val, sz) kmemset((dst), (sz), (val))

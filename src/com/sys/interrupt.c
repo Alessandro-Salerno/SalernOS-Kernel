@@ -23,10 +23,10 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
-#include <vendor/printf.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <vendor/printf.h>
 
 static kspinlock_t InterruptTableLock                  = KSPINLOCK_NEW();
 static com_isr_t   InterruptTable[ARCH_NUM_INTERRUPTS] = {0};

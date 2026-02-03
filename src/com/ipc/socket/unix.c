@@ -23,9 +23,9 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/sync.h>
 #include <lib/ringbuffer.h>
 #include <lib/str.h>
+#include <lib/sync.h>
 #include <poll.h>
 #include <stdatomic.h>
 
@@ -50,7 +50,7 @@ struct unix_socket {
 struct unix_socket_binding {
     struct unix_socket *server;
     com_vnode_t        *vnode;
-    ksync_t          lock;
+    ksync_t             lock;
 };
 
 // Foward declaration, defined below

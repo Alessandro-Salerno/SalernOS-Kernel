@@ -19,9 +19,9 @@
 #pragma once
 
 #include <kernel/com/sys/panic.h>
-#include <vendor/printf.h>
 #include <lib/util.h>
 #include <stddef.h>
+#include <vendor/printf.h>
 
 struct com_vnode;
 typedef void (*com_intf_log_t)(const char *s, size_t n);
