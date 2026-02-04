@@ -120,6 +120,7 @@ int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
     kspinlock_acquire(&proc->signal_lock);
     if (proc->exited) {
         kspinlock_release(&proc->signal_lock);
+        COM_SYS_PROC_RELEASE(proc);
         return ESRCH;
     }
 
@@ -139,6 +140,7 @@ int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
 
     kspinlock_release(&proc->threads_lock);
     kspinlock_release(&proc->signal_lock);
+    COM_SYS_PROC_RELEASE(proc);
 
     return 0;
 }
@@ -241,10 +243,10 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // Execution gets beck here after the process receives a SIGCONT, as
             // can be seen in send_to_thread
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
-            com_sys_proc_acquire_glock();
+            ksync_acquire(&proc->waitpid_condvar);
             proc->stop_signal   = COM_IPC_SIGNAL_NONE;
             proc->stop_notified = false;
-            com_sys_proc_release_glock();
+            ksync_release(&proc->waitpid_condvar);
             return;
         } else if (SA_IGNORE & SignalProperties[sig]) {
             goto end;

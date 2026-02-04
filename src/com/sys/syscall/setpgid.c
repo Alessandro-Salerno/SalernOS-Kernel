@@ -88,5 +88,8 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
 
 end:
     kspinlock_release(&proc->pg_lock);
+    if (proc != curr_proc) {
+        COM_SYS_PROC_RELEASE(proc);
+    }
     return ret;
 }

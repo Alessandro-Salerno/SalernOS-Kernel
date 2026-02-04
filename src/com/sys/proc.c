@@ -76,7 +76,8 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     proc->cwd                 = cwd;
     proc->num_ref             = 1; // 1 because of the parent
     proc->num_running_threads = 0;
-    COM_SYS_THREAD_WAITLIST_INIT(&proc->notifications);
+    KSYNC_INIT_SPINLOCK(&proc->waitpid_condvar);
+    COM_SYS_THREAD_WAITLIST_INIT(&proc->waitpid_waitlist);
 
     proc->threads_lock = KSPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);
@@ -98,8 +99,13 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     COM_IPC_SIGNAL_SIGMASK_INIT(&proc->pending_signals);
 
     com_proc_t *parent = com_sys_proc_get_by_pid(parent_pid);
-    if (NULL != parent && NULL != parent->proc_group) {
-        com_sys_proc_join_group(proc, parent->proc_group);
+    if (NULL != parent) {
+        kspinlock_acquire(&parent->pg_lock);
+        if (NULL != parent->proc_group) {
+            com_sys_proc_join_group(proc, parent->proc_group);
+        }
+        kspinlock_release(&parent->pg_lock);
+        COM_SYS_PROC_RELEASE(parent);
     }
 
     return proc;
@@ -108,21 +114,6 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 void com_sys_proc_destroy(com_proc_t *proc) {
     KASSERT(0 == proc->num_ref);
     KASSERT(proc->exited);
-
-    com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
-
-    if (NULL != parent) {
-        __atomic_add_fetch(&proc->num_children, -1, __ATOMIC_SEQ_CST);
-    }
-
-    // TODO: Operation is unlocked now because PID recycling is not supported
-    kradixtree_remove_nolock(&Processes, proc->pid - 1);
-
-    kspinlock_acquire(&proc->pg_lock);
-    if (NULL != proc->proc_group) {
-        TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
-    }
-    kspinlock_fake_release();
 
     com_vmm_context_t *proc_vmm_ctx = proc->vmm_context;
     com_mm_slab_free(proc, sizeof(com_proc_t));
@@ -272,41 +263,39 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     }
 
     com_proc_t *ret = NULL;
+    kspinlock_acquire(&GlobalProcLock);
     kradixtree_get_nolock((void *)&ret, &Processes, pid - 1);
+    if (NULL != ret) {
+        COM_SYS_PROC_HOLD(ret);
+    }
+    kspinlock_release(&GlobalProcLock);
     return ret;
 }
 
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
+    kspinlock_acquire(&GlobalProcLock);
+
+    com_proc_t *candidate = NULL;
     for (size_t i = 0; i < CONFIG_PROC_MAX; i++) {
-        com_proc_t *candidate = NULL;
         kradixtree_get_nolock((void *)&candidate, &Processes, i);
 
         if (NULL != candidate && candidate->parent_pid == proc->pid &&
             !candidate->exited) {
-            return candidate;
+            COM_SYS_PROC_HOLD(candidate);
+            goto end;
         }
     }
 
-    return NULL;
-}
-
-void com_sys_proc_acquire_glock(void) {
-    kspinlock_acquire(&GlobalProcLock);
-}
-
-void com_sys_proc_release_glock(void) {
+end:
     kspinlock_release(&GlobalProcLock);
-}
-
-void com_sys_proc_wait(com_proc_t *proc) {
-    com_sys_sched_wait(&proc->notifications, &GlobalProcLock);
+    return candidate;
 }
 
 void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
     KASSERT(!proc->exited);
     kspinlock_acquire(&proc->threads_lock);
     TAILQ_INSERT_TAIL(&proc->threads, thread, proc_threads);
-    __atomic_add_fetch(&proc->num_ref, 1, __ATOMIC_SEQ_CST);
+    COM_SYS_PROC_HOLD(proc);
     kspinlock_release(&proc->threads_lock);
 }
 
@@ -341,7 +330,6 @@ void com_sys_proc_kill_other_threads_nolock(com_proc_t   *proc,
 }
 
 void com_sys_proc_exit(com_proc_t *proc, int status) {
-    com_sys_proc_acquire_glock();
     kspinlock_acquire(&proc->signal_lock);
 
     kspinlock_acquire(&proc->fd_lock);
@@ -357,21 +345,23 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     KDEBUG("pid=%d exited with code %d", proc->pid, status);
 
     if (NULL != parent) {
-        com_sys_sched_notify(&parent->notifications);
+        ksync_notify(&proc->waitpid_condvar, &proc->waitpid_waitlist);
         com_ipc_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
     kspinlock_release(&proc->fd_lock);
     kspinlock_release(&proc->signal_lock);
-    com_sys_proc_release_glock();
+
+    if (NULL != parent) {
+        COM_SYS_PROC_RELEASE(parent);
+    }
 }
 
 void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
-    com_sys_proc_acquire_glock();
     KASSERT(COM_IPC_SIGNAL_NONE != stop_signal);
 
     if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
-        goto end;
+        return;
     }
 
     com_proc_t *parent  = com_sys_proc_get_by_pid(proc->parent_pid);
@@ -379,7 +369,7 @@ void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
     proc->stop_notified = false;
 
     if (NULL != parent) {
-        com_sys_sched_notify(&parent->notifications);
+        ksync_notify(&proc->waitpid_condvar, &proc->waitpid_waitlist);
         com_ipc_signal_send_to_proc(parent->pid, SIGCHLD, proc);
     }
 
@@ -390,8 +380,9 @@ void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
     }
     kspinlock_release(&proc->threads_lock);
 
-end:
-    com_sys_proc_release_glock();
+    if (NULL != parent) {
+        COM_SYS_PROC_RELEASE(parent);
+    }
 }
 
 void com_sys_proc_terminate(com_proc_t *proc, int ecode) {
@@ -402,6 +393,25 @@ void com_sys_proc_terminate(com_proc_t *proc, int ecode) {
     com_sys_proc_exit(proc, ecode);
     com_sys_proc_remove_thread(proc, curr_thread);
     com_sys_thread_exit(curr_thread);
+}
+
+void com_sys_proc_hide(com_proc_t *proc) {
+    kspinlock_acquire(&GlobalProcLock);
+    // TODO: add it to new reaper thread queue
+    // the new reaper thread will work differently from the previous: since we
+    // have this function now, we can just have other parts drop their refcounts
+    // and we'll always know when it hits 0 and we can dispatch the reaper
+    // thread accordingly without hash tables or scheduler magic
+    kradixtree_remove_nolock(&Processes, proc->pid - 1);
+    kspinlock_acquire(&proc->pg_lock);
+    if (NULL != proc->proc_group) {
+        kspinlock_acquire(&proc->proc_group->procs_lock);
+        TAILQ_REMOVE(&proc->proc_group->procs, proc, procs);
+        kspinlock_release(&proc->proc_group->procs_lock);
+    }
+    proc->proc_group = NULL;
+    kspinlock_release(&proc->pg_lock);
+    kspinlock_release(&GlobalProcLock);
 }
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,

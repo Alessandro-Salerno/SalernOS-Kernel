@@ -31,11 +31,19 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
+#include <lib/sync.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
+
+#define COM_SYS_PROC_HOLD(proc) \
+    __atomic_add_fetch(&(proc)->num_ref, 1, __ATOMIC_SEQ_CST);
+#define COM_SYS_PROC_RELEASE(proc)                                         \
+    if (0 == __atomic_add_fetch(&(proc)->num_ref, -1, __ATOMIC_SEQ_CST)) { \
+        com_sys_proc_hide(proc);                                           \
+    }
 
 typedef struct com_proc_session {
     pid_t                       sid;
@@ -69,7 +77,8 @@ typedef struct com_proc {
     int                    next_fd;
     com_filedesc_t         fd[CONFIG_OPEN_MAX];
 
-    struct com_waitlist notifications;
+    struct ksync        waitpid_condvar;
+    struct com_waitlist waitpid_waitlist;
 
     kspinlock_t             threads_lock;
     struct com_thread_tailq threads;
@@ -86,11 +95,13 @@ typedef struct com_proc {
     com_sigmask_t         pending_signals;
 } com_proc_t;
 
-com_proc_t     *com_sys_proc_new(com_vmm_context_t *vmm_context,
-                                 pid_t              parent_pid,
-                                 com_vnode_t       *root,
-                                 com_vnode_t       *cwd);
-void            com_sys_proc_destroy(com_proc_t *proc);
+com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
+                             pid_t              parent_pid,
+                             com_vnode_t       *root,
+                             com_vnode_t       *cwd);
+void        com_sys_proc_destroy(com_proc_t *proc);
+
+// File management
 int             com_sys_proc_next_fd(com_proc_t *proc);
 com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
@@ -107,11 +118,9 @@ int com_sys_proc_get_directory(com_file_t  **dir_file,
                                int           dir_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
-void        com_sys_proc_acquire_glock(void);
-void        com_sys_proc_release_glock(void);
-void        com_sys_proc_wait(com_proc_t *proc);
-void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
 
+// Threads
+void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);
@@ -119,9 +128,11 @@ void com_sys_proc_kill_other_threads(com_proc_t        *proc,
                                      struct com_thread *excluded);
 void com_sys_proc_kill_other_threads_nolock(com_proc_t        *proc,
                                             struct com_thread *excluded);
+
 void com_sys_proc_exit(com_proc_t *proc, int status);
 void com_sys_proc_stop(com_proc_t *proc, int stop_signal);
 void com_sys_proc_terminate(com_proc_t *proc, int ecode);
+void com_sys_proc_hide(com_proc_t *proc);
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
                                          com_proc_session_t *session);

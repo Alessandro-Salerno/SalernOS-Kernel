@@ -44,9 +44,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
                 *status |= towait->stop_signal & 0x7f;
             }
             int ret = towait->pid;
-            // TODO: i think this creates issues with multithreading (race where
-            // one of two waiting threads may read from deallocated memory)
-            __atomic_add_fetch(&towait->num_ref, -1, __ATOMIC_SEQ_CST);
+            COM_SYS_PROC_RELEASE(towait);
             return ret;
         }
 
@@ -65,7 +63,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
             return 0;
         }
 
-        com_sys_proc_wait(curr_proc);
+        ksync_wait(&towait->waitpid_condvar, &towait->waitpid_waitlist);
 
         if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
             return -EINTR;
@@ -98,7 +96,6 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         goto end;
     }
 
-    com_sys_proc_acquire_glock();
     com_proc_t *towait = NULL;
 
     if (-1 == pid) {
@@ -107,8 +104,10 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         towait = com_sys_proc_get_by_pid(pid);
     }
 
+    ksync_acquire(&towait->waitpid_condvar);
     ret = waitpid_proc(curr_proc, towait, status, flags);
-    com_sys_proc_release_glock();
+    ksync_release(&towait->waitpid_condvar);
+    COM_SYS_PROC_RELEASE(towait);
 
 end:
     if (ret < 0) {

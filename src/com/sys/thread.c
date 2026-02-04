@@ -92,7 +92,7 @@ void com_sys_thread_exit_nolock(com_thread_t *thread) {
 void com_sys_thread_destroy(com_thread_t *thread) {
     thread->runnable = false;
     if (NULL != thread->proc) {
-        __atomic_add_fetch(&thread->proc->num_ref, -1, __ATOMIC_SEQ_CST);
+        COM_SYS_PROC_RELEASE(thread->proc);
     }
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
                     ARCH_PAGE_SIZE);

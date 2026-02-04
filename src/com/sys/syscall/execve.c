@@ -74,7 +74,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_mm_vmm_switch(new_vmm_ctx);
     proc->vmm_context = new_vmm_ctx;
     KASSERT(proc->num_ref > 0);
-    KASSERT(2 == proc->num_ref);
     com_mm_vmm_destroy_context(old_vmm_ctx);
 
     kspinlock_acquire(&proc->fd_lock);

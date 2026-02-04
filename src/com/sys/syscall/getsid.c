@@ -68,5 +68,6 @@ COM_SYS_SYSCALL(com_sys_syscall_getsid) {
 end:
     kspinlock_release(&proc->pg_lock);
     kspinlock_release(&curr_proc->pg_lock);
+    COM_SYS_PROC_RELEASE(proc);
     return ret;
 }
