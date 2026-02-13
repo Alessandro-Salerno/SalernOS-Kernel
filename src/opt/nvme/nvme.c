@@ -24,7 +24,7 @@
 #include <kernel/com/sys/thread.h>
 #include <kernel/opt/nvme.h>
 #include <kernel/opt/pci.h>
-#include <lib/spinlock.h>
+#include <lib/sync.h>
 #include <lib/util.h>
 
 // TAKEN: vloxei64/ke
@@ -148,7 +148,7 @@ struct nvme_queue {
     uint32_t       qid;
     bool           cq_phase;
     com_waitlist_t irq_waiters;
-    kspinlock_t    lock;
+    ksync_t        lock;
 };
 
 struct nvme_device {
@@ -228,12 +228,11 @@ static void nvme_submit_page_command_sync(struct nvme_device *drive,
                                 .prp1   = (uint64_t)buf,
                                 .slba   = lba,
                                 .cdw12  = count - 1};
-    kspinlock_acquire(&drive->queues[0].lock);
+    ksync_acquire(&drive->queues[0].lock);
     nvme_submit(&drive->queues[0], &rw_in);
 
     while (!nvme_queue_done_nobarrier(&drive->queues[0])) {
-        com_sys_sched_wait(&drive->queues[0].irq_waiters,
-                           &drive->queues[0].lock);
+        ksync_wait(&drive->queues[0].lock, &drive->queues[0].irq_waiters);
     }
     ARCH_BARRIER_GENERIC_READ();
 
@@ -244,7 +243,7 @@ static void nvme_submit_page_command_sync(struct nvme_device *drive,
     }
     nvme_write32(drive->queues[0].cq_doorbell, drive->queues[0].cq_idx);
 
-    kspinlock_release(&drive->queues[0].lock);
+    ksync_release(&drive->queues[0].lock);
 }
 
 static void nvme_submit_multipage_command_sync(struct nvme_device *drive,
@@ -273,9 +272,7 @@ static void nvme_submit_multipage_command_sync(struct nvme_device *drive,
 static void nvme_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)ctx;
     struct nvme_device *drive = isr->extra;
-    kspinlock_acquire(&drive->queues[0].lock);
-    com_sys_sched_notify(&drive->queues[0].irq_waiters);
-    kspinlock_release(&drive->queues[0].lock);
+    ksync_notify(&drive->queues[0].lock, &drive->queues[0].irq_waiters);
     com_sys_sched_yield();
 }
 
@@ -473,8 +470,8 @@ static int nvme_init_device(opt_pci_enum_t *pci_enum) {
     com_isr_t *devisr = com_sys_interrupt_allocate(nvme_isr, arch_pci_msi_eoi);
     struct nvme_device *dev = com_mm_slab_alloc(sizeof(struct nvme_device));
     COM_SYS_THREAD_WAITLIST_INIT(&dev->queues[0].irq_waiters);
-    dev->queues[0].lock = KSPINLOCK_NEW();
-    devisr->extra       = dev;
+    KSYNC_INIT_MUTEX(&dev->queues[0].lock);
+    devisr->extra = dev;
 
     opt_pci_msix_add(pci_enum, 0, devisr->vec, OPT_PCI_MSIFMT_EDGE_TRIGGER);
     opt_pci_set_command(pci_enum,
