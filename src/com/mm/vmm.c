@@ -25,6 +25,7 @@
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
 #include <lib/str.h>
+#include <lib/sync.h>
 #include <stdatomic.h>
 
 #define UNMAP_MAX_ARRAY_ON_STACK 64
@@ -33,7 +34,7 @@ static com_vmm_context_t RootContext = {0};
 static void             *ZeroPage    = NULL;
 
 // This lock guards the context queue and is used as condvar for the waitlist
-static kspinlock_t ZombieQueueLock = KSPINLOCK_NEW();
+static ksync_t ZombieQueueLock;
 // Queue of context pointers on which destroy() was called
 static TAILQ_HEAD(, com_vmm_context) ZombieContextQueue;
 // Waitlist used only by the vmm reaper thread to wait
@@ -77,11 +78,13 @@ static void vmm_reaper_thread(void) {
         // First, we move the zombies to a local queue. This way, we hold the
         // lock as little as possible and don't bottleneck others wanting to add
         // to the queue
-        kspinlock_acquire(&ZombieQueueLock);
+        ksync_acquire(&ZombieQueueLock);
         if (TAILQ_EMPTY(&ZombieContextQueue) || already_done) {
             already_done = false;
-            com_sys_sched_wait(&ReaperThreadWaitlist, &ZombieQueueLock);
+            ksync_wait(&ZombieQueueLock, &ReaperThreadWaitlist);
         }
+        // TODO: detach the queue in O(1) and then let scheduelr priority
+        // preempt reaper thread if needed, without hard limits
         TAILQ_FOREACH_SAFE(context, &ZombieContextQueue, reaper_entry, _) {
             if (CONFIG_VMM_REAPER_MAX == num_done) {
                 break;
@@ -92,7 +95,7 @@ static void vmm_reaper_thread(void) {
             ReaperNumPending--;
             num_done++;
         }
-        kspinlock_release(&ZombieQueueLock);
+        ksync_release(&ZombieQueueLock);
 
         // Then we destroy the ones in the local zombie queue
         TAILQ_FOREACH_SAFE(context, &local_zombies, reaper_entry, _) {
@@ -127,12 +130,12 @@ void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
     KASSERT(context->pagetable != arch_mmu_get_table());
     KASSERT(NULL != context->pagetable);
 
-    kspinlock_acquire(&ZombieQueueLock);
+    ksync_acquire(&ZombieQueueLock);
     TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
     if (++ReaperNumPending >= CONFIG_VMM_REAPER_NOTIFY) {
-        com_sys_sched_notify(&ReaperThreadWaitlist);
+        ksync_notify(&ZombieQueueLock, &ReaperThreadWaitlist);
     }
-    kspinlock_release(&ZombieQueueLock);
+    ksync_release(&ZombieQueueLock);
 }
 
 com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context) {
@@ -368,6 +371,7 @@ void com_mm_vmm_init(void) {
     // not initialized!
     TAILQ_INIT(&ZombieContextQueue);
     COM_SYS_THREAD_WAITLIST_INIT(&ReaperThreadWaitlist);
+    KSYNC_INIT_SPINLOCK(&ZombieQueueLock);
 }
 
 void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,

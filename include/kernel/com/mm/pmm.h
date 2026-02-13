@@ -36,7 +36,6 @@ typedef struct com_pmm_stats {
     size_t evictable;
     size_t to_zero;
     size_t to_insert;
-    size_t to_defrag;
 } com_pmm_stats_t;
 
 void *com_mm_pmm_alloc(void);

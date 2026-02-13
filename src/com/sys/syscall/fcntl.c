@@ -16,7 +16,9 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#define _GNU_SOURCE
 #include <arch/cpu.h>
+#include <arch/info.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -91,6 +93,11 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
 
     if (F_DUPFD == op || F_DUPFD_CLOEXEC == op) {
         ret = fcntl_dup(curr_proc, fd, op, arg1);
+        goto end;
+    }
+
+    if (F_GETPIPE_SZ == op) {
+        ret = COM_SYS_SYSCALL_OK(ARCH_PAGE_SIZE);
         goto end;
     }
 

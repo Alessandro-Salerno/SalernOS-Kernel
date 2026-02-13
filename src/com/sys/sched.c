@@ -301,6 +301,24 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_sys_sched_yield();
 }
 
+void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist) {
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    KASSERT(0 == curr->lock_depth);
+    kspinlock_acquire(&curr->sched_lock);
+
+    // curr->cpu is nulled and curr is removed from runqueue in sched, no need
+    // to do it here. In fact, this has caused issues, specifically with
+    // testjoin 1000
+
+    curr->waiting_on = waitlist;
+    curr->runnable   = false;
+    kspinlock_acquire(&waitlist->lock);
+    TAILQ_INSERT_TAIL(&waitlist->queue, curr, threads);
+    kspinlock_release(&waitlist->lock);
+
+    com_sys_sched_yield_nolock();
+}
+
 void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     KASSERT(1 == curr->lock_depth);

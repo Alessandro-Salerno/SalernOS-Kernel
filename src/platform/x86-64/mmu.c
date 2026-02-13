@@ -200,7 +200,7 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
                    : (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable << 9);
     }
 
-    uint64_t  new   = (uint64_t)internal_alloc_phys();
+    uint64_t new    = (uint64_t)internal_alloc_phys();
     uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
 
     for (size_t i = 0; i < 512; i++) {
@@ -391,6 +391,9 @@ void arch_mmu_switch_default(void) {
 void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
     uint64_t *entry = get_page(pagetable, virt_addr);
     if (NULL == entry) {
+        return NULL;
+    }
+    if (0 == (*entry & ADDRMASK)) {
         return NULL;
     }
     return (void *)((*entry & ADDRMASK) +

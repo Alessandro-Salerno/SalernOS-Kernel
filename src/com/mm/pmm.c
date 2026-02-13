@@ -28,7 +28,7 @@
 #include <lib/hashmap.h>
 #include <lib/mem.h>
 #include <lib/searchtree.h>
-#include <lib/spinlock.h>
+#include <lib/sync.h>
 #include <lib/util.h>
 #include <stdint.h>
 #include <vendor/printf.h>
@@ -41,19 +41,10 @@
 #define LAZYLIST_LOCK(lazylist_head) kspinlock_acquire(&(lazylist_head)->lock);
 #define LAZYLIST_UNLOCK(lazylist_head) \
     kspinlock_release(&(lazylist_head)->lock);
-#define LAZYLIST_WAIT(lazylist_head)                   \
-    {                                                  \
-        LAZYLIST_LOCK(lazylist_head);                  \
-        com_sys_sched_wait(&(lazylist_head)->waitlist, \
-                           &(lazylist_head)->lock);    \
-        LAZYLIST_UNLOCK(lazylist_head);                \
-    }
-#define LAZYLIST_NOTIFY(lazylist_head)                    \
-    {                                                     \
-        LAZYLIST_LOCK(lazylist_head);                     \
-        com_sys_sched_notify(&(lazylist_head)->waitlist); \
-        LAZYLIST_UNLOCK(lazylist_head);                   \
-    }
+#define LAZYLIST_WAIT(lazylist_head) \
+    com_sys_sched_wait_nodrop(&(lazylist_head)->waitlist);
+#define LAZYLIST_NOTIFY(lazylist_head) \
+    com_sys_sched_notify(&(lazylist_head)->waitlist);
 
 #define PHYS_TO_META_INDEX(page_phys) ((uintptr_t)(page_phys) / ARCH_PAGE_SIZE)
 #define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / ARCH_PAGE_SIZE)
@@ -66,24 +57,17 @@
                        __ATOMIC_SEQ_CST)
 #define READ_STATS(field) __atomic_load_n(&MemoryStats.field, __ATOMIC_SEQ_CST)
 
-// NOTE: the defrag thread is not implemented yet (see comments below), so to
-// avoid warnings I mark those functions as used. But to avoid confusion on
-// whether they're really used or not, I use this macro instead. You're welcome
-#define DEFRAG_NOT_IMPLEMENTED KUSED
-
 TAILQ_HEAD(freelist_tailq, freelist_entry);
 
 struct freelist_head {
     struct freelist_tailq head;
-    KSEARCHTREE_ROOT(, freelist_entry) tree;
-    kspinlock_t lock;
+    kspinlock_t           lock;
 };
 
 // A block of one or more contigous pages that points to two more such blocks
 // (one before, one after)
 struct freelist_entry {
     TAILQ_ENTRY(freelist_entry) tqe;
-    KSEARCHTREE_NODE(freelist_entry, uintptr_t) stn;
     size_t pages;
 };
 
@@ -152,11 +136,7 @@ static struct page_meta_array PageMeta = {0};
 // Consolidated data for fast access. Should be accessed atomically after
 // initialization
 static com_pmm_stats_t MemoryStats = {0};
-// Background threads may go to sleep at some point to save CPU time, so they
-// need waitlists. But defrag is not on a lazylist, so it needs its own here
-static com_waitlist_t DefragThreadWaitlist;
-static kspinlock_t    DefragNotifyLock = KSPINLOCK_NEW();
-// To help the defrag thread, the insert thread tires to group pages a little
+// Used by insert thread to group pages together
 static khashmap_t InsertThreadDefragMap;
 
 // UTILITY FUNCTIONS
@@ -355,16 +335,6 @@ page_meta_set(void *page_phys, struct page_meta *tocopy, size_t num_pages) {
 
 // BACKGROUND TASKS
 
-DEFRAG_NOT_IMPLEMENTED static void
-pmm_notify_defrag_callout(com_callout_t *callout) {
-    kspinlock_acquire(&DefragNotifyLock);
-    com_sys_sched_notify(&DefragThreadWaitlist);
-    kspinlock_release(&DefragNotifyLock);
-    com_sys_callout_reschedule(callout,
-                               CONFIG_PMM_DEFRAG_TIMEOUT / 1000UL *
-                                   KNANOS_PER_SEC);
-}
-
 static void pmm_zero_thread(void) {
     bool                   already_done = false;
     struct lazylist_entry *to_zero      = NULL;
@@ -431,7 +401,6 @@ static void pmm_insert_thread(void) {
     struct lazylist_entry *to_insert    = NULL;
     size_t insert_max = READ_STATS(usable) / 10000 * CONFIG_PMM_ZERO_MAX /
                         ARCH_PAGE_SIZE;
-    size_t to_defrag_notify = CONFIG_PMM_NOTIFY_DEFRAG * ARCH_PAGE_SIZE;
 
     while (true) {
         // Allow kernel preemption
@@ -527,26 +496,8 @@ static void pmm_insert_thread(void) {
         }
 
         UPDATE_STATS(to_insert, -pages_inserted);
-        size_t to_defrag = UPDATE_STATS(to_defrag, +pages_inserted);
-
-        if (to_defrag >= to_defrag_notify) {
-            kspinlock_acquire(&DefragNotifyLock);
-            com_sys_sched_notify(&DefragThreadWaitlist);
-            kspinlock_release(&DefragNotifyLock);
-        }
-
         already_done = true;
     }
-}
-
-DEFRAG_NOT_IMPLEMENTED static void pmm_defrag_thread(void) {
-    // TODO: the insert thread tries to defragment things, but it would be
-    // better to also have this thread run every so often to fully defragment
-    // the structure. Say, after a certain amount of time (see callout function
-    // above), after a certain number of pages reinserted, or when the freelist
-    // reaches a certain number of entries. To speed this up, I could use the
-    // search tree (which is ordered by address instead of length) and perform
-    // an in-order visit while merging nodes
 }
 
 // INTERFACE FUNCTIONS
@@ -697,7 +648,6 @@ void com_mm_pmm_init_threads(void) {
     KLOG("initializing pmm threads");
     COM_SYS_THREAD_WAITLIST_INIT(&ZeroLazyList.waitlist);
     COM_SYS_THREAD_WAITLIST_INIT(&InsertLazyList.waitlist);
-    COM_SYS_THREAD_WAITLIST_INIT(&DefragThreadWaitlist);
     KHASHMAP_INIT(&InsertThreadDefragMap);
 
     // Zero thread
@@ -711,8 +661,6 @@ void com_mm_pmm_init_threads(void) {
                                                             pmm_insert_thread);
     insert_thread->runnable     = true;
     TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, insert_thread, threads);
-
-    // Defrag thread
 }
 
 void com_mm_pmm_init(void) {
@@ -721,7 +669,6 @@ void com_mm_pmm_init(void) {
     uintptr_t      highest_addr         = 0;
     uintptr_t      highest_indexed_addr = 0;
     TAILQ_INIT(&MainFreeList.head);
-    KSEARCHTREE_INIT(&MainFreeList.tree);
 
     // Setup the fake entry in the page meta array
     PageMeta.fake_entry.type    = E_PAGE_TYPE_ANONYMOUS;

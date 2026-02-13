@@ -28,6 +28,7 @@ void com_sys_sched_yield_nolock(void);
 void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 
+void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist);
 void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond);
 void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex);
 void com_sys_sched_notify(com_waitlist_t *waitlist);
