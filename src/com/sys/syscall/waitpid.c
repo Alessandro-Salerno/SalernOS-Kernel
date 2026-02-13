@@ -31,8 +31,7 @@ static int waitpid_proc(com_proc_t *curr_proc,
                         com_proc_t *towait,
                         int        *status,
                         int         flags) {
-    if (NULL == towait ||
-        0 == __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) ||
+    if (0 == __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) ||
         NULL == towait || towait->parent_pid != curr_proc->pid) {
         return -ECHILD;
     }
@@ -102,6 +101,10 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         towait = com_sys_proc_get_arbitrary_child(curr_proc);
     } else {
         towait = com_sys_proc_get_by_pid(pid);
+    }
+
+    if (NULL == towait) {
+        return COM_SYS_SYSCALL_ERR(ECHILD);
     }
 
     ksync_acquire(&towait->waitpid_condvar);

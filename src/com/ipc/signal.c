@@ -98,21 +98,7 @@ static int send_to_thread(com_thread_t *thread, int sig) {
     return 0;
 }
 
-void com_ipc_signal_sigset_emptY(com_sigset_t *set) {
-    kmemset(set, sizeof(com_sigset_t), 0);
-}
-
-int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
-    (void)sender;
-    // TODO: should I check permission to send the signal?
-
-    if (!IS_VALID_SIGNAL(sig)) {
-        return EINVAL;
-    }
-
-    KDEBUG("sending signal %d to pid=%d", sig, pid);
-    com_proc_t *proc = com_sys_proc_get_by_pid(pid);
-
+static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
     if (NULL == proc) {
         return ESRCH;
     }
@@ -120,7 +106,6 @@ int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
     kspinlock_acquire(&proc->signal_lock);
     if (proc->exited) {
         kspinlock_release(&proc->signal_lock);
-        COM_SYS_PROC_RELEASE(proc);
         return ESRCH;
     }
 
@@ -140,9 +125,26 @@ int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
 
     kspinlock_release(&proc->threads_lock);
     kspinlock_release(&proc->signal_lock);
-    COM_SYS_PROC_RELEASE(proc);
 
     return 0;
+}
+
+void com_ipc_signal_sigset_emptY(com_sigset_t *set) {
+    kmemset(set, sizeof(com_sigset_t), 0);
+}
+
+int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
+    (void)sender;
+    // TODO: should I check permission to send the signal?
+
+    if (!IS_VALID_SIGNAL(sig)) {
+        return EINVAL;
+    }
+
+    KDEBUG("sending signal %d to pid=%d", sig, pid);
+    com_proc_t *proc = com_sys_proc_get_by_pid(pid);
+
+    return send_to_proc(proc, sig, sender);
 }
 
 int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
@@ -161,7 +163,7 @@ int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
     kspinlock_acquire(&group->procs_lock);
     com_proc_t *p, *_;
     TAILQ_FOREACH_SAFE(p, &group->procs, procs, _) {
-        com_ipc_signal_send_to_proc(p->pid, sig, sender);
+        send_to_proc(p, sig, sender);
     }
     kspinlock_release(&group->procs_lock);
 
