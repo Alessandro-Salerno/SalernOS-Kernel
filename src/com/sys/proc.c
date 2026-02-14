@@ -413,7 +413,9 @@ com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
         group->session = leader->proc_group->session;
     }
 
-    KASSERT(0 == kradixtree_put_nolock(&ProcGroupMap, group->pgid, group));
+    KASSERT_CALL(0,
+                 ==,
+                 kradixtree_put_nolock(&ProcGroupMap, group->pgid, group));
     KDEBUG("created pgid=%d", group->pgid);
     kspinlock_release(&ProcGroupMap.lock);
     return group;

@@ -106,7 +106,9 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     COM_SYS_THREAD_WAITLIST_INIT(&default_futex->waiters);
                     KSYNC_INIT_MUTEX(&default_futex->condvar);
 
-                    KASSERT(0 == KHASHMAP_PUT(&FutexMap, &phys, default_futex));
+                    KASSERT_CALL(0,
+                                 ==,
+                                 KHASHMAP_PUT(&FutexMap, &phys, default_futex));
                     futex = default_futex;
                 } else if (0 != get_ret) {
                     kmutex_release(&FutexLock);

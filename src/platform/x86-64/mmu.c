@@ -458,7 +458,7 @@ void arch_mmu_init(void) {
                 uint64_t pt_entry = ((entry->base + i) & ADDRMASK) |
                                     ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                                     ARCH_MMU_FLAGS_NOEXEC | other_flags;
-                KASSERT(add_page(
+                KASSERT_CALL_SUCCESSFUL(add_page(
                     (arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                     (uint64_t *)ARCH_PHYS_TO_HHDM(entry->base + i),
                     pt_entry,
@@ -481,10 +481,11 @@ void arch_mmu_init(void) {
            _TEXT_END);
     for (uintptr_t i = (uintptr_t)_TEXT_START; i < (uintptr_t)_TEXT_END;
          i += ARCH_PAGE_SIZE) {
-        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                         (uint64_t *)i,
-                         ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
-                         0));
+        KASSERT_CALL_SUCCESSFUL(
+            add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
+                     0));
     }
 
     KDEBUG("mapping kernel rodata section (virtual: %p -> %p)",
@@ -492,11 +493,12 @@ void arch_mmu_init(void) {
            _RODATA_END);
     for (uintptr_t i = (uintptr_t)_RODATA_START; i < (uintptr_t)_RODATA_END;
          i += ARCH_PAGE_SIZE) {
-        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                         (uint64_t *)i,
-                         ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                             ARCH_MMU_FLAGS_NOEXEC,
-                         0));
+        KASSERT_CALL_SUCCESSFUL(
+            add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_NOEXEC,
+                     0));
     }
 
     KDEBUG(
@@ -505,11 +507,12 @@ void arch_mmu_init(void) {
         _DATA_END);
     for (uintptr_t i = (uintptr_t)_DATA_START; i < (uintptr_t)_DATA_END;
          i += ARCH_PAGE_SIZE) {
-        KASSERT(add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
-                         (uint64_t *)i,
-                         ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                             ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
-                         0));
+        KASSERT_CALL_SUCCESSFUL(
+            add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
+                     (uint64_t *)i,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
+                     0));
     }
 
     arch_mmu_switch((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable));

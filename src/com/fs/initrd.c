@@ -57,16 +57,18 @@ static void create_node(com_vnode_t      **file,
                         com_vnode_t       *dir,
                         struct tar_header *hdr) {
     if (GNUTAR_DIR == hdr->type) {
-        KASSERT(0 == com_fs_vfs_mkdir(file, dir, name, namelen, 0));
+        KASSERT_CALL(0, ==, com_fs_vfs_mkdir(file, dir, name, namelen, 0));
         return;
     }
 
-    KASSERT(0 == com_fs_vfs_create(file, dir, name, namelen, 0));
+    KASSERT_CALL(0, ==, com_fs_vfs_create(file, dir, name, namelen, 0));
     void  *contents  = (uint8_t *)hdr + 512;
     size_t file_size = oct_atoi(hdr->size, 11);
     size_t written   = 0;
     COM_FS_VFS_VNODE_HOLD((*file));
-    KASSERT(0 == com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
+    KASSERT_CALL(0,
+                 ==,
+                 com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
     KASSERT(file_size == written);
     COM_FS_VFS_VNODE_RELEASE((*file));
 }

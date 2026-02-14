@@ -47,14 +47,12 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
 
     com_file_t *sockfile = com_sys_proc_get_file(curr_proc, sockfd);
     if (NULL == sockfile) {
-        KASSERT("no file with this fd");
         ret = COM_SYS_SYSCALL_ERR(EBADF);
         goto end;
     }
 
     if (NULL == sockfile->vnode ||
         E_COM_VNODE_TYPE_SOCKET != sockfile->vnode->type) {
-        KASSERT("file is not a socket");
         ret = COM_SYS_SYSCALL_ERR(ENOTSOCK);
         goto end;
     }
@@ -70,14 +68,12 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
                                          server_socket,
                                          sockfile->flags);
     if (0 != sock_ret) {
-        KASSERT("bad socket return");
         ret = COM_SYS_SYSCALL_ERR(sock_ret);
         goto end;
     }
 
     int new_fd = com_sys_proc_next_fd(curr_proc);
     if (-1 == new_fd) {
-        KASSERT("too many files");
         ret = COM_SYS_SYSCALL_ERR(EMFILE);
         goto end;
     }

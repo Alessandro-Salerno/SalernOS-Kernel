@@ -108,8 +108,14 @@
 
 #if CONFIG_ASSERT_ACTION == CONST_ASSERT_REMOVE
 #define KASSERT(statement)
+#define KASSERT_CALL(retval, eq, fn) fn
+#define KASSERT_CALL_SUCCESSFUL(fn)  fn
+
 #elif CONFIG_ASSERT_ACTION == CONST_ASSERT_EXPAND
-#define KASSERT(statement) (statement)
+#define KASSERT(statement)           (statement)
+#define KASSERT_CALL(retval, eq, fn) fn
+#define KASSERT_CALL_SUCCESSFUL(fn)  fn
+
 #elif CONFIG_ASSERT_ACTION == CONST_ASSERT_SOFT
 #define KASSERT(statement)                                        \
     if (KUNKLIKELY(!(statement))) {                               \
@@ -121,6 +127,9 @@
                                                   " failed\n");   \
         com_io_log_unlock();                                      \
     }
+#define KASSERT_CALL(retval, eq, fn) KASSERT(retval eq fn)
+#define KASSERT_CALL_SUCCESSFUL(fn)  KASSERT(fn)
+
 #elif CONFIG_ASSERT_ACTION == CONST_ASSERT_PANIC
 #define KASSERT(statement)                                        \
     if (KUNKLIKELY(!(statement))) {                               \
@@ -138,6 +147,9 @@
                       __LINE__,                                   \
                       #statement);                                \
     }
+#define KASSERT_CALL(retval, eq, fn) KASSERT(retval eq fn)
+#define KASSERT_CALL_SUCCESSFUL(fn)  KASSERT(fn)
+
 #else
 #error "unsupported assert action, check config/config.h"
 #endif
