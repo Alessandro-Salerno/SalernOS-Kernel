@@ -24,14 +24,11 @@
 // CREDIT: vloxei64/ke
 // TODO: why doesn't this work at boot time?
 
-void kmutex_acquire(kmutex_t *mutex) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
-
-    for (size_t i = 0; i < CONFIG_MUTEX_RETRIES; i++) {
+static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
+    for (size_t i = 0; i < retries; i++) {
         kspinlock_acquire(&mutex->lock);
         if (!mutex->locked) {
-            goto take;
+            return true;
         }
         // TODO: check if owner is running on the same CPU and go straight to
         // wait. This cannot be odne right now because, logically, if we are
@@ -40,6 +37,27 @@ void kmutex_acquire(kmutex_t *mutex) {
         // CPU.
         kspinlock_release(&mutex->lock);
         ARCH_CPU_PAUSE();
+    }
+
+    return false;
+}
+
+bool kmutex_try_acquire(kmutex_t *mutex) {
+    if (!try_acquire_internal(mutex, 1)) {
+        return false;
+    }
+
+    mutex->locked = true;
+    mutex->owner  = ARCH_CPU_GET_THREAD();
+    kspinlock_release(&mutex->lock);
+}
+
+void kmutex_acquire(kmutex_t *mutex) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
+
+    if (try_acquire_internal(mutex, CONFIG_MUTEX_RETRIES)) {
+        goto take;
     }
 
     kspinlock_acquire(&mutex->lock);

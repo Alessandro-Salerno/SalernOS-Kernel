@@ -20,6 +20,7 @@
 
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <vendor/tailq.h>
 
@@ -36,5 +37,6 @@ typedef struct kmutex {
     com_waitlist_t     waiters;
 } kmutex_t;
 
+bool kmutex_try_acquire(kmutex_t *mutex);
 void kmutex_acquire(kmutex_t *mutex);
 void kmutex_release(kmutex_t *mutex);

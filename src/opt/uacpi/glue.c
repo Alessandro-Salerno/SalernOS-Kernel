@@ -463,12 +463,21 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
  * The contents of the allocated memory are unspecified.
  */
 void *uacpi_kernel_alloc(uacpi_size size) {
-    if (size < ARCH_PAGE_SIZE) {
-        return com_mm_slab_alloc(size);
+    // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
+    uacpi_size alloc_size = size + 16;
+    void      *buffer     = NULL;
+
+    if (alloc_size < ARCH_PAGE_SIZE) {
+        buffer = com_mm_slab_alloc(alloc_size);
+        goto end;
     }
 
-    size_t num_pages = (size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(num_pages));
+    size_t num_pages = (alloc_size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
+    buffer = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(num_pages));
+
+end:
+    *(uacpi_size *)buffer = alloc_size;
+    return (char *)buffer + 16;
 }
 
 #ifdef UACPI_NATIVE_ALLOC_ZEROED
@@ -477,12 +486,21 @@ void *uacpi_kernel_alloc(uacpi_size size) {
  * The returned memory block is expected to be zero-filled.
  */
 void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
-    if (size < ARCH_PAGE_SIZE) {
-        return com_mm_slab_alloc(size);
+    // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
+    uacpi_size alloc_size = size + 16;
+    void      *buffer     = NULL;
+
+    if (alloc_size < ARCH_PAGE_SIZE) {
+        buffer = com_mm_slab_alloc(alloc_size);
+        goto end;
     }
 
-    size_t num_pages = (size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    return (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(num_pages));
+    size_t num_pages = (alloc_size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
+    buffer = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(num_pages));
+
+end:
+    *(uacpi_size *)buffer = alloc_size;
+    return (char *)buffer + 16;
 }
 #endif
 
@@ -498,16 +516,23 @@ void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
  */
 #ifndef UACPI_SIZED_FREES
 void uacpi_kernel_free(void *mem) {
-}
-#else
-void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
+    if (NULL == mem) {
+        return;
+    }
+
+    void      *base      = (char *)mem - 16;
+    uacpi_size size_hint = *(uacpi_size *)base;
+
     if (size_hint < ARCH_PAGE_SIZE) {
-        com_mm_slab_free(mem, size_hint);
+        com_mm_slab_free(base, size_hint);
         return;
     }
 
     size_t num_pages = (size_hint + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(mem), num_pages);
+    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(base), num_pages);
+}
+#else
+void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
 }
 #endif
 
@@ -551,10 +576,12 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
  * Create/free an opaque non-recursive kernel mutex object.
  */
 uacpi_handle uacpi_kernel_create_mutex(void) {
-    return uacpi_kernel_create_spinlock();
+    kmutex_t *mutex = com_mm_slab_alloc(sizeof(*mutex));
+    KMUTEX_INIT(mutex);
+    return mutex;
 }
 void uacpi_kernel_free_mutex(uacpi_handle handle) {
-    uacpi_kernel_free_spinlock(handle);
+    com_mm_slab_free(handle, sizeof(kmutex_t));
 }
 
 /*
@@ -604,15 +631,22 @@ uacpi_thread_id uacpi_kernel_get_thread_id(void) {
  */
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle,
                                         uacpi_u16    timeout) {
-    if (kspinlock_acquire_timeout((kspinlock_t *)handle, timeout)) {
-        return UACPI_STATUS_OK;
+    kmutex_t *mutex = (void *)handle;
+
+    if (0 == timeout) {
+        if (kmutex_try_acquire(mutex)) {
+            return UACPI_STATUS_OK;
+        }
+        return UACPI_STATUS_TIMEOUT;
     }
 
-    return UACPI_STATUS_TIMEOUT;
+    // TODO: add check for timed wait
+    kmutex_acquire(mutex);
+    return UACPI_STATUS_OK;
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
-    uacpi_kernel_unlock_spinlock(handle, 0);
+    kmutex_release((kmutex_t *)handle);
 }
 
 /*
