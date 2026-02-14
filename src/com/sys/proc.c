@@ -75,7 +75,6 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     proc->cwd                 = cwd;
     proc->num_ref             = 1; // 1 because of the parent
     proc->num_running_threads = 0;
-    KSYNC_INIT_SPINLOCK(&proc->waitpid_condvar);
     COM_SYS_THREAD_WAITLIST_INIT(&proc->waitpid_waitlist);
 
     proc->threads_lock = KSPINLOCK_NEW();
@@ -345,13 +344,13 @@ void com_sys_proc_exit(com_proc_t *proc, int status) {
     proc->exit_status = status;
     kspinlock_release(&proc->signal_lock);
 
-    ksync_notify(&proc->waitpid_condvar, &proc->waitpid_waitlist);
+    com_sys_sched_notify_all(&proc->waitpid_waitlist);
     com_ipc_signal_send_to_proc(proc->parent_pid, SIGCHLD, proc);
 
     KDEBUG("pid=%d exited with code %d", proc->pid, status);
 }
 
-void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
+void com_sys_proc_stop_nolock(com_proc_t *proc, int stop_signal) {
     KASSERT(COM_IPC_SIGNAL_NONE != stop_signal);
 
     if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
@@ -364,11 +363,11 @@ void com_sys_proc_stop(com_proc_t *proc, int stop_signal) {
     com_thread_t *t, *_;
     kspinlock_acquire(&proc->threads_lock);
     TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        com_ipc_signal_send_to_thread(t, stop_signal, proc);
+        com_ipc_signal_send_to_thread_nolock(t, stop_signal, proc);
     }
     kspinlock_release(&proc->threads_lock);
 
-    ksync_notify(&proc->waitpid_condvar, &proc->waitpid_waitlist);
+    com_sys_sched_notify_all(&proc->waitpid_waitlist);
     com_ipc_signal_send_to_proc(proc->parent_pid, SIGCHLD, proc);
 }
 

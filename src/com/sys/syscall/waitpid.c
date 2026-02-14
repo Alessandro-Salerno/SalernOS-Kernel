@@ -37,11 +37,19 @@ static int waitpid_proc(com_proc_t *curr_proc,
     }
 
     while (true) {
+        kspinlock_acquire(&towait->signal_lock);
+
+        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check_nolock()) {
+            kspinlock_release(&towait->signal_lock);
+            return -EINTR;
+        }
+
         if (towait->exited) {
-            *status = (towait->exit_status & 0xff);
+            *status = (towait->exit_status & 0xff) << 8;
             if (COM_IPC_SIGNAL_NONE != towait->stop_signal) {
                 *status |= towait->stop_signal & 0x7f;
             }
+            kspinlock_release(&towait->signal_lock);
             int ret = towait->pid;
             COM_SYS_PROC_RELEASE(towait);
             return ret;
@@ -54,19 +62,17 @@ static int waitpid_proc(com_proc_t *curr_proc,
 
             *status               = 0x7F | (towait->stop_signal << 8);
             towait->stop_notified = true;
+            kspinlock_release(&towait->signal_lock);
             return towait->pid;
         }
 
     do_wait:
+        kspinlock_release(&towait->signal_lock);
         if (WNOHANG & flags) {
             return 0;
         }
 
-        ksync_wait(&towait->waitpid_condvar, &towait->waitpid_waitlist);
-
-        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
-            return -EINTR;
-        }
+        com_sys_sched_wait_nodrop(&towait->waitpid_waitlist);
     }
 }
 
@@ -107,9 +113,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         return COM_SYS_SYSCALL_ERR(ECHILD);
     }
 
-    ksync_acquire(&towait->waitpid_condvar);
     ret = waitpid_proc(curr_proc, towait, status, flags);
-    ksync_release(&towait->waitpid_condvar);
     COM_SYS_PROC_RELEASE(towait);
 
 end:

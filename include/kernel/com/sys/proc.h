@@ -61,38 +61,40 @@ typedef struct com_proc_group {
 } com_proc_group_t;
 
 typedef struct com_proc {
-    pid_t pid;
-    pid_t parent_pid;
-    bool  exited;
-    // COM_IPC_SIGNAL_NONE if not stopped, signal number otherwise
-    int                stop_signal;
-    bool               stop_notified;
-    int                exit_status;
+    pid_t              pid;
+    pid_t              parent_pid;
     com_vmm_context_t *vmm_context;
     size_t             num_children;
 
-    com_vnode_t           *root;
-    _Atomic(com_vnode_t *) cwd;
-    kspinlock_t            fd_lock;
-    int                    next_fd;
-    com_filedesc_t         fd[CONFIG_OPEN_MAX];
-
-    struct ksync        waitpid_condvar;
-    struct com_waitlist waitpid_waitlist;
-
+    // Threads
     kspinlock_t             threads_lock;
     struct com_thread_tailq threads;
     size_t                  num_ref;
     size_t                  num_running_threads;
 
+    // Process groups
     kspinlock_t       pg_lock;
     com_proc_group_t *proc_group;
     TAILQ_ENTRY(com_proc) procs;
     bool did_execve;
 
-    kspinlock_t           signal_lock;
-    struct com_sigaction *sigaction[NSIG];
-    com_sigmask_t         pending_signals;
+    // Termination & signals
+    // COM_IPC_SIGNAL_NONE if not stopped, signal number otherwise
+    KCACHE_FRIENDLY kspinlock_t signal_lock;
+    com_sigmask_t               pending_signals;
+    bool                        exited;
+    int                         stop_signal;
+    bool                        stop_notified;
+    int                         exit_status;
+    struct com_waitlist         waitpid_waitlist;
+    struct com_sigaction       *sigaction[NSIG];
+
+    // File system
+    KCACHE_FRIENDLY com_vnode_t *root;
+    _Atomic(com_vnode_t *)       cwd;
+    kspinlock_t                  fd_lock;
+    int                          next_fd;
+    com_filedesc_t               fd[CONFIG_OPEN_MAX];
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
@@ -130,7 +132,7 @@ void com_sys_proc_kill_other_threads_nolock(com_proc_t        *proc,
                                             struct com_thread *excluded);
 
 void com_sys_proc_exit(com_proc_t *proc, int status);
-void com_sys_proc_stop(com_proc_t *proc, int stop_signal);
+void com_sys_proc_stop_nolock(com_proc_t *proc, int stop_signal);
 void com_sys_proc_terminate(com_proc_t *proc, int ecode);
 void com_sys_proc_hide(com_proc_t *proc);
 

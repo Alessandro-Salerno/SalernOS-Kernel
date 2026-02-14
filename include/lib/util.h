@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <arch/info.h>
 #include <kernel/com/io/log.h>
 
 #define KSTR_HELPER(x) #x
@@ -38,6 +39,8 @@
 
 // NOTE: only works if multiple is a power of 2
 #define KMOD_FAST(value, multiple) ((value) & ((multiple) - 1))
+
+#define KCACHE_FRIENDLY __attribute__((aligned(ARCH_CACHE_ALIGN)))
 
 #if CONFIG_LOG_LOCATION == CONST_LOG_LOCATION_NONE
 #define __LOG_LOCATION()

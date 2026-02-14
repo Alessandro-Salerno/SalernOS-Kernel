@@ -75,6 +75,9 @@ int  com_ipc_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
 int  com_ipc_signal_send_to_proc_group(pid_t            pgid,
                                        int              sig,
                                        struct com_proc *sender);
+int  com_ipc_signal_send_to_thread_nolock(struct com_thread *thread,
+                                          int                sig,
+                                          struct com_proc   *sender);
 int  com_ipc_signal_send_to_thread(struct com_thread *thread,
                                    int                sig,
                                    struct com_proc   *sender);

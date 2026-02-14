@@ -23,6 +23,7 @@
 
 #define ARCH_PAGE_SIZE      4096UL
 #define ARCH_NUM_INTERRUPTS 256
+#define ARCH_CACHE_ALIGN    64
 
 #define ARCH_PHYS_TO_HHDM(addr) \
     ((uintptr_t)0xffff800000000000 + (uintptr_t)(addr))

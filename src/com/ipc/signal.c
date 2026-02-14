@@ -170,18 +170,23 @@ int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
     return 0;
 }
 
-int com_ipc_signal_send_to_thread(struct com_thread *thread,
-                                  int                sig,
-                                  com_proc_t        *sender) {
+int com_ipc_signal_send_to_thread_nolock(struct com_thread *thread,
+                                         int                sig,
+                                         struct com_proc   *sender) {
     (void)sender;
     // TODO: (same as for proc) actually check that this can be done (sender
     // check)
+    send_to_thread(thread, sig);
+    return 0;
+}
+
+int com_ipc_signal_send_to_thread(struct com_thread *thread,
+                                  int                sig,
+                                  com_proc_t        *sender) {
+
     kspinlock_acquire(&thread->proc->signal_lock);
-    int ret = send_to_thread(thread, sig);
+    int ret = com_ipc_signal_send_to_thread_nolock(thread, sig, sender);
     kspinlock_release(&thread->proc->signal_lock);
-    if (TKILL_STATUS_MASKED == ret) {
-        return 0;
-    }
     return ret;
 }
 
@@ -191,7 +196,7 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     kspinlock_acquire(&proc->signal_lock);
     int sig = com_ipc_signal_check_nolock();
 
-    if (-1 == sig) {
+    if (COM_IPC_SIGNAL_NONE == sig) {
         goto end;
     }
 
@@ -206,10 +211,10 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KDEBUG("killing pid=%d because it received a deadly signal %d",
                    proc->pid,
                    sig);
+            proc->stop_signal = sig;
             kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
-            proc->stop_signal = sig;
             com_sys_proc_terminate(proc, 0);
             com_sys_sched_yield();
 
@@ -220,24 +225,24 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KASSERT(false);
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
-            kspinlock_release(&proc->signal_lock);
-
-            // com_sys_proc_stop will return early if the stop signal has
+            // com_sys_proc_stop_nolock will return early if the stop signal has
             // already been sent to a single thread. This way we don't flood the
             // system with an infinite number of stop signals
-            com_sys_proc_stop(proc, sig);
+            com_sys_proc_stop_nolock(proc, sig);
 
-            // we clear the stop signal because com_sys_proc_stop may have sent
-            // it to us again
+            // we clear the stop signal because com_sys_proc_stop_nolock may
+            // have sent it to us again
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+            kspinlock_release(&proc->signal_lock);
 
-            // com_sys_proc_stop will ensure that the signal is sent to all
-            // threads, so all will arrive here, and all will set themselves to
-            // not runnable
+            // com_sys_proc_stop_nolock will ensure that the signal is sent to
+            // all threads, so all will arrive here, and all will set themselves
+            // to not runnable
             kspinlock_acquire(&thread->sched_lock);
             thread->runnable = false;
             com_sys_sched_yield_nolock();
 
+            kspinlock_acquire(&proc->signal_lock);
             KASSERT(COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->pending_signals,
                                                  SIGCONT));
 
@@ -245,11 +250,9 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // Execution gets beck here after the process receives a SIGCONT, as
             // can be seen in send_to_thread
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
-            ksync_acquire(&proc->waitpid_condvar);
             proc->stop_signal   = COM_IPC_SIGNAL_NONE;
             proc->stop_notified = false;
-            ksync_release(&proc->waitpid_condvar);
-            return;
+            goto end;
         } else if (SA_IGNORE & SignalProperties[sig]) {
             goto end;
         }
