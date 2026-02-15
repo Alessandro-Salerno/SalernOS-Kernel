@@ -46,8 +46,10 @@ typedef struct com_waitlist {
 #include <sys/types.h>
 
 typedef struct com_thread_timer {
+    kspinlock_t      lock;
     struct itimerval itimerval;
-    uintmax_t        ctime; // when it was created
+    uintmax_t        ctime;      // when it was created
+    void            *itimer_arg; // see src/com/sys/syscall/setitimer.c
 } com_thread_timer_t;
 
 typedef struct com_thread {

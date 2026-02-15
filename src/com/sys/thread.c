@@ -49,6 +49,8 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
 
     thread->waiting_on = NULL;
 
+    thread->real_timer.lock = KSPINLOCK_NEW();
+
     COM_IPC_SIGNAL_SIGMASK_INIT(&thread->pending_signals);
     COM_IPC_SIGNAL_SIGMASK_INIT(&thread->masked_signals);
 

@@ -52,6 +52,11 @@ void kinitlog(const char *category, const char *color) {
         goto log;
     }
 
+    if (curr_thread == curr_cpu->idle_thread) {
+        printf("IDLE");
+        goto log;
+    }
+
     printf("tid=%d/", curr_thread->tid);
 
     if (NULL == curr_thread->proc) {

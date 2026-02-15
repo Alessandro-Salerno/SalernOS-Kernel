@@ -34,8 +34,9 @@
 #define KUSER_DATA __attribute__((section(".user_data")))
 #define KUSED      __attribute__((used))
 
-#define KNANOS_PER_SEC 1000000000UL
-#define KFPS(fps)      (KNANOS_PER_SEC / (fps))
+#define KNANOS_PER_SEC  1000000000UL
+#define KMICROS_PER_SEC (KNANOS_PER_SEC / 1000)
+#define KFPS(fps)       (KNANOS_PER_SEC / (fps))
 
 // NOTE: only works if multiple is a power of 2
 #define KMOD_FAST(value, multiple) ((value) & ((multiple) - 1))
