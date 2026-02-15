@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <lib/mutex.h>
 #include <lib/util.h>
@@ -50,9 +51,12 @@ bool kmutex_try_acquire(kmutex_t *mutex) {
     mutex->locked = true;
     mutex->owner  = ARCH_CPU_GET_THREAD();
     kspinlock_release(&mutex->lock);
+    return true;
 }
 
 void kmutex_acquire(kmutex_t *mutex) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE);
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
@@ -69,6 +73,7 @@ take:
     mutex->locked = true;
     mutex->owner  = curr_thread;
     kspinlock_release(&mutex->lock);
+    com_sys_profiler_end_function(&profiler_data);
 }
 
 void kmutex_release(kmutex_t *mutex) {

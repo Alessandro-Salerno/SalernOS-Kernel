@@ -102,10 +102,12 @@ typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
 
 typedef struct com_syscall {
     com_intf_syscall_t handler;
-    size_t             num_args;
-    const char        *name;
-    const char        *arg_names[6];
-    int                arg_types[6];
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
+    const char *name;
+    size_t      num_args;
+    const char *arg_names[6];
+    int         arg_types[6];
+#endif
 } com_syscall_t;
 
 void              com_sys_syscall_register(uintmax_t          number,
@@ -180,3 +182,4 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer);
 COM_SYS_SYSCALL(com_sys_syscall_mkdirat);
 COM_SYS_SYSCALL(com_sys_syscall_getpeername);
 COM_SYS_SYSCALL(com_sys_syscall_munmap);
+COM_SYS_SYSCALL(com_sys_syscall_sysprofile);

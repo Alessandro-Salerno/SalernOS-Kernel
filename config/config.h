@@ -85,20 +85,18 @@
 #define CONFIG_PMM_DEFRAG_MAX           500
 
 // Misc
-#define CONFIG_TERM_FPS             60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC           1 /* Display kernel panic to fallback terminal */
-#define CONFIG_INIT_PATH            "/boot/init" /* Path to init executable */
-#define CONFIG_INIT_ARGV            NULL         /* Init program argv */
-#define CONFIG_INIT_ENV             NULL         /* Init program env */
-#define CONFIG_CALLOUT_MODE         CONST_CALLOUT_ONLY_BSP
-#define CONFIG_MUTEX_RETRIES        60
-#define CONFIG_UNIX_SOCK_RB_SIZE    (256UL * 1024UL)
-#define CONFIG_VMM_ANON_START       0x100000000
-#define CONFIG_VMM_REAPER_NOTIFY    8
-#define CONFIG_DEFAULT_KBD_LAYOUT   en_us
-#define CONFIG_SCHED_REAPER_NOTIFY  32
-#define CONFIG_PMM_NOTIFY_ZERO      200 /* % of memory to zero before notify */
-#define CONFIG_PMM_NOTIFY_INSERT    200 /* % of memory to free before notify */
-#define CONFIG_PMM_NOTIFY_DEFRAG    400 /* % of max pages freed since defrag */
-#define CONFIG_PMM_DEFRAG_TIMEOUT   10000 /* max time since last defrag (ms) */
-#define CONFIG_PMM_DEFRAG_THRESHOLD 100   /* min % of memory since defrag */
+#define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC         1 /* Display kernel panic to fallback terminal */
+#define CONFIG_INIT_PATH          "/boot/init" /* Path to init executable */
+#define CONFIG_INIT_ARGV          NULL         /* Init program argv */
+#define CONFIG_INIT_ENV           NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE       CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_RETRIES      60
+#define CONFIG_UNIX_SOCK_RB_SIZE  (256UL * 1024UL)
+#define CONFIG_VMM_ANON_START     0x100000000
+#define CONFIG_VMM_REAPER_NOTIFY  8
+#define CONFIG_DEFAULT_KBD_LAYOUT en_us
+#define CONFIG_PMM_NOTIFY_ZERO    200 /* % of memory to zero before notify */
+#define CONFIG_PMM_NOTIFY_INSERT  200 /* % of memory to free before notify */
+#define CONFIG_TRACK_SLEEP_TIME   1
+#define CONFIG_USE_PROFILER       1

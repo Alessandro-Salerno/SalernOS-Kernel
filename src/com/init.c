@@ -39,6 +39,7 @@
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
@@ -224,5 +225,6 @@ void com_init_pid1(void) {
     com_io_term_enable(MainTerm);
     com_io_term_set_buffering(MainTerm, true);
     com_io_log_set_vnode(NULL);
+    com_sys_profiler_init();
     arch_context_trampoline(&thread->ctx);
 }

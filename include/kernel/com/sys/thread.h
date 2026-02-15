@@ -67,6 +67,8 @@ typedef struct com_thread {
     pid_t tid;
 
     com_waitlist_t *waiting_on;
+    uintmax_t       ctime;
+    uintmax_t       time_slept;
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;

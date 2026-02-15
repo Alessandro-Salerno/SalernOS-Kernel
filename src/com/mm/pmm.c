@@ -22,6 +22,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/panic.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/info.h>
@@ -503,6 +504,8 @@ static void pmm_insert_thread(void) {
 // INTERFACE FUNCTIONS
 
 void *com_mm_pmm_alloc(void) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_PMM_ALLOC);
     FREELIST_LOCK(&MainFreeList);
     struct freelist_entry *virt_ret = freelist_pop_rear_nolock(&MainFreeList);
     FREELIST_UNLOCK(&MainFreeList);
@@ -520,6 +523,7 @@ void *com_mm_pmm_alloc(void) {
     UPDATE_STATS(used, +1);
     UPDATE_STATS(free, -1);
 
+    com_sys_profiler_end_function(&profiler_data);
     return phys;
 }
 
@@ -528,6 +532,8 @@ void *com_mm_pmm_alloc_many(size_t pages) {
         return com_mm_pmm_alloc();
     }
 
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_PMM_ALLOC);
     FREELIST_LOCK(&MainFreeList);
     size_t                 alloc_size;
     struct freelist_entry *virt_ret = freelist_pop_front_nolock(&alloc_size,
@@ -547,6 +553,7 @@ void *com_mm_pmm_alloc_many(size_t pages) {
     UPDATE_STATS(used, +pages);
     UPDATE_STATS(free, -pages);
 
+    com_sys_profiler_end_function(&profiler_data);
     return phys;
 }
 

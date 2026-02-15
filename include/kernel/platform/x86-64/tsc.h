@@ -37,6 +37,10 @@ static inline uint64_t __hdr_x86_64_tsc_read(void) {
 
 static inline uintmax_t __hdr_x86_64_tsc_val_to_ns(uint64_t  tsc_freq,
                                                    uintmax_t val) {
+    if (0 == tsc_freq) {
+        return 0;
+    }
+
     uint64_t secs       = val / tsc_freq;
     uint64_t secs_to_ns = secs * 1000UL * 1000UL * 1000UL;
 

@@ -48,6 +48,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_SEQ_CST);
 
     thread->waiting_on = NULL;
+    thread->ctime      = ARCH_CPU_GET_TIME();
 
     thread->real_timer.lock = KSPINLOCK_NEW();
 

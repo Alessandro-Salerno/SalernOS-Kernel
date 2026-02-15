@@ -17,36 +17,48 @@
 *************************************************************************/
 
 #include <arch/libhelp.h>
+#include <kernel/com/sys/profiler.h>
 #include <lib/mem.h>
 #include <stddef.h>
 #include <stdint.h>
 
 void *kmemset(void *buff, size_t buffsize, uint8_t val) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMSET);
 #ifdef ARCH_LIBHELP_FAST_MEMSET
-    ARCH_LIBHELP_FAST_MEMSET(buff, val, buffsize);
+    void  *dst = buff;
+    size_t n   = buffsize;
+    ARCH_LIBHELP_FAST_MEMSET(dst, val, n);
 #else
     // Use compiler optiimzations for better performance
     for (uint64_t i = 0; i < buffsize; i++) {
         *(uint8_t *)((uint64_t)(buff) + i) = val;
     }
 #endif
+    com_sys_profiler_end_function(&profiler_data);
     return buff;
 }
 
 int8_t kmemcmp(const void *buff1, const void *buff2, size_t buffsize) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMCMP);
     for (uint64_t i = 0; i < buffsize; i++) {
         uint8_t buff1val = *(uint8_t *)(buff1 + i);
         uint8_t buff2val = *(uint8_t *)(buff2 + i);
 
         if (buff1val != buff2val) {
+            com_sys_profiler_end_function(&profiler_data);
             return -1;
         }
     }
 
+    com_sys_profiler_end_function(&profiler_data);
     return 0;
 }
 
 void *kmemcpy(void *dst, const void *src, size_t buffsize) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMCPY);
 #ifdef ARCH_LIBHELP_FAST_MEMCPY
     ARCH_LIBHELP_FAST_MEMCPY(dst, src, buffsize);
 #else
@@ -58,34 +70,45 @@ void *kmemcpy(void *dst, const void *src, size_t buffsize) {
         *(uint8_t *)(dst_off + i) = val;
     }
 #endif
+    com_sys_profiler_end_function(&profiler_data);
     return dst;
 }
 
 void *kmemchr(const void *str, int c, size_t n) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMCHR);
     const unsigned char *s = str;
     for (size_t i = 0; i < n; i++) {
         if (c == s[i]) {
+            com_sys_profiler_end_function(&profiler_data);
             return (void *)&s[i];
         }
     }
 
+    com_sys_profiler_end_function(&profiler_data);
     return NULL;
 }
 
 void *kmemrchr(const void *str, int c, size_t n) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMRCHR);
     const unsigned char *s = str;
     c                      = (unsigned char)c;
 
     while (n--) {
         if (s[n] == c) {
+            com_sys_profiler_end_function(&profiler_data);
             return (void *)(s + n);
         }
     }
 
+    com_sys_profiler_end_function(&profiler_data);
     return NULL;
 }
 
 void *kmemmove(void *dst, void *src, size_t n) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KMEMMOVE);
     if (src > dst) {
         kmemcpy(dst, src, n);
     } else if (src < dst) {
@@ -100,6 +123,7 @@ void *kmemmove(void *dst, void *src, size_t n) {
 #endif
     }
 
+    com_sys_profiler_end_function(&profiler_data);
     return dst;
 }
 

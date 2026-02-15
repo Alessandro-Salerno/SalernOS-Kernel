@@ -21,6 +21,7 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/syscall.h>
@@ -111,9 +112,11 @@ void com_sys_syscall_register(uintmax_t          number,
                               ...) {
     KASSERT(number < CONFIG_SYSCALL_MAX);
     volatile com_syscall_t *syscall = &SyscallTable[number];
-    syscall->name                   = name;
     syscall->handler                = handler;
-    syscall->num_args               = num_args;
+
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
+    syscall->name     = name;
+    syscall->num_args = num_args;
 
     if (0 == num_args) {
         return;
@@ -128,6 +131,10 @@ void com_sys_syscall_register(uintmax_t          number,
         syscall->arg_types[i] = arg_type;
     }
     va_end(args);
+#else
+    (void)name;
+    (void)num_args;
+#endif
 }
 
 com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
@@ -159,8 +166,11 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     (void)invoke_ip;
 #endif
 
+    com_profiler_data_t profiler_data = com_sys_profiler_start_syscall(number);
     com_syscall_ret_t
         ret = syscall->handler(ctx, arg1, arg2, arg3, arg4, arg5, arg6);
+    com_sys_profiler_end_syscall(&profiler_data);
+
 #ifdef DO_SYSCALL_LOG_AFTER
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");

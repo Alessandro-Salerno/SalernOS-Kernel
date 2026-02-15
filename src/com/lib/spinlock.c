@@ -20,6 +20,7 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/panic.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
 
@@ -59,6 +60,8 @@ static inline void decrement_lock_depth_tested(void) {
 }
 
 void kspinlock_acquire(kspinlock_t *lock) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_KSPINLOCK_ACQUIRE);
     ARCH_CPU_DISABLE_INTERRUPTS();
     INCREMENT_CURR_LOCK_DEPTH();
 
@@ -79,6 +82,7 @@ void kspinlock_acquire(kspinlock_t *lock) {
     lock->holder_thread   = ARCH_CPU_GET_THREAD();
     lock->last_acquire_ip = (void *)__builtin_return_address(0);
     lock->last_release_ip = NULL;
+    com_sys_profiler_end_function(&profiler_data);
 }
 
 bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {

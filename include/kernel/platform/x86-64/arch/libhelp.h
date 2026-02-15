@@ -18,11 +18,8 @@
 
 #pragma once
 
-#define ARCH_LIBHELP_FAST_MEMSET(dst, c, n)   \
-    asm volatile("cld; rep stosb"             \
-                 : "=c"((int){0})             \
-                 : "rdi"(dst), "a"(c), "c"(n) \
-                 : "flags", "memory", "rdi");
+#define ARCH_LIBHELP_FAST_MEMSET(dst, c, n) \
+    asm volatile("cld; rep stosb" : "+D"(dst), "+c"(n) : "a"(val) : "memory");
 
 #define ARCH_LIBHELP_FAST_MEMCPY(dst, src, n) \
     asm volatile("cld; rep movsb"             \
