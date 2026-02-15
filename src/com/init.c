@@ -216,7 +216,6 @@ void com_init_pid1(void) {
     com_mm_vmm_switch(proc->vmm_context);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
-    com_sys_sched_init_base();
     com_mm_vmm_init_reaper();
     com_mm_pmm_init_threads();
 

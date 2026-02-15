@@ -37,4 +37,3 @@ void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread(com_thread_t *thread);
 
 void com_sys_sched_init(void);
-void com_sys_sched_init_base(void);
