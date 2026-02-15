@@ -51,8 +51,16 @@ KUSED static int uacpi_util_status_to_posix(uacpi_status status) {
     switch (status) {
         case UACPI_STATUS_OK:
             return 0;
+        case UACPI_STATUS_UNIMPLEMENTED:
+            return ENOSYS;
+        case UACPI_STATUS_INVALID_ARGUMENT:
+            return EINVAL;
+        case UACPI_STATUS_OUT_OF_MEMORY:
+            return ENOMEM;
+        case UACPI_STATUS_DENIED:
+            return EPERM;
         default:
-            KDEBUG("wtf, got %zu", status);
-            KASSERT(false);
+            KDEBUG("unknown uacpi status %d", status);
+            KASSERT(!"unknown uacpi status");
     }
 }

@@ -67,26 +67,14 @@ _Static_assert(__builtin_types_compatible_p(uacpi_phys_addr,
 _Static_assert(__builtin_types_compatible_p(uacpi_io_addr, opt_uacpi_io_addr_t),
                "uacpi_io_addr must be the same as opt_uacpi_phys_io_t");
 
-struct uacpi_glue_waitlist {
-    com_waitlist_t waitlist;
-    kspinlock_t    condvar;
-};
-
 struct uacpi_glue_isr_extra {
     uacpi_interrupt_handler handler;
     uacpi_handle            ctx;
 };
 
-struct uacpi_glue_callout_arg {
-    struct uacpi_glue_waitlist *waitlist;
-    atomic_bool                 invalidated;
-    bool                        expired;
-};
-
 struct uacpi_glue_global_waitlist {
-    struct uacpi_glue_waitlist waitlist;
-    size_t                     events_left;
-    // The waitlit's condvar is used as lock for events_left too
+    com_waitlist_t waitlist;
+    size_t         events_left;
 };
 
 struct uacpi_glue_wrok {
@@ -101,66 +89,20 @@ static void uacpi_glue_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)ctx;
     struct uacpi_glue_isr_extra *extra = isr->extra;
 
-    // Bump the number of in-flight interrupts
-    kspinlock_acquire(&InFlightInterruptWaitlist.waitlist.condvar);
-    InFlightInterruptWaitlist.events_left++;
-    kspinlock_release(&InFlightInterruptWaitlist.waitlist.condvar);
+    __atomic_add_fetch(&InFlightInterruptWaitlist.events_left,
+                       1,
+                       __ATOMIC_SEQ_CST);
 
     extra->handler(extra->ctx);
 
     // Decrease the number and notify waiters if needed
-    kspinlock_acquire(&InFlightInterruptWaitlist.waitlist.condvar);
-    if (0 == --InFlightInterruptWaitlist.events_left) {
-        com_sys_sched_notify_all(&InFlightInterruptWaitlist.waitlist.waitlist);
+    if (0 == __atomic_fetch_add(&InFlightInterruptWaitlist.events_left,
+                                -1,
+                                __ATOMIC_SEQ_CST)) {
+        com_sys_sched_notify_all(&InFlightInterruptWaitlist.waitlist);
     }
-    kspinlock_release(&InFlightInterruptWaitlist.waitlist.condvar);
 
     com_mm_slab_free(extra, sizeof(*extra));
-}
-
-static void uacpi_glue_event_timeout(com_callout_t *callout) {
-    struct uacpi_glue_callout_arg *arg = callout->arg;
-
-    if (atomic_load(&arg->invalidated)) {
-        com_mm_slab_free(arg, sizeof(*arg));
-        return;
-    }
-
-    kspinlock_acquire(&arg->waitlist->condvar);
-    arg->expired = true;
-    com_sys_sched_notify_all(&arg->waitlist->waitlist);
-    kspinlock_release(&arg->waitlist->condvar);
-
-    // Here we basically do a poor man's garbage collector. We reschedule this 1
-    // second later, so the possible outcomes are:
-    // 1. The callout is still not invalidated: in this case we notify all again
-    // (and all = nobody now) and reschedule
-    // 2. The callout is invalidated and we just free it
-    com_sys_callout_reschedule(callout, KNANOS_PER_SEC);
-}
-
-static void uacpi_glue_sleep_timeout(com_callout_t *callout) {
-    struct uacpi_glue_waitlist *waitlist = callout->arg;
-    kspinlock_acquire(&waitlist->condvar);
-    com_sys_sched_notify(&waitlist->waitlist);
-    kspinlock_release(&waitlist->condvar);
-}
-
-static void uacpi_glue_work_dispatcher(com_callout_t *callout) {
-    struct uacpi_glue_wrok *work = callout->arg;
-    kspinlock_acquire(&ScheduledWorkWaitlist.waitlist.condvar);
-    ScheduledWorkWaitlist.events_left++;
-    kspinlock_release(&ScheduledWorkWaitlist.waitlist.condvar);
-
-    work->handler(work->ctx);
-
-    kspinlock_acquire(&ScheduledWorkWaitlist.waitlist.condvar);
-    if (0 == --ScheduledWorkWaitlist.events_left) {
-        com_sys_sched_notify_all(&ScheduledWorkWaitlist.waitlist.waitlist);
-    }
-    kspinlock_release(&ScheduledWorkWaitlist.waitlist.condvar);
-
-    com_mm_slab_free(work, sizeof(*work));
 }
 
 // Returns the PHYSICAL address of the RSDP structure via *out_rsdp_address.
@@ -273,12 +215,8 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
 uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
     switch (current_init_lvl) {
         case UACPI_INIT_LEVEL_EARLY:
-            COM_SYS_THREAD_WAITLIST_INIT(
-                &InFlightInterruptWaitlist.waitlist.waitlist);
-            COM_SYS_THREAD_WAITLIST_INIT(
-                &ScheduledWorkWaitlist.waitlist.waitlist);
-            InFlightInterruptWaitlist.waitlist.condvar = KSPINLOCK_NEW();
-            ScheduledWorkWaitlist.waitlist.condvar     = KSPINLOCK_NEW();
+            COM_SYS_THREAD_WAITLIST_INIT(&InFlightInterruptWaitlist.waitlist);
+            COM_SYS_THREAD_WAITLIST_INIT(&ScheduledWorkWaitlist.waitlist);
             break;
         default:
             break;
@@ -561,15 +499,6 @@ void uacpi_kernel_stall(uacpi_u8 usec) {
  * Sleep for N milliseconds.
  */
 void uacpi_kernel_sleep(uacpi_u64 msec) {
-    struct uacpi_glue_waitlist waitlist;
-    COM_SYS_THREAD_WAITLIST_INIT(&waitlist.waitlist);
-    waitlist.condvar = KSPINLOCK_NEW();
-    kspinlock_acquire(&waitlist.condvar);
-    com_sys_callout_add(uacpi_glue_sleep_timeout,
-                        &waitlist,
-                        msec * 1000UL * 1000UL);
-    com_sys_sched_wait(&waitlist.waitlist, &waitlist.condvar);
-    kspinlock_release(&waitlist.condvar);
 }
 
 /*
@@ -588,16 +517,9 @@ void uacpi_kernel_free_mutex(uacpi_handle handle) {
  * Create/free an opaque kernel (semaphore-like) event object.
  */
 uacpi_handle uacpi_kernel_create_event(void) {
-    struct uacpi_glue_waitlist *waitlist = com_mm_slab_alloc(sizeof(*waitlist));
-    waitlist->condvar                    = KSPINLOCK_NEW();
-    COM_SYS_THREAD_WAITLIST_INIT(&waitlist->waitlist);
-    return (uacpi_handle)waitlist;
 }
 
 void uacpi_kernel_free_event(uacpi_handle handle) {
-    struct uacpi_glue_waitlist *waitlist = (void *)handle;
-    KASSERT(COM_SYS_THREAD_WAITLIST_EMPTY(&waitlist->waitlist));
-    com_mm_slab_free(waitlist, sizeof(*waitlist));
 }
 
 /*
@@ -658,32 +580,6 @@ void uacpi_kernel_release_mutex(uacpi_handle handle) {
  * A successful wait is indicated by returning UACPI_TRUE.
  */
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle handle, uacpi_u16 timeout) {
-    struct uacpi_glue_waitlist *waitlist = (void *)handle;
-
-    if (0xFFFF == timeout) {
-        kspinlock_acquire(&waitlist->condvar);
-        com_sys_sched_wait(&waitlist->waitlist, &waitlist->condvar);
-        kspinlock_release(&waitlist->condvar);
-        return UACPI_TRUE;
-    }
-
-    struct uacpi_glue_callout_arg *callout_arg = com_mm_slab_alloc(
-        sizeof(*callout_arg));
-    callout_arg->waitlist = waitlist;
-    uintmax_t timeout_ns  = (uintmax_t)timeout * KNANOS_PER_SEC / 1000UL;
-
-    kspinlock_acquire(&waitlist->condvar);
-    com_sys_callout_add(uacpi_glue_event_timeout, callout_arg, timeout_ns);
-    com_sys_sched_wait(&waitlist->waitlist, &waitlist->condvar);
-
-    if (callout_arg->expired) {
-        kspinlock_release(&waitlist->condvar);
-        return UACPI_FALSE;
-    }
-
-    atomic_store(&callout_arg->invalidated, true);
-    kspinlock_release(&waitlist->condvar);
-    return UACPI_TRUE;
 }
 
 /*
@@ -692,22 +588,12 @@ uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle handle, uacpi_u16 timeout) {
  * This function may be used in interrupt contexts.
  */
 void uacpi_kernel_signal_event(uacpi_handle handle) {
-    struct uacpi_glue_waitlist *waitlist = (void *)handle;
-    kspinlock_acquire(&waitlist->condvar);
-    com_sys_sched_notify(&waitlist->waitlist);
-    kspinlock_release(&waitlist->condvar);
 }
 
 /*
  * Reset the event counter to 0.
  */
 void uacpi_kernel_reset_event(uacpi_handle handle) {
-    // This is basically a no-op, but it asserts, so we can see if uACPI calls
-    // it in d different moment than what I think it does
-    struct uacpi_glue_waitlist *waitlist = (void *)handle;
-    kspinlock_acquire(&waitlist->condvar);
-    KASSERT(COM_SYS_THREAD_WAITLIST_EMPTY(&waitlist->waitlist));
-    kspinlock_release(&waitlist->condvar);
 }
 
 /*
@@ -784,7 +670,7 @@ uacpi_handle uacpi_kernel_create_spinlock(void) {
 
 void uacpi_kernel_free_spinlock(uacpi_handle handle) {
     kspinlock_t *spinlock = (void *)handle;
-    KASSERT(0 == spinlock->lock);
+    KASSERT(!KSPINLOCK_IS_HELD(spinlock));
     com_mm_slab_free(spinlock, sizeof(*spinlock));
 }
 
@@ -823,14 +709,8 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type    type,
 
     switch (type) {
         case UACPI_WORK_GPE_EXECUTION:
-            com_sys_callout_add_bsp(uacpi_glue_work_dispatcher,
-                                    work,
-                                    UACPI_GLUE_DEFER_TIME);
             break;
         case UACPI_WORK_NOTIFICATION:
-            com_sys_callout_add(uacpi_glue_work_dispatcher,
-                                work,
-                                UACPI_GLUE_DEFER_TIME);
             break;
         default:
             return UACPI_STATUS_UNIMPLEMENTED;
@@ -848,23 +728,4 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type    type,
  * Note that the waits must be done in this order specifically.
  */
 uacpi_status uacpi_kernel_wait_for_work_completion(void) {
-    // Here we use while instead of if even if we should be notified only once
-    // because I don't trust my code and while is safer and worst case we just
-    // mess up with branch prediction or something
-
-    kspinlock_acquire(&InFlightInterruptWaitlist.waitlist.condvar);
-    while (InFlightInterruptWaitlist.events_left > 0) {
-        com_sys_sched_wait(&InFlightInterruptWaitlist.waitlist.waitlist,
-                           &InFlightInterruptWaitlist.waitlist.condvar);
-    }
-    kspinlock_release(&InFlightInterruptWaitlist.waitlist.condvar);
-
-    kspinlock_acquire(&ScheduledWorkWaitlist.waitlist.condvar);
-    while (ScheduledWorkWaitlist.events_left > 0) {
-        com_sys_sched_wait(&ScheduledWorkWaitlist.waitlist.waitlist,
-                           &ScheduledWorkWaitlist.waitlist.condvar);
-    }
-    kspinlock_release(&ScheduledWorkWaitlist.waitlist.condvar);
-
-    return UACPI_STATUS_OK;
 }
