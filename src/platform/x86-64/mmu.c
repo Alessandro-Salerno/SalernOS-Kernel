@@ -436,7 +436,7 @@ void arch_mmu_init(void) {
         uint64_t *entry = internal_alloc_phys();
         KASSERT(NULL != entry);
         RootTable[i] = (uint64_t)entry | ARCH_MMU_FLAGS_WRITE |
-                       ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_USER;
+                       ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_GLOBAL;
     }
 
     // Mapp all the necessary memmap entries
@@ -484,7 +484,8 @@ void arch_mmu_init(void) {
         KASSERT_CALL_SUCCESSFUL(
             add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                      (uint64_t *)i,
-                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ,
+                     ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
+                         ARCH_MMU_FLAGS_GLOBAL,
                      0));
     }
 
@@ -497,7 +498,7 @@ void arch_mmu_init(void) {
             add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                      (uint64_t *)i,
                      ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                         ARCH_MMU_FLAGS_NOEXEC,
+                         ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_GLOBAL,
                      0));
     }
 
@@ -511,7 +512,8 @@ void arch_mmu_init(void) {
             add_page((arch_mmu_pagetable_t *)ARCH_HHDM_TO_PHYS(RootTable),
                      (uint64_t *)i,
                      ((i - vp_delta) & ADDRMASK) | ARCH_MMU_FLAGS_READ |
-                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC,
+                         ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC |
+                         ARCH_MMU_FLAGS_GLOBAL,
                      0));
     }
 

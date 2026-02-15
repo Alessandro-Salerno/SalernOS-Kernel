@@ -33,6 +33,7 @@
 #define ARCH_MMU_FLAGS_USER    (uint64_t)4
 #define ARCH_MMU_FLAGS_PRESENT (uint64_t)1
 #define ARCH_MMU_FLAGS_NOEXEC  ((uint64_t)1 << 63)
+#define ARCH_MMU_FLAGS_GLOBAL  ((uint64_t)1 << 8)
 
 #define ARCH_MMU_FLAGS_WB 0
 #define ARCH_MMU_FLAGS_WT (1 << 3)
