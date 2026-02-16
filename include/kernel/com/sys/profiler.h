@@ -32,6 +32,7 @@ typedef enum com_profile_func {
     E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE,
     E_COM_PROFILE_FUNC_PMM_ALLOC,
     E_COM_PROFILE_FUNC_PMM_FREE,
+    E_COM_PROFILE_FUNC_SCHED_YIELD,
 
     E_COM_PROFILE_FUNC__MAX
 } com_profile_func_t;
@@ -74,6 +75,7 @@ void                com_sys_profiler_end_syscall(com_profiler_data_t *data);
 
 static inline com_profiler_data_t
 com_sys_profiler_start_function(com_profile_func_t function_id) {
+    (void)function_id;
     return (com_profiler_data_t){0};
 }
 
@@ -83,6 +85,7 @@ static inline void com_sys_profiler_end_function(com_profiler_data_t *data) {
 
 static inline com_profiler_data_t
 com_sys_profiler_start_syscall(size_t syscall_number) {
+    (void)syscall_number;
     return (com_profiler_data_t){0};
 }
 

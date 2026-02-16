@@ -23,6 +23,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
@@ -61,18 +62,18 @@ static inline void sched_switch_vmm_context(com_thread_t *curr,
     com_vmm_context_t *prev_vmm_ctx = NULL;
     com_vmm_context_t *next_vmm_ctx = NULL;
 
-    if (NULL != curr->proc) {
-        __atomic_add_fetch(&curr->proc->num_running_threads,
-                           -1,
-                           __ATOMIC_SEQ_CST);
-        prev_vmm_ctx = curr->proc->vmm_context;
-    }
-
     if (NULL != next->proc) {
         __atomic_add_fetch(&next->proc->num_running_threads,
                            1,
-                           __ATOMIC_SEQ_CST);
+                           __ATOMIC_RELEASE);
         next_vmm_ctx = next->proc->vmm_context;
+    }
+
+    if (NULL != curr->proc) {
+        __atomic_add_fetch(&curr->proc->num_running_threads,
+                           -1,
+                           __ATOMIC_RELEASE);
+        prev_vmm_ctx = curr->proc->vmm_context;
     }
 
     if (!ARCH_CONTEXT_ISUSER(&next->ctx)) {
@@ -83,6 +84,8 @@ static inline void sched_switch_vmm_context(com_thread_t *curr,
 }
 
 void com_sys_sched_yield_nolock(void) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_SCHED_YIELD);
     arch_cpu_t *cpu = ARCH_CPU_GET();
     kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
@@ -91,6 +94,7 @@ void com_sys_sched_yield_nolock(void) {
 
     if (NULL == curr) {
         kspinlock_release(&cpu->runqueue_lock);
+        com_sys_profiler_end_function(&profiler_data);
         return;
     }
 
@@ -101,6 +105,7 @@ void com_sys_sched_yield_nolock(void) {
         if (curr->runnable) {
             kspinlock_release(&cpu->runqueue_lock);
             kspinlock_release(&curr->sched_lock);
+            com_sys_profiler_end_function(&profiler_data);
             return;
         }
 
@@ -156,6 +161,7 @@ void com_sys_sched_yield_nolock(void) {
     //        guarantee that this function will return to the same point from
     //        which it was called, in fact, quite the opposite.
     next->lock_depth--;
+    com_sys_profiler_end_function(&profiler_data);
 #if CONFIG_TRACK_SLEEP_TIME
     uintmax_t sleep_start = ARCH_CPU_GET_TIMESTAMP();
 #endif

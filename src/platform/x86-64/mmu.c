@@ -326,7 +326,7 @@ void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
                           NULL != curr_thread->proc &&
                           __atomic_load_n(
                               &curr_thread->proc->num_running_threads,
-                              __ATOMIC_SEQ_CST) > 1));
+                              __ATOMIC_ACQUIRE) > 1));
     // numer of other CPUs that have completed the shootdown
     size_t shootdown_counter = 0;
     // expected number of CPUs to compelte the shootdown
@@ -575,6 +575,6 @@ void x86_64_mmu_invalidate_isr(com_isr_t *isr, arch_context_t *ctx) {
     internal_invalidate(curr_cpu->mmu_shootdown_virt,
                         curr_cpu->mmu_shootdown_pages);
     KASSERT(KSPINLOCK_IS_HELD(&curr_cpu->mmu_shootdown_lock));
-    __atomic_add_fetch(curr_cpu->mmu_shootdown_counter, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(curr_cpu->mmu_shootdown_counter, 1, __ATOMIC_RELAXED);
     kspinlock_release(&curr_cpu->mmu_shootdown_lock); // realeased by us
 }
