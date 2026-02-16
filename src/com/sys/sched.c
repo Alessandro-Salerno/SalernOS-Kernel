@@ -157,12 +157,12 @@ void com_sys_sched_yield_nolock(void) {
     //        which it was called, in fact, quite the opposite.
     next->lock_depth--;
 #if CONFIG_TRACK_SLEEP_TIME
-    uintmax_t sleep_start = ARCH_CPU_GET_TIME();
+    uintmax_t sleep_start = ARCH_CPU_GET_TIMESTAMP();
 #endif
     // This must drop the lock on curr->sched_lock
     ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx, &curr->sched_lock.lock);
 #if CONFIG_TRACK_SLEEP_TIME
-    uintmax_t sleep_end  = ARCH_CPU_GET_TIME();
+    uintmax_t sleep_end  = ARCH_CPU_GET_TIMESTAMP();
     uintmax_t time_slept = sleep_end - sleep_start;
     __atomic_add_fetch(&curr->time_slept, time_slept, __ATOMIC_SEQ_CST);
 #endif

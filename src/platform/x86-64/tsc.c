@@ -57,19 +57,23 @@ void x86_64_tsc_boot(void) {
 void x86_64_tsc_bsp_init(void) {
     KASSERT(0 == __x86_64_TSC_BootTime);
     x86_64_tsc_init();
-    __x86_64_TSC_BootTime = X86_64_TSC_VAL_TO_NS(ARCH_CPU_GET()->tsc_freq,
-                                                 __x86_64_TSC_BootValue);
+    __x86_64_TSC_BootTime = X86_64_TSC_VAL_TO_NS(
+        ARCH_CPU_GET()->tsc_reverse_mult,
+        __x86_64_TSC_BootValue);
 }
 
 void x86_64_tsc_init(void) {
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
+
     if (!tsc_probe()) {
         // Set some random but realistic frequency for TSC
-        ARCH_CPU_GET()->tsc_freq = 3 * 1000UL * 1000UL * 1000UL;
+        uint64_t tsc_freq          = 3 * 1000UL * 1000UL * 1000UL;
+        curr_cpu->tsc_reverse_mult = ((__uint128_t)1000000000ULL << 32) /
+                                     tsc_freq;
         return;
     }
 
     KLOG("initializing tsc");
-    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
 
     if (X86_64_CPUID_BASE_MAX_LEAF() >= 0x15) {
         x86_64_cpuid_t regs;
@@ -82,7 +86,9 @@ void x86_64_tsc_init(void) {
         uint64_t core_freq        = regs.ecx;
         uint64_t core_numerator   = regs.ebx;
         uint64_t core_denominator = regs.eax;
-        curr_cpu->tsc_freq = core_freq * core_numerator / core_denominator;
+        uint64_t tsc_freq = core_freq * core_numerator / core_denominator;
+        curr_cpu->tsc_reverse_mult = ((__uint128_t)1000000000ULL << 32) /
+                                     tsc_freq;
         return;
     }
 
@@ -90,8 +96,8 @@ calibrate:;
     uintmax_t start_tsc = X86_64_TSC_READ();
     uint64_t  meas_pit  = x86_64_pit_wait_ticks(TSC_CALIBRATE_PIT_TICKS);
     uintmax_t end_tsc   = X86_64_TSC_READ();
-    curr_cpu->tsc_freq  = (end_tsc - start_tsc) / meas_pit *
-                         X86_64_PIT_FREQUENCY;
+    uint64_t tsc_freq = (end_tsc - start_tsc) / meas_pit * X86_64_PIT_FREQUENCY;
+    curr_cpu->tsc_reverse_mult = ((__uint128_t)1000000000ULL << 32) / tsc_freq;
 
     KDEBUG("tsc has %zu hz measured with pit=%zu",
            curr_cpu->tsc_freq,

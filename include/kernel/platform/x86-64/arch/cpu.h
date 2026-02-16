@@ -54,6 +54,9 @@
 
 #define ARCH_CPU_HALT() asm volatile("hlt");
 
+#define ARCH_CPU_GET_TIMESTAMP() X86_64_TSC_READ()
+#define ARCH_CPU_TIMESTAMP_TO_NS(ts) \
+    X86_64_TSC_VAL_TO_NS(ARCH_CPU_GET()->tsc_reverse_mult, ts)
 #define ARCH_CPU_GET_TIME() X86_64_TSC_GET_NS()
 
 typedef struct arch_cpu {
@@ -65,7 +68,7 @@ typedef struct arch_cpu {
 
     uint64_t        gdt[7];
     x86_64_ist_t    ist;
-    uint64_t        tsc_freq;
+    uint64_t        tsc_reverse_mult;
     com_pmm_cache_t mmu_cache;
     size_t         *mmu_shootdown_counter;
     kspinlock_t     mmu_shootdown_lock;
