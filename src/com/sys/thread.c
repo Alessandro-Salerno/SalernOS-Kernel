@@ -45,7 +45,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) +
                            ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
-    thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_SEQ_CST);
+    thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_RELAXED);
 
     thread->waiting_on = NULL;
     thread->ctime      = ARCH_CPU_GET_TIMESTAMP();

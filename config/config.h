@@ -98,5 +98,5 @@
 #define CONFIG_DEFAULT_KBD_LAYOUT en_us
 #define CONFIG_PMM_NOTIFY_ZERO    200 /* % of memory to zero before notify */
 #define CONFIG_PMM_NOTIFY_INSERT  200 /* % of memory to free before notify */
-#define CONFIG_TRACK_SLEEP_TIME   1
-#define CONFIG_USE_PROFILER       1
+#define CONFIG_TRACK_SLEEP_TIME   0
+#define CONFIG_USE_PROFILER       0

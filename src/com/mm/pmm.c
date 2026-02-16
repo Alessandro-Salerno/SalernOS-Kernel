@@ -55,8 +55,8 @@
 #define UPDATE_STATS(field, diff)            \
     __atomic_add_fetch(&MemoryStats.field,   \
                        diff *ARCH_PAGE_SIZE, \
-                       __ATOMIC_SEQ_CST)
-#define READ_STATS(field) __atomic_load_n(&MemoryStats.field, __ATOMIC_SEQ_CST)
+                       __ATOMIC_RELAXED)
+#define READ_STATS(field) __atomic_load_n(&MemoryStats.field, __ATOMIC_RELAXED)
 
 TAILQ_HEAD(freelist_tailq, freelist_entry);
 
@@ -602,14 +602,14 @@ void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages) {
 void com_mm_pmm_hold(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
     KASSERT(E_PAGE_STATE_FREE != page_meta->state);
-    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_RELAXED);
 }
 
 void com_mm_pmm_free(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
 
     if (E_PAGE_STATE_TAKEN != page_meta->state ||
-        0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_SEQ_CST)) {
+        0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_ACQ_REL)) {
         return;
     }
 

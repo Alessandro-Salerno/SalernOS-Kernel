@@ -72,7 +72,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     kspinlock_release(&curr_proc->fd_lock);
 
     ARCH_CONTEXT_FORK(new_thread, *ctx);
-    __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
 
     kspinlock_acquire(&curr_proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {

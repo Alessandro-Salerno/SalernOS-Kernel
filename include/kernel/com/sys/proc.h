@@ -39,9 +39,9 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <sys/types.h>
 
 #define COM_SYS_PROC_HOLD(proc) \
-    __atomic_add_fetch(&(proc)->num_ref, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&(proc)->num_ref, 1, __ATOMIC_RELAXED);
 #define COM_SYS_PROC_RELEASE(proc)                                         \
-    if (0 == __atomic_add_fetch(&(proc)->num_ref, -1, __ATOMIC_SEQ_CST)) { \
+    if (0 == __atomic_add_fetch(&(proc)->num_ref, -1, __ATOMIC_ACQ_REL)) { \
         com_sys_proc_hide(proc);                                           \
     }
 

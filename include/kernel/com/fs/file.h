@@ -26,7 +26,7 @@
 
 #define COM_FS_FILE_HOLD(file)                                   \
     if (NULL != (file)) {                                        \
-        __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_SEQ_CST); \
+        __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_RELAXED); \
     }
 
 #define COM_FS_FILE_RELEASE(file)                               \
@@ -34,7 +34,7 @@
         if (NULL != file && NULL != file->vnode) {              \
             uintmax_t n = __atomic_add_fetch(&file->num_ref,    \
                                              -1,                \
-                                             __ATOMIC_SEQ_CST); \
+                                             __ATOMIC_ACQ_REL); \
             if (0 == n) {                                       \
                 KDEBUG("freeing file %p", (file));              \
                 COM_FS_VFS_VNODE_RELEASE(file->vnode);          \

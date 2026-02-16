@@ -34,10 +34,10 @@ struct com_poll_head;
 #define COM_FS_VFS_VNCTL_GETNAME 1
 
 #define COM_FS_VFS_VNODE_HOLD(node) \
-    __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_SEQ_CST)
+    __atomic_add_fetch(&node->num_ref, 1, __ATOMIC_RELAXED)
 #define COM_FS_VFS_VNODE_RELEASE(node)                                   \
     if (NULL != (node) &&                                                \
-        0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_SEQ_CST)) { \
+        0 == __atomic_add_fetch(&node->num_ref, -1, __ATOMIC_ACQ_REL)) { \
         KDEBUG("freeing vnode %p", (node));                              \
         com_fs_vfs_close(node);                                          \
     }
