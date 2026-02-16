@@ -21,6 +21,7 @@
 #include <arch/info.h>
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
+#include <kernel/com/dev/profile.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
@@ -170,6 +171,7 @@ void com_init_tty(com_term_backend_t (*new_backend)(void)) {
 void com_init_devices(void) {
     com_dev_gfx_fbdev_init(NULL);
     com_dev_null_init();
+    com_dev_profile_init();
 }
 
 void com_init_pid1(void) {

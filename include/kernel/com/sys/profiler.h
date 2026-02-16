@@ -59,6 +59,7 @@ typedef struct com_profiler_data {
 
 void                   com_sys_profiler_init(void);
 com_syswide_profile_t *com_sys_profiler_get_syswide(void);
+const char *com_sys_profiler_resolve_name(com_profile_func_t function_id);
 
 // This is quite unconventional but it helps reduce code clutter
 

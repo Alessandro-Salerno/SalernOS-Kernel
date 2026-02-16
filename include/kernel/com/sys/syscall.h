@@ -100,14 +100,15 @@ typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
                                                 arch_syscall_arg_t a5,
                                                 arch_syscall_arg_t a6);
 
-typedef struct com_syscall {
-    com_intf_syscall_t handler;
-#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
+typedef struct com_syscall_aux {
     const char *name;
     size_t      num_args;
     const char *arg_names[6];
     int         arg_types[6];
-#endif
+} com_syscall_aux_t;
+
+typedef struct com_syscall {
+    com_intf_syscall_t handler;
 } com_syscall_t;
 
 void              com_sys_syscall_register(uintmax_t          number,
@@ -124,6 +125,9 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t a5,
                                          arch_syscall_arg_t a6,
                                          uintptr_t          invoke_ip);
+void              com_sys_syscall_get_tables(com_syscall_t     **syscall_table,
+                                             com_syscall_aux_t **aux_table,
+                                             size_t             *num_syscalls);
 void              com_sys_syscall_init(void);
 
 // SYSCALLS

@@ -28,16 +28,17 @@
 #include <stdint.h>
 
 // NOTE: not static so others can call
-volatile com_syscall_t SyscallTable[CONFIG_SYSCALL_MAX];
+com_syscall_t            SyscallTable[CONFIG_SYSCALL_MAX];
+static com_syscall_aux_t SyscallAuxTable[CONFIG_SYSCALL_MAX];
+static size_t            NumSyscalls = 0;
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
-static void log_syscall(volatile com_syscall_t *syscall,
-                        arch_syscall_arg_t      args[]) {
-    printf("%s(", syscall->name);
+static void log_syscall(com_syscall_aux_t *aux, arch_syscall_arg_t args[]) {
+    printf("%s(", aux->name);
 
-    for (size_t i = 0; i < syscall->num_args; i++) {
-        int         arg_type = syscall->arg_types[i];
-        const char *arg_name = syscall->arg_names[i];
+    for (size_t i = 0; i < aux->num_args; i++) {
+        int         arg_type = aux->arg_types[i];
+        const char *arg_name = aux->arg_names[i];
         printf("%s = ", arg_name);
 
         com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
@@ -96,7 +97,7 @@ static void log_syscall(volatile com_syscall_t *syscall,
                 break;
         }
 
-        if (i != syscall->num_args - 1) {
+        if (i != aux->num_args - 1) {
             printf(", ");
         }
     }
@@ -111,12 +112,12 @@ void com_sys_syscall_register(uintmax_t          number,
                               size_t             num_args,
                               ...) {
     KASSERT(number < CONFIG_SYSCALL_MAX);
-    volatile com_syscall_t *syscall = &SyscallTable[number];
-    syscall->handler                = handler;
+    com_syscall_t     *syscall = &SyscallTable[number];
+    com_syscall_aux_t *aux     = &SyscallAuxTable[number];
+    syscall->handler           = handler;
 
-#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
-    syscall->name     = name;
-    syscall->num_args = num_args;
+    aux->name     = name;
+    aux->num_args = num_args;
 
     if (0 == num_args) {
         return;
@@ -125,16 +126,14 @@ void com_sys_syscall_register(uintmax_t          number,
     va_list args;
     va_start(args, num_args);
     for (size_t i = 0; i < num_args; i++) {
-        int         arg_type  = va_arg(args, int);
-        const char *arg_name  = va_arg(args, const char *);
-        syscall->arg_names[i] = arg_name;
-        syscall->arg_types[i] = arg_type;
+        int         arg_type = va_arg(args, int);
+        const char *arg_name = va_arg(args, const char *);
+        aux->arg_names[i]    = arg_name;
+        aux->arg_types[i]    = arg_type;
     }
     va_end(args);
-#else
-    (void)name;
-    (void)num_args;
-#endif
+
+    NumSyscalls++;
 }
 
 com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
@@ -147,14 +146,15 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg6,
                                          uintptr_t          invoke_ip) {
     KASSERT(number < CONFIG_SYSCALL_MAX);
-    volatile com_syscall_t *syscall = &SyscallTable[number];
+    com_syscall_t     *syscall = &SyscallTable[number];
+    com_syscall_aux_t *aux     = &SyscallAuxTable[number];
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
     arch_syscall_arg_t args[6] = {arg1, arg2, arg3, arg4, arg5, arg6};
 #if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
-    log_syscall(syscall, args);
+    log_syscall(aux, args);
     printf(" at %p\n", invoke_ip);
     KRESET_COLOR();
     com_io_log_unlock();
@@ -174,13 +174,27 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
 #ifdef DO_SYSCALL_LOG_AFTER
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
-    log_syscall(syscall, args);
+    log_syscall(aux, args);
     printf(" -> {ret = %p, errno = %zu}\n", ret.value, ret.err);
     KRESET_COLOR();
     com_io_log_unlock();
 #undef DO_SYSCALL_LOG_AFTER
 #endif
     return ret;
+}
+
+void com_sys_syscall_get_tables(com_syscall_t     **syscall_table,
+                                com_syscall_aux_t **aux_table,
+                                size_t             *num_syscalls) {
+    if (NULL != syscall_table) {
+        *syscall_table = SyscallTable;
+    }
+    if (NULL != aux_table) {
+        *aux_table = SyscallAuxTable;
+    }
+    if (NULL != num_syscalls) {
+        *num_syscalls = NumSyscalls;
+    }
 }
 
 void com_sys_syscall_init(void) {
@@ -419,6 +433,7 @@ void com_sys_syscall_init(void) {
                              "set");
 
     // 0x1C used to be sigthreadmask(), it's now free to use
+    com_sys_syscall_register(0x1C, "(unused)", NULL, 0);
 
     com_sys_syscall_register(0x1D,
                              "sigaction",

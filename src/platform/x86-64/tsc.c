@@ -98,8 +98,4 @@ calibrate:;
     uintmax_t end_tsc   = X86_64_TSC_READ();
     uint64_t tsc_freq = (end_tsc - start_tsc) / meas_pit * X86_64_PIT_FREQUENCY;
     curr_cpu->tsc_reverse_mult = ((__uint128_t)1000000000ULL << 32) / tsc_freq;
-
-    KDEBUG("tsc has %zu hz measured with pit=%zu",
-           curr_cpu->tsc_freq,
-           meas_pit);
 }

@@ -58,6 +58,38 @@ com_syswide_profile_t *com_sys_profiler_get_syswide(void) {
     return &SystemProfile;
 }
 
+// TODO: this is very clunky, we can probably do something with debug syms
+const char *com_sys_profiler_resolve_name(com_profile_func_t function_id) {
+    switch (function_id) {
+        case E_COM_PROFILE_FUNC_KMEMSET:
+            return "kmemset";
+        case E_COM_PROFILE_FUNC_KMEMCPY:
+            return "kmemcpy";
+        case E_COM_PROFILE_FUNC_KMEMMOVE:
+            return "kmemmove";
+        case E_COM_PROFILE_FUNC_KMEMCMP:
+            return "kmemcmp";
+        case E_COM_PROFILE_FUNC_KMEMCHR:
+            return "kmemchr";
+        case E_COM_PROFILE_FUNC_KMEMRCHR:
+            return "kmemrchr";
+        case E_COM_PROFILE_FUNC_KSPINLOCK_ACQUIRE:
+            return "kspinlock_acquire";
+        case E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE:
+            return "kmutex_acquire";
+        case E_COM_PROFILE_FUNC_PMM_ALLOC:
+            return "com_mm_pmm_alloc";
+        case E_COM_PROFILE_FUNC_PMM_FREE:
+            return "com_mm_pmm_free";
+        case E_COM_PROFILE_FUNC_SCHED_YIELD:
+            return "com_sys_sched_yield_nolock";
+        default:
+            break;
+    }
+
+    return "(unknown)";
+}
+
 #if CONFIG_USE_PROFILER
 
 com_profiler_data_t
