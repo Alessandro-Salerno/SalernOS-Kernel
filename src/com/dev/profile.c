@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/cpu.h>
 #include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/sys/profiler.h>
@@ -41,8 +42,8 @@ static int devprofile_ioctl(void *devdata, uintmax_t op, void *buf) {
             struct devprofile_fn_data *d    = &r->data[i];
             com_profile_func_data_t   *data = &profiler->functions[i];
             kstrcpy(d->name, com_sys_profiler_resolve_name(i));
-            d->real_time_ns = data->real_time;
-            d->cpu_time_ns  = data->cpu_time;
+            d->real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
+            d->cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
             d->num_calls    = data->num_calls;
         }
 
@@ -59,8 +60,8 @@ static int devprofile_ioctl(void *devdata, uintmax_t op, void *buf) {
             com_syscall_aux_t         *aux  = &aux_syscalls[i];
             com_profile_func_data_t   *data = &profiler->syscalls[i];
             kstrcpy(d->name, aux->name);
-            d->real_time_ns = data->real_time;
-            d->cpu_time_ns  = data->cpu_time;
+            d->real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
+            d->cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
             d->num_calls    = data->num_calls;
         }
 

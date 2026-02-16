@@ -11,7 +11,8 @@
 #define DEVPROFILE_IOCTL_GET_FUNCTIONS _IOR('P', 0X02, struct devprofile_fn_res)
 #define DEVPROFILE_IOCTL_GET_SYSCALL   _IOR('P', 0X03, struct devprofile_fn_res)
 
-#define DEVPROFILE_SIZEOF_FN_RES(n) ((n) * sizeof(struct devprofile_fn_data))
+#define DEVPROFILE_SIZEOF_FN_RES(n) \
+    ((n) * sizeof(struct devprofile_fn_data) + sizeof(struct devprofile_fn_res))
 
 struct devprofile_fn_data {
     char      name[64];
