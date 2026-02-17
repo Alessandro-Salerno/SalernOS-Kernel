@@ -19,12 +19,14 @@
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/platform/mmu.h>
 #include <lib/mem.h>
 #include <lib/str.h>
@@ -91,42 +93,85 @@ static int load(uintptr_t          vaddr,
                 struct elf_phdr   *phdr,
                 com_vnode_t       *elf_file,
                 com_vmm_context_t *vmm_context) {
-    size_t   idx = 0;
-    intmax_t fsz = phdr->file_sz;
+    size_t           idx          = 0;
+    ssize_t          fsz          = phdr->file_sz;
+    ssize_t          mem_sz       = phdr->mem_sz;
+    bool             vaddr_mapped = false; // if *vaddr is ok
+    arch_mmu_flags_t mmu_flags    = ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
+                                 ARCH_MMU_FLAGS_WRITE;
 
-    for (uintptr_t cur = vaddr; cur < (vaddr + phdr->mem_sz);) {
-        intmax_t misalign = cur & (ARCH_PAGE_SIZE - 1);
-        intmax_t rem      = ARCH_PAGE_SIZE - misalign;
-
-        void *phys_page  = com_mm_pmm_alloc_zero();
-        void *kvirt_page = (void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign);
-
+    if (0 != vaddr % ARCH_PAGE_SIZE && fsz > 0) {
+        ssize_t misalign    = vaddr % ARCH_PAGE_SIZE;
+        ssize_t rem         = ARCH_PAGE_SIZE - misalign;
+        ssize_t mapping_len = KMIN(rem, fsz);
+        void   *phys_page   = com_mm_pmm_alloc();
         com_mm_vmm_map(vmm_context,
-                       (void *)(cur - misalign),
+                       (void *)(vaddr - misalign),
                        phys_page,
-                       ARCH_PAGE_SIZE,
+                       mapping_len,
                        COM_MM_VMM_FLAGS_NONE,
-                       ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
-                           ARCH_MMU_FLAGS_WRITE);
-
-        if (fsz > 0) {
-            size_t len = KMIN(rem, fsz);
-
-            int ret = com_fs_vfs_read(kvirt_page,
-                                      len,
-                                      NULL,
-                                      elf_file,
-                                      phdr->off + idx,
-                                      0);
-            if (0 != ret) {
-                return ret;
-            }
-        }
-
-        cur += rem;
-        fsz -= rem;
-        idx += rem;
+                       mmu_flags);
+        com_fs_vfs_read((void *)(ARCH_PHYS_TO_HHDM(phys_page) + misalign),
+                        mapping_len,
+                        NULL,
+                        elf_file,
+                        phdr->off,
+                        O_RDONLY);
+        vaddr += mapping_len;
+        fsz -= mapping_len;
+        mem_sz -= mapping_len;
+        idx += mapping_len;
+        vaddr_mapped = true;
     }
+
+    if (fsz <= 0) {
+        goto zero_fill;
+    }
+
+    // here vaddr is guaranteed to be page-aligned
+    com_fs_vfs_mmap(NULL,
+                    elf_file,
+                    vmm_context,
+                    (void *)vaddr,
+                    fsz,
+                    COM_MM_VMM_FLAGS_PRIVATE,
+                    ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
+                        ARCH_MMU_FLAGS_WRITE,
+                    phdr->off + idx);
+    vaddr += fsz;
+    mem_sz -= fsz;
+    vaddr_mapped = true;
+
+zero_fill:
+    if (0 != vaddr % ARCH_PAGE_SIZE && mem_sz > 0) {
+        ssize_t misalign = vaddr % ARCH_PAGE_SIZE;
+        ssize_t rem      = ARCH_PAGE_SIZE - misalign;
+        if (vaddr_mapped) {
+            ssize_t zero_size = KMIN(mem_sz, rem);
+            void   *phys_page = com_mm_vmm_get_physical(vmm_context,
+                                                      (void *)vaddr);
+            // NOTE: the value returned by vmm_get_physical already accounts for
+            // in-page offset (misalign)
+            kmemset((void *)ARCH_PHYS_TO_HHDM(phys_page), zero_size, 0);
+            vaddr += zero_size;
+            mem_sz -= zero_size;
+        } else {
+            vaddr -= misalign;
+            mem_sz += misalign;
+            // will be mapped below
+        }
+    }
+
+    if (mem_sz <= 0) {
+        return 0;
+    }
+
+    com_mm_vmm_map(vmm_context,
+                   (void *)vaddr,
+                   NULL,
+                   mem_sz,
+                   COM_MM_VMM_FLAGS_ALLOCATE,
+                   mmu_flags);
 
     return 0;
 }
@@ -138,6 +183,8 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                        com_vnode_t       *cwd,
                        uintptr_t          virt_off,
                        com_vmm_context_t *vmm_context) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_ELF_LOAD);
     com_vnode_t *elf_file = NULL;
     int          ret      = com_fs_vfs_lookup(&elf_file,
                                 exec_path,
@@ -172,8 +219,6 @@ int com_sys_elf64_load(com_elf_data_t    *out,
         goto cleanup;
     }
 
-    // Here vnode is already held
-
     struct elf_header elf_hdr    = {0};
     size_t            bytes_read = 0;
     ret                          = com_fs_vfs_read(&elf_hdr,
@@ -181,7 +226,7 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                           &bytes_read,
                           elf_file,
                           0,
-                          0);
+                          O_RDONLY);
     if (0 != ret) {
         goto cleanup;
     }
@@ -201,7 +246,7 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                               &bytes_read,
                               elf_file,
                               phdr_off,
-                              0);
+                              O_RDONLY);
         if (0 != ret) {
             goto cleanup;
         }
@@ -245,6 +290,7 @@ int com_sys_elf64_load(com_elf_data_t    *out,
 
 cleanup:
     COM_FS_VFS_VNODE_RELEASE(elf_file);
+    com_sys_profiler_end_function(&profiler_data);
     return ret;
 }
 
@@ -356,20 +402,26 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
     }
 
     uintptr_t stack_end   = 0x60000000;
-    uintptr_t stack_start = stack_end - (ARCH_PAGE_SIZE * 64);
-    void     *stack_phys  = NULL;
+    size_t    stack_len   = ARCH_PAGE_SIZE * 64;
+    uintptr_t stack_start = stack_end - stack_len;
+    void     *stack_phys  = com_mm_pmm_alloc();
 
-    for (uintptr_t curr = stack_start; curr < stack_end;
-         curr += ARCH_PAGE_SIZE) {
-        stack_phys = com_mm_pmm_alloc();
-        com_mm_vmm_map(new_vmm_ctx,
-                       (void *)curr,
-                       stack_phys,
-                       ARCH_PAGE_SIZE,
-                       COM_MM_VMM_FLAGS_NONE,
-                       ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                           ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-    }
+    // allocate first part of the stack
+    com_mm_vmm_map(new_vmm_ctx,
+                   (void *)stack_start,
+                   NULL,
+                   stack_len - ARCH_PAGE_SIZE,
+                   COM_MM_VMM_FLAGS_ALLOCATE,
+                   ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                       ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
+    // map last page
+    com_mm_vmm_map(new_vmm_ctx,
+                   (void *)(stack_start + stack_len - ARCH_PAGE_SIZE),
+                   stack_phys,
+                   ARCH_PAGE_SIZE,
+                   COM_MM_VMM_FLAGS_NONE,
+                   ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
+                       ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
 
     *ctx                = (arch_context_t){0};
     uintptr_t stack_ptr = com_sys_elf64_prepare_stack(prog_data,

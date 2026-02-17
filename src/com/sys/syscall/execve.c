@@ -52,8 +52,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
 
     com_thread_t *thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc   = thread->proc;
-    kspinlock_acquire(&proc->signal_lock);
-    // kspinlock_acquire(&thread->sched_lock);
 
     com_vmm_context_t *old_vmm_ctx = proc->vmm_context;
     com_vmm_context_t *new_vmm_ctx = NULL;
@@ -65,8 +63,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
                                             ctx);
 
     if (0 != status) {
-        kspinlock_release(&proc->signal_lock);
-        // kspinlock_release(&thread->sched_lock);
         return COM_SYS_SYSCALL_ERR(status);
     }
 
@@ -77,7 +73,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_mm_vmm_destroy_context(old_vmm_ctx);
 
     kspinlock_acquire(&proc->fd_lock);
-    for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
+    for (int i = 0; i < proc->max_fd; i++) {
         if (NULL != proc->fd[i].file &&
             ((FD_CLOEXEC & proc->fd[i].flags) ||
              (O_CLOEXEC & proc->fd[i].file->flags))) {
@@ -87,6 +83,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     }
     kspinlock_release(&proc->fd_lock);
 
+    kspinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i] &&
             (SIGCHLD != i || SIG_IGN != proc->sigaction[i]->sa_action)) {
@@ -94,13 +91,12 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->sigaction[i] = NULL;
         }
     }
+    kspinlock_release(&proc->signal_lock);
 
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     proc->did_execve = true;
-    // kspinlock_release(&thread->sched_lock);
-    kspinlock_release(&proc->signal_lock);
 
     return COM_SYS_SYSCALL_OK(0);
 }

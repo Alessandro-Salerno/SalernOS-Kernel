@@ -27,6 +27,8 @@
 #include <sys/stat.h>
 #include <vendor/tailq.h>
 
+#include "com/mm/vmm.h"
+
 // NOTE: Forward declaration, definition in <kernel/com/fs/poll.h>
 // It doesn't like it if I include it here
 struct com_poll_head;
@@ -140,13 +142,14 @@ typedef struct com_vnode_ops {
                     size_t        namelen,
                     uintmax_t     attr,
                     uintmax_t     fsattr);
-    int (*mmap)(void           **out,
-                com_vnode_t     *node,
-                uintptr_t        hint,
-                size_t           size,
-                int              vmm_flags,
-                arch_mmu_flags_t mmu_flags,
-                uintmax_t        off);
+    int (*mmap)(void             **out,
+                com_vnode_t       *node,
+                com_vmm_context_t *vmm_context,
+                void              *hint,
+                size_t             size,
+                int                vmm_flags,
+                arch_mmu_flags_t   mmu_flags,
+                uintmax_t          off);
 } com_vnode_ops_t;
 
 typedef struct com_vfs_ops {
@@ -236,13 +239,14 @@ int com_fs_vfs_mksocket(com_vnode_t **out,
                         const char   *name,
                         size_t        namelen,
                         uintmax_t     attr);
-int com_fs_vfs_mmap(void           **out,
-                    com_vnode_t     *node,
-                    uintptr_t        hint,
-                    size_t           size,
-                    int              vmm_flags,
-                    arch_mmu_flags_t mmu_flags,
-                    uintmax_t        off);
+int com_fs_vfs_mmap(void             **out,
+                    com_vnode_t       *node,
+                    com_vmm_context_t *vmm_context,
+                    void              *hint,
+                    size_t             size,
+                    int                vmm_flags,
+                    arch_mmu_flags_t   mmu_flags,
+                    uintmax_t          off);
 
 // UTILITY FUNCTIONS
 

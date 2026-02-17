@@ -200,6 +200,7 @@ void com_init_pid1(void) {
     stdfile->vnode      = MainTtyDev;
     stdfile->num_ref    = 3;
     proc->next_fd       = 3;
+    proc->max_fd        = proc->next_fd;
     com_filedesc_t stddesc;
     stddesc.file  = stdfile;
     stddesc.flags = 0;

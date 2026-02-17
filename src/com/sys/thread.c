@@ -104,10 +104,10 @@ void com_sys_thread_destroy(com_thread_t *thread) {
 
 void com_sys_thread_ready_nolock(com_thread_t *thread) {
     arch_cpu_t *curr_cpu = x86_64_smp_get_random();
+    thread->runnable     = true;
+    thread->waiting_on   = NULL;
     kspinlock_acquire(&curr_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-    thread->runnable   = true;
-    thread->waiting_on = NULL;
     kspinlock_release(&curr_cpu->runqueue_lock);
     KDEBUG("thread with tid=%zu is now runnable on cpu %zu",
            thread->tid,

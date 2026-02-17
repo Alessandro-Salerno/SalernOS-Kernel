@@ -58,20 +58,21 @@ static int fbdev_stat(struct stat *out, void *devdata) {
     return 0;
 }
 
-static int fbdev_mmap(void           **out,
-                      void            *devdata,
-                      uintptr_t        hint,
-                      size_t           size,
-                      int              vmm_flags,
-                      arch_mmu_flags_t mmu_flags,
-                      uintmax_t        off) {
+static int fbdev_mmap(void             **out,
+                      void              *devdata,
+                      com_vmm_context_t *vmm_context,
+                      void              *hint,
+                      size_t             size,
+                      int                vmm_flags,
+                      arch_mmu_flags_t   mmu_flags,
+                      uintmax_t          off) {
     (void)off;
 
     com_fbdev_t *fbdev = devdata;
     void        *phys  = (void *)ARCH_HHDM_TO_PHYS(fbdev->fb->address);
 
-    *out = com_mm_vmm_map(NULL,
-                          (void *)hint,
+    *out = com_mm_vmm_map(vmm_context,
+                          hint,
                           phys,
                           size,
                           vmm_flags,

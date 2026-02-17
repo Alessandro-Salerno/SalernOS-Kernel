@@ -83,6 +83,8 @@ const char *com_sys_profiler_resolve_name(com_profile_func_t function_id) {
             return "com_mm_pmm_free";
         case E_COM_PROFILE_FUNC_SCHED_YIELD:
             return "com_sys_sched_yield_nolock";
+        case E_COM_PROFILE_FUNC_ELF_LOAD:
+            return "com_sys_elf64_load";
         default:
             break;
     }

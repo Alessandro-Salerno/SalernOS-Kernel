@@ -46,7 +46,7 @@ static void proc_update_fd_hint(com_proc_t *proc) {
     // Best case: there's a file after the hint
     for (; proc->next_fd < CONFIG_OPEN_MAX; proc->next_fd++) {
         if (NULL == proc->fd[proc->next_fd].file) {
-            return;
+            goto end;
         }
     }
 
@@ -55,6 +55,8 @@ static void proc_update_fd_hint(com_proc_t *proc) {
     for (proc->next_fd = 0; proc->next_fd < CONFIG_OPEN_MAX &&
                             NULL != proc->fd[proc->next_fd].file;
          proc->next_fd++);
+end:
+    proc->max_fd = KMAX(proc->max_fd, proc->next_fd);
 }
 
 com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,

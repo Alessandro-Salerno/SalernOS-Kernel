@@ -33,6 +33,7 @@ typedef enum com_profile_func {
     E_COM_PROFILE_FUNC_PMM_ALLOC,
     E_COM_PROFILE_FUNC_PMM_FREE,
     E_COM_PROFILE_FUNC_SCHED_YIELD,
+    E_COM_PROFILE_FUNC_ELF_LOAD,
 
     E_COM_PROFILE_FUNC__MAX
 } com_profile_func_t;

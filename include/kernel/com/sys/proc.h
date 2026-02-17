@@ -94,6 +94,7 @@ typedef struct com_proc {
     _Atomic(com_vnode_t *)       cwd;
     kspinlock_t                  fd_lock;
     int                          next_fd;
+    int                          max_fd;
     com_filedesc_t               fd[CONFIG_OPEN_MAX];
 } com_proc_t;
 

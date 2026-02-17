@@ -36,7 +36,7 @@ static com_syscall_ret_t file_mmap(com_proc_t      *curr_proc,
                                    int              vmm_flags,
                                    arch_mmu_flags_t mmu_flags,
                                    uintmax_t        off,
-                                   uintptr_t        hint) {
+                                   void            *hint) {
     com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
     com_file_t       *file = com_sys_proc_get_file(curr_proc, fd);
     if (NULL == file) {
@@ -47,6 +47,7 @@ static com_syscall_ret_t file_mmap(com_proc_t      *curr_proc,
     void *mmap_ret;
     int   vfs_err = com_fs_vfs_mmap(&mmap_ret,
                                   file->vnode,
+                                  NULL,
                                   hint,
                                   size,
                                   vmm_flags | COM_MM_VMM_FLAGS_FILE,
@@ -107,12 +108,12 @@ static inline arch_mmu_flags_t make_mmu_flags(int flags, int prot) {
 COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
 
-    uintptr_t hint  = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
-    size_t    size  = COM_SYS_SYSCALL_ARG(size_t, 2);
-    int       flags = COM_SYS_SYSCALL_ARG(int, 3);
-    int       prot  = COM_SYS_SYSCALL_ARG(int, 4);
-    int       fd    = COM_SYS_SYSCALL_ARG(int, 5);
-    off_t     off   = COM_SYS_SYSCALL_ARG(off_t, 6);
+    void  *hint  = COM_SYS_SYSCALL_ARG(void *, 1);
+    size_t size  = COM_SYS_SYSCALL_ARG(size_t, 2);
+    int    flags = COM_SYS_SYSCALL_ARG(int, 3);
+    int    prot  = COM_SYS_SYSCALL_ARG(int, 4);
+    int    fd    = COM_SYS_SYSCALL_ARG(int, 5);
+    off_t  off   = COM_SYS_SYSCALL_ARG(off_t, 6);
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
@@ -126,7 +127,7 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
 
     // Allocate anonymous pages
     void *virt = com_mm_vmm_map(curr_proc->vmm_context,
-                                (void *)hint,
+                                hint,
                                 NULL,
                                 size,
                                 vmm_flags | COM_MM_VMM_FLAGS_ALLOCATE,

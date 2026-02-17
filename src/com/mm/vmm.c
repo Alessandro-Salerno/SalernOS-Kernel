@@ -157,7 +157,6 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
                      arch_mmu_flags_t   mmu_flags) {
     if (COM_MM_VMM_FLAGS_ALLOCATE & vmm_flags) {
         phys = NULL;
-        mmu_flags |= ARCH_MMU_FLAGS_GLOBAL;
     }
 
 #ifdef ARCH_MMU_EXTRA_FLAGS_SHARED
@@ -206,6 +205,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
             kspinlock_release(&context->lock);
         } else if (COM_MM_VMM_FLAGS_PHYSICAL & vmm_flags) {
             virt = (void *)ARCH_PHYS_TO_HHDM(page_paddr);
+            mmu_flags |= ARCH_MMU_FLAGS_GLOBAL;
         } else {
             KASSERT(!"unsupported vmm flags");
         }

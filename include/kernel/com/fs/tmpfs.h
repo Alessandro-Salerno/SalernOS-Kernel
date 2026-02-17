@@ -81,13 +81,14 @@ int com_fs_tmpfs_mksocket(com_vnode_t **out,
                           size_t        namelen,
                           uintmax_t     attr,
                           uintmax_t     fsattr);
-int com_fs_tmpfs_mmap(void           **out,
-                      com_vnode_t     *node,
-                      uintptr_t        hint,
-                      size_t           size,
-                      int              vmm_flags,
-                      arch_mmu_flags_t mmu_flags,
-                      uintmax_t        off);
+int com_fs_tmpfs_mmap(void             **out,
+                      com_vnode_t       *node,
+                      com_vmm_context_t *vmm_context,
+                      void              *hint,
+                      size_t             size,
+                      int                vmm_flags,
+                      arch_mmu_flags_t   mmu_flags,
+                      uintmax_t          off);
 
 // OTHER FUNCTIONS
 

@@ -656,19 +656,20 @@ int com_fs_tmpfs_mksocket(com_vnode_t **out,
     return 0;
 }
 
-int com_fs_tmpfs_mmap(void           **out,
-                      com_vnode_t     *node,
-                      uintptr_t        hint,
-                      size_t           size,
-                      int              vmm_flags,
-                      arch_mmu_flags_t mmu_flags,
-                      uintmax_t        off) {
+int com_fs_tmpfs_mmap(void             **out,
+                      com_vnode_t       *node,
+                      com_vmm_context_t *vmm_context,
+                      void              *hint,
+                      size_t             size,
+                      int                vmm_flags,
+                      arch_mmu_flags_t   mmu_flags,
+                      uintmax_t          off) {
     struct tmpfs_node *file       = node->extra;
-    void              *range_base = (void *)hint;
+    void              *range_base = hint;
 
     if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
         vmm_flags &= ~COM_MM_VMM_FLAGS_NOHINT;
-        range_base = com_mm_vmm_prealloc_range(NULL,
+        range_base = com_mm_vmm_prealloc_range(vmm_context,
                                                E_COM_VMM_RANGE_TYPE_FILE,
                                                size);
     }
@@ -681,7 +682,7 @@ int com_fs_tmpfs_mmap(void           **out,
         // If it is NULL or undefined, we'll ignore it thanks to FLAGS_ALLOCATE
         void *page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
         com_mm_pmm_hold(page_phys);
-        com_mm_vmm_map(NULL,
+        com_mm_vmm_map(vmm_context,
                        range_base + (curr - off),
                        page_phys,
                        ARCH_PAGE_SIZE,
