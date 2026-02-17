@@ -143,6 +143,7 @@ void com_sys_sched_yield_nolock(void) {
         ARCH_CONTEXT_RESTORE_EXTRA(next->xctx);
     }
 
+    com_sys_profiler_end_function(&profiler_data);
     cpu->thread = next;
     curr->cpu   = NULL;
     next->cpu   = cpu;
@@ -161,7 +162,6 @@ void com_sys_sched_yield_nolock(void) {
     //        guarantee that this function will return to the same point from
     //        which it was called, in fact, quite the opposite.
     next->lock_depth--;
-    com_sys_profiler_end_function(&profiler_data);
 #if CONFIG_TRACK_SLEEP_TIME
     uintmax_t sleep_start = ARCH_CPU_GET_TIMESTAMP();
 #endif

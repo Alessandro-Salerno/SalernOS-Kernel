@@ -78,6 +78,7 @@ override LDFLAGS += \
 
 override OPTDEPS = 
 override CFILES = $(call rwildcard, src/com, *.c) $(call rwildcard, src/platform/$(PLATFORM), *.c)
+override UTILFILES = $(call rwildcard, util, *.c)
 override ASFILES = $(call rwildcard, src/platform/$(PLATFORM), *.S)
 override NASMFILES = $(call rwildcard, src/platform/$(PLATFORM), *.asm)
 

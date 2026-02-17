@@ -244,7 +244,9 @@ arch_mmu_pagetable_t *arch_mmu_new_table(void) {
         return NULL;
     }
 
-    kmemcpy((void *)ARCH_PHYS_TO_HHDM(table), RootTable, ARCH_PAGE_SIZE);
+    kmemcpy((void *)ARCH_PHYS_TO_HHDM(table + 256),
+            RootTable + 256,
+            ARCH_PAGE_SIZE / 2);
     return table;
 }
 

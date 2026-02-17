@@ -110,6 +110,14 @@ void com_sys_profiler_end_function(com_profiler_data_t *data) {
     uintmax_t real_elapsed;
     uintmax_t cpu_elapsed;
     profiler_calc_elapsed_time(&real_elapsed, &cpu_elapsed, data);
+
+    com_profile_func_data_t
+        *function_data = &SystemProfile.functions[data->syscall_number];
+    __atomic_add_fetch(&function_data->num_calls, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&function_data->real_time,
+                       real_elapsed,
+                       __ATOMIC_RELAXED);
+    __atomic_add_fetch(&function_data->cpu_time, cpu_elapsed, __ATOMIC_RELAXED);
 }
 
 com_profiler_data_t com_sys_profiler_start_syscall(size_t syscall_number) {

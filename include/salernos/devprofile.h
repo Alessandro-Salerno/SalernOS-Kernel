@@ -9,7 +9,7 @@
 #define DEVPROFILE_IOCTL_GET_NUM_SYSCALLS  _IOR('P', 0x01, size_t)
 
 #define DEVPROFILE_IOCTL_GET_FUNCTIONS _IOR('P', 0X02, struct devprofile_fn_res)
-#define DEVPROFILE_IOCTL_GET_SYSCALL   _IOR('P', 0X03, struct devprofile_fn_res)
+#define DEVPROFILE_IOCTL_GET_SYSCALLS  _IOR('P', 0X03, struct devprofile_fn_res)
 
 #define DEVPROFILE_SIZEOF_FN_RES(n) \
     ((n) * sizeof(struct devprofile_fn_data) + sizeof(struct devprofile_fn_res))
@@ -22,7 +22,7 @@ struct devprofile_fn_data {
 };
 
 struct devprofile_fn_res {
-    uint64_t                  _rsvd;
+    uint64_t                  _rsvd[16]; // reserved for future use
     struct devprofile_fn_data data[];
 };
 

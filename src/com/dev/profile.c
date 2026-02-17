@@ -48,7 +48,7 @@ static int devprofile_ioctl(void *devdata, uintmax_t op, void *buf) {
         }
 
         return 0;
-    } else if (DEVPROFILE_IOCTL_GET_SYSCALL == op) {
+    } else if (DEVPROFILE_IOCTL_GET_SYSCALLS == op) {
         struct devprofile_fn_res *r            = buf;
         size_t                    num_syscalls = 0;
         com_syscall_aux_t        *aux_syscalls;

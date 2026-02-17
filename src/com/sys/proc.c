@@ -274,7 +274,7 @@ com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
     kspinlock_acquire(&PIDNamespaceLock);
 
     com_proc_t *ret = NULL;
-    for (size_t i = 0; i < CONFIG_PROC_MAX; i++) {
+    for (int i = 0; i < NextPid + 1; i++) {
         com_proc_t *candidate;
         kradixtree_get_nolock((void *)&candidate, &Processes, i);
 
