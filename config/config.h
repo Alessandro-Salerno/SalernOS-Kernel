@@ -83,6 +83,7 @@
 #define CONFIG_PMM_ZERO_MAX             400
 #define CONFIG_PMM_INSERT_MAX           200
 #define CONFIG_PMM_DEFRAG_MAX           500
+#define CONFIG_VMM_PREFAULT_MAX         512 /* max n. pages faultable at once */
 
 // Misc
 #define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */

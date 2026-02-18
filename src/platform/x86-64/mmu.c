@@ -545,6 +545,20 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
     uint64_t              entry          = *get_page(curr_pt, fault_virt);
     void                 *fault_phys     = (void *)(entry & ADDRMASK);
     arch_mmu_flags_t      mmu_flags_hint = entry & ~ADDRMASK;
+    size_t                num_pages      = 1;
+
+    for (; num_pages < CONFIG_VMM_PREFAULT_MAX; num_pages++) {
+        uint64_t *next_entry = get_page(curr_pt,
+                                        (char *)fault_virt +
+                                            ARCH_PAGE_SIZE * num_pages);
+        if (NULL == next_entry) {
+            break;
+        }
+        arch_mmu_flags_t next_mmu_flags = *next_entry & ~ADDRMASK;
+        if (mmu_flags_hint != next_mmu_flags) {
+            break;
+        }
+    }
 
     int vmm_attr = 0;
     if (ARCH_MMU_EXTRA_FLAGS_PRIVATE & entry) {
@@ -565,7 +579,8 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
                             fault_phys,
                             ctx,
                             mmu_flags_hint,
-                            vmm_attr);
+                            vmm_attr,
+                            num_pages);
 }
 
 void x86_64_mmu_invalidate_isr(com_isr_t *isr, arch_context_t *ctx) {

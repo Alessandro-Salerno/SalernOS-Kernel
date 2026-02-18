@@ -70,7 +70,8 @@ void  com_mm_vmm_handle_fault(void            *fault_virt,
                               void            *fault_phys,
                               arch_context_t  *fault_ctx,
                               arch_mmu_flags_t mmu_flags_hint,
-                              int              attr);
+                              int              attr,
+                              size_t           num_pages_hint);
 void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
                                 com_vmm_range_type_t rangetype,
                                 size_t               len);

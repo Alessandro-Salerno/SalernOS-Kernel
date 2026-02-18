@@ -21,6 +21,8 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sys/proc.h>
+#include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/platform/mmu.h>
@@ -292,9 +294,12 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
                              void            *fault_phys,
                              arch_context_t  *fault_ctx,
                              arch_mmu_flags_t mmu_flags_hint,
-                             int              attr) {
+                             int              attr,
+                             size_t           num_pages_hint) {
+    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
+        E_COM_PROFILE_FUNC_VMM_HANDLE_FAULT);
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL == curr_thread) {
+    if (KUNKLIKELY(NULL == curr_thread)) {
         com_sys_panic(fault_ctx,
                       "unrecoverable page fault in kernel setup code on "
                       "address (virt = %p, phys = %p)",
@@ -304,11 +309,28 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
 
     com_proc_t *curr_proc = curr_thread->proc;
     bool        is_user   = ARCH_CONTEXT_ISUSER(&curr_thread->ctx);
-    if (!is_user || NULL == curr_proc) {
+    if (KUNKLIKELY(!is_user || NULL == curr_proc)) {
         goto kernel_thread;
     }
 
-    if (COM_MM_VMM_FAULT_ATTR_COW & attr) {
+    if (KLIKELY(COM_MM_VMM_FAULT_ATTR_MAP & attr)) {
+        void *fault_virt_page = (void *)((uintptr_t)fault_virt &
+                                         ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        void *new_phys        = com_mm_pmm_alloc_many_zero(num_pages_hint);
+        for (size_t i = 0; i < num_pages_hint; i++) {
+            arch_mmu_map(curr_proc->vmm_context->pagetable,
+                         fault_virt_page + ARCH_PAGE_SIZE * i,
+                         new_phys + ARCH_PAGE_SIZE * i,
+                         mmu_flags_hint);
+        }
+        arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
+                            fault_virt_page,
+                            num_pages_hint);
+        // com_mm_pmm_free(ZeroPage);
+        goto end;
+    }
+
+    if (KLIKELY(COM_MM_VMM_FAULT_ATTR_COW & attr)) {
         void *fault_virt_page = (void *)((uintptr_t)fault_virt &
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
         void *fault_phys_page = (void *)((uintptr_t)fault_phys &
@@ -325,30 +347,12 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
                             fault_virt_page,
                             1);
         com_mm_pmm_free(fault_phys_page);
-        return;
+        goto end;
     }
 
-    if (COM_MM_VMM_FAULT_ATTR_MAP & attr) {
-        void *fault_virt_page = (void *)((uintptr_t)fault_virt &
-                                         ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
-        void *new_phys        = com_mm_pmm_alloc_zero();
-        arch_mmu_map(curr_proc->vmm_context->pagetable,
-                     fault_virt_page,
-                     new_phys,
-                     mmu_flags_hint);
-        arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
-                            fault_virt_page,
-                            1);
-        com_mm_pmm_free(ZeroPage);
-        return;
-    }
-
-    if (ARCH_CONTEXT_ISUSER(fault_ctx)) {
-        KDEBUG("sending SIGSEGV to pid=%d due to page fault on addr %p",
-               curr_proc->pid,
-               fault_virt);
+    if (KLIKELY(ARCH_CONTEXT_ISUSER(fault_ctx))) {
         com_ipc_signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
-        return;
+        goto end;
     }
 
 kernel_thread:
@@ -360,6 +364,9 @@ kernel_thread:
                   fault_virt,
                   fault_phys,
                   ARCH_CONTEXT_ISUSER(fault_ctx) ? "USER" : "KERNEL");
+
+end:
+    com_sys_profiler_end_function(&profiler_data);
 }
 
 void com_mm_vmm_init(void) {
