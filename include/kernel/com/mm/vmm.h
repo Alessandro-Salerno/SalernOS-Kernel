@@ -38,6 +38,8 @@
 #define COM_MM_VMM_FAULT_ATTR_COW 1 // COW enabled on the address
 #define COM_MM_VMM_FAULT_ATTR_MAP 2 // Map on page fault
 
+#define COM_MM_VMM_PREFAULT_SUPPORTED_ATTR (COM_MM_VMM_FAULT_ATTR_MAP)
+
 // Doing this now, but using one big range regardless
 typedef enum com_vmm_range_type {
     E_COM_VMM_RANGE_TYPE_ANONYMOUS,

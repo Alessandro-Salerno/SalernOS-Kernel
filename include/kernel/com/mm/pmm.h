@@ -19,6 +19,7 @@
 #pragma once
 
 #include <arch/info.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -45,6 +46,7 @@ void *com_mm_pmm_alloc_many_zero(size_t pages);
 void *com_mm_pmm_alloc_max(size_t *out_alloc_size, size_t pages);
 void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages);
 void  com_mm_pmm_hold(void *page);
+bool  com_mm_pmm_is_shared(void *page);
 void  com_mm_pmm_free(void *page);
 void  com_mm_pmm_free_many(void *base, size_t pages);
 void  com_mm_pmm_unreserve_many(void *base, size_t pages);

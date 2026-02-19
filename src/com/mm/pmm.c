@@ -605,6 +605,12 @@ void com_mm_pmm_hold(void *page) {
     __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_RELAXED);
 }
 
+bool com_mm_pmm_is_shared(void *page) {
+    struct page_meta *page_meta = page_meta_get(page);
+    KASSERT(E_PAGE_STATE_FREE != page_meta->state);
+    return __atomic_load_n(&page_meta->num_ref, __ATOMIC_ACQUIRE) > 1;
+}
+
 void com_mm_pmm_free(void *page) {
     struct page_meta *page_meta = page_meta_get(page);
 

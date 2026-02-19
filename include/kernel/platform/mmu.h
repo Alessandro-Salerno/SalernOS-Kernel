@@ -29,9 +29,9 @@ bool                  arch_mmu_map(arch_mmu_pagetable_t *pt,
                                    void                 *virt,
                                    void                 *phys,
                                    arch_mmu_flags_t      flags);
-bool                  arch_mmu_chflags(arch_mmu_flags_t *pt,
-                                       void             *virt,
-                                       arch_mmu_flags_t  new_flags);
+bool                  arch_mmu_chflags(arch_mmu_pagetable_t *pt,
+                                       void                 *virt,
+                                       arch_mmu_flags_t      new_flags);
 bool  arch_mmu_unmap(void **out_old_phys, arch_mmu_pagetable_t *pt, void *virt);
 void  arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages);
 void  arch_mmu_switch(arch_mmu_pagetable_t *pt);

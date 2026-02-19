@@ -290,9 +290,9 @@ bool arch_mmu_map(arch_mmu_pagetable_t *pt,
     return add_page(pt, virt, ((uint64_t)phys & ADDRMASK) | flags, 0);
 }
 
-bool arch_mmu_chflags(arch_mmu_flags_t *pt,
-                      void             *virt,
-                      arch_mmu_flags_t  new_flags) {
+bool arch_mmu_chflags(arch_mmu_pagetable_t *pt,
+                      void                 *virt,
+                      arch_mmu_flags_t      new_flags) {
     uint64_t *entry = get_page(pt, virt);
     if (NULL == entry) {
         return false;
@@ -375,7 +375,7 @@ void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
 
     // And finally, we wait for all others to complete
     while (do_shootdown &&
-           __atomic_load_n(&shootdown_counter, __ATOMIC_RELAXED) !=
+           __atomic_load_n(&shootdown_counter, __ATOMIC_ACQUIRE) !=
                num_other_cpus) {
         ARCH_CPU_PAUSE();
     }
@@ -542,23 +542,13 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
 
     arch_mmu_pagetable_t *curr_pt        = arch_mmu_get_table();
     void                 *fault_virt     = (void *)ctx->cr2;
-    uint64_t              entry          = *get_page(curr_pt, fault_virt);
-    void                 *fault_phys     = (void *)(entry & ADDRMASK);
-    arch_mmu_flags_t      mmu_flags_hint = entry & ~ADDRMASK;
+    uint64_t             *entry_ptr      = get_page(curr_pt, fault_virt);
+    uint64_t              entry          = *entry_ptr;
+    uint64_t              start_entry    = entry;
+    void                 *start_virt     = fault_virt;
+    arch_mmu_flags_t      mmu_flags      = entry & ~ADDRMASK;
+    arch_mmu_flags_t      mmu_flags_hint = mmu_flags;
     size_t                num_pages      = 1;
-
-    for (; num_pages < CONFIG_VMM_PREFAULT_MAX; num_pages++) {
-        uint64_t *next_entry = get_page(curr_pt,
-                                        (char *)fault_virt +
-                                            ARCH_PAGE_SIZE * num_pages);
-        if (NULL == next_entry) {
-            break;
-        }
-        arch_mmu_flags_t next_mmu_flags = *next_entry & ~ADDRMASK;
-        if (mmu_flags_hint != next_mmu_flags) {
-            break;
-        }
-    }
 
     int vmm_attr = 0;
     if (ARCH_MMU_EXTRA_FLAGS_PRIVATE & entry) {
@@ -575,8 +565,42 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
         vmm_attr |= COM_MM_VMM_FAULT_ATTR_MAP;
     }
 
-    com_mm_vmm_handle_fault(fault_virt,
-                            fault_phys,
+    if (!(COM_MM_VMM_PREFAULT_SUPPORTED_ATTR & vmm_attr)) {
+        goto call_vmm;
+    }
+
+    for (; num_pages < CONFIG_VMM_PREFAULT_MAX / 2; num_pages++) {
+        uint64_t *prev_entry_tr = get_page(curr_pt,
+                                           (char *)fault_virt -
+                                               ARCH_PAGE_SIZE * num_pages);
+        if (NULL == prev_entry_tr) {
+            break;
+        }
+        uint64_t         prev_entry     = *prev_entry_tr;
+        arch_mmu_flags_t prev_mmu_flags = prev_entry & ~ADDRMASK;
+        if (mmu_flags != prev_mmu_flags) {
+            break;
+        }
+        start_entry = prev_entry;
+        start_virt  = (void *)((uintptr_t)start_virt - ARCH_PAGE_SIZE);
+    }
+
+    for (; num_pages < CONFIG_VMM_PREFAULT_MAX; num_pages++) {
+        uint64_t *next_entry = get_page(curr_pt,
+                                        (char *)fault_virt +
+                                            ARCH_PAGE_SIZE * num_pages);
+        if (NULL == next_entry) {
+            break;
+        }
+        arch_mmu_flags_t next_mmu_flags = *next_entry & ~ADDRMASK;
+        if (mmu_flags != next_mmu_flags) {
+            break;
+        }
+    }
+
+call_vmm:
+    com_mm_vmm_handle_fault(start_virt,
+                            (void *)(start_entry & ADDRMASK),
                             ctx,
                             mmu_flags_hint,
                             vmm_attr,

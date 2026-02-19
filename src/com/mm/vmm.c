@@ -335,9 +335,19 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
         void *fault_phys_page = (void *)((uintptr_t)fault_phys &
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
-        void *fault_hhdm      = (void *)ARCH_PHYS_TO_HHDM(fault_phys_page);
-        void *new_phys        = (void *)com_mm_pmm_alloc();
-        void *new_hhdm        = (void *)ARCH_PHYS_TO_HHDM(new_phys);
+        if (!com_mm_pmm_is_shared(fault_phys_page)) {
+            arch_mmu_map(curr_proc->vmm_context->pagetable,
+                         fault_virt_page,
+                         fault_phys_page,
+                         mmu_flags_hint);
+            arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
+                                fault_virt_page,
+                                1);
+            goto end;
+        }
+        void *fault_hhdm = (void *)ARCH_PHYS_TO_HHDM(fault_phys_page);
+        void *new_phys   = (void *)com_mm_pmm_alloc();
+        void *new_hhdm   = (void *)ARCH_PHYS_TO_HHDM(new_phys);
         kmemcpy(new_hhdm, fault_hhdm, ARCH_PAGE_SIZE);
         arch_mmu_map(curr_proc->vmm_context->pagetable,
                      fault_virt_page,
