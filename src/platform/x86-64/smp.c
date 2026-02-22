@@ -38,7 +38,7 @@
 #include <vendor/tailq.h>
 
 #define EFER_SYSCALLENABLE 1
-#define MAX_CPUS           ARCH_PAGE_SIZE / sizeof(arch_cpu_t)
+#define MAX_CPUS           (ARCH_PAGE_SIZE * 2) / sizeof(arch_cpu_t)
 
 __attribute__((
     used,
@@ -122,7 +122,7 @@ void x86_64_smp_init(void) {
         return;
     }
 
-    arch_cpu_t *cpus       = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_zero());
+    arch_cpu_t *cpus = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(2));
     size_t      avail_cpus = KMIN(MAX_CPUS, smp->cpu_count);
     Cpus                   = cpus;
     NumCpus                = avail_cpus;

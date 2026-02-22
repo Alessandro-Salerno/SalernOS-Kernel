@@ -36,7 +36,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define NUM_STACK_POLLEDS       8
+#define NUM_STACK_POLLEDS       64
 #define POLL_SHOULD_ALLOC(nfds) ((nfds) > NUM_STACK_POLLEDS)
 
 struct poll_timeout_arg {
@@ -93,9 +93,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
                                  timeout->tv_nsec;
             timeout_arg = com_mm_slab_alloc(sizeof(struct poll_timeout_arg));
             timeout_arg->poller = &poller;
-            ksync_acquire(&poller.lock);
             com_sys_callout_add(poll_timeout, timeout_arg, delay_ns);
-            ksync_release(&poller.lock);
         }
     }
 
@@ -105,6 +103,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     if (POLL_SHOULD_ALLOC(nfds)) {
         polleds = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many_zero(polleds_pages));
+        KURGENT("poll with %zu fds", nfds);
     }
 
     kspinlock_acquire(&curr_proc->fd_lock);

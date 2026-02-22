@@ -59,6 +59,7 @@ typedef struct com_thread {
     kspinlock_t          sched_lock;
     struct com_proc     *proc;
     struct arch_cpu     *cpu;
+    struct arch_cpu     *last_cpu;
     bool                 runnable;
     bool                 exited;
     TAILQ_ENTRY(com_thread) threads;
