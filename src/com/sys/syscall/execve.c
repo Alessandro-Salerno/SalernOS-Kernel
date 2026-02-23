@@ -67,6 +67,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     }
 
     com_sys_proc_kill_other_threads(proc, thread);
+    kstrncpy(proc->executable_path, path, CONFIG_PATH_MAX);
     com_mm_vmm_switch(new_vmm_ctx);
     proc->vmm_context = new_vmm_ctx;
     KASSERT(proc->num_ref > 0);

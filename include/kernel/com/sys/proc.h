@@ -96,6 +96,8 @@ typedef struct com_proc {
     int                          next_fd;
     int                          max_fd;
     com_filedesc_t               fd[CONFIG_OPEN_MAX];
+
+    char executable_path[CONFIG_PATH_MAX];
 } com_proc_t;
 
 com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,

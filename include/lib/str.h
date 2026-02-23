@@ -25,6 +25,7 @@
 int    kstrcmp(const char *s1, const char *s2);
 size_t kstrlen(const char *s);
 void   kstrcpy(char *dst, const char *src);
+void   kstrncpy(char *dst, const char *src, size_t len);
 
 const char *kuitoa(uint64_t val, char *s);
 const char *kitoa(int64_t val, char *s);

@@ -76,19 +76,6 @@ static com_vfs_t *init_tmpfs(com_vfs_t *rootfs) {
     return tmpfs;
 }
 
-static com_vfs_t *init_procfs(com_vfs_t *rootfs) {
-    com_vnode_t *procfs_mountpoint = NULL;
-    com_vfs_t   *procfs            = NULL;
-    com_fs_tmpfs_mkdir(&procfs_mountpoint,
-                       rootfs->root,
-                       "proc",
-                       kstrlen("proc"),
-                       0,
-                       0);
-    com_fs_tmpfs_mount(&procfs, procfs_mountpoint);
-    return procfs;
-}
-
 void com_init_splash(void) {
 #if CONFIG_LOG_SHOW_SPLASH
     com_io_log_putsn(_binary_src_splash_txt_start,
@@ -108,22 +95,6 @@ void com_init_filesystem(void) {
     com_fs_tmpfs_mount(&rootfs, NULL);
 
     init_tmpfs(rootfs);
-    com_vfs_t *procfs = init_procfs(rootfs);
-
-#if CONFIG_LOG_USE_VNODE
-    com_vnode_t *proc_kernel = NULL;
-    com_fs_tmpfs_mkdir(&proc_kernel,
-                       procfs->root,
-                       "kernel",
-                       kstrlen("kernel"),
-                       0,
-                       0);
-
-#warning "log to vnode is experimental!"
-    com_vnode_t *kernel_log = NULL;
-    com_fs_tmpfs_create(&kernel_log, proc_kernel, "log", kstrlen("log"), 0, 0);
-    com_io_log_set_vnode(kernel_log);
-#endif
 
     arch_file_t *initrd = arch_info_get_initrd();
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);

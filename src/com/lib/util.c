@@ -64,7 +64,9 @@ void kinitlog(const char *category, const char *color) {
         goto log;
     }
 
-    printf("pid=%d", curr_thread->proc->pid);
+    printf("pid=%d (%s)",
+           curr_thread->proc->pid,
+           curr_thread->proc->executable_path);
 log:
     printf("]\t");
 }

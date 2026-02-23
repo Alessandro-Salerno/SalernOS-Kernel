@@ -25,13 +25,14 @@
 #include <vendor/tailq.h>
 
 typedef struct com_callout com_callout_t;
-typedef void (*com_callout_intf_t)(com_callout_t *callout);
+typedef void (*com_intf_callout_t)(com_callout_t *callout);
 
 typedef struct com_callout {
     uintmax_t          ns;
-    com_callout_intf_t handler;
+    com_intf_callout_t handler;
     void              *arg;
     bool               reuse;
+    bool               permanent;
     TAILQ_ENTRY(com_callout) queue;
 } com_callout_t;
 
@@ -49,16 +50,24 @@ void      com_sys_callout_run(void);
 void      com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx);
 void      com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns);
 void      com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay);
-void      com_sys_callout_add_at(com_callout_intf_t handler,
+void      com_sys_callout_add_at(com_intf_callout_t handler,
                                  void              *arg,
                                  uintmax_t          ns);
-void      com_sys_callout_add(com_callout_intf_t handler,
+void      com_sys_callout_add(com_intf_callout_t handler,
                               void              *arg,
                               uintmax_t          delay);
-void      com_sys_callout_add_at_bsp(com_callout_intf_t handler,
+void      com_sys_callout_add_at_bsp(com_intf_callout_t handler,
                                      void              *arg,
                                      uintmax_t          ns);
-void      com_sys_callout_add_bsp(com_callout_intf_t handler,
+void      com_sys_callout_add_bsp(com_intf_callout_t handler,
                                   void              *arg,
                                   uintmax_t          delay);
 void      com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue);
+com_callout_t      *
+com_sys_callout_new(com_intf_callout_t handler, void *arg, uintmax_t ns);
+void com_sys_callout_destroy(com_callout_t *callout);
+void com_sys_callout_enqueue(com_callout_t *callout);
+void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
+                                     com_intf_callout_t handler,
+                                     uintmax_t          delay);
+void com_sys_callout_cancel(com_callout_t *callout);

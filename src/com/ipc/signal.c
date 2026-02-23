@@ -99,6 +99,9 @@ static int send_to_thread(com_thread_t *thread, int sig) {
 }
 
 static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
+    (void)sender;
+    // TODO: should I check permission to send the signal?
+
     if (NULL == proc) {
         return ESRCH;
     }
@@ -134,9 +137,6 @@ void com_ipc_signal_sigset_emptY(com_sigset_t *set) {
 }
 
 int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
-    (void)sender;
-    // TODO: should I check permission to send the signal?
-
     if (!IS_VALID_SIGNAL(sig)) {
         return EINVAL;
     }

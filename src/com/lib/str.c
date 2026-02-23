@@ -52,6 +52,14 @@ void kstrcpy(char *dst, const char *src) {
     dst[n] = 0;
 }
 
+void kstrncpy(char *dst, const char *src, size_t len) {
+    size_t n = 0;
+    for (; 0 != src[n] && n < len - 1; n++) {
+        dst[n] = src[n];
+    }
+    dst[n] = 0;
+}
+
 const char *kuitoa(uint64_t val, char *s) {
     uint64_t size_test = val;
     uint8_t  size      = 0;

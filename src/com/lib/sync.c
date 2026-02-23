@@ -43,6 +43,20 @@ void ksync_wait(ksync_t *sync, com_waitlist_t *waitlist) {
     }
 }
 
+int ksync_wait_timeout(ksync_t             *sync,
+                       struct com_waitlist *waitlist,
+                       uintmax_t            timeout) {
+    if (KSYNC_FLAGS_MUTEX & sync->flags) {
+        return com_sys_sched_wait_mutex_timeout(waitlist,
+                                                &sync->lock.mutex,
+                                                timeout);
+    } else {
+        return com_sys_sched_wait_spinlock_timeout(waitlist,
+                                                   &sync->lock.spinlock,
+                                                   timeout);
+    }
+}
+
 void ksync_notify(ksync_t *sync, com_waitlist_t *waitlist) {
     (void)sync;
     com_sys_sched_notify(waitlist);

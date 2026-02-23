@@ -48,5 +48,8 @@ typedef struct ksync {
 void ksync_acquire(ksync_t *sync);
 void ksync_release(ksync_t *sync);
 void ksync_wait(ksync_t *sync, struct com_waitlist *waitlist);
+int  ksync_wait_timeout(ksync_t             *sync,
+                        struct com_waitlist *waitlist,
+                        uintmax_t            timeout);
 void ksync_notify(ksync_t *sync, struct com_waitlist *waiters);
 void ksync_notify_all(ksync_t *sync, struct com_waitlist *waiters);

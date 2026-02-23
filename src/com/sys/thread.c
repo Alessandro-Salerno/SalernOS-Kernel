@@ -47,8 +47,10 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_RELAXED);
 
-    thread->waiting_on = NULL;
-    thread->ctime      = ARCH_CPU_GET_TIMESTAMP();
+    thread->waiting_on         = NULL;
+    thread->ctime              = ARCH_CPU_GET_TIMESTAMP();
+    thread->timed_wait_callout = com_sys_callout_new(NULL, thread, 0);
+    thread->timed_wait_callout->permanent = true;
 
     thread->real_timer.lock = KSPINLOCK_NEW();
 
@@ -99,6 +101,7 @@ void com_sys_thread_destroy(com_thread_t *thread) {
     }
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
                     ARCH_PAGE_SIZE);
+    com_sys_callout_destroy(thread->timed_wait_callout);
     com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
 }
 

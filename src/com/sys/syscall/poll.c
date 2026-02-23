@@ -39,38 +39,13 @@
 #define NUM_STACK_POLLEDS       64
 #define POLL_SHOULD_ALLOC(nfds) ((nfds) > NUM_STACK_POLLEDS)
 
-struct poll_timeout_arg {
-    com_poller_t *poller;
-    atomic_bool   invalidated;
-    bool          expired;
-};
-
-static void poll_timeout(com_callout_t *callout) {
-    struct poll_timeout_arg *data = callout->arg;
-
-    // If the timeout expires after the poll call has ended (either because an
-    // event was caught before it or because a signal interrupted it), we cannot
-    // know for sure wether the function is still running or not (might be in
-    // the last few lines), but we know for sure it's not going to use this
-    // struct ever again, so we can free it
-    if (atomic_load(&data->invalidated)) {
-        com_mm_slab_free(data, sizeof(struct poll_timeout_arg));
-        return;
-    }
-
-    ksync_acquire(&data->poller->lock);
-    data->expired = true;
-    ksync_release(&data->poller->lock);
-    ksync_notify_all(&data->poller->lock, &data->poller->waiters);
-    // here the struct is not freed because the function will use it, and it
-    // will be responsible for cleaning up the memory
-}
-
 // CREDIT: vloxei64/ke
 // SYSCALL: poll(struct pollfd fds[], nfds_t nfds, struct timespec *timeout)
 COM_SYS_SYSCALL(com_sys_syscall_poll) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
+
+    uintmax_t syscall_start = ARCH_CPU_GET_TIMESTAMP();
 
     struct pollfd   *fds     = COM_SYS_SYSCALL_ARG(void *, 1);
     nfds_t           nfds    = COM_SYS_SYSCALL_ARG(nfds_t, 2);
@@ -79,21 +54,17 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    struct poll_timeout_arg *timeout_arg = NULL;
-    com_poller_t             poller      = {0};
+    com_poller_t poller = {0};
     COM_SYS_THREAD_WAITLIST_INIT(&poller.waiters);
     KSYNC_INIT_SPINLOCK(&poller.lock);
 
-    bool do_wait = true;
+    bool      do_wait  = true;
+    uintmax_t delay_ns = 0;
     if (NULL != timeout) {
         if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
             do_wait = false;
-        } else if (timeout->tv_nsec >= 0 && timeout->tv_nsec >= 0) {
-            uintmax_t delay_ns = timeout->tv_sec * KNANOS_PER_SEC +
-                                 timeout->tv_nsec;
-            timeout_arg = com_mm_slab_alloc(sizeof(struct poll_timeout_arg));
-            timeout_arg->poller = &poller;
-            com_sys_callout_add(poll_timeout, timeout_arg, delay_ns);
+        } else if (timeout->tv_sec >= 0 && timeout->tv_nsec >= 0) {
+            delay_ns = timeout->tv_sec * KNANOS_PER_SEC + timeout->tv_nsec;
         }
     }
 
@@ -103,7 +74,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     if (POLL_SHOULD_ALLOC(nfds)) {
         polleds = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many_zero(polleds_pages));
-        KURGENT("poll with %zu fds", nfds);
     }
 
     kspinlock_acquire(&curr_proc->fd_lock);
@@ -164,35 +134,27 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         }
 
         ksync_acquire(&poller.lock);
-
-        // If timeout expired before we got here
-        if (NULL != timeout_arg && timeout_arg->expired) {
-            ksync_release(&poller.lock);
-            com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
-            timeout_arg = NULL; // do not invalidate freed memory
-            break;
+        uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
+        uintmax_t elapsed = ARCH_CPU_TIMESTAMP_TO_NS(curr_time - syscall_start);
+        int       wait_ret = EINTR;
+        if (elapsed < delay_ns) {
+            wait_ret = ksync_wait_timeout(&poller.lock,
+                                          &poller.waiters,
+                                          delay_ns - elapsed);
         }
-
-        ksync_wait(&poller.lock, &poller.waiters);
-
-        // If we were notified by the callout
-        if (NULL != timeout_arg && timeout_arg->expired) {
-            ksync_release(&poller.lock);
-            com_mm_slab_free(timeout_arg, sizeof(struct poll_timeout_arg));
-            timeout_arg = NULL; // do not invalidate freed memory
-            break;
-        }
-
         ksync_release(&poller.lock);
+
+        if (0 != wait_ret) {
+            do_wait = false;
+            continue;
+        }
+
         sig = com_ipc_signal_check();
 
         if (COM_IPC_SIGNAL_NONE != sig) {
             break;
         }
     }
-
-    // TODO: I think there is a race condition here: if timeout arrives here,
-    // the structure is not freed. Not a big deal for now though
 
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
@@ -211,13 +173,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     // If we had allocated polleds, we shall also free it
     if (POLL_SHOULD_ALLOC(nfds)) {
         com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(polleds), polleds_pages);
-    }
-
-    // This poll is over, so we need to invalidate any callout data left
-    // otherwise we risk creating stack issues as callout_data->poller points to
-    // this syscall's stack
-    if (NULL != timeout_arg) {
-        atomic_store(&timeout_arg->invalidated, true);
     }
 
     if (COM_IPC_SIGNAL_NONE != sig) {

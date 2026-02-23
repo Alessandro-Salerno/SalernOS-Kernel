@@ -32,6 +32,15 @@ void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist);
 void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond);
 void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex);
 
+int com_sys_sched_wait_nodrop_timeout(com_waitlist_t *waitlist,
+                                      uintmax_t       timeout);
+int com_sys_sched_wait_spinlock_timeout(com_waitlist_t *waitlist,
+                                        kspinlock_t    *lock,
+                                        uintmax_t       timeout);
+int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
+                                     kmutex_t       *mutex,
+                                     uintmax_t       timeout);
+
 void com_sys_sched_notify(com_waitlist_t *waitlist);
 void com_sys_sched_notify_all(com_waitlist_t *waitlist);
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread);

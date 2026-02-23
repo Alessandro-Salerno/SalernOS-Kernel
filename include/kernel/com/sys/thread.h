@@ -67,9 +67,11 @@ typedef struct com_thread {
     int   lock_depth;
     pid_t tid;
 
-    com_waitlist_t *waiting_on;
-    uintmax_t       ctime;
-    uintmax_t       time_slept;
+    com_waitlist_t     *waiting_on;
+    uintmax_t           ctime;
+    uintmax_t           time_slept;
+    struct com_callout *timed_wait_callout;
+    bool                timed_wait_expired;
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;

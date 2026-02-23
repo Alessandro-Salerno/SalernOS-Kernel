@@ -59,7 +59,7 @@ static void enqueue_callout(com_callout_queue_t *cpu_callout,
 }
 
 static void callout_add_at(com_callout_queue_t *cpu_callout,
-                           com_callout_intf_t   handler,
+                           com_intf_callout_t   handler,
                            void                *arg,
                            uintmax_t            ns) {
     com_callout_t *new = com_mm_slab_alloc(sizeof(com_callout_t));
@@ -75,7 +75,7 @@ static void callout_add_at(com_callout_queue_t *cpu_callout,
 
 // NOTE: repeated code for locking reasons
 static void callout_add(com_callout_queue_t *cpu_callout,
-                        com_callout_intf_t   handler,
+                        com_intf_callout_t   handler,
                         void                *arg,
                         uintmax_t            delay) {
     kspinlock_acquire(&cpu_callout->lock);
@@ -124,7 +124,7 @@ void com_sys_callout_run(void) {
         callout->handler(callout);
         kspinlock_acquire(&cpu_callout->lock);
 
-        if (!callout->reuse) {
+        if (!callout->reuse && !callout->permanent) {
             com_mm_slab_free(callout, sizeof(com_callout_t));
         }
     }
@@ -168,25 +168,25 @@ void com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay) {
     kspinlock_release(&cpu_callout->lock);
 }
 
-void com_sys_callout_add_at(com_callout_intf_t handler,
+void com_sys_callout_add_at(com_intf_callout_t handler,
                             void              *arg,
                             uintmax_t          ns) {
     callout_add_at(GET_CALLOUT(), handler, arg, ns);
 }
 
-void com_sys_callout_add(com_callout_intf_t handler,
+void com_sys_callout_add(com_intf_callout_t handler,
                          void              *arg,
                          uintmax_t          delay) {
     callout_add(GET_CALLOUT(), handler, arg, delay);
 }
 
-void com_sys_callout_add_at_bsp(com_callout_intf_t handler,
+void com_sys_callout_add_at_bsp(com_intf_callout_t handler,
                                 void              *arg,
                                 uintmax_t          ns) {
     callout_add_at(BspCallout, handler, arg, ns);
 }
 
-void com_sys_callout_add_bsp(com_callout_intf_t handler,
+void com_sys_callout_add_bsp(com_intf_callout_t handler,
                              void              *arg,
                              uintmax_t          delay) {
     callout_add(BspCallout, handler, arg, delay);
@@ -194,4 +194,48 @@ void com_sys_callout_add_bsp(com_callout_intf_t handler,
 
 void com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue) {
     BspCallout = bsp_queue;
+}
+
+com_callout_t *
+com_sys_callout_new(com_intf_callout_t handler, void *arg, uintmax_t ns) {
+    com_callout_t *new = com_mm_slab_alloc(sizeof(com_callout_t));
+    new->handler       = handler;
+    new->arg           = arg;
+    new->ns            = ns;
+    return new;
+}
+
+void com_sys_callout_destroy(com_callout_t *callout) {
+    com_sys_callout_cancel(callout);
+    com_mm_slab_free(callout, sizeof(com_callout_t));
+}
+
+void com_sys_callout_enqueue(com_callout_t *callout) {
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
+    kspinlock_acquire(&cpu_callout->lock);
+    enqueue_callout(cpu_callout, callout);
+    kspinlock_release(&cpu_callout->lock);
+}
+
+// NOTE: this seems weird, but it's used for pre-allocated callouts, such as
+// those used by the scheduler's timed wait primtives
+void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
+                                     com_intf_callout_t handler,
+                                     uintmax_t          delay) {
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
+    callout->handler                 = handler;
+    kspinlock_acquire(&cpu_callout->lock);
+    callout->ns = cpu_callout->ns + delay;
+    enqueue_callout(cpu_callout, callout);
+    kspinlock_release(&cpu_callout->lock);
+}
+
+void com_sys_callout_cancel(com_callout_t *callout) {
+    com_callout_queue_t *cpu_callout = GET_CALLOUT();
+    kspinlock_acquire(&cpu_callout->lock);
+    if (NULL != callout->queue.tqe_prev ||
+        TAILQ_FIRST(&cpu_callout->queue) == callout) {
+        TAILQ_REMOVE(&cpu_callout->queue, callout, queue);
+    }
+    kspinlock_release(&cpu_callout->lock);
 }

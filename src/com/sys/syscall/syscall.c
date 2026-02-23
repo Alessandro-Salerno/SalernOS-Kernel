@@ -146,10 +146,10 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg6,
                                          uintptr_t          invoke_ip) {
     KASSERT(number < CONFIG_SYSCALL_MAX);
-    com_syscall_t     *syscall = &SyscallTable[number];
-    com_syscall_aux_t *aux     = &SyscallAuxTable[number];
+    com_syscall_t *syscall = &SyscallTable[number];
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
+    com_syscall_aux_t *aux     = &SyscallAuxTable[number];
     arch_syscall_arg_t args[6] = {arg1, arg2, arg3, arg4, arg5, arg6};
 #if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
     com_io_log_lock();
