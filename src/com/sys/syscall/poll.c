@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#define _GNU_SROUCE
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <errno.h>
@@ -36,7 +37,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define NUM_STACK_POLLEDS       8
+#define NUM_STACK_POLLEDS       32
 #define POLL_SHOULD_ALLOC(nfds) ((nfds) > NUM_STACK_POLLEDS)
 
 // CREDIT: vloxei64/ke
@@ -63,6 +64,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     if (NULL != timeout) {
         if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
             do_wait = false;
+        } else if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 ||
+                   (uintmax_t)timeout->tv_nsec >= KNANOS_PER_SEC) {
+            return COM_SYS_SYSCALL_ERR(EINVAL);
         } else if (timeout->tv_sec >= 0 && timeout->tv_nsec >= 0) {
             delay_ns = timeout->tv_sec * KNANOS_PER_SEC + timeout->tv_nsec;
         }
@@ -76,6 +80,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             com_mm_pmm_alloc_many_zero(polleds_pages));
     }
 
+    int invalid_count = 0;
     kspinlock_acquire(&curr_proc->fd_lock);
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
@@ -85,17 +90,17 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         int fd               = fds[i].fd;
 
         if (fd < 0) {
-            continue;
+            goto invalid_fd;
         }
 
         com_file_t *file = com_sys_proc_get_file_nolock(curr_proc, fd);
         if (NULL == file) {
-            continue;
+            goto invalid_fd;
         }
 
         com_poll_head_t *poll_head = NULL;
         if (0 != com_fs_vfs_poll_head(&poll_head, file->vnode)) {
-            continue;
+            goto invalid_fd;
         }
 
         polled->file = file;
@@ -105,6 +110,11 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             LIST_INSERT_HEAD(&poll_head->polled_list, polled, polled_list);
             kspinlock_release(&poll_head->lock);
         }
+
+        continue;
+    invalid_fd:
+        fds[i].revents |= POLLNVAL;
+        invalid_count++;
     }
     kspinlock_release(&curr_proc->fd_lock);
 
@@ -134,15 +144,21 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             break;
         }
 
+        int wait_ret = ETIMEDOUT;
         ksync_acquire(&poller.lock);
-        uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
-        uintmax_t elapsed = ARCH_CPU_TIMESTAMP_TO_NS(curr_time - syscall_start);
-        int       wait_ret = ETIMEDOUT;
-        if (0 == delay_ns || elapsed < delay_ns) {
-            wait_ret = ksync_wait_timeout(&poller.lock,
-                                          &poller.waiters,
-                                          delay_ns);
+        if (0 != delay_ns) {
+            uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
+            uintmax_t elapsed   = ARCH_CPU_TIMESTAMP_TO_NS(curr_time -
+                                                         syscall_start);
+            if (elapsed >= delay_ns) {
+                goto skip_wait;
+            }
+            syscall_start = curr_time;
+            delay_ns -= elapsed;
         }
+
+        wait_ret = ksync_wait_timeout(&poller.lock, &poller.waiters, delay_ns);
+    skip_wait:
         ksync_release(&poller.lock);
 
         if (ETIMEDOUT == wait_ret) {
@@ -153,7 +169,8 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         sig = com_ipc_signal_check();
 
         if (COM_IPC_SIGNAL_NONE != sig) {
-            break;
+            last_recheck = true;
+            continue;
         }
     }
 
@@ -176,9 +193,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(polleds), polleds_pages);
     }
 
-    if (COM_IPC_SIGNAL_NONE != sig) {
+    if (COM_IPC_SIGNAL_NONE != sig && 0 == count + invalid_count) {
         return COM_SYS_SYSCALL_ERR(EINTR);
     }
 
-    return COM_SYS_SYSCALL_OK(count);
+    return COM_SYS_SYSCALL_OK(count + invalid_count);
 }
