@@ -36,7 +36,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define NUM_STACK_POLLEDS       64
+#define NUM_STACK_POLLEDS       8
 #define POLL_SHOULD_ALLOC(nfds) ((nfds) > NUM_STACK_POLLEDS)
 
 // CREDIT: vloxei64/ke
@@ -108,8 +108,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     }
     kspinlock_release(&curr_proc->fd_lock);
 
-    int count = 0;
-    int sig   = COM_IPC_SIGNAL_NONE;
+    int  count        = 0;
+    int  sig          = COM_IPC_SIGNAL_NONE;
+    bool last_recheck = false;
 
     while (0 == count) {
         for (nfds_t i = 0; i < nfds; i++) {
@@ -129,23 +130,23 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             }
         }
 
-        if (0 != count || !do_wait) {
+        if (0 != count || !do_wait || last_recheck) {
             break;
         }
 
         ksync_acquire(&poller.lock);
         uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
         uintmax_t elapsed = ARCH_CPU_TIMESTAMP_TO_NS(curr_time - syscall_start);
-        int       wait_ret = EINTR;
-        if (elapsed < delay_ns) {
+        int       wait_ret = ETIMEDOUT;
+        if (0 == delay_ns || elapsed < delay_ns) {
             wait_ret = ksync_wait_timeout(&poller.lock,
                                           &poller.waiters,
-                                          delay_ns - elapsed);
+                                          delay_ns);
         }
         ksync_release(&poller.lock);
 
-        if (0 != wait_ret) {
-            do_wait = false;
+        if (ETIMEDOUT == wait_ret) {
+            last_recheck = true;
             continue;
         }
 

@@ -431,6 +431,7 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
                                                       argv,
                                                       env);
     ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
+    kstrncpy(proc->executable_path, path, CONFIG_PATH_MAX);
     return 0;
 
 fail:

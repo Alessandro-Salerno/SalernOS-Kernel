@@ -33,6 +33,9 @@ typedef struct com_callout {
     void              *arg;
     bool               reuse;
     bool               permanent;
+
+    kspinlock_t               entry_lock;  // only protects the following fields
+    struct com_callout_queue *cpu_callout; // NULL if not scheduled
     TAILQ_ENTRY(com_callout) queue;
 } com_callout_t;
 

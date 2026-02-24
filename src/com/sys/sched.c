@@ -249,25 +249,33 @@ int com_sys_sched_wait_nodrop_timeout(com_waitlist_t *waitlist,
                                       uintmax_t       timeout) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     KASSERT(0 == curr->lock_depth);
+
+    curr->timed_wait_expired = false;
     if (0 != timeout) {
         com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
                                         sched_handle_timeout,
                                         timeout);
     }
-    kspinlock_acquire(&curr->sched_lock);
 
+    kspinlock_acquire(&curr->sched_lock);
     sched_waitlist_insert(waitlist, curr);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
     com_sys_callout_cancel(curr->timed_wait_callout);
 
-    if (curr->timed_wait_expired) {
-        curr->timed_wait_expired = false;
-        return EINTR;
+    if (0 == timeout) {
+        return 0;
     }
 
-    return 0;
+    int ret = 0;
+    kspinlock_acquire(&curr->sched_lock);
+    if (curr->timed_wait_expired) {
+        ret = ETIMEDOUT;
+    }
+    kspinlock_release(&curr->sched_lock);
+
+    return ret;
 }
 
 int com_sys_sched_wait_spinlock_timeout(com_waitlist_t *waitlist,
@@ -275,55 +283,73 @@ int com_sys_sched_wait_spinlock_timeout(com_waitlist_t *waitlist,
                                         uintmax_t       timeout) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
     KASSERT(1 == curr->lock_depth);
+
+    curr->timed_wait_expired = false;
     if (0 != timeout) {
         com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
                                         sched_handle_timeout,
                                         timeout);
     }
-    kspinlock_acquire(&curr->sched_lock);
 
+    kspinlock_acquire(&curr->sched_lock);
     sched_waitlist_insert(waitlist, curr);
     kspinlock_release(lock);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
     com_sys_callout_cancel(curr->timed_wait_callout);
-    kspinlock_acquire(lock);
 
-    if (curr->timed_wait_expired) {
-        curr->timed_wait_expired = false;
-        return EINTR;
+    int ret = 0;
+    if (0 == timeout) {
+        goto end;
     }
 
-    return 0;
+    kspinlock_acquire(&curr->sched_lock);
+    if (curr->timed_wait_expired) {
+        ret = ETIMEDOUT;
+    }
+    kspinlock_release(&curr->sched_lock);
+
+end:
+    kspinlock_acquire(lock);
+    return ret;
 }
 
 int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
                                      kmutex_t       *mutex,
                                      uintmax_t       timeout) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    KASSERT(1 == curr->lock_depth);
+
+    curr->timed_wait_expired = false;
     if (0 != timeout) {
         com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
                                         sched_handle_timeout,
                                         timeout);
     }
-    kspinlock_acquire(&curr->sched_lock);
 
+    kspinlock_acquire(&curr->sched_lock);
     sched_waitlist_insert(waitlist, curr);
     kmutex_release(mutex);
     com_sys_sched_yield_nolock();
 
     // This point is reached AFTER the thread is notified
-    // We can do this because sched_lock is dropped by sched_yield
     com_sys_callout_cancel(curr->timed_wait_callout);
-    kmutex_acquire(mutex);
 
-    if (curr->timed_wait_expired) {
-        curr->timed_wait_expired = false;
-        return EINTR;
+    int ret = 0;
+    if (0 == timeout) {
+        goto end;
     }
 
-    return 0;
+    kspinlock_acquire(&curr->sched_lock);
+    if (curr->timed_wait_expired) {
+        ret = ETIMEDOUT;
+    }
+    kspinlock_release(&curr->sched_lock);
+
+end:
+    kmutex_acquire(mutex);
+    return ret;
 }
 
 void com_sys_sched_notify(com_waitlist_t *waitlist) {

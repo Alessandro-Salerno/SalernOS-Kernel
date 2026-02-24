@@ -56,6 +56,8 @@ static void enqueue_callout(com_callout_queue_t *cpu_callout,
     if (!added) {
         TAILQ_INSERT_TAIL(&cpu_callout->queue, callout, queue);
     }
+
+    callout->cpu_callout = cpu_callout;
 }
 
 static void callout_add_at(com_callout_queue_t *cpu_callout,
@@ -117,8 +119,11 @@ void com_sys_callout_run(void) {
             break;
         }
 
-        TAILQ_REMOVE_HEAD(&cpu_callout->queue, queue);
         callout->reuse = false;
+        kspinlock_acquire(&callout->entry_lock);
+        TAILQ_REMOVE_HEAD(&cpu_callout->queue, queue);
+        callout->cpu_callout = NULL;
+        kspinlock_release(&callout->entry_lock);
 
         kspinlock_release(&cpu_callout->lock);
         callout->handler(callout);
@@ -231,11 +236,17 @@ void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
 }
 
 void com_sys_callout_cancel(com_callout_t *callout) {
-    com_callout_queue_t *cpu_callout = GET_CALLOUT();
-    kspinlock_acquire(&cpu_callout->lock);
-    if (NULL != callout->queue.tqe_prev ||
-        TAILQ_FIRST(&cpu_callout->queue) == callout) {
+    kspinlock_acquire(&callout->entry_lock);
+    if (NULL != callout->cpu_callout) {
+        com_callout_queue_t *cpu_callout = callout->cpu_callout;
+        callout->cpu_callout             = NULL;
+        // avoid lock ordering issues
+        kspinlock_release(&callout->entry_lock);
+
+        kspinlock_acquire(&cpu_callout->lock);
         TAILQ_REMOVE(&cpu_callout->queue, callout, queue);
+        kspinlock_release(&cpu_callout->lock);
+    } else {
+        kspinlock_release(&callout->entry_lock);
     }
-    kspinlock_release(&cpu_callout->lock);
 }
