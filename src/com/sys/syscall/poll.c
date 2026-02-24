@@ -57,7 +57,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
     com_poller_t poller = {0};
     COM_SYS_THREAD_WAITLIST_INIT(&poller.waiters);
-    KSYNC_INIT_SPINLOCK(&poller.lock);
 
     bool      do_wait  = true;
     uintmax_t delay_ns = 0;
@@ -85,7 +84,6 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
         polled->poller       = &poller;
-        polled->file         = NULL; // overriden if all checks pass
         fds[i].revents       = 0;
         int fd               = fds[i].fd;
 
@@ -145,21 +143,21 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         }
 
         int wait_ret = ETIMEDOUT;
-        ksync_acquire(&poller.lock);
+
         if (0 != delay_ns) {
             uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
             uintmax_t elapsed   = ARCH_CPU_TIMESTAMP_TO_NS(curr_time -
                                                          syscall_start);
-            if (elapsed >= delay_ns) {
+            if (elapsed < delay_ns) {
+                syscall_start = curr_time;
+                delay_ns -= elapsed;
+            } else {
                 goto skip_wait;
             }
-            syscall_start = curr_time;
-            delay_ns -= elapsed;
         }
 
-        wait_ret = ksync_wait_timeout(&poller.lock, &poller.waiters, delay_ns);
+        wait_ret = com_sys_sched_wait_nodrop_timeout(&poller.waiters, delay_ns);
     skip_wait:
-        ksync_release(&poller.lock);
 
         if (ETIMEDOUT == wait_ret) {
             last_recheck = true;

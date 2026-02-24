@@ -102,7 +102,7 @@ static void unix_socket_poll_callback(void *arg) {
     kspinlock_acquire(&sock->pollhead.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &sock->pollhead.polled_list, polled_list, _) {
-        ksync_notify_all(&polled->poller->lock, &polled->poller->waiters);
+        com_sys_sched_notify_all(&polled->poller->waiters);
     }
     kspinlock_release(&sock->pollhead.lock);
 }

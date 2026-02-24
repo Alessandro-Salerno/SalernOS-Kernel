@@ -319,7 +319,7 @@ int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
                                      kmutex_t       *mutex,
                                      uintmax_t       timeout) {
     com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(1 == curr->lock_depth);
+    KASSERT(0 == curr->lock_depth);
 
     curr->timed_wait_expired = false;
     if (0 != timeout) {
