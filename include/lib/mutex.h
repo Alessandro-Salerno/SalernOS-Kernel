@@ -39,4 +39,5 @@ typedef struct kmutex {
 
 bool kmutex_try_acquire(kmutex_t *mutex);
 void kmutex_acquire(kmutex_t *mutex);
+bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout);
 void kmutex_release(kmutex_t *mutex);

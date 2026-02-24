@@ -17,13 +17,11 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <errno.h>
 #include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <lib/mutex.h>
 #include <lib/util.h>
-
-// CREDIT: vloxei64/ke
-// TODO: why doesn't this work at boot time?
 
 static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
     for (size_t i = 0; i < retries; i++) {
@@ -31,11 +29,9 @@ static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
         if (!mutex->locked) {
             return true;
         }
-        // TODO: check if owner is running on the same CPU and go straight to
-        // wait. This cannot be odne right now because, logically, if we are
-        // running, no other thread is running on this CPU, so mutex->owner->cpu
-        // will be NULL. We need a new field in the thread struct to hold last
-        // CPU.
+        // TODO: check if owner is on this CPU's runqueue. If it is, there's no
+        // point in spinning because it will not be relased until this CPU has a
+        // chance to run that thread
         kspinlock_release(&mutex->lock);
         ARCH_CPU_PAUSE();
     }
@@ -57,6 +53,11 @@ bool kmutex_try_acquire(kmutex_t *mutex) {
 void kmutex_acquire(kmutex_t *mutex) {
     com_profiler_data_t profiler_data = com_sys_profiler_start_function(
         E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE);
+    kmutex_acquire_timeout(mutex, 0);
+    com_sys_profiler_end_function(&profiler_data);
+}
+
+bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
@@ -66,14 +67,19 @@ void kmutex_acquire(kmutex_t *mutex) {
 
     kspinlock_acquire(&mutex->lock);
     while (mutex->locked) {
-        com_sys_sched_wait(&mutex->waiters, &mutex->lock);
+        if (ETIMEDOUT == com_sys_sched_wait_spinlock_timeout(&mutex->waiters,
+                                                             &mutex->lock,
+                                                             timeout)) {
+            kspinlock_release(&mutex->lock);
+            return false;
+        }
     }
 
 take:
     mutex->locked = true;
     mutex->owner  = curr_thread;
     kspinlock_release(&mutex->lock);
-    com_sys_profiler_end_function(&profiler_data);
+    return true;
 }
 
 void kmutex_release(kmutex_t *mutex) {

@@ -562,9 +562,15 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle,
         return UACPI_STATUS_TIMEOUT;
     }
 
-    // TODO: add check for timed wait
-    kmutex_acquire(mutex);
-    return UACPI_STATUS_OK;
+    if (0xFFFF == timeout) {
+        kmutex_acquire(mutex);
+        return UACPI_STATUS_OK;
+    }
+
+    if (kmutex_acquire_timeout(mutex, timeout * 1000000UL)) {
+        return UACPI_STATUS_OK;
+    }
+    return UACPI_STATUS_TIMEOUT;
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
