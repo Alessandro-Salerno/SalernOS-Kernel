@@ -23,10 +23,8 @@
 
 static kspinlock_t LogLock = KSPINLOCK_NEW();
 
-static struct {
-    com_vnode_t *vnode;
-    size_t       off;
-} SecondaryLog;
+// TODO: reimplement vnode logging correctly (do not write to vnode directly,
+// file systems should not be invoked under spinlocks)
 
 static void dummy_hook(const char *s, size_t n) {
     (void)s;
@@ -56,16 +54,6 @@ void com_io_log_puts_nolock(const char *s) {
 void com_io_log_putsn_nolock(const char *s, size_t n) {
     LogHook(s, n);
     UserHook(s, n);
-
-    if (NULL != SecondaryLog.vnode) {
-        com_fs_vfs_write(NULL,
-                         SecondaryLog.vnode,
-                         (void *)s,
-                         n,
-                         SecondaryLog.off,
-                         0);
-        SecondaryLog.off += n;
-    }
 }
 
 void com_io_log_lock(void) {
@@ -77,7 +65,7 @@ void com_io_log_unlock(void) {
 }
 
 void com_io_log_set_vnode_nolock(struct com_vnode *vnode) {
-    SecondaryLog.vnode = vnode;
+    (void)vnode;
 }
 
 void com_io_log_set_hook(com_intf_log_t hook) {
