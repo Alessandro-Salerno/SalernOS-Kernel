@@ -93,6 +93,7 @@ static struct unix_socket *unix_socket_alloc(void) {
     TAILQ_INIT(&sock->srv_acceptq);
     COM_SYS_THREAD_WAITLIST_INIT(&sock->srv_acceptwait);
     LIST_INIT(&sock->socket.pollhead.polled_list);
+    KSYNC_INIT_MUTEX(&sock->socket.lock);
     return sock;
 }
 
@@ -135,7 +136,7 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
     socket_vn->binding                      = binding;
     unix_socket->srv_binding                = binding;
     unix_socket->binding_path.local.pathlen = addr->local.pathlen;
-    KSYNC_INIT_SPINLOCK(&binding->lock);
+    KSYNC_INIT_MUTEX(&binding->lock);
     kmemcpy(unix_socket->binding_path.local.path,
             addr->local.path,
             addr->local.pathlen);
