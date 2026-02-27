@@ -31,7 +31,6 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
-#include <lib/sync.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>

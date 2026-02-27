@@ -64,10 +64,7 @@ typedef struct com_thread {
     bool                 exited;
     TAILQ_ENTRY(com_thread) threads;
     TAILQ_ENTRY(com_thread) proc_threads;
-    int lock_depth;
-    struct {
-        uintmax_t ticket;
-    } rwlock_data;
+    int   lock_depth;
     pid_t tid;
 
     com_waitlist_t     *waiting_on;

@@ -50,34 +50,24 @@ void krwlock_release_read(krwlock_t *rwlock) {
 }
 
 void krwlock_acquire_write(krwlock_t *rwlock) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL == curr_thread) {
-        return;
-    }
-
     kspinlock_acquire(&rwlock->lock);
-    curr_thread->rwlock_data.ticket = rwlock->next_ticket++;
+    uintmax_t ticket = rwlock->next_ticket++;
 
     while (rwlock->writer_active || rwlock->active_readers > 0 ||
-           curr_thread->rwlock_data.ticket != rwlock->serving_ticket) {
+           ticket != rwlock->serving_ticket) {
         com_sys_sched_wait(&rwlock->writers_waitlist, &rwlock->lock);
     }
 
+    KASSERT(!rwlock->writer_active);
     rwlock->writer_active = true;
     kspinlock_release(&rwlock->lock);
 }
 
 void krwlock_release_write(krwlock_t *rwlock) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL == curr_thread) {
-        return;
-    }
-
     kspinlock_acquire(&rwlock->lock);
-    rwlock->writer_active = false;
-    rwlock->serving_ticket++;
-    // Update the read phase ticket to include all queued readers
+    rwlock->writer_active     = false;
     rwlock->read_phase_ticket = rwlock->next_ticket - 1;
+    rwlock->serving_ticket++;
 
     if (rwlock->serving_ticket != rwlock->next_ticket) {
         // More writers waiting: wake exactly one
