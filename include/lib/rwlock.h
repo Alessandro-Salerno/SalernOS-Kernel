@@ -26,7 +26,7 @@
     do {                                                               \
         (rwlock_ptr)->lock              = KSPINLOCK_NEW();             \
         (rwlock_ptr)->next_ticket       = 1;                           \
-        (rwlock_ptr)->serving_ticket    = 0;                           \
+        (rwlock_ptr)->serving_ticket    = 1;                           \
         (rwlock_ptr)->read_phase_ticket = 0;                           \
         (rwlock_ptr)->active_readers    = 0;                           \
         (rwlock_ptr)->writer_active     = false;                       \

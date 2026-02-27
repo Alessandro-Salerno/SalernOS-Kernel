@@ -51,6 +51,10 @@ void krwlock_release_read(krwlock_t *rwlock) {
 
 void krwlock_acquire_write(krwlock_t *rwlock) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        return;
+    }
+
     kspinlock_acquire(&rwlock->lock);
     curr_thread->rwlock_data.ticket = rwlock->next_ticket++;
 
@@ -64,6 +68,11 @@ void krwlock_acquire_write(krwlock_t *rwlock) {
 }
 
 void krwlock_release_write(krwlock_t *rwlock) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        return;
+    }
+
     kspinlock_acquire(&rwlock->lock);
     rwlock->writer_active = false;
     rwlock->serving_ticket++;
