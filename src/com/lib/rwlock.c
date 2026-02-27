@@ -19,15 +19,10 @@
 #include <kernel/com/sys/sched.h>
 #include <lib/rwlock.h>
 
-// NOTE: all of this assumes FIFO waitlists. Keep this in mind when we implement
-// more advanced scheduling systems: there will be a need for FIFO waitlists
-
 void krwlock_acquire_read(krwlock_t *rwlock) {
     kspinlock_acquire(&rwlock->lock);
 
-    // Readers use the current read_phase_ticket to gate entry
-    while (rwlock->writer_active ||
-           rwlock->next_ticket - 1 > rwlock->read_phase_ticket) {
+    while (rwlock->writer_active || rwlock->waiting_writers > 0) {
         com_sys_sched_wait(&rwlock->readers_waitlist, &rwlock->lock);
     }
 
@@ -39,11 +34,8 @@ void krwlock_release_read(krwlock_t *rwlock) {
     kspinlock_acquire(&rwlock->lock);
 
     rwlock->active_readers--;
-    if (0 == rwlock->active_readers) {
-        // If a writer is waiting, wake exactly one
-        if (rwlock->serving_ticket != rwlock->next_ticket) {
-            com_sys_sched_notify(&rwlock->writers_waitlist);
-        }
+    if (0 == rwlock->active_readers && rwlock->waiting_writers > 0) {
+        com_sys_sched_notify(&rwlock->writers_waitlist);
     }
 
     kspinlock_release(&rwlock->lock);
@@ -51,30 +43,26 @@ void krwlock_release_read(krwlock_t *rwlock) {
 
 void krwlock_acquire_write(krwlock_t *rwlock) {
     kspinlock_acquire(&rwlock->lock);
-    uintmax_t ticket = rwlock->next_ticket++;
+    rwlock->waiting_writers++;
 
-    while (rwlock->writer_active || rwlock->active_readers > 0 ||
-           ticket != rwlock->serving_ticket) {
+    while (rwlock->writer_active || rwlock->active_readers > 0) {
         com_sys_sched_wait(&rwlock->writers_waitlist, &rwlock->lock);
     }
 
     KASSERT(!rwlock->writer_active);
+    rwlock->waiting_writers--;
     rwlock->writer_active = true;
     kspinlock_release(&rwlock->lock);
 }
 
 void krwlock_release_write(krwlock_t *rwlock) {
     kspinlock_acquire(&rwlock->lock);
-    rwlock->writer_active     = false;
-    rwlock->read_phase_ticket = rwlock->next_ticket - 1;
-    rwlock->serving_ticket++;
+    rwlock->writer_active = false;
 
-    if (rwlock->serving_ticket != rwlock->next_ticket) {
-        // More writers waiting: wake exactly one
-        com_sys_sched_notify(&rwlock->writers_waitlist);
-    } else {
-        // No writers waiting: wake all readers in current phase
+    if (0 == rwlock->waiting_writers) {
         com_sys_sched_notify_all(&rwlock->readers_waitlist);
+    } else {
+        com_sys_sched_notify(&rwlock->writers_waitlist);
     }
 
     kspinlock_release(&rwlock->lock);

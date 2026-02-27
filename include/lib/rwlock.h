@@ -24,22 +24,18 @@
 
 #define KRWLOCK_INIT(rwlock_ptr)                                       \
     do {                                                               \
-        (rwlock_ptr)->lock              = KSPINLOCK_NEW();             \
-        (rwlock_ptr)->next_ticket       = 1;                           \
-        (rwlock_ptr)->serving_ticket    = 1;                           \
-        (rwlock_ptr)->read_phase_ticket = 0;                           \
-        (rwlock_ptr)->active_readers    = 0;                           \
-        (rwlock_ptr)->writer_active     = false;                       \
+        (rwlock_ptr)->lock            = KSPINLOCK_NEW();               \
+        (rwlock_ptr)->active_readers  = 0;                             \
+        (rwlock_ptr)->waiting_writers = 0;                             \
+        (rwlock_ptr)->writer_active   = false;                         \
         COM_SYS_THREAD_WAITLIST_INIT(&(rwlock_ptr)->readers_waitlist); \
         COM_SYS_THREAD_WAITLIST_INIT(&(rwlock_ptr)->writers_waitlist); \
     } while (0)
 
 typedef struct krwlock {
     kspinlock_t lock;
-    uintmax_t   next_ticket;       // next ticket to hand out (writers only)
-    uintmax_t   serving_ticket;    // current ticket being served
-    uintmax_t   read_phase_ticket; // max ticket readers can enter under
     size_t      active_readers;
+    size_t      waiting_writers;
     bool        writer_active;
 
     com_waitlist_t readers_waitlist;
