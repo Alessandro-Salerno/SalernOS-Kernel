@@ -21,6 +21,7 @@
 #include <kernel/platform/x86-64/context.h>
 #include <kernel/platform/x86-64/msr.h>
 #include <lib/mem.h>
+#include <lib/spinlock.h>
 #include <stdint.h>
 
 #define ARCH_CONTEXT_INTSTATUS(x) ((x)->rflags & 0x200 ? true : false)
@@ -143,5 +144,5 @@ typedef struct {
 
 void x86_64_ctx_switch(arch_context_t *to,
                        arch_context_t *from,
-                       int            *from_sched_lock);
+                       kspinlock_t    *from_sched_lock);
 void x86_64_ctx_test_trampoline(void);

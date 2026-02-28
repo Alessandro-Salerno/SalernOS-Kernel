@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#if CONFIG_SPINLOCK_DEBUG
+
 #define KSPINLOCK_HELD_VALUE 144
 #define KSPINLOCK_FREE_VALUE 0
 
@@ -35,6 +37,18 @@ typedef struct kspinlock {
     void *last_acquire_ip;
     void *last_release_ip;
 } kspinlock_t;
+
+#else
+
+#define KSPINLOCK_HELD_VALUE 1
+#define KSPINLOCK_FREE_VALUE 0
+
+#define KSPINLOCK_NEW()            (kspinlock_t) KSPINLOCK_FREE_VALUE
+#define KSPINLOCK_IS_HELD(lockptr) (KSPINLOCK_HELD_VALUE == *(lockptr))
+
+typedef int kspinlock_t;
+
+#endif
 
 void kspinlock_acquire(kspinlock_t *lock);
 bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns);

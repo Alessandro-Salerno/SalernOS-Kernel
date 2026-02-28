@@ -34,19 +34,30 @@
 #define INCREMENT_CURR_LOCK_DEPTH() INCREMENT_LOCK_DEPTH(ARCH_CPU_GET_THREAD())
 #define DECREMENT_CURR_LOCK_DEPTH() DECREMENT_LOCK_DEPTH(ARCH_CPU_GET_THREAD())
 
+#if CONFIG_SPINLOCK_DEBUG
+
+#define LOCK_VALUE(lock) (lock)->lock
+
 #define LOCK_ERROR(fmt, ...)                             \
     com_sys_panic(NULL,                                  \
                   "(lock error) " fmt " [called at %p]", \
                   __VA_ARGS__,                           \
                   __builtin_return_address(0));
 
+#else
+
+#define LOCK_VALUE(lock) *(lock)
+#define LOCK_ERROR(fmt, ...)
+
+#endif
+
 static inline void decrement_lock_depth_tested(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
-    if (NULL != curr_thread) {
+    if (KLIKELY(NULL != curr_thread)) {
         int old_depth = curr_thread->lock_depth--;
 
-        if (old_depth < 1) {
+        if (KUNKLIKELY(old_depth < 1)) {
             LOCK_ERROR("trying to unlock lock on thread (tid = %d) with "
                        "invalid lock depth %d",
                        curr_thread->tid,
@@ -67,21 +78,23 @@ void kspinlock_acquire(kspinlock_t *lock) {
 
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
-        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&lock->lock,
+        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&LOCK_VALUE(lock),
                                                         KSPINLOCK_HELD_VALUE,
                                                         __ATOMIC_ACQUIRE)) {
             break;
         }
         // spin with no ordering constraints
         while (KSPINLOCK_HELD_VALUE ==
-               __atomic_load_n(&lock->lock, __ATOMIC_RELAXED)) {
+               __atomic_load_n(&LOCK_VALUE(lock), __ATOMIC_RELAXED)) {
             ARCH_CPU_PAUSE();
         }
     }
 
+#if CONFIG_SPINLOCK_DEBUG
     lock->holder_thread   = ARCH_CPU_GET_THREAD();
     lock->last_acquire_ip = (void *)__builtin_return_address(0);
     lock->last_release_ip = NULL;
+#endif
     com_sys_profiler_end_function(&profiler_data);
 }
 
@@ -94,14 +107,14 @@ bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {
 
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
-        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&lock->lock,
+        if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&LOCK_VALUE(lock),
                                                         KSPINLOCK_HELD_VALUE,
                                                         __ATOMIC_ACQUIRE)) {
             break;
         }
         // spin with no ordering constraints
         while (KSPINLOCK_HELD_VALUE ==
-               __atomic_load_n(&lock->lock, __ATOMIC_RELAXED)) {
+               __atomic_load_n(&LOCK_VALUE(lock), __ATOMIC_RELAXED)) {
             if (end_ns <= ARCH_CPU_GET_TIME()) {
                 goto fail;
             }
@@ -109,9 +122,11 @@ bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns) {
         }
     }
 
+#if CONFIG_SPINLOCK_DEBUG
     lock->holder_thread   = ARCH_CPU_GET_THREAD();
     lock->last_acquire_ip = (void *)__builtin_return_address(0);
     lock->last_release_ip = NULL;
+#endif
     return true;
 
 fail:
@@ -121,18 +136,20 @@ fail:
 }
 
 void kspinlock_release(kspinlock_t *lock) {
-    if (KSPINLOCK_FREE_VALUE == lock->lock) {
+    if (KUNKLIKELY(KSPINLOCK_FREE_VALUE == LOCK_VALUE(lock))) {
         LOCK_ERROR("trying to unlock unlocked lock %p", lock);
     }
 
-    if (KSPINLOCK_HELD_VALUE != lock->lock) {
+    if (KUNKLIKELY(KSPINLOCK_HELD_VALUE != LOCK_VALUE(lock))) {
         LOCK_ERROR("lock at %p has impossible value %d", lock, lock->lock);
     }
 
+#if CONFIG_SPINLOCK_DEBUG
     lock->last_release_ip = (void *)__builtin_return_address(0);
     lock->holder_thread   = NULL;
     lock->last_acquire_ip = NULL;
-    __atomic_store_n(&lock->lock, KSPINLOCK_FREE_VALUE, __ATOMIC_RELEASE);
+#endif
+    __atomic_store_n(&LOCK_VALUE(lock), KSPINLOCK_FREE_VALUE, __ATOMIC_RELEASE);
     decrement_lock_depth_tested();
 }
 
