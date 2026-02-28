@@ -35,15 +35,6 @@
 static com_vmm_context_t RootContext = {0};
 static void             *ZeroPage    = NULL;
 
-// This lock guards the context queue and is used as condvar for the waitlist
-static ksync_t ZombieQueueLock;
-// Queue of context pointers on which destroy() was called
-static TAILQ_HEAD(, com_vmm_context) ZombieContextQueue;
-// Waitlist used only by the vmm reaper thread to wait
-static com_waitlist_t ReaperThreadWaitlist;
-// Number of elements in the zombie context queue
-static size_t ReaperNumPending = 0;
-
 static inline com_vmm_context_t *vmm_current_context(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL == curr_thread || NULL == curr_thread->proc ||
@@ -62,55 +53,6 @@ vmm_ensure_context(com_vmm_context_t *context) {
     }
 
     return context;
-}
-
-static void vmm_reaper_thread(void) {
-    bool already_done = false;
-    TAILQ_HEAD(, com_vmm_context) local_zombies;
-    TAILQ_INIT(&local_zombies);
-
-    while (true) {
-        // Allow kernel preemption
-        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-        curr_thread->lock_depth   = 0;
-
-        size_t             num_done = 0;
-        com_vmm_context_t *context, *_;
-
-        // First, we move the zombies to a local queue. This way, we hold the
-        // lock as little as possible and don't bottleneck others wanting to add
-        // to the queue
-        ksync_acquire(&ZombieQueueLock);
-        if (TAILQ_EMPTY(&ZombieContextQueue) || already_done) {
-            already_done = false;
-            ksync_wait(&ZombieQueueLock, &ReaperThreadWaitlist);
-        }
-        // TODO: detach the queue in O(1) and then let scheduelr priority
-        // preempt reaper thread if needed, without hard limits
-        TAILQ_FOREACH_SAFE(context, &ZombieContextQueue, reaper_entry, _) {
-            if (CONFIG_VMM_REAPER_MAX == num_done) {
-                break;
-            }
-
-            TAILQ_REMOVE(&ZombieContextQueue, context, reaper_entry);
-            TAILQ_INSERT_TAIL(&local_zombies, context, reaper_entry);
-            ReaperNumPending--;
-            num_done++;
-        }
-        ksync_release(&ZombieQueueLock);
-
-        // Then we destroy the ones in the local zombie queue
-        TAILQ_FOREACH_SAFE(context, &local_zombies, reaper_entry, _) {
-            KASSERT(context != vmm_current_context());
-            KASSERT(context->pagetable != arch_mmu_get_table());
-            KASSERT(NULL != context->pagetable);
-            arch_mmu_destroy_table(context->pagetable);
-            TAILQ_REMOVE_HEAD(&local_zombies, reaper_entry);
-            com_mm_slab_free(context, sizeof(com_vmm_context_t));
-        }
-
-        already_done = true;
-    }
 }
 
 com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable) {
@@ -132,12 +74,7 @@ void com_mm_vmm_destroy_context(com_vmm_context_t *context) {
     KASSERT(context->pagetable != arch_mmu_get_table());
     KASSERT(NULL != context->pagetable);
 
-    ksync_acquire(&ZombieQueueLock);
-    TAILQ_INSERT_TAIL(&ZombieContextQueue, context, reaper_entry);
-    if (++ReaperNumPending >= CONFIG_VMM_REAPER_NOTIFY) {
-        ksync_notify(&ZombieQueueLock, &ReaperThreadWaitlist);
-    }
-    ksync_release(&ZombieQueueLock);
+    // TODO: reimplement this
 }
 
 com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context) {
@@ -384,12 +321,6 @@ void com_mm_vmm_init(void) {
     RootContext.pagetable = arch_mmu_get_table();
     RootContext.lock      = KSPINLOCK_NEW();
     ZeroPage              = com_mm_pmm_alloc_zero();
-
-    // This is here because destroy will add stuff to the queue even if this is
-    // not initialized!
-    TAILQ_INIT(&ZombieContextQueue);
-    COM_SYS_THREAD_WAITLIST_INIT(&ReaperThreadWaitlist);
-    KSYNC_INIT_SPINLOCK(&ZombieQueueLock);
 }
 
 void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
@@ -410,9 +341,5 @@ void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
 }
 
 void com_mm_vmm_init_reaper(void) {
-    KLOG("initializing vmm reaper");
-    com_thread_t *reaper_thread = com_sys_thread_new_kernel(NULL,
-                                                            vmm_reaper_thread);
-    reaper_thread->runnable     = true;
-    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, reaper_thread, threads);
+    KLOG("TODO: reimplement vmm reaper");
 }

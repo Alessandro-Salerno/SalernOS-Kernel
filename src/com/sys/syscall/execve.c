@@ -67,10 +67,23 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     }
 
     com_sys_proc_kill_other_threads(proc, thread);
+
+    // NOTE: we need preemption to be disabled here because otherwise this could
+    // happen:
+    // 1. switch to new context
+    // 2. preempted (proc-vmm_context = old_vmm_context still)
+    // 3. return here (with old context)
+    // 4. destroy old context (casuing kernel panic because it's in use)
+    // We don't need a lock because proc->vmm_context is now effectively just
+    // ours (since we killed all other threads) and noone looking up this PID is
+    // going to read the vmm_context field, so no need to do anything atomically
+    // or introduce locks
+    ARCH_CPU_DISABLE_INTERRUPTS();
     com_mm_vmm_switch(new_vmm_ctx);
     proc->vmm_context = new_vmm_ctx;
     KASSERT(proc->num_ref > 0);
     com_mm_vmm_destroy_context(old_vmm_ctx);
+    ARCH_CPU_ENABLE_INTERRUPTS();
 
     kspinlock_acquire(&proc->fd_lock);
     for (int i = 0; i < proc->max_fd; i++) {

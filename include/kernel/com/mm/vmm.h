@@ -22,7 +22,6 @@
 #include <arch/mmu.h>
 #include <lib/spinlock.h>
 #include <stddef.h>
-#include <vendor/tailq.h>
 
 #define COM_MM_VMM_FLAGS_NONE      0
 #define COM_MM_VMM_FLAGS_ANONYMOUS 1
@@ -51,7 +50,6 @@ typedef struct com_vmm_context {
     arch_mmu_pagetable_t *pagetable;
     size_t                anon_pages;
     kspinlock_t           lock;
-    TAILQ_ENTRY(com_vmm_context) reaper_entry;
 } com_vmm_context_t;
 
 void               com_mm_vmm_init(void);

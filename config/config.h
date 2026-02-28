@@ -71,19 +71,16 @@
 #define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
 
 // Max
-#define CONFIG_OPEN_MAX                 96 /* Maximum number of FDs per process */
-#define CONFIG_PROC_MAX                 250000 /* Maximum number of processes */
-#define CONFIG_SYSCALL_MAX              128 /* Maximum number of syscall handlers */
-#define CONFIG_SYMLINK_MAX              32
-#define CONFIG_PATH_MAX                 256
-#define CONFIG_TTY_MAX                  7
-#define CONFIG_VMM_REAPER_MAX           16
-#define CONFIG_SCHED_REAPER_MAX_THREADS 32
-#define CONFIG_SCHED_REAPER_MAX_PROCS   8
-#define CONFIG_PMM_ZERO_MAX             400
-#define CONFIG_PMM_INSERT_MAX           200
-#define CONFIG_PMM_DEFRAG_MAX           500
-#define CONFIG_VMM_PREFAULT_MAX         512 /* max n. pages faultable at once */
+#define CONFIG_OPEN_MAX         96     /* Maximum number of FDs per process */
+#define CONFIG_PROC_MAX         250000 /* Maximum number of processes */
+#define CONFIG_SYSCALL_MAX      128    /* Maximum number of syscall handlers */
+#define CONFIG_SYMLINK_MAX      32
+#define CONFIG_PATH_MAX         256
+#define CONFIG_TTY_MAX          7
+#define CONFIG_PMM_ZERO_MAX     400
+#define CONFIG_PMM_INSERT_MAX   200
+#define CONFIG_PMM_DEFRAG_MAX   500
+#define CONFIG_VMM_PREFAULT_MAX 512 /* max n. pages faultable at once */
 
 // Misc
 #define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
