@@ -398,6 +398,36 @@ void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
     }
 }
 
+void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters) {
+    // Similar strategy to notify_all
+    kspinlock_acquire(&waitlist->lock);
+    struct com_thread_tailq local_queue;
+    TAILQ_INIT(&local_queue);
+    for (size_t i = 0; i < num_waiters; i++) {
+        com_thread_t *thread = TAILQ_FIRST(&waitlist->queue);
+        if (NULL == thread) {
+            break;
+        }
+        TAILQ_REMOVE(&waitlist->queue, thread, threads);
+        TAILQ_INSERT_TAIL(&local_queue, thread, threads);
+    }
+    kspinlock_release(&waitlist->lock);
+
+    com_thread_t *next, *_;
+    TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
+        kspinlock_acquire(&next->sched_lock);
+        KASSERT(NULL == next->cpu);
+        TAILQ_REMOVE(&local_queue, next, threads);
+        kspinlock_acquire(&next->last_cpu->runqueue_lock);
+        TAILQ_INSERT_HEAD(&next->last_cpu->sched_queue, next, threads);
+        next->runnable   = true;
+        next->waiting_on = NULL;
+        ARCH_CPU_SEND_IPI(next->last_cpu, ARCH_CPU_IPI_RESCHEDULE);
+        kspinlock_release(&next->last_cpu->runqueue_lock);
+        kspinlock_release(&next->sched_lock);
+    }
+}
+
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
     arch_cpu_t *currcpu = ARCH_CPU_GET();
 

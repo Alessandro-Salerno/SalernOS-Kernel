@@ -147,6 +147,7 @@ void com_init_devices(void) {
 
 void com_init_pid1(void) {
     com_sys_proc_init();
+    com_sys_syscall_futex_init();
 
     KASSERT(NULL != RootFs);
     char *const   argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};

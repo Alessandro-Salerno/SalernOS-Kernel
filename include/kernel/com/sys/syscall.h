@@ -187,3 +187,7 @@ COM_SYS_SYSCALL(com_sys_syscall_mkdirat);
 COM_SYS_SYSCALL(com_sys_syscall_getpeername);
 COM_SYS_SYSCALL(com_sys_syscall_munmap);
 COM_SYS_SYSCALL(com_sys_syscall_sysprofile);
+
+// SYSCALL UTILITIES
+
+void com_sys_syscall_futex_init(void);

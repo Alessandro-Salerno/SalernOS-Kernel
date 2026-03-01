@@ -32,6 +32,10 @@ static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
         // TODO: check if owner is on this CPU's runqueue. If it is, there's no
         // point in spinning because it will not be relased until this CPU has a
         // chance to run that thread
+        if (mutex->owner->last_cpu == ARCH_CPU_GET()) {
+            kspinlock_release(&mutex->lock);
+            return false;
+        }
         kspinlock_release(&mutex->lock);
         ARCH_CPU_PAUSE();
     }
@@ -70,6 +74,7 @@ bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout) {
         if (ETIMEDOUT == com_sys_sched_wait_spinlock_timeout(&mutex->waiters,
                                                              &mutex->lock,
                                                              timeout)) {
+            KASSERT(0 != timeout);
             kspinlock_release(&mutex->lock);
             return false;
         }

@@ -43,6 +43,7 @@ int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
 
 void com_sys_sched_notify(com_waitlist_t *waitlist);
 void com_sys_sched_notify_all(com_waitlist_t *waitlist);
+void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters);
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread(com_thread_t *thread);
 

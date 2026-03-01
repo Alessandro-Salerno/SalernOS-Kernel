@@ -39,19 +39,17 @@
 #define FUTEX_WAKE 1
 
 struct futex {
-    ksync_t        condvar;
     com_waitlist_t waiters;
 };
 
-enum futex_init_stage {
-    FUTEX_INIT_NONE = 0,
-    FUTEX_INIT_DOING,
-    FUTEX_INIT_DONE
-};
+static kmutex_t   FutexLock;
+static khashmap_t FutexMap;
 
-static kmutex_t              FutexLock;
-static khashmap_t            FutexMap;
-static enum futex_init_stage FutexInitStage = FUTEX_INIT_NONE;
+void com_sys_syscall_futex_init(void) {
+    KLOG("initializing futex");
+    KHASHMAP_INIT(&FutexMap);
+    KMUTEX_INIT(&FutexLock);
+}
 
 // SYSCALL: futex(uint32_t *word_ptr, int op, uint32_t val)
 COM_SYS_SYSCALL(com_sys_syscall_futex) {
@@ -67,22 +65,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,
                                                         word_ptr);
 
-    // TODO: this has a bit of unnecessary overhead, can be fixed by AOT init
-    while (FUTEX_INIT_DONE !=
-           __atomic_load_n(&FutexInitStage, __ATOMIC_SEQ_CST)) {
-        if (FUTEX_INIT_NONE == __atomic_exchange_n(&FutexInitStage,
-                                                   FUTEX_INIT_DOING,
-                                                   __ATOMIC_SEQ_CST)) {
-            KHASHMAP_INIT(&FutexMap);
-            KMUTEX_INIT(&FutexLock);
-            __atomic_store_n(&FutexInitStage,
-                             FUTEX_INIT_DONE,
-                             __ATOMIC_SEQ_CST);
-        } else {
-            ARCH_CPU_PAUSE();
-        }
-    }
-
     uint32_t temp = value;
 
     switch (op) {
@@ -92,8 +74,8 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     &temp,    // expected value
                     value,    // new value (same as expected, so no change)
                     false,    // don't allow spurious failures
-                    __ATOMIC_SEQ_CST, // memory order for success
-                    __ATOMIC_SEQ_CST  // memory order for failure
+                    __ATOMIC_ACQUIRE, // memory order for success
+                    __ATOMIC_RELAXED  // memory order for failure
                     )) {
                 struct futex *futex;
 
@@ -104,7 +86,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     struct futex *default_futex = com_mm_slab_alloc(
                         sizeof(struct futex));
                     COM_SYS_THREAD_WAITLIST_INIT(&default_futex->waiters);
-                    KSYNC_INIT_MUTEX(&default_futex->condvar);
 
                     KASSERT_CALL(0,
                                  ==,
@@ -116,9 +97,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 }
 
                 kmutex_release(&FutexLock);
-                ksync_acquire(&futex->condvar);
-                ksync_wait(&futex->condvar, &futex->waiters);
-                ksync_release(&futex->condvar);
+                com_sys_sched_wait_nodrop(&futex->waiters);
 
                 if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                     return COM_SYS_SYSCALL_ERR(EINTR);
@@ -139,13 +118,10 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                 return COM_SYS_SYSCALL_OK(0);
             }
 
-            if (INT_MAX == value) {
-                ksync_notify_all(&futex->condvar, &futex->waiters);
+            if (value >= INT_MAX) {
+                com_sys_sched_notify_all(&futex->waiters);
             } else {
-                // TODO: this is a bit slow, but it works
-                for (size_t i = 0; i < value; i++) {
-                    ksync_notify(&futex->condvar, &futex->waiters);
-                }
+                com_sys_sched_notify_n(&futex->waiters, value);
             }
 
             return COM_SYS_SYSCALL_OK(value);
