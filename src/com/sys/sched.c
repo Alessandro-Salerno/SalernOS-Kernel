@@ -45,17 +45,6 @@ static void sched_idle(void) {
     }
 }
 
-static inline com_thread_t *
-sched_handle_zombies(bool *next_removed, arch_cpu_t *cpu, com_thread_t *next) {
-    while (NULL != next && E_COM_THREAD_STATE_EXITED == next->state) {
-        *next_removed = true;
-        TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
-        next = TAILQ_FIRST(&cpu->sched_queue);
-    }
-
-    return next;
-}
-
 static inline void sched_switch_vmm_context(com_thread_t *curr,
                                             com_thread_t *next) {
     com_vmm_context_t *prev_vmm_ctx = NULL;
@@ -119,9 +108,6 @@ void com_sys_sched_yield_nolock(void) {
         return;
     }
 
-    bool next_removed = false;
-    next              = sched_handle_zombies(&next_removed, cpu, next);
-
     if (NULL == next) {
         if (E_COM_THREAD_STATE_RUNNING == curr->state) {
             kspinlock_release(&cpu->runqueue_lock);
@@ -131,14 +117,21 @@ void com_sys_sched_yield_nolock(void) {
         }
 
         next = cpu->idle_thread;
-    } else if (!next_removed) {
+    } else {
         KASSERT(next != cpu->idle_thread);
         TAILQ_REMOVE(&cpu->sched_queue, next, threads);
     }
 
-    // TODO: fix this as soon as I figure out why it's happening
+    if (E_COM_THREAD_STATE_READY != next->state) {
+        KURGENT("next = %p, next->tid = %d, next->state = %d",
+                next,
+                next->tid,
+                next->state);
+        KASSERT(false);
+    }
+
     if (curr == next) {
-        KURGENT("curr = %p, next = %p | curr->tid = %d, next->5id = %d | "
+        KURGENT("curr = %p, next = %p | curr->tid = %d, next->tid = %d | "
                 "IS_USER(curr) = %d, "
                 "IS_USER(next) = %d",
                 curr,
@@ -156,6 +149,7 @@ void com_sys_sched_yield_nolock(void) {
             TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
         }
     }
+    KASSERT(E_COM_THREAD_STATE_RUNNING != curr->state);
 
     kspinlock_release(&cpu->runqueue_lock);
 
@@ -167,9 +161,17 @@ void com_sys_sched_yield_nolock(void) {
     }
 
     com_sys_profiler_end_function(&profiler_data);
-    cpu->thread    = next;
     curr->cpu      = NULL;
     curr->last_cpu = cpu;
+
+    // NOTE: this creates a subtle race that we don't care about for now. The
+    // obvious solution (i.e., doing it after the context switch) doesn't work
+    // probably because not all context switches lead to another instance of
+    // this function (for example, newly spawned threads will context switch
+    // elsewhere)
+    cpu->thread = next;
+    next->cpu   = cpu;
+    com_sys_thread_transition_nolock(next, E_COM_THREAD_STATE_RUNNING);
 
     // Restore kernel stack
     ARCH_CPU_SET_INTERRUPT_STACK(cpu, next->kernel_stack);
@@ -195,11 +197,6 @@ void com_sys_sched_yield_nolock(void) {
     uintmax_t time_slept = sleep_end - sleep_start;
     __atomic_add_fetch(&curr->time_slept, time_slept, __ATOMIC_RELAXED);
 #endif
-
-    kspinlock_acquire(&curr->sched_lock);
-    curr->cpu = cpu;
-    com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_RUNNING);
-    kspinlock_release(&curr->sched_lock);
 }
 
 void com_sys_sched_yield(void) {
@@ -431,6 +428,8 @@ void com_sys_sched_init(void) {
     arch_cpu_t *curr_cpu       = ARCH_CPU_GET();
     curr_cpu->idle_thread      = com_sys_thread_new_kernel(NULL, sched_idle);
     curr_cpu->idle_thread->cpu = curr_cpu;
-    com_sys_thread_transition(curr_cpu->idle_thread,
-                              E_COM_THREAD_STATE_RUNNING);
+    // NOTE: this is different from other CPUs because those run the idle thread
+    // as their first thread, while the BSP runs the init thread as its first
+    // thread
+    com_sys_thread_transition(curr_cpu->idle_thread, E_COM_THREAD_STATE_READY);
 }
