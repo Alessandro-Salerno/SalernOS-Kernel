@@ -88,8 +88,11 @@ static int send_to_thread(com_thread_t *thread, int sig) {
     kspinlock_acquire(&thread->sched_lock);
     if (E_COM_THREAD_STATE_WAITING == thread->state) {
         com_sys_sched_notify_thread_nolock(thread);
+    } else if (E_COM_THREAD_STATE_READY == thread->state) {
+        com_sys_sched_prioritize_nolock(thread);
     } else if (E_COM_THREAD_STATE_RUNNING == thread->state &&
                thread->cpu != ARCH_CPU_GET()) {
+        KASSERT(thread->cpu->thread == thread);
         ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
     }
 

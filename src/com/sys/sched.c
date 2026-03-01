@@ -76,7 +76,6 @@ static void sched_waitlist_insert(com_waitlist_t *waitlist,
     // thread->cpu is nulled and curr is removed from runqueue in sched, no need
     // to do it here. In fact, this has caused issues, specifically with
     // testjoin 1000
-
     thread->waiting_on = waitlist;
     com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_WAITING);
 
@@ -100,6 +99,7 @@ void com_sys_sched_yield_nolock(void) {
     kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
     KASSERT(NULL == curr || KSPINLOCK_IS_HELD(&curr->sched_lock));
+    KASSERT(NULL == curr || 2 == curr->lock_depth || 3 == curr->lock_depth);
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
@@ -151,6 +151,8 @@ void com_sys_sched_yield_nolock(void) {
     }
     KASSERT(E_COM_THREAD_STATE_RUNNING != curr->state);
 
+    curr->cpu      = NULL;
+    curr->last_cpu = cpu;
     kspinlock_release(&cpu->runqueue_lock);
 
     sched_switch_vmm_context(curr, next);
@@ -161,8 +163,6 @@ void com_sys_sched_yield_nolock(void) {
     }
 
     com_sys_profiler_end_function(&profiler_data);
-    curr->cpu      = NULL;
-    curr->last_cpu = cpu;
 
     // NOTE: this creates a subtle race that we don't care about for now. The
     // obvious solution (i.e., doing it after the context switch) doesn't work
@@ -422,6 +422,24 @@ void com_sys_sched_notify_thread(com_thread_t *thread) {
     kspinlock_acquire(&thread->sched_lock);
     com_sys_sched_notify_thread_nolock(thread);
     kspinlock_release(&thread->sched_lock);
+}
+
+void com_sys_sched_prioritize(com_thread_t *thread) {
+    kspinlock_acquire(&thread->sched_lock);
+    com_sys_sched_prioritize_nolock(thread);
+    kspinlock_release(&thread->sched_lock);
+}
+
+void com_sys_sched_prioritize_nolock(com_thread_t *thread) {
+    arch_cpu_t *cpu = thread->last_cpu;
+
+    if (NULL != cpu) {
+        kspinlock_acquire(&cpu->runqueue_lock);
+        TAILQ_REMOVE(&cpu->sched_queue, thread, threads);
+        TAILQ_INSERT_HEAD(&cpu->sched_queue, thread, threads);
+        kspinlock_release(&cpu->runqueue_lock);
+        ARCH_CPU_SEND_IPI(cpu, ARCH_CPU_IPI_RESCHEDULE);
+    }
 }
 
 void com_sys_sched_init(void) {

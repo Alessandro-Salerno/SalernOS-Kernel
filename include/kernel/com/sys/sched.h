@@ -47,4 +47,7 @@ void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters);
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread(com_thread_t *thread);
 
+void com_sys_sched_prioritize(com_thread_t *thread);
+void com_sys_sched_prioritize_nolock(com_thread_t *thread);
+
 void com_sys_sched_init(void);
