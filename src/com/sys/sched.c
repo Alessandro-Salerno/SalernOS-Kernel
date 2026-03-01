@@ -122,14 +122,6 @@ void com_sys_sched_yield_nolock(void) {
         TAILQ_REMOVE(&cpu->sched_queue, next, threads);
     }
 
-    if (E_COM_THREAD_STATE_READY != next->state) {
-        KURGENT("next = %p, next->tid = %d, next->state = %d",
-                next,
-                next->tid,
-                next->state);
-        KASSERT(false);
-    }
-
     if (curr == next) {
         KURGENT("curr = %p, next = %p | curr->tid = %d, next->tid = %d | "
                 "IS_USER(curr) = %d, "
@@ -141,6 +133,16 @@ void com_sys_sched_yield_nolock(void) {
                 ARCH_CONTEXT_ISUSER(&curr->ctx),
                 ARCH_CONTEXT_ISUSER(&next->ctx));
         KASSERT(curr != next);
+    }
+
+    if (E_COM_THREAD_STATE_READY != next->state) {
+        KURGENT(
+            "next = %p, next->tid = %d, next->state = %d, next->cpu->id = %d",
+            next,
+            next->tid,
+            next->state,
+            (NULL != next->cpu) ? next->cpu->id : -1);
+        KASSERT(false);
     }
 
     if (E_COM_THREAD_STATE_RUNNING == curr->state) {
@@ -431,15 +433,21 @@ void com_sys_sched_prioritize(com_thread_t *thread) {
 }
 
 void com_sys_sched_prioritize_nolock(com_thread_t *thread) {
-    arch_cpu_t *cpu = thread->last_cpu;
+    (void)thread;
+    // TODO: figure out why this doesn't work
+
+    /*arch_cpu_t *cpu = thread->last_cpu;
+    KASSERT(E_COM_THREAD_STATE_READY == thread->state);
+    KASSERT(NULL == thread->cpu);
 
     if (NULL != cpu) {
         kspinlock_acquire(&cpu->runqueue_lock);
+        KASSERT(cpu->thread != thread);
         TAILQ_REMOVE(&cpu->sched_queue, thread, threads);
         TAILQ_INSERT_HEAD(&cpu->sched_queue, thread, threads);
         kspinlock_release(&cpu->runqueue_lock);
         ARCH_CPU_SEND_IPI(cpu, ARCH_CPU_IPI_RESCHEDULE);
-    }
+    }*/
 }
 
 void com_sys_sched_init(void) {
