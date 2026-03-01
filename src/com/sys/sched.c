@@ -47,7 +47,7 @@ static void sched_idle(void) {
 
 static inline com_thread_t *
 sched_handle_zombies(bool *next_removed, arch_cpu_t *cpu, com_thread_t *next) {
-    while (NULL != next && next->exited) {
+    while (NULL != next && E_COM_THREAD_STATE_EXITED == next->state) {
         *next_removed = true;
         TAILQ_REMOVE_HEAD(&cpu->sched_queue, threads);
         next = TAILQ_FIRST(&cpu->sched_queue);
@@ -89,7 +89,8 @@ static void sched_waitlist_insert(com_waitlist_t *waitlist,
     // testjoin 1000
 
     thread->waiting_on = waitlist;
-    thread->runnable   = false;
+    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_WAITING);
+
     kspinlock_acquire(&waitlist->lock);
     TAILQ_INSERT_TAIL(&waitlist->queue, thread, threads);
     kspinlock_release(&waitlist->lock);
@@ -122,7 +123,7 @@ void com_sys_sched_yield_nolock(void) {
     next              = sched_handle_zombies(&next_removed, cpu, next);
 
     if (NULL == next) {
-        if (curr->runnable) {
+        if (E_COM_THREAD_STATE_RUNNING == curr->state) {
             kspinlock_release(&cpu->runqueue_lock);
             kspinlock_release(&curr->sched_lock);
             com_sys_profiler_end_function(&profiler_data);
@@ -148,10 +149,12 @@ void com_sys_sched_yield_nolock(void) {
                 ARCH_CONTEXT_ISUSER(&next->ctx));
         KASSERT(curr != next);
     }
-    KASSERT(!curr->exited || !curr->runnable);
 
-    if (curr->runnable && curr != cpu->idle_thread) {
-        TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
+    if (E_COM_THREAD_STATE_RUNNING == curr->state) {
+        com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_READY);
+        if (curr != cpu->idle_thread) {
+            TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
+        }
     }
 
     kspinlock_release(&cpu->runqueue_lock);
@@ -167,7 +170,6 @@ void com_sys_sched_yield_nolock(void) {
     cpu->thread    = next;
     curr->cpu      = NULL;
     curr->last_cpu = cpu;
-    next->cpu      = cpu;
 
     // Restore kernel stack
     ARCH_CPU_SET_INTERRUPT_STACK(cpu, next->kernel_stack);
@@ -193,6 +195,11 @@ void com_sys_sched_yield_nolock(void) {
     uintmax_t time_slept = sleep_end - sleep_start;
     __atomic_add_fetch(&curr->time_slept, time_slept, __ATOMIC_RELAXED);
 #endif
+
+    kspinlock_acquire(&curr->sched_lock);
+    curr->cpu = cpu;
+    com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_RUNNING);
+    kspinlock_release(&curr->sched_lock);
 }
 
 void com_sys_sched_yield(void) {
@@ -361,15 +368,7 @@ void com_sys_sched_notify(com_waitlist_t *waitlist) {
     kspinlock_release(&waitlist->lock);
 
     if (NULL != next) {
-        kspinlock_acquire(&next->sched_lock);
-        KASSERT(NULL == next->cpu);
-        kspinlock_acquire(&next->last_cpu->runqueue_lock);
-        TAILQ_INSERT_HEAD(&next->last_cpu->sched_queue, next, threads);
-        next->runnable   = true;
-        next->waiting_on = NULL;
-        ARCH_CPU_SEND_IPI(next->last_cpu, ARCH_CPU_IPI_RESCHEDULE);
-        kspinlock_release(&next->last_cpu->runqueue_lock);
-        kspinlock_release(&next->sched_lock);
+        com_sys_thread_ready(next);
     }
 }
 
@@ -385,16 +384,7 @@ void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
 
     com_thread_t *next, *_;
     TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
-        kspinlock_acquire(&next->sched_lock);
-        KASSERT(NULL == next->cpu);
-        TAILQ_REMOVE(&local_queue, next, threads);
-        kspinlock_acquire(&next->last_cpu->runqueue_lock);
-        TAILQ_INSERT_HEAD(&next->last_cpu->sched_queue, next, threads);
-        next->runnable   = true;
-        next->waiting_on = NULL;
-        ARCH_CPU_SEND_IPI(next->last_cpu, ARCH_CPU_IPI_RESCHEDULE);
-        kspinlock_release(&next->last_cpu->runqueue_lock);
-        kspinlock_release(&next->sched_lock);
+        com_sys_thread_ready(next);
     }
 }
 
@@ -415,22 +405,11 @@ void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters) {
 
     com_thread_t *next, *_;
     TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
-        kspinlock_acquire(&next->sched_lock);
-        KASSERT(NULL == next->cpu);
-        TAILQ_REMOVE(&local_queue, next, threads);
-        kspinlock_acquire(&next->last_cpu->runqueue_lock);
-        TAILQ_INSERT_HEAD(&next->last_cpu->sched_queue, next, threads);
-        next->runnable   = true;
-        next->waiting_on = NULL;
-        ARCH_CPU_SEND_IPI(next->last_cpu, ARCH_CPU_IPI_RESCHEDULE);
-        kspinlock_release(&next->last_cpu->runqueue_lock);
-        kspinlock_release(&next->sched_lock);
+        com_sys_thread_ready(next);
     }
 }
 
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
-    arch_cpu_t *currcpu = ARCH_CPU_GET();
-
     if (NULL != thread->waiting_on) {
         KASSERT(NULL == thread->cpu);
 
@@ -438,12 +417,7 @@ void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
         TAILQ_REMOVE(&thread->waiting_on->queue, thread, threads);
         kspinlock_release(&thread->waiting_on->lock);
 
-        kspinlock_acquire(&thread->last_cpu->runqueue_lock);
-        TAILQ_INSERT_HEAD(&currcpu->sched_queue, thread, threads);
-        thread->runnable   = true;
-        thread->waiting_on = NULL;
-        ARCH_CPU_SEND_IPI(thread->last_cpu, ARCH_CPU_IPI_RESCHEDULE);
-        kspinlock_release(&thread->last_cpu->runqueue_lock);
+        com_sys_thread_ready_nolock(thread);
     }
 }
 
@@ -454,6 +428,9 @@ void com_sys_sched_notify_thread(com_thread_t *thread) {
 }
 
 void com_sys_sched_init(void) {
-    arch_cpu_t *curr_cpu  = ARCH_CPU_GET();
-    curr_cpu->idle_thread = com_sys_thread_new_kernel(NULL, sched_idle);
+    arch_cpu_t *curr_cpu       = ARCH_CPU_GET();
+    curr_cpu->idle_thread      = com_sys_thread_new_kernel(NULL, sched_idle);
+    curr_cpu->idle_thread->cpu = curr_cpu;
+    com_sys_thread_transition(curr_cpu->idle_thread,
+                              E_COM_THREAD_STATE_RUNNING);
 }

@@ -39,14 +39,6 @@
 #define FREELIST_UNLOCK(freelist_head) \
     kspinlock_release(&(freelist_head)->lock);
 
-#define LAZYLIST_LOCK(lazylist_head) kspinlock_acquire(&(lazylist_head)->lock);
-#define LAZYLIST_UNLOCK(lazylist_head) \
-    kspinlock_release(&(lazylist_head)->lock);
-#define LAZYLIST_WAIT(lazylist_head) \
-    com_sys_sched_wait_nodrop(&(lazylist_head)->waitlist);
-#define LAZYLIST_NOTIFY(lazylist_head) \
-    com_sys_sched_notify(&(lazylist_head)->waitlist);
-
 #define PHYS_TO_META_INDEX(page_phys) ((uintptr_t)(page_phys) / ARCH_PAGE_SIZE)
 #define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / ARCH_PAGE_SIZE)
 #define PAGE_META_ARRAY_SIZE(memsize) \
@@ -70,20 +62,6 @@ struct freelist_head {
 struct freelist_entry {
     TAILQ_ENTRY(freelist_entry) tqe;
     size_t pages;
-};
-
-struct lazylist_head {
-    struct lazylist_entry *first;
-    com_waitlist_t         waitlist;
-    kspinlock_t            lock;
-};
-
-// An entry into a lazy list, i.e. a list where each entry is a distinct page
-// which is waiting for lazy processing. This struct is mapped directly over the
-// page, using the first bytes of the buffer
-struct lazylist_entry {
-    struct lazylist_entry *next;
-    size_t                 pages;
 };
 
 enum page_state {
@@ -126,19 +104,12 @@ struct page_meta_array {
 
 // List of currently available blocks. This list is ordered by block size
 static struct freelist_head MainFreeList = {0};
-// List of pages to be zeroed by async thread
-static struct lazylist_head ZeroLazyList = {0};
-// List of pages that have been zeroed, but have yet to be inserted in the
-// correct order in the main free list
-static struct lazylist_head InsertLazyList = {0};
 // Array of page metadata. Initialized by the init() function to piont to a the
 // HHDM representation of a memory map entry large enough to hold it
 static struct page_meta_array PageMeta = {0};
 // Consolidated data for fast access. Should be accessed atomically after
 // initialization
 static com_pmm_stats_t MemoryStats = {0};
-// Used by insert thread to group pages together
-static khashmap_t InsertThreadDefragMap;
 
 // UTILITY FUNCTIONS
 
@@ -270,45 +241,6 @@ freelist_pop_front_nolock(size_t               *out_alloc_size,
     return ret;
 }
 
-// Lazy lists are not ordered, this adds to the head of the list
-static inline void lazylist_add_nolock(struct lazylist_head  *lazylist,
-                                       struct lazylist_entry *entry) {
-    if (NULL == lazylist->first) {
-        goto fallback;
-    }
-
-    // Functiosns like memset scale better on larger blocks, so we try to merge
-    // these
-    if ((uintptr_t)entry ==
-        (uintptr_t)lazylist->first + lazylist->first->pages * ARCH_PAGE_SIZE) {
-        lazylist->first->pages++;
-        return;
-    }
-
-    if ((uintptr_t)lazylist->first ==
-        (uintptr_t)entry + entry->pages * ARCH_PAGE_SIZE) {
-        entry->next = lazylist->first->next;
-        entry->pages += lazylist->first->pages;
-        *lazylist->first = (struct lazylist_entry){0};
-        lazylist->first  = entry;
-        return;
-    }
-
-fallback:
-    entry->next     = lazylist->first;
-    lazylist->first = entry;
-}
-
-// Take the lazy list as it is now,  then empty it. This way, the caller can
-// take a local pointer to the entire list, ensuring that the global lock is
-// held for as little as possible, but the contents are still thread-safe
-static inline struct lazylist_entry *
-lazylist_truncate_nolock(struct lazylist_head *lazylist) {
-    struct lazylist_entry *ret = lazylist->first;
-    lazylist->first            = NULL;
-    return ret;
-}
-
 static inline struct page_meta *page_meta_get(void *phys_addr) {
     size_t index = PHYS_TO_META_INDEX(phys_addr);
     KASSERT(index < PageMeta.extended_len);
@@ -332,173 +264,6 @@ page_meta_set(void *page_phys, struct page_meta *tocopy, size_t num_pages) {
                tocopy,
                sizeof(struct page_meta),
                num_pages);
-}
-
-// BACKGROUND TASKS
-
-static void pmm_zero_thread(void) {
-    bool                   already_done = false;
-    struct lazylist_entry *to_zero      = NULL;
-    size_t zero_max = READ_STATS(usable) / 10000 * CONFIG_PMM_ZERO_MAX /
-                      ARCH_PAGE_SIZE;
-    size_t to_insert_notify = CONFIG_PMM_NOTIFY_INSERT * ARCH_PAGE_SIZE;
-
-    while (true) {
-        // Allow kernel preemption
-        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-        curr_thread->lock_depth   = 0;
-        ARCH_CPU_ENABLE_INTERRUPTS();
-
-        if (already_done) {
-            LAZYLIST_WAIT(&ZeroLazyList);
-            already_done = false;
-        }
-
-        if (NULL == to_zero) {
-            LAZYLIST_LOCK(&ZeroLazyList);
-            to_zero = lazylist_truncate_nolock(&ZeroLazyList);
-            LAZYLIST_UNLOCK(&ZeroLazyList);
-        }
-
-        // Repeated if because the values might have changed
-        if (NULL == to_zero) {
-            already_done = true;
-            continue;
-        }
-
-        size_t pages_zeroed = 0;
-        while (NULL != to_zero && pages_zeroed < zero_max) {
-            struct lazylist_entry *next          = to_zero->next;
-            size_t                 to_zero_pages = to_zero->pages;
-
-            // Memset only the part the insert thread doesn't need
-            kmemset(to_zero + 1,
-                    to_zero_pages * ARCH_PAGE_SIZE -
-                        sizeof(struct lazylist_entry),
-                    0);
-
-            // Pass it on to the insert thrtead
-            LAZYLIST_LOCK(&InsertLazyList);
-            lazylist_add_nolock(&InsertLazyList, to_zero);
-            LAZYLIST_UNLOCK(&InsertLazyList);
-
-            to_zero = next;
-            pages_zeroed += to_zero_pages;
-        }
-
-        UPDATE_STATS(to_zero, -pages_zeroed);
-        size_t to_insert = UPDATE_STATS(to_insert, +pages_zeroed);
-
-        if (to_insert >= to_insert_notify) {
-            LAZYLIST_NOTIFY(&InsertLazyList);
-        }
-
-        already_done = true;
-    }
-}
-
-static void pmm_insert_thread(void) {
-    bool                   already_done = false;
-    struct lazylist_entry *to_insert    = NULL;
-    size_t insert_max = READ_STATS(usable) / 10000 * CONFIG_PMM_ZERO_MAX /
-                        ARCH_PAGE_SIZE;
-
-    while (true) {
-        // Allow kernel preemption
-        com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-        curr_thread->lock_depth   = 0;
-        ARCH_CPU_ENABLE_INTERRUPTS();
-
-        if (already_done) {
-            LAZYLIST_WAIT(&InsertLazyList);
-            already_done = false;
-        }
-
-        if (NULL == to_insert) {
-            LAZYLIST_LOCK(&InsertLazyList);
-            to_insert = lazylist_truncate_nolock(&InsertLazyList);
-            LAZYLIST_UNLOCK(&InsertLazyList);
-        }
-
-        // Repeated if because the values might have changed
-        if (NULL == to_insert) {
-            already_done = true;
-            continue;
-        }
-
-        // For each entry in the lazylist, we try to see if is contiguous with
-        // some previsouly added block, so that we already do a bit of defrag
-        // here
-        size_t pages_inserted = 0;
-        while (NULL != to_insert && pages_inserted < insert_max) {
-            struct lazylist_entry *next            = to_insert->next;
-            size_t                 to_insert_pages = to_insert->pages;
-            uintptr_t              to_insert_addr  = (uintptr_t)to_insert;
-            uintptr_t prev_page_addr = to_insert_addr - ARCH_PAGE_SIZE;
-            uintptr_t next_page_addr = to_insert_addr +
-                                       (to_insert_pages * ARCH_PAGE_SIZE);
-            bool add_to_hashmap = true;
-
-            struct lazylist_entry *prev_page_entry;
-            struct lazylist_entry *next_page_entry;
-            if (ENOENT != KHASHMAP_GET(&prev_page_entry,
-                                       &InsertThreadDefragMap,
-                                       &prev_page_addr)) {
-                prev_page_entry->pages += to_insert_pages;
-                to_insert      = prev_page_entry;
-                to_insert_addr = prev_page_addr;
-                add_to_hashmap = false;
-            }
-
-            if (ENOENT != KHASHMAP_GET(&next_page_entry,
-                                       &InsertThreadDefragMap,
-                                       &next_page_addr)) {
-                KHASHMAP_REMOVE(&InsertThreadDefragMap, &next_page_addr);
-                to_insert->pages += next_page_entry->pages;
-                *next_page_entry = (struct lazylist_entry){0};
-            }
-
-            if (add_to_hashmap) {
-                KHASHMAP_PUT(&InsertThreadDefragMap,
-                             &to_insert_addr,
-                             to_insert);
-            }
-
-            to_insert = next;
-            pages_inserted += to_insert_pages;
-        }
-
-        // Perform the actual insert process
-        KHASHMAP_FOREACH(&InsertThreadDefragMap) {
-            struct lazylist_entry *lazylist_entry = entry->value;
-            // Since we're using the address as key, but the address also
-            // contains the structure, then we're left with this unreadable
-            // mess. I'm sorry
-            uintptr_t entry_key = (uintptr_t)entry->value;
-            size_t    pages     = lazylist_entry->pages;
-            // We transform it into a freelist entry
-            struct freelist_entry *freelist_entry = entry->value;
-            freelist_entry->pages                 = pages;
-
-            // This is zeroeing, but we do it here because it is less fragmented
-            // and kernel lib likes that. No need to lock this since as long as
-            // the pages are not in the freelist, we're the only ones that will
-            // look into this buffer
-            struct page_meta *page_meta_base = page_meta_get(
-                (void *)ARCH_HHDM_TO_PHYS(freelist_entry));
-            kmemset(page_meta_base,
-                    freelist_entry->pages * sizeof(struct page_meta),
-                    0);
-            KHASHMAP_REMOVE(&InsertThreadDefragMap, &entry_key);
-
-            FREELIST_LOCK(&MainFreeList);
-            freelist_add_ordered_nolock(&MainFreeList, freelist_entry);
-            FREELIST_UNLOCK(&MainFreeList);
-        }
-
-        UPDATE_STATS(to_insert, -pages_inserted);
-        already_done = true;
-    }
 }
 
 // INTERFACE FUNCTIONS
@@ -619,17 +384,7 @@ void com_mm_pmm_free(void *page) {
         return;
     }
 
-    struct lazylist_entry *entry = (void *)ARCH_PHYS_TO_HHDM(page);
-    entry->pages                 = 1;
-
-    LAZYLIST_LOCK(&ZeroLazyList);
-    lazylist_add_nolock(&ZeroLazyList, entry);
-    LAZYLIST_UNLOCK(&ZeroLazyList);
-
-    size_t to_zero_notify = READ_STATS(usable) / 10000 * CONFIG_PMM_NOTIFY_ZERO;
-    if (UPDATE_STATS(to_zero, +1) >= to_zero_notify) {
-        LAZYLIST_NOTIFY(&ZeroLazyList);
-    }
+    // TODO: reimplement free
 }
 
 void com_mm_pmm_free_many(void *base, size_t pages) {
@@ -658,22 +413,8 @@ void com_mm_pmm_get_stats(com_pmm_stats_t *out) {
 }
 
 void com_mm_pmm_init_threads(void) {
-    KLOG("initializing pmm threads");
-    COM_SYS_THREAD_WAITLIST_INIT(&ZeroLazyList.waitlist);
-    COM_SYS_THREAD_WAITLIST_INIT(&InsertLazyList.waitlist);
-    KHASHMAP_INIT(&InsertThreadDefragMap);
-
-    // Zero thread
-    com_thread_t *zero_thread = com_sys_thread_new_kernel(NULL,
-                                                          pmm_zero_thread);
-    zero_thread->runnable     = true;
-    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, zero_thread, threads);
-
-    // Insert thread
-    com_thread_t *insert_thread = com_sys_thread_new_kernel(NULL,
-                                                            pmm_insert_thread);
-    insert_thread->runnable     = true;
-    TAILQ_INSERT_TAIL(&ARCH_CPU_GET()->sched_queue, insert_thread, threads);
+    KLOG("TODO: reimplement pmm threads");
+    // TODO reimplement pmm threads
 }
 
 void com_mm_pmm_init(void) {

@@ -87,6 +87,7 @@ typedef struct com_proc {
     int                         exit_status;
     struct com_waitlist         waitpid_waitlist;
     struct com_sigaction       *sigaction[NSIG];
+    struct com_waitlist         stop_waitlist;
 
     // File system
     KCACHE_FRIENDLY com_vnode_t *root;

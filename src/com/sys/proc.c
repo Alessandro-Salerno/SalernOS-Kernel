@@ -78,6 +78,7 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     proc->num_ref             = 1; // 1 because of the parent
     proc->num_running_threads = 0;
     COM_SYS_THREAD_WAITLIST_INIT(&proc->waitpid_waitlist);
+    COM_SYS_THREAD_WAITLIST_INIT(&proc->stop_waitlist);
 
     proc->threads_lock = KSPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);

@@ -102,7 +102,9 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
     cpu->idle_thread->lock_depth = 0;
-    cpu->thread                  = cpu->idle_thread;
+    cpu->idle_thread->cpu        = cpu;
+    com_sys_thread_transition(cpu->idle_thread, E_COM_THREAD_STATE_RUNNING);
+    cpu->thread = cpu->idle_thread;
     ARCH_CPU_SET_INTERRUPT_STACK(cpu, cpu->idle_thread->kernel_stack);
 
     asm("sti");

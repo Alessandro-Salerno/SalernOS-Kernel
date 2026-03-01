@@ -35,6 +35,14 @@ typedef struct com_waitlist {
     kspinlock_t             lock;
 } com_waitlist_t;
 
+typedef enum com_thread_state {
+    E_COM_THREAD_STATE_NEW = 0,
+    E_COM_THREAD_STATE_WAITING,
+    E_COM_THREAD_STATE_READY,
+    E_COM_THREAD_STATE_RUNNING,
+    E_COM_THREAD_STATE_EXITED
+} com_thread_state_t;
+
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <kernel/com/ipc/signal.h>
@@ -60,8 +68,7 @@ typedef struct com_thread {
     struct com_proc     *proc;
     struct arch_cpu     *cpu;
     struct arch_cpu     *last_cpu;
-    bool                 runnable;
-    bool                 exited;
+    com_thread_state_t   state;
     TAILQ_ENTRY(com_thread) threads;
     TAILQ_ENTRY(com_thread) proc_threads;
     int   lock_depth;
@@ -87,8 +94,12 @@ com_thread_t *com_sys_thread_new(struct com_proc *proc,
                                  uintmax_t        stack_size,
                                  void            *entry);
 com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
-void          com_sys_thread_exit(com_thread_t *thread);
-void          com_sys_thread_exit_nolock(com_thread_t *thread);
-void          com_sys_thread_destroy(com_thread_t *thread);
-void          com_sys_thread_ready_nolock(com_thread_t *thread);
-void          com_sys_thread_ready(com_thread_t *thread);
+
+void com_sys_thread_transition(com_thread_t *thread, com_thread_state_t state);
+void com_sys_thread_transition_nolock(com_thread_t      *thread,
+                                      com_thread_state_t state);
+void com_sys_thread_exit(com_thread_t *thread);
+void com_sys_thread_exit_nolock(com_thread_t *thread);
+void com_sys_thread_destroy(com_thread_t *thread);
+void com_sys_thread_ready_nolock(com_thread_t *thread);
+void com_sys_thread_ready(com_thread_t *thread);

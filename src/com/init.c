@@ -186,6 +186,8 @@ void com_init_pid1(void) {
     KASSERT(NULL != curr_cpu);
     ARCH_CPU_SET_INTERRUPT_STACK(curr_cpu, thread->kernel_stack);
     curr_cpu->thread = thread;
+    thread->cpu      = curr_cpu;
+    com_sys_thread_transition(thread, E_COM_THREAD_STATE_RUNNING);
 
     KASSERT(NULL != proc);
     KASSERT(NULL != proc->vmm_context);

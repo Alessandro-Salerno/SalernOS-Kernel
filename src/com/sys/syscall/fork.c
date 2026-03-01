@@ -84,7 +84,6 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     }
     kspinlock_release(&curr_proc->signal_lock);
 
-    new_thread->runnable = false;
     com_sys_thread_ready(new_thread);
 
     return COM_SYS_SYSCALL_OK(new_proc->pid);

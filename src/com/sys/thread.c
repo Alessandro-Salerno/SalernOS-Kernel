@@ -37,8 +37,6 @@ static pid_t NextTid = 0;
 static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     com_thread_t *thread = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     thread->proc         = proc;
-    thread->runnable     = true;
-    thread->exited       = false;
     thread->ctx          = ctx;
     thread->lock_depth   = 1;
     thread->sched_lock   = KSPINLOCK_NEW();
@@ -80,6 +78,41 @@ com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
     return t;
 }
 
+void com_sys_thread_transition(com_thread_t *thread, com_thread_state_t state) {
+    kspinlock_acquire(&thread->sched_lock);
+    com_sys_thread_transition_nolock(thread, state);
+    kspinlock_release(&thread->sched_lock);
+}
+
+void com_sys_thread_transition_nolock(com_thread_t      *thread,
+                                      com_thread_state_t state) {
+    // debug checks
+    KASSERT(E_COM_THREAD_STATE_EXITED != thread->state);
+    switch (state) {
+        case E_COM_THREAD_STATE_NEW:
+            KASSERT(!"cannot transition to new state from any state");
+            break;
+        case E_COM_THREAD_STATE_READY:
+            KASSERT(E_COM_THREAD_STATE_EXITED != thread->state);
+            KASSERT(NULL == thread->waiting_on);
+            break;
+        case E_COM_THREAD_STATE_WAITING:
+            KASSERT(NULL != thread->waiting_on);
+            break;
+        case E_COM_THREAD_STATE_RUNNING:
+            KASSERT(NULL != thread->cpu);
+            KASSERT(NULL == thread->waiting_on);
+            break;
+        case E_COM_THREAD_STATE_EXITED:
+            break;
+        default:
+            KASSERT(!"invalid argument");
+            break;
+    }
+
+    thread->state = state;
+}
+
 void com_sys_thread_exit(com_thread_t *thread) {
     kspinlock_acquire(&thread->sched_lock);
     com_sys_thread_exit_nolock(thread);
@@ -87,15 +120,14 @@ void com_sys_thread_exit(com_thread_t *thread) {
 }
 
 void com_sys_thread_exit_nolock(com_thread_t *thread) {
-    thread->runnable = false;
-    thread->exited   = true;
+    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_EXITED);
     if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
         ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_RESCHEDULE);
     }
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {
-    thread->runnable = false;
+    KASSERT(E_COM_THREAD_STATE_EXITED == thread->state);
     if (NULL != thread->proc) {
         COM_SYS_PROC_RELEASE(thread->proc);
     }
@@ -106,12 +138,18 @@ void com_sys_thread_destroy(com_thread_t *thread) {
 }
 
 void com_sys_thread_ready_nolock(com_thread_t *thread) {
-    arch_cpu_t *curr_cpu = x86_64_smp_get_random();
-    thread->runnable     = true;
-    thread->waiting_on   = NULL;
-    kspinlock_acquire(&curr_cpu->runqueue_lock);
-    TAILQ_INSERT_TAIL(&curr_cpu->sched_queue, thread, threads);
-    kspinlock_release(&curr_cpu->runqueue_lock);
+    arch_cpu_t *ready_cpu = thread->last_cpu;
+    thread->waiting_on    = NULL;
+    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_READY);
+
+    if (NULL == ready_cpu) {
+        ready_cpu = x86_64_smp_get_random();
+    }
+
+    kspinlock_acquire(&ready_cpu->runqueue_lock);
+    TAILQ_INSERT_TAIL(&ready_cpu->sched_queue, thread, threads);
+    kspinlock_release(&ready_cpu->runqueue_lock);
+
     KDEBUG("thread with tid=%zu is now runnable on cpu %zu",
            thread->tid,
            curr_cpu->id);

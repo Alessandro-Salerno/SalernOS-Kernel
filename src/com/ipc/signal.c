@@ -86,11 +86,10 @@ static int send_to_thread(com_thread_t *thread, int sig) {
     }
 
     kspinlock_acquire(&thread->sched_lock);
-    if (NULL != thread->waiting_on) {
+    if (E_COM_THREAD_STATE_WAITING == thread->state) {
         com_sys_sched_notify_thread_nolock(thread);
-    } else if (!thread->runnable) {
-        com_sys_thread_ready_nolock(thread);
-    } else if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
+    } else if (E_COM_THREAD_STATE_RUNNING == thread->state &&
+               thread->cpu != ARCH_CPU_GET()) {
         ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
     }
 
@@ -236,11 +235,9 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             kspinlock_release(&proc->signal_lock);
 
             // com_sys_proc_stop_nolock will ensure that the signal is sent to
-            // all threads, so all will arrive here, and all will set themselves
-            // to not runnable
-            kspinlock_acquire(&thread->sched_lock);
-            thread->runnable = false;
-            com_sys_sched_yield_nolock();
+            // all threads, so all will arrive here, and all will wait on the
+            // process's stop_waitlist
+            com_sys_sched_wait_nodrop(&proc->stop_waitlist);
 
             kspinlock_acquire(&proc->signal_lock);
             KASSERT(COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->pending_signals,
@@ -250,8 +247,11 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // Execution gets beck here after the process receives a SIGCONT, as
             // can be seen in send_to_thread
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
-            proc->stop_signal   = COM_IPC_SIGNAL_NONE;
-            proc->stop_notified = false;
+            if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
+                proc->stop_signal   = COM_IPC_SIGNAL_NONE;
+                proc->stop_notified = false;
+                com_sys_sched_notify_all(&proc->stop_waitlist);
+            }
             goto end;
         } else if (SA_IGNORE & SignalProperties[sig]) {
             goto end;

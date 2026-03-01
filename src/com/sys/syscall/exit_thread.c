@@ -38,7 +38,7 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     kspinlock_acquire(&curr_thread->proc->threads_lock);
     kspinlock_acquire(&curr_thread->sched_lock);
 
-    KASSERT(curr_thread->runnable);
+    KASSERT(E_COM_THREAD_STATE_RUNNING == curr_thread->state);
     com_sys_thread_exit_nolock(curr_thread);
     KASSERT(0 == curr_thread->pending_signals);
 
