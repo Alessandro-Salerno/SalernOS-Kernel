@@ -40,14 +40,16 @@ COM_SYS_SYSCALL(com_sys_syscall_dup3) {
     com_syscall_ret_t ret         = COM_SYS_SYSCALL_BASE_OK();
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t       *curr_proc   = curr_thread->proc;
+    com_file_t       *file        = NULL;
 
     kspinlock_acquire(&curr_proc->fd_lock);
-    com_sys_proc_close_file_nolock(curr_proc, new_fd);
+    com_sys_proc_close_file_nolock(&file, curr_proc, new_fd);
     int dup_ret = com_sys_proc_duplicate_file_nolock(curr_proc, new_fd, old_fd);
     if (dup_ret < 0) {
         ret = COM_SYS_SYSCALL_ERR(-dup_ret);
     }
 
     kspinlock_release(&curr_proc->fd_lock);
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

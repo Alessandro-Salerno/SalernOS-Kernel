@@ -115,7 +115,9 @@ int             com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
                                                    int         new_fd,
                                                    int         old_fd);
 int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
-int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd);
+int com_sys_proc_close_file_nolock(com_file_t **out_file,
+                                   com_proc_t  *proc,
+                                   int          fd);
 int com_sys_proc_close_file(com_proc_t *proc, int fd);
 int com_sys_proc_get_directory(com_file_t  **dir_file,
                                com_vnode_t **dir,
@@ -129,14 +131,14 @@ void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
                                        struct com_thread *thread);
-void com_sys_proc_kill_other_threads(com_proc_t        *proc,
-                                     struct com_thread *excluded);
-void com_sys_proc_kill_other_threads_nolock(com_proc_t        *proc,
-                                            struct com_thread *excluded);
 
-void com_sys_proc_exit(com_proc_t *proc, int status);
-void com_sys_proc_stop_nolock(com_proc_t *proc, int stop_signal);
-void com_sys_proc_terminate(com_proc_t *proc, int ecode);
+// These work exclusively on the running process
+void com_sys_proc_kill_other_threads(void);
+void com_sys_proc_kill_other_threads_nolock(void);
+void com_sys_proc_exit(int status);
+void com_sys_proc_stop_nolock(int stop_signal);
+void com_sys_proc_terminate(int ecode);
+
 void com_sys_proc_hide(com_proc_t *proc);
 
 com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,

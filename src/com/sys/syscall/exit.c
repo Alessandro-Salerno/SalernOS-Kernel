@@ -34,11 +34,6 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
 
     int exit_status = COM_SYS_SYSCALL_ARG(int, 1);
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    com_sys_proc_terminate(curr_proc, exit_status);
-    com_sys_sched_yield();
-
+    com_sys_proc_terminate(exit_status);
     __builtin_unreachable();
 }

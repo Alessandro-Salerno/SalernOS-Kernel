@@ -217,8 +217,7 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
-            com_sys_proc_terminate(proc, 0);
-            com_sys_sched_yield();
+            com_sys_proc_terminate(0);
 
             // This should never be reached
             KDEBUG("tid=%d in pid=%d is somehow still alive",
@@ -230,17 +229,21 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             // com_sys_proc_stop_nolock will return early if the stop signal has
             // already been sent to a single thread. This way we don't flood the
             // system with an infinite number of stop signals
-            com_sys_proc_stop_nolock(proc, sig);
+            com_sys_proc_stop_nolock(sig);
 
             // we clear the stop signal because com_sys_proc_stop_nolock may
             // have sent it to us again
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
             kspinlock_release(&proc->signal_lock);
 
+            // TODO: temporary hack
+            int lock_depth     = thread->lock_depth;
+            thread->lock_depth = 0;
             // com_sys_proc_stop_nolock will ensure that the signal is sent to
             // all threads, so all will arrive here, and all will wait on the
             // process's stop_waitlist
             com_sys_sched_wait_nodrop(&proc->stop_waitlist);
+            thread->lock_depth = lock_depth;
 
             kspinlock_acquire(&proc->signal_lock);
             KASSERT(COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->pending_signals,

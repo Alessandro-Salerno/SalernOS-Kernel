@@ -207,7 +207,9 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
     return ret;
 }
 
-int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd) {
+int com_sys_proc_close_file_nolock(com_file_t **out_file,
+                                   com_proc_t  *proc,
+                                   int          fd) {
     if (fd < 0 || fd > CONFIG_OPEN_MAX) {
         return EBADF;
     }
@@ -217,8 +219,8 @@ int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd) {
         return EBADF;
     }
 
-    COM_FS_FILE_RELEASE(fildesc->file);
-    *fildesc = (com_filedesc_t){0};
+    *out_file = fildesc->file;
+    *fildesc  = (com_filedesc_t){0};
 
     // Recycle file descriptors
     if (fd < proc->next_fd) {
@@ -230,8 +232,10 @@ int com_sys_proc_close_file_nolock(com_proc_t *proc, int fd) {
 
 int com_sys_proc_close_file(com_proc_t *proc, int fd) {
     kspinlock_acquire(&proc->fd_lock);
-    int ret = com_sys_proc_close_file_nolock(proc, fd);
+    com_file_t *file = NULL;
+    int         ret  = com_sys_proc_close_file_nolock(&file, proc, fd);
     kspinlock_release(&proc->fd_lock);
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }
 
@@ -313,74 +317,101 @@ void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
     TAILQ_REMOVE(&proc->threads, thread, proc_threads);
 }
 
-void com_sys_proc_kill_other_threads(com_proc_t *proc, com_thread_t *excluded) {
-    kspinlock_acquire(&proc->threads_lock);
-    com_sys_proc_kill_other_threads_nolock(proc, excluded);
-    kspinlock_release(&proc->threads_lock);
+void com_sys_proc_kill_other_threads(void) {
+    com_thread_t *curr_thraed = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL != curr_thraed);
+    com_proc_t *curr_proc = curr_thraed->proc;
+    KASSERT(NULL != curr_proc);
+
+    kspinlock_acquire(&curr_proc->threads_lock);
+    com_sys_proc_kill_other_threads_nolock();
+    kspinlock_release(&curr_proc->threads_lock);
 }
 
-void com_sys_proc_kill_other_threads_nolock(com_proc_t   *proc,
-                                            com_thread_t *excluded) {
+void com_sys_proc_kill_other_threads_nolock(void) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL != curr_thread);
+    com_proc_t *curr_proc = curr_thread->proc;
+    KASSERT(NULL != curr_proc);
+
     com_thread_t *t, *_;
-    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        if (t->tid != excluded->tid) {
+    TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
+        if (t->tid != curr_thread->tid) {
             kspinlock_acquire(&t->sched_lock);
             com_sys_thread_exit_nolock(t);
-            com_sys_proc_remove_thread_nolock(proc, t);
+            com_sys_proc_remove_thread_nolock(curr_proc, t);
             kspinlock_release(&t->sched_lock);
         }
     }
 }
 
-void com_sys_proc_exit(com_proc_t *proc, int status) {
-    kspinlock_acquire(&proc->signal_lock);
+void com_sys_proc_exit(int status) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL != curr_thread);
+    com_proc_t *curr_proc = curr_thread->proc;
+    KASSERT(NULL != curr_proc);
+    KASSERT(1 == curr_proc->num_running_threads);
 
-    kspinlock_acquire(&proc->fd_lock);
-    for (int i = 0; i < CONFIG_OPEN_MAX; i++) {
-        if (NULL != proc->fd[i].file) {
-            COM_FS_FILE_RELEASE(proc->fd[i].file);
+    // NOTE: we don't need to take the fd lock because we are guaranteed to be
+    // the only thread left
+    for (int i = 0; i < curr_proc->max_fd; i++) {
+        if (NULL != curr_proc->fd[i].file) {
+            COM_FS_FILE_RELEASE(curr_proc->fd[i].file);
         }
     }
-    kspinlock_release(&proc->fd_lock);
 
-    proc->exited      = true;
-    proc->exit_status = status;
-    kspinlock_release(&proc->signal_lock);
+    // We do all of this under the signal spinlock because all functions that
+    // are called are spinlock-safe and we don't want to be preempted midway
+    // through this section
+    kspinlock_acquire(&curr_proc->signal_lock);
+    curr_proc->exited      = true;
+    curr_proc->exit_status = status;
 
-    com_sys_sched_notify_all(&proc->waitpid_waitlist);
-    com_ipc_signal_send_to_proc(proc->parent_pid, SIGCHLD, proc);
+    com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
+    com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
     KDEBUG("pid=%d exited with code %d", proc->pid, status);
+    kspinlock_release(&curr_proc->signal_lock);
 }
 
-void com_sys_proc_stop_nolock(com_proc_t *proc, int stop_signal) {
+void com_sys_proc_stop_nolock(int stop_signal) {
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    KASSERT(NULL != curr_thread);
+    com_proc_t *curr_proc = curr_thread->proc;
+    KASSERT(NULL != curr_proc);
     KASSERT(COM_IPC_SIGNAL_NONE != stop_signal);
 
-    if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
+    if (COM_IPC_SIGNAL_NONE != curr_proc->stop_signal) {
         return;
     }
 
-    proc->stop_signal   = stop_signal;
-    proc->stop_notified = false;
+    curr_proc->stop_signal   = stop_signal;
+    curr_proc->stop_notified = false;
 
     com_thread_t *t, *_;
-    kspinlock_acquire(&proc->threads_lock);
-    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        com_ipc_signal_send_to_thread_nolock(t, stop_signal, proc);
+    kspinlock_acquire(&curr_proc->threads_lock);
+    TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
+        com_ipc_signal_send_to_thread_nolock(t, stop_signal, curr_proc);
     }
-    kspinlock_release(&proc->threads_lock);
+    kspinlock_release(&curr_proc->threads_lock);
 
-    com_sys_sched_notify_all(&proc->waitpid_waitlist);
-    com_ipc_signal_send_to_proc(proc->parent_pid, SIGCHLD, proc);
+    com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
+    com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 }
 
-void com_sys_proc_terminate(com_proc_t *proc, int ecode) {
+void com_sys_proc_terminate(int ecode) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    KASSERT(curr_thread->proc == proc);
+    KASSERT(NULL != curr_thread);
+    com_proc_t *curr_proc = curr_thread->proc;
+    KASSERT(NULL != curr_proc);
 
-    com_sys_proc_kill_other_threads(proc, curr_thread);
-    com_sys_proc_exit(proc, ecode);
-    com_sys_proc_remove_thread(proc, curr_thread);
+    com_sys_proc_kill_other_threads_nolock();
+    com_sys_proc_exit(ecode);
+    // NOTE: now the process is in an exited state, but this thread is still
+    // running. We could be preempted here, so it's important that the scheduler
+    // never refuses to run a thread if it's process has exited, because we want
+    // to get back here and finish our job
+    com_sys_proc_remove_thread_nolock(curr_proc, curr_thread);
     com_sys_thread_exit(curr_thread);
 }
 

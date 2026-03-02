@@ -66,7 +66,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
         return COM_SYS_SYSCALL_ERR(status);
     }
 
-    com_sys_proc_kill_other_threads(proc, thread);
+    com_sys_proc_kill_other_threads();
 
     // NOTE: we need preemption to be disabled here because otherwise this could
     // happen:
@@ -85,7 +85,12 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_mm_vmm_destroy_context(old_vmm_ctx);
     ARCH_CPU_ENABLE_INTERRUPTS();
 
-    kspinlock_acquire(&proc->fd_lock);
+    // NOTE: we don't need to take locks here because we're guaranteed to be the
+    // only running thread of this process. Thus process-local resources are
+    // de-facto thread-local, and this is even more true because these specific
+    // resources are only altered by system calls issued by the process (which,
+    // however, is stuck here)
+
     for (int i = 0; i < proc->max_fd; i++) {
         if (NULL != proc->fd[i].file &&
             ((FD_CLOEXEC & proc->fd[i].flags) ||
@@ -94,9 +99,7 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->fd[i] = (com_filedesc_t){0};
         }
     }
-    kspinlock_release(&proc->fd_lock);
 
-    kspinlock_acquire(&proc->signal_lock);
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != proc->sigaction[i] &&
             (SIGCHLD != i || SIG_IGN != proc->sigaction[i]->sa_action)) {
@@ -104,7 +107,6 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
             proc->sigaction[i] = NULL;
         }
     }
-    kspinlock_release(&proc->signal_lock);
 
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);

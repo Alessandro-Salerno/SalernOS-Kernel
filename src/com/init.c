@@ -168,11 +168,12 @@ void com_init_pid1(void) {
     }
 
     KASSERT(NULL != MainTtyDev);
-    com_file_t *stdfile = com_mm_slab_alloc(sizeof(com_file_t));
-    stdfile->vnode      = MainTtyDev;
-    stdfile->num_ref    = 3;
-    proc->next_fd       = 3;
-    proc->max_fd        = proc->next_fd;
+    com_file_t *stdfile       = com_mm_slab_alloc(sizeof(com_file_t));
+    stdfile->vnode            = MainTtyDev;
+    stdfile->num_ref          = 3;
+    proc->num_running_threads = 1;
+    proc->next_fd             = 3;
+    proc->max_fd              = proc->next_fd;
     com_filedesc_t stddesc;
     stddesc.file  = stdfile;
     stddesc.flags = 0;

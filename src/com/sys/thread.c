@@ -121,8 +121,12 @@ void com_sys_thread_exit(com_thread_t *thread) {
 
 void com_sys_thread_exit_nolock(com_thread_t *thread) {
     com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_EXITED);
-    if (NULL != thread->cpu && thread->cpu != ARCH_CPU_GET()) {
-        ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_RESCHEDULE);
+    if (NULL != thread->cpu) {
+        if (thread->cpu != ARCH_CPU_GET()) {
+            ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_RESCHEDULE);
+        } else {
+            com_sys_sched_yield_nolock();
+        }
     }
 }
 
