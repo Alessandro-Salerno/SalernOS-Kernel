@@ -69,6 +69,10 @@ void x86_64_syscall_handle_sce(arch_context_t *ctx) {
 
     com_ipc_signal_dispatch(ctx, curr_thread);
 
+    // Here we set lock_depth = 1 because we want interrupts to be disabled
+    // while we return from the syscall and this ensures that, regardless of
+    // whether the caller makes use of spinlocks or not, interrupt won't be
+    // enabled by mistake
     KASSERT(0 == curr_thread->lock_depth);
     ARCH_CPU_DISABLE_INTERRUPTS();
     curr_thread->lock_depth = 1;

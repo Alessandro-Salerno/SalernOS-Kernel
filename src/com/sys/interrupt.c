@@ -105,10 +105,14 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     }
 
     if (ARCH_CONTEXT_ISUSER(ctx)) {
+        KASSERT(0 == curr_thread->lock_depth || 1 == curr_thread->lock_depth);
         com_ipc_signal_dispatch(ctx, curr_thread);
     }
 
     if (NULL != curr_thread && !no_reset) {
+        // Here we reset lock_depth = 0 because if we got here, this was a fully
+        // async interrupt and thus an event that can only occur in user code or
+        // kernel code with lock_depth = 0
         KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
         KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
         KASSERT(1 == curr_thread->lock_depth);

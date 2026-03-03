@@ -21,6 +21,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/cr.h>
 #include <kernel/platform/x86-64/gdt.h>
@@ -101,17 +102,16 @@ static void cpu_init(struct limine_smp_info *cpu_info) {
     arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
 
     __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
-    cpu->idle_thread->lock_depth = 0;
-    cpu->idle_thread->cpu        = cpu;
-    com_sys_thread_transition(cpu->idle_thread, E_COM_THREAD_STATE_RUNNING);
+
+    // We avoid taking locks here to make sure we don't accidentally enable
+    // interrupts
+    cpu->idle_thread->cpu = cpu;
+    com_sys_thread_transition_nolock(cpu->idle_thread,
+                                     E_COM_THREAD_STATE_RUNNING);
     cpu->thread = cpu->idle_thread;
     ARCH_CPU_SET_INTERRUPT_STACK(cpu, cpu->idle_thread->kernel_stack);
 
-    asm("sti");
-    while (1) {
-        asm("sti");
-        asm("hlt");
-    }
+    arch_context_trampoline(&cpu->idle_thread->ctx);
 }
 
 void x86_64_smp_init(void) {

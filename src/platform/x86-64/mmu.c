@@ -360,17 +360,16 @@ void arch_mmu_invalidate(arch_mmu_pagetable_t *pt, void *virt, size_t pages) {
         next_cpu->mmu_shootdown_counter = &shootdown_counter;
         next_cpu->mmu_shootdown_virt    = virt;
         next_cpu->mmu_shootdown_pages   = pages;
-        kspinlock_fake_release();
-        // lock released by ISR
         num_other_cpus++;
         ARCH_CPU_SEND_IPI(next_cpu, X86_64_MMU_IPI_INVALIDATE);
+
+        // lock released by ISR
+        kspinlock_fake_release();
     }
 
     // If we also have to perform a shootdown
     if (pt == curr_pt) {
-        kspinlock_acquire(&curr_cpu->mmu_shootdown_lock);
         internal_invalidate(virt, pages);
-        kspinlock_release(&curr_cpu->mmu_shootdown_lock);
     }
 
     // And finally, we wait for all others to complete

@@ -227,6 +227,13 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     }
 }
 
+// TODO: this **MUST** be restrucutred. In its current state, this caues
+// deadlocks and other nasty things. The issue is as follows: this can only
+// executge with interrupts enabled otherwise MMU shootdowns may fail due to
+// IPIs not being delivered. However, forcing interrupts to be enabled here
+// creates major issues for cases where user memory is accessed directly under a
+// spinlock, which is frequent as of now. Thus, this implies deeper kernel
+// restructuring.
 void com_mm_vmm_handle_fault(void            *fault_virt,
                              void            *fault_phys,
                              arch_context_t  *fault_ctx,

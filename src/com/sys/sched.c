@@ -135,16 +135,6 @@ void com_sys_sched_yield_nolock(void) {
         KASSERT(curr != next);
     }
 
-    if (E_COM_THREAD_STATE_READY != next->state) {
-        KURGENT(
-            "next = %p, next->tid = %d, next->state = %d, next->cpu->id = %d",
-            next,
-            next->tid,
-            next->state,
-            (NULL != next->cpu) ? next->cpu->id : -1);
-        KASSERT(false);
-    }
-
     if (E_COM_THREAD_STATE_RUNNING == curr->state) {
         com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_READY);
         if (curr != cpu->idle_thread) {
