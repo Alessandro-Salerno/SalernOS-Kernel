@@ -328,6 +328,7 @@ void com_sys_proc_kill_other_threads(void) {
     kspinlock_release(&curr_proc->threads_lock);
 }
 
+// TODO: this is wrong: we should wait for all threads to ack
 void com_sys_proc_kill_other_threads_nolock(void) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL != curr_thread);

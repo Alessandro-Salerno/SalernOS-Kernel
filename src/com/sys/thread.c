@@ -119,6 +119,9 @@ void com_sys_thread_exit(com_thread_t *thread) {
     kspinlock_release(&thread->sched_lock);
 }
 
+// TODO: this is wrong, sending the RESCHEDULE IPI may cause deadlocks if
+// threads are holding mutexes, as they will have no chance of ever releasing
+// them
 void com_sys_thread_exit_nolock(com_thread_t *thread) {
     com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_EXITED);
     if (NULL != thread->cpu) {
