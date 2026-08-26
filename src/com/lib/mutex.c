@@ -29,13 +29,12 @@ static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
         if (!mutex->locked) {
             return true;
         }
-        // TODO: check if owner is on this CPU's runqueue. If it is, there's no
-        // point in spinning because it will not be relased until this CPU has a
-        // chance to run that thread
-        if (mutex->owner->last_cpu == ARCH_CPU_GET()) {
+
+        if (mutex->owner->state != E_COM_THREAD_STATE_RUNNING) {
             kspinlock_release(&mutex->lock);
             return false;
         }
+
         kspinlock_release(&mutex->lock);
         ARCH_CPU_PAUSE();
     }
@@ -55,6 +54,10 @@ bool kmutex_try_acquire(kmutex_t *mutex) {
 }
 
 void kmutex_acquire(kmutex_t *mutex) {
+    if (NULL == ARCH_CPU_GET_THREAD()) {
+        return;
+    }
+
     com_profiler_data_t profiler_data = com_sys_profiler_start_function(
         E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE);
     kmutex_acquire_timeout(mutex, 0);
@@ -63,6 +66,9 @@ void kmutex_acquire(kmutex_t *mutex) {
 
 bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        return true;
+    }
     KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
     if (try_acquire_internal(mutex, CONFIG_MUTEX_RETRIES)) {
@@ -88,7 +94,11 @@ take:
 }
 
 void kmutex_release(kmutex_t *mutex) {
-    // com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    if (NULL == curr_thread) {
+        return;
+    }
+
     // KASSERT(NULL == curr_thread || 0 == curr_thread->lock_depth);
 
     kspinlock_acquire(&mutex->lock);

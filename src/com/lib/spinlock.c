@@ -71,11 +71,16 @@ static inline void decrement_lock_depth_tested(void) {
 }
 
 void kspinlock_acquire(kspinlock_t *lock) {
+    if (NULL == ARCH_CPU_GET_THREAD()) {
+        return;
+    }
+
     com_profiler_data_t profiler_data = com_sys_profiler_start_function(
         E_COM_PROFILE_FUNC_KSPINLOCK_ACQUIRE);
     ARCH_CPU_DISABLE_INTERRUPTS();
     INCREMENT_CURR_LOCK_DEPTH();
 
+    uint32_t backoff = 1;
     while (true) {
         // this is before the spinning since hopefully the lock is uncontended
         if (KSPINLOCK_FREE_VALUE == __atomic_exchange_n(&LOCK_VALUE(lock),
@@ -86,7 +91,12 @@ void kspinlock_acquire(kspinlock_t *lock) {
         // spin with no ordering constraints
         while (KSPINLOCK_HELD_VALUE ==
                __atomic_load_n(&LOCK_VALUE(lock), __ATOMIC_RELAXED)) {
-            ARCH_CPU_PAUSE();
+            for (uint32_t i = 0; i < backoff; i++) {
+                ARCH_CPU_PAUSE();
+            }
+            if (backoff < KSPINLOCK_BACKOFF_MAX) {
+                backoff *= 2;
+            }
         }
     }
 
@@ -142,6 +152,10 @@ void kspinlock_release(kspinlock_t *lock) {
 
     if (KUNKLIKELY(KSPINLOCK_HELD_VALUE != LOCK_VALUE(lock))) {
         LOCK_ERROR("lock at %p has impossible value %d", lock, lock->lock);
+    }
+
+    if (NULL == ARCH_CPU_GET_THREAD()) {
+        return;
     }
 
 #if CONFIG_SPINLOCK_DEBUG

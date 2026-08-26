@@ -43,6 +43,8 @@ typedef struct kspinlock {
 #define KSPINLOCK_HELD_VALUE 1
 #define KSPINLOCK_FREE_VALUE 0
 
+#define KSPINLOCK_BACKOFF_MAX 64
+
 #define KSPINLOCK_NEW()            (kspinlock_t) KSPINLOCK_FREE_VALUE
 #define KSPINLOCK_IS_HELD(lockptr) (KSPINLOCK_HELD_VALUE == *(lockptr))
 
