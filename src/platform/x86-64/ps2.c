@@ -23,6 +23,7 @@
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/ioapic.h>
 #include <kernel/platform/x86-64/ps2.h>
+#include <kernel/platform/x86-64/tsc.h>
 
 #define PS2_KEYBOARD_EXTENDED_SCANCODE 0xE0
 #define PS2_KEYBOARD_KEY_RELEASED      0x80
@@ -36,7 +37,13 @@
 #define PS2_MOUSECTL_PULSE6     0xF6
 #define PS2_MOUSECTL_PULSE10    0xFA
 
-#define PS2_MOUSEPKT_GOOD 8
+#define PS2_MOUSEPKT_GOOD       8
+#define PS2_MOUSEPKT_XOVERFLOW  0x40
+#define PS2_MOUSEPKT_YOVERFLOW  0x80
+#define PS2_MOUSEPKT_TIMEOUT_NS 100000000
+#define PS2_MOUSEPKT_SYNCED(byte)  \
+    (PS2_MOUSEPKT_GOOD & (byte) && \
+     0 == ((PS2_MOUSEPKT_XOVERFLOW | PS2_MOUSEPKT_YOVERFLOW) & (byte)))
 #define PS2_MOUSEPKT_ENOUGH(mouse, cycle) \
     (((mouse)->has_wheel && 4 == cycle) || (!(mouse)->has_wheel && 3 == cycle))
 #define PS2_MOUSEPKT_TO_PROTOCOL(data)                 \
@@ -60,6 +67,7 @@
 
 #define PS2_STATUS_OUTDATA 1
 #define PS2_STATUS_INDATA  2
+#define PS2_STATUS_AUXDATA 0x20
 
 #define PS2_CFG_IRQ0_ENABLE        (1 << 0)
 #define PS2_CFG_IRQ1_ENABLE        (1 << 1)
@@ -282,16 +290,29 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
 
-    static uint8_t mouse_data[5] = {0};
-    static size_t  cycle         = 0;
+    static uint8_t   mouse_data[5] = {0};
+    static size_t    cycle         = 0;
+    static uintmax_t last_time     = 0;
 
-    uint8_t curr_byte = X86_64_IO_INB(PS2_PORT_DATA);
-    mouse_data[cycle] = curr_byte;
-    if (!(PS2_MOUSEPKT_GOOD & mouse_data[0])) {
-        cycle = 0;
+    uint8_t status = X86_64_IO_INB(PS2_PORT_CNTL);
+    if (0 == (PS2_STATUS_OUTDATA & status) ||
+        0 == (PS2_STATUS_AUXDATA & status)) {
         return;
     }
 
+    uint8_t   curr_byte = X86_64_IO_INB(PS2_PORT_DATA);
+    uintmax_t now       = X86_64_TSC_GET_NS();
+
+    if (PS2_MOUSEPKT_TIMEOUT_NS < now - last_time) {
+        cycle = 0;
+    }
+    last_time = now;
+
+    if (0 == cycle && !PS2_MOUSEPKT_SYNCED(curr_byte)) {
+        return;
+    }
+
+    mouse_data[cycle] = curr_byte;
     cycle++;
     if (!PS2_MOUSEPKT_ENOUGH(&Ps2Mouse, cycle)) {
         return;

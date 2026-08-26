@@ -371,7 +371,7 @@ void com_sys_proc_exit(int status) {
     com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
-    KDEBUG("pid=%d exited with code %d", proc->pid, status);
+    KDEBUG("pid=%d exited with code %d", curr_proc->pid, status);
     kspinlock_release(&curr_proc->signal_lock);
 }
 

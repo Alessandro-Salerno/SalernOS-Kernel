@@ -159,7 +159,7 @@ void com_sys_thread_ready_nolock(com_thread_t *thread) {
 
     KDEBUG("thread with tid=%zu is now runnable on cpu %zu",
            thread->tid,
-           curr_cpu->id);
+           ready_cpu->id);
 
     ARCH_CPU_SEND_IPI(ready_cpu, ARCH_CPU_IPI_RESCHEDULE);
 }
