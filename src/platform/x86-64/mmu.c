@@ -389,15 +389,37 @@ void arch_mmu_switch_default(void) {
     arch_mmu_switch((void *)ARCH_HHDM_TO_PHYS(RootTable));
 }
 
-void *arch_mmu_get_physical(arch_mmu_pagetable_t *pagetable, void *virt_addr) {
+static int mapping_info(arch_mmu_flags_t *out_flags, uint64_t entry) {
+    arch_mmu_flags_t flags = entry & ~ADDRMASK;
+    int              attr  = 0;
+    if ((ARCH_MMU_FLAGS_PRESENT & entry) &&
+        (ARCH_MMU_EXTRA_FLAGS_PRIVATE & entry)) {
+        flags &= ~(ARCH_MMU_EXTRA_FLAGS_PRIVATE | ARCH_MMU_EXTRA_FLAGS_NOCOPY);
+        flags |= ARCH_MMU_FLAGS_WRITE;
+        attr = (ARCH_MMU_EXTRA_FLAGS_NOCOPY & entry)
+                   ? COM_MM_VMM_FAULT_ATTR_MAP
+                   : COM_MM_VMM_FAULT_ATTR_COW;
+    }
+    if (NULL != out_flags) {
+        *out_flags = flags;
+    }
+    return attr;
+}
+
+void *arch_mmu_get_physical(arch_mmu_flags_t     *out_flags,
+                            int                  *out_attr,
+                            arch_mmu_pagetable_t *pagetable,
+                            void                 *virt_addr) {
     uint64_t *entry = get_page(pagetable, virt_addr);
-    if (NULL == entry) {
+    uint64_t  value = NULL != entry ? *entry : 0;
+    int       attr  = mapping_info(out_flags, value);
+    if (NULL != out_attr) {
+        *out_attr = attr;
+    }
+    if (!(ARCH_MMU_FLAGS_PRESENT & value)) {
         return NULL;
     }
-    if (0 == (*entry & ADDRMASK)) {
-        return NULL;
-    }
-    return (void *)((*entry & ADDRMASK) +
+    return (void *)((value & ADDRMASK) +
                     ((uintptr_t)virt_addr & (ARCH_PAGE_SIZE - 1)));
 }
 
@@ -542,27 +564,14 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
     arch_mmu_pagetable_t *curr_pt        = arch_mmu_get_table();
     void                 *fault_virt     = (void *)ctx->cr2;
     uint64_t             *entry_ptr      = get_page(curr_pt, fault_virt);
-    uint64_t              entry          = *entry_ptr;
+    uint64_t              entry          = NULL != entry_ptr ? *entry_ptr : 0;
     uint64_t              start_entry    = entry;
     void                 *start_virt     = fault_virt;
     arch_mmu_flags_t      mmu_flags      = entry & ~ADDRMASK;
     arch_mmu_flags_t      mmu_flags_hint = mmu_flags;
     size_t                num_pages      = 1;
 
-    int vmm_attr = 0;
-    if (ARCH_MMU_EXTRA_FLAGS_PRIVATE & entry) {
-        mmu_flags_hint &= ~ARCH_MMU_EXTRA_FLAGS_PRIVATE;
-        mmu_flags_hint |= ARCH_MMU_FLAGS_WRITE;
-        vmm_attr |= COM_MM_VMM_FAULT_ATTR_COW;
-    }
-    if (ARCH_MMU_EXTRA_FLAGS_NOCOPY & entry) {
-        // We still want the vmm to map, but we don't want to copy the zero page
-        // into a page taht's laready been zeroed. So we remove COW (copy on
-        // write) and add MAP
-        mmu_flags_hint &= ~ARCH_MMU_EXTRA_FLAGS_NOCOPY;
-        vmm_attr &= ~COM_MM_VMM_FAULT_ATTR_COW;
-        vmm_attr |= COM_MM_VMM_FAULT_ATTR_MAP;
-    }
+    int vmm_attr = mapping_info(&mmu_flags_hint, entry);
 
     if (!(COM_MM_VMM_PREFAULT_SUPPORTED_ATTR & vmm_attr)) {
         goto call_vmm;

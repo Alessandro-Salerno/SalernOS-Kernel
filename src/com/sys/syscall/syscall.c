@@ -66,8 +66,11 @@ static void log_syscall(com_syscall_aux_t *aux, arch_syscall_arg_t args[]) {
                 if (NULL != (void *)args[i]) {
                     // TODO: poor man's usercopy, if the string is longer than
                     // ARCH_PAGE_SIZE this may still crash
-                    if (NULL != com_mm_vmm_get_physical(curr_proc->vmm_context,
-                                                        (void *)args[i])) {
+                    if (NULL !=
+                        arch_mmu_get_physical(NULL,
+                                              NULL,
+                                              curr_proc->vmm_context->pagetable,
+                                              (void *)args[i])) {
                         printf("\"%s\"", (void *)args[i]);
                     } else {
                         printf("**UNMAPPED**");

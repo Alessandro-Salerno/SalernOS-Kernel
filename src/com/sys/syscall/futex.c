@@ -56,7 +56,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(4);
 
-    // TODO: validate and pre-fault this to avoid issues with CoW zero page
     uint32_t *word_ptr = COM_SYS_SYSCALL_ARG(uint32_t *, 1);
     int       op       = COM_SYS_SYSCALL_ARG(int, 2);
     uint32_t  value    = COM_SYS_SYSCALL_ARG(uint32_t, 3);
@@ -64,6 +63,9 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,
                                                         word_ptr);
+    if (0 == phys) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     uint32_t temp = value;
 

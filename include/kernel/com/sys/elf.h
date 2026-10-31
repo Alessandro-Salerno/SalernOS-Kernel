@@ -41,11 +41,13 @@ int       com_sys_elf64_load(com_elf_data_t    *out,
                              com_vnode_t       *cwd,
                              uintptr_t          virt_off,
                              com_vmm_context_t *vmm_context);
-uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
-                                      size_t         stack_end_phys,
-                                      size_t         stack_end_virt,
-                                      char *const    argv[],
-                                      char *const    envp[]);
+int       com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
+                                      com_vmm_context_t *vmm_ctx,
+                                      com_elf_data_t     elf_data,
+                                      size_t             stack_end_virt,
+                                      size_t             stack_len,
+                                      char *const        argv[],
+                                      char *const        envp[]);
 int       com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
                                      const char         *path,
                                      char *const         argv[],

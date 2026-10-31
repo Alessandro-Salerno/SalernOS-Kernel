@@ -150,6 +150,9 @@ zero_fill:
             ssize_t zero_size = KMIN(mem_sz, rem);
             void   *phys_page = com_mm_vmm_get_physical(vmm_context,
                                                         (void *)vaddr);
+            if (NULL == phys_page) {
+                return EFAULT;
+            }
             // NOTE: the value returned by vmm_get_physical already accounts for
             // in-page offset (misalign)
             kmemset((void *)ARCH_PHYS_TO_HHDM(phys_page), zero_size, 0);
@@ -294,36 +297,177 @@ cleanup:
     return ret;
 }
 
-// CREDIT: vloxei64/ke
-// TODO: this is VERY unsafe!! It uses the HHDM to write to the new process's
-// stack, but this causes wild memory corruption if auxv contents exceed
-// ARCH_PAGE_SIZE bytes
-uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
-                                      size_t         stack_end_phys,
-                                      size_t         stack_end_virt,
-                                      char *const    argv[],
-                                      char *const    envp[]) {
-#define PUSH(x) *(--stackptr) = (x)
-    uintptr_t *stackptr       = (uintptr_t *)ARCH_PHYS_TO_HHDM(stack_end_phys),
-              *orig           = stackptr;
-    size_t envc               = 0;
-
-    for (; envp[envc]; envc++) {
-        size_t len = kstrlen(envp[envc]) + 1;
-        stackptr   = (uintptr_t *)((uintptr_t)stackptr - len);
-        kmemcpy(stackptr, envp[envc], len);
+static int push_buffer(com_vmm_context_t *vmm_ctx,
+                       uintptr_t          stack_virt_end,
+                       size_t             stack_len,
+                       size_t            *stack_off,
+                       void             **stack_page,
+                       const void        *buf,
+                       size_t             len) {
+    if (*stack_off > stack_len || len > stack_len - *stack_off) {
+        return E2BIG;
     }
+
+    const unsigned char *str = buf;
+    const unsigned char *end = str + len;
+
+    while (len > 0) {
+        // stack_off grows toward higher values, but the stack itself grows
+        // downwards and we access pages in ascending address order. So we get
+        // the offset into the current page by modulo, and subtracting it from
+        // the page size gives us the stack pointer/cursor into the page, which
+        // also happens to be the remaining bytes in the page (by definition,
+        // it's the distance from the page's base address)
+        size_t stack_aligned_off = *stack_off % ARCH_PAGE_SIZE;
+        size_t stack_page_cur    = ARCH_PAGE_SIZE - stack_aligned_off;
+        size_t page_rem          = stack_page_cur;
+        size_t can_write         = KMIN(len, page_rem);
+
+        *stack_off += can_write;
+        size_t write_at = stack_page_cur - can_write;
+        kmemcpy((unsigned char *)*stack_page + write_at,
+                end - can_write,
+                can_write);
+
+        end -= can_write;
+        len -= can_write;
+
+        if (can_write == page_rem && *stack_off < stack_len) {
+            void *res = com_mm_vmm_get_physical(
+                vmm_ctx,
+                (void *)(stack_virt_end - *stack_off - 1));
+            if (NULL == res) {
+                return EFAULT;
+            }
+            *stack_page = (void *)ARCH_PHYS_TO_HHDM(
+                (uintptr_t)res & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        }
+    }
+
+    return 0;
+}
+
+static int push_string(com_vmm_context_t *vmm_ctx,
+                       uintptr_t          stack_virt_end,
+                       size_t             stack_len,
+                       size_t            *stack_off,
+                       void             **stack_page,
+                       const char        *str) {
+    return push_buffer(vmm_ctx,
+                       stack_virt_end,
+                       stack_len,
+                       stack_off,
+                       stack_page,
+                       str,
+                       kstrlen(str) + 1);
+}
+
+static int push_value(com_vmm_context_t *vmm_ctx,
+                      uintptr_t          stack_virt_end,
+                      size_t             stack_len,
+                      size_t            *stack_off,
+                      void             **stack_page,
+                      uintptr_t          value) {
+    return push_buffer(vmm_ctx,
+                       stack_virt_end,
+                       stack_len,
+                       stack_off,
+                       stack_page,
+                       &value,
+                       sizeof(uintptr_t));
+}
+
+static int align_stack(com_vmm_context_t *vmm_ctx,
+                       uintptr_t          stack_virt_end,
+                       size_t             stack_len,
+                       size_t            *stack_off,
+                       void             **stack_page) {
+    unsigned char dummy[15] = {0};
+    uintptr_t     stack_ptr = stack_virt_end - *stack_off;
+    size_t        to_align  = stack_ptr & 0xF;
+    return push_buffer(vmm_ctx,
+                       stack_virt_end,
+                       stack_len,
+                       stack_off,
+                       stack_page,
+                       dummy,
+                       to_align);
+}
+
+int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
+                                com_vmm_context_t *vmm_ctx,
+                                com_elf_data_t     elf_data,
+                                size_t             stack_end_virt,
+                                size_t             stack_len,
+                                char *const        argv[],
+                                char *const        envp[]) {
+#define PUSH(x)                             \
+    {                                       \
+        int _r = push_value(vmm_ctx,        \
+                            stack_end_virt, \
+                            stack_len,      \
+                            &stack_off,     \
+                            &stack_page,    \
+                            x);             \
+        if (0 != _r) {                      \
+            return _r;                      \
+        }                                   \
+    }
+
+    KASSERT(0 == stack_end_virt % ARCH_PAGE_SIZE);
+    KASSERT(stack_len <= stack_end_virt);
+    if (0 == stack_len) {
+        return E2BIG;
+    }
+    void *stack_phys = com_mm_vmm_get_physical(vmm_ctx,
+                                               (void *)(stack_end_virt - 1));
+    if (NULL == stack_phys) {
+        return EFAULT;
+    }
+    void *stack_page = (void *)ARCH_PHYS_TO_HHDM(
+        (uintptr_t)stack_phys & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+    size_t stack_off = 0;
+
+    size_t envc = 0;
+    for (; envp[envc]; envc++) {
+        int ret = push_string(vmm_ctx,
+                              stack_end_virt,
+                              stack_len,
+                              &stack_off,
+                              &stack_page,
+                              envp[envc]);
+        if (0 != ret) {
+            return ret;
+        }
+    }
+
+    size_t env_bytes = stack_off;
 
     size_t argc = 0;
     for (; argv[argc]; argc++) {
-        size_t len = kstrlen(argv[argc]) + 1;
-        stackptr   = (uintptr_t *)((uintptr_t)stackptr - len);
-        kmemcpy(stackptr, argv[argc], len);
+        int ret = push_string(vmm_ctx,
+                              stack_end_virt,
+                              stack_len,
+                              &stack_off,
+                              &stack_page,
+                              argv[argc]);
+        if (0 != ret) {
+            return ret;
+        }
     }
 
-    stackptr = (uintptr_t *)((uintptr_t)stackptr & (~0xF));
-    if (((argc + envc + 1) & 1) != 0) {
-        stackptr--;
+    size_t strings_bytes = stack_off;
+
+    int align_ret = align_stack(vmm_ctx,
+                                stack_end_virt,
+                                stack_len,
+                                &stack_off,
+                                &stack_page);
+    if (0 != align_ret) {
+        return align_ret;
+    }
+    if (0 != ((envc + argc + 1) & 1)) {
+        PUSH(0);
     }
 
     PUSH(0);
@@ -346,25 +490,28 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
     PUSH(elf_data.phent_num);
     PUSH(AT_PHNUM);
 
-    uintptr_t off = 0;
+    uintptr_t off = env_bytes;
 
     PUSH(0);
-    stackptr -= envc;
-    for (size_t i = 0; i < envc; i++) {
-        stackptr[i] = stack_end_virt - (off += kstrlen(envp[i]) + 1);
+    for (size_t i = envc; i > 0;) {
+        i--;
+        PUSH(stack_end_virt - off);
+        off -= kstrlen(envp[i]) + 1;
     }
 
+    off = strings_bytes;
+
     PUSH(0);
-    stackptr -= argc;
-    for (size_t i = 0; i < argc; i++) {
-        stackptr[i] = stack_end_virt - (off += kstrlen(argv[i]) + 1);
+    for (size_t i = argc; i > 0;) {
+        i--;
+        PUSH(stack_end_virt - off);
+        off -= kstrlen(argv[i]) + 1;
     }
 
     PUSH(argc);
-    KASSERT((uintptr_t)stackptr < ARCH_PHYS_TO_HHDM(stack_end_phys));
-    KASSERT(ARCH_PHYS_TO_HHDM(stack_end_phys) - (uintptr_t)stackptr <
-            ARCH_PAGE_SIZE);
-    return stack_end_virt - ((uintptr_t)orig - (uintptr_t)stackptr);
+
+    *out_stack_ptr = stack_end_virt - stack_off;
+    return 0;
 #undef PUSH
 }
 
@@ -412,32 +559,27 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
     uintptr_t stack_end   = 0x60000000;
     size_t    stack_len   = ARCH_PAGE_SIZE * 64;
     uintptr_t stack_start = stack_end - stack_len;
-    void     *stack_phys  = com_mm_pmm_alloc();
 
-    // allocate first part of the stack
     com_mm_vmm_map(new_vmm_ctx,
                    (void *)stack_start,
                    NULL,
-                   stack_len - ARCH_PAGE_SIZE,
+                   stack_len,
                    COM_MM_VMM_FLAGS_ALLOCATE,
-                   ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
-                       ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
-    // map last page
-    com_mm_vmm_map(new_vmm_ctx,
-                   (void *)(stack_start + stack_len - ARCH_PAGE_SIZE),
-                   stack_phys,
-                   ARCH_PAGE_SIZE,
-                   COM_MM_VMM_FLAGS_NONE,
                    ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                        ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
 
     *ctx                = (arch_context_t){0};
-    uintptr_t stack_ptr = com_sys_elf64_prepare_stack(prog_data,
-                                                      (uintptr_t)stack_phys +
-                                                          ARCH_PAGE_SIZE,
+    uintptr_t stack_ptr = 0;
+    status              = com_sys_elf64_prepare_stack(&stack_ptr,
+                                                      new_vmm_ctx,
+                                                      prog_data,
                                                       stack_end,
+                                                      stack_len,
                                                       argv,
                                                       env);
+    if (0 != status) {
+        goto fail;
+    }
     ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
     kstrncpy(proc->executable_path, path, CONFIG_PATH_MAX);
     return 0;

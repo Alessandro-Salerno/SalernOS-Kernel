@@ -126,7 +126,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 #endif
 
     void     *page_paddr = (void *)((uintptr_t)phys &
-                                    ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+                                ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     uintptr_t page_off   = (uintptr_t)phys % ARCH_PAGE_SIZE;
     size_t    size_p_off = page_off + len;
     size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
@@ -182,7 +182,38 @@ void com_mm_vmm_switch(com_vmm_context_t *context) {
 
 void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr) {
     context = vmm_ensure_context(context);
-    return arch_mmu_get_physical(context->pagetable, virt_addr);
+    arch_mmu_flags_t flags;
+    int              attr;
+    void            *phys = arch_mmu_get_physical(&flags,
+                                                  &attr,
+                                                  context->pagetable,
+                                                  virt_addr);
+    if (NULL == phys ||
+        !(attr & (COM_MM_VMM_FAULT_ATTR_MAP | COM_MM_VMM_FAULT_ATTR_COW))) {
+        return phys;
+    }
+
+    uintptr_t offset    = (uintptr_t)virt_addr & (ARCH_PAGE_SIZE - 1);
+    void     *old_page  = (void *)((uintptr_t)phys - offset);
+    void     *virt_page = (void *)((uintptr_t)virt_addr - offset);
+    void     *new_page  = (attr & COM_MM_VMM_FAULT_ATTR_MAP)
+                              ? com_mm_pmm_alloc_zero()
+                              : com_mm_pmm_alloc();
+    if (NULL == new_page) {
+        return NULL;
+    }
+    if (attr & COM_MM_VMM_FAULT_ATTR_COW) {
+        kmemcpy((void *)ARCH_PHYS_TO_HHDM(new_page),
+                (void *)ARCH_PHYS_TO_HHDM(old_page),
+                ARCH_PAGE_SIZE);
+    }
+    if (!arch_mmu_map(context->pagetable, virt_page, new_page, flags)) {
+        com_mm_pmm_free(new_page);
+        return NULL;
+    }
+    arch_mmu_invalidate(context->pagetable, virt_page, 1);
+    com_mm_pmm_free(old_page);
+    return (void *)((uintptr_t)new_page + offset);
 }
 
 void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
@@ -198,7 +229,7 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     size_t tmp_phys_buf_pages = (size_in_pages * sizeof(void *) +
                                  ARCH_PAGE_SIZE - 1) /
                                 ARCH_PAGE_SIZE;
-    size_t unmaps_done        = 0;
+    size_t unmaps_done = 0;
     if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
         tmp_phys_buf = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many(tmp_phys_buf_pages));
