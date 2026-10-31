@@ -31,11 +31,11 @@
     {                                                              \
         bool force_return = false;                                 \
         int  hup_ret      = check_hangup(new_nbytes,               \
-                                   curr_nbytes,              \
-                                   &force_return,            \
-                                   rb,                       \
-                                   op,                       \
-                                   arg);                     \
+                                         curr_nbytes,              \
+                                         &force_return,            \
+                                         rb,                       \
+                                         op,                       \
+                                         arg);                     \
         if (0 != hup_ret || force_return) {                        \
             return hup_ret;                                        \
         }                                                          \

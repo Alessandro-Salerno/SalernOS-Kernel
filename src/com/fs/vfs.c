@@ -365,11 +365,11 @@ int com_fs_vfs_readv(kioviter_t  *ioviter,
          NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
         size_t curr_read = 0;
         ret              = node->ops->read(iov->iov_base,
-                              iov->iov_len,
-                              &curr_read,
-                              node,
-                              iov_off,
-                              flags);
+                                           iov->iov_len,
+                                           &curr_read,
+                                           node,
+                                           iov_off,
+                                           flags);
         iov_off += curr_read;
         tot_read += curr_read;
     }
@@ -406,11 +406,11 @@ int com_fs_vfs_writev(size_t      *bytes_written,
          NULL != (iov = kioviter_next(ioviter)) && 0 == ret;) {
         size_t curr_write = 0;
         ret               = node->ops->write(&curr_write,
-                               node,
-                               iov->iov_base,
-                               iov->iov_len,
-                               iov_off,
-                               flags);
+                                             node,
+                                             iov->iov_base,
+                                             iov->iov_len,
+                                             iov_off,
+                                             flags);
         iov_off += curr_write;
         tot_write += curr_write;
     }

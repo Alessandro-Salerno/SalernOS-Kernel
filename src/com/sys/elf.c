@@ -98,7 +98,7 @@ static int load(uintptr_t          vaddr,
     ssize_t          mem_sz       = phdr->mem_sz;
     bool             vaddr_mapped = false; // if *vaddr is ok
     arch_mmu_flags_t mmu_flags    = ARCH_MMU_FLAGS_USER | ARCH_MMU_FLAGS_READ |
-                                 ARCH_MMU_FLAGS_WRITE;
+                                    ARCH_MMU_FLAGS_WRITE;
 
     if (0 != vaddr % ARCH_PAGE_SIZE && fsz > 0) {
         ssize_t misalign    = vaddr % ARCH_PAGE_SIZE;
@@ -149,7 +149,7 @@ zero_fill:
         if (vaddr_mapped) {
             ssize_t zero_size = KMIN(mem_sz, rem);
             void   *phys_page = com_mm_vmm_get_physical(vmm_context,
-                                                      (void *)vaddr);
+                                                        (void *)vaddr);
             // NOTE: the value returned by vmm_get_physical already accounts for
             // in-page offset (misalign)
             kmemset((void *)ARCH_PHYS_TO_HHDM(phys_page), zero_size, 0);
@@ -187,11 +187,11 @@ int com_sys_elf64_load(com_elf_data_t    *out,
         E_COM_PROFILE_FUNC_ELF_LOAD);
     com_vnode_t *elf_file = NULL;
     int          ret      = com_fs_vfs_lookup(&elf_file,
-                                exec_path,
-                                exec_path_len,
-                                root,
-                                cwd,
-                                true);
+                                              exec_path,
+                                              exec_path_len,
+                                              root,
+                                              cwd,
+                                              true);
     if (0 != ret) {
         return ret;
     }
@@ -204,11 +204,11 @@ int com_sys_elf64_load(com_elf_data_t    *out,
     char   expected_signaturr[4] = {0x7F, 'E', 'L', 'F'};
     size_t signature_bytes       = 0;
     ret                          = com_fs_vfs_read(elf_signature,
-                          sizeof(elf_signature),
-                          &signature_bytes,
-                          elf_file,
-                          0,
-                          0);
+                                                   sizeof(elf_signature),
+                                                   &signature_bytes,
+                                                   elf_file,
+                                                   0,
+                                                   0);
     if (0 != ret) {
         goto cleanup;
     }
@@ -222,11 +222,11 @@ int com_sys_elf64_load(com_elf_data_t    *out,
     struct elf_header elf_hdr    = {0};
     size_t            bytes_read = 0;
     ret                          = com_fs_vfs_read(&elf_hdr,
-                          sizeof(struct elf_header),
-                          &bytes_read,
-                          elf_file,
-                          0,
-                          O_RDONLY);
+                                                   sizeof(struct elf_header),
+                                                   &bytes_read,
+                                                   elf_file,
+                                                   0,
+                                                   O_RDONLY);
     if (0 != ret) {
         goto cleanup;
     }
@@ -362,7 +362,8 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
 
     PUSH(argc);
     KASSERT((uintptr_t)stackptr < ARCH_PHYS_TO_HHDM(stack_end_phys));
-    KASSERT(ARCH_PHYS_TO_HHDM(stack_end_phys) - (uintptr_t)stackptr < ARCH_PAGE_SIZE);
+    KASSERT(ARCH_PHYS_TO_HHDM(stack_end_phys) - (uintptr_t)stackptr <
+            ARCH_PAGE_SIZE);
     return stack_end_virt - ((uintptr_t)orig - (uintptr_t)stackptr);
 #undef PUSH
 }
@@ -378,12 +379,12 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
 
     com_elf_data_t prog_data = {0};
     int            status    = com_sys_elf64_load(&prog_data,
-                                    path,
-                                    kstrlen(path),
-                                    proc->root,
-                                    proc->cwd,
-                                    0,
-                                    new_vmm_ctx);
+                                                  path,
+                                                  kstrlen(path),
+                                                  proc->root,
+                                                  proc->cwd,
+                                                  0,
+                                                  new_vmm_ctx);
 
     if (0 != status) {
         goto fail;
@@ -393,7 +394,7 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
 
     if (0 != prog_data.interpreter_path[0]) {
         com_elf_data_t interp_data = {0};
-        status                     = com_sys_elf64_load(&interp_data,
+        status = com_sys_elf64_load(&interp_data,
                                     prog_data.interpreter_path,
                                     kstrlen(prog_data.interpreter_path),
                                     proc->root,

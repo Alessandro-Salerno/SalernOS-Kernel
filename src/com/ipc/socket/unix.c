@@ -103,7 +103,7 @@ static void unix_socket_poll_callback(void *arg) {
     kspinlock_acquire(&sock->pollhead.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &sock->pollhead.polled_list, polled_list, _) {
-        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&sock->pollhead.lock);
 }
@@ -119,14 +119,14 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
 
     com_vnode_t *socket_vn = NULL;
     ret                    = com_fs_vfs_create_any(&socket_vn,
-                                addr->local.path,
-                                addr->local.pathlen,
-                                curr_proc->root,
-                                atomic_load(&curr_proc->cwd),
-                                0,
-                                true,
-                                true,
-                                com_fs_vfs_mksocket);
+                                                   addr->local.path,
+                                                   addr->local.pathlen,
+                                                   curr_proc->root,
+                                                   atomic_load(&curr_proc->cwd),
+                                                   0,
+                                                   true,
+                                                   true,
+                                                   com_fs_vfs_mksocket);
     if (0 != ret) {
         goto end;
     }

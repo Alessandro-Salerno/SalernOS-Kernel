@@ -72,13 +72,13 @@ typedef struct com_thread {
     uintptr_t            epoch;
     size_t               refs;
     SLIST_ENTRY(com_thread) zombies;
-    bool                 exit_requested;
-    bool                 signal_stopped; // protected by proc->signal_lock
-    bool                 wait_interruptible;
-    struct com_proc     *proc;
-    struct arch_cpu     *cpu;
-    struct arch_cpu     *last_cpu;
-    com_thread_state_t   state; // relaxed atomic accesses
+    bool               exit_requested;
+    bool               signal_stopped; // protected by proc->signal_lock
+    bool               wait_interruptible;
+    struct com_proc   *proc;
+    struct arch_cpu   *cpu;
+    struct arch_cpu   *last_cpu;
+    com_thread_state_t state; // relaxed atomic accesses
     TAILQ_ENTRY(com_thread) threads;
     TAILQ_ENTRY(com_thread) proc_threads;
     int   lock_depth;

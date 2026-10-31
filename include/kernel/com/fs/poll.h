@@ -19,12 +19,15 @@
 #pragma once
 
 #include <kernel/com/fs/file.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
 #include <vendor/tailq.h>
 
 typedef struct com_poller {
     com_waitlist_t waiters;
+    kspinlock_t    lock;
+    bool           notified;
 } com_poller_t;
 
 typedef struct com_polled {
@@ -37,3 +40,10 @@ typedef struct com_poll_head {
     LIST_HEAD(, com_polled) polled_list;
     kspinlock_t lock;
 } com_poll_head_t;
+
+static inline void com_fs_poll_notify(com_poller_t *poller) {
+    kspinlock_acquire(&poller->lock);
+    poller->notified = true;
+    com_sys_sched_notify_all(&poller->waiters);
+    kspinlock_release(&poller->lock);
+}

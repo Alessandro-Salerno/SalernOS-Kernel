@@ -189,7 +189,6 @@ int kioviter_read_to_ringbuffer_nolock(size_t        *bytes_read,
                                        void       *hu_arg,
                                        kioviter_t *ioviter,
                                        size_t      nbytes) {
-    size_t init_off   = ioviter->curr_off;
     size_t tot_rem    = KMIN(nbytes, KIOVITER_REMAINING(ioviter));
     size_t read_count = 0;
     int    ret        = 0;
@@ -213,20 +212,20 @@ int kioviter_read_to_ringbuffer_nolock(size_t        *bytes_read,
             break;
         }
 
-        kioviter_skip(ioviter, copy_size);
+        kioviter_skip(ioviter, curr_count);
         read_count += curr_count;
         tot_rem -= curr_count;
+
+        if (curr_count < copy_size) {
+            break;
+        }
     } while (0 != tot_rem && !KIOVITER_FINISHED(ioviter));
 
     if (NULL != bytes_read) {
         *bytes_read = read_count;
     }
 
-    if (0 != ret) {
-        kioviter_goto(ioviter, init_off + read_count);
-    }
-
-    return ret;
+    return read_count > 0 ? 0 : ret;
 }
 
 int kioviter_write_from_ringbuffer(kioviter_t    *ioviter,
@@ -261,7 +260,6 @@ int kioviter_write_from_ringbuffer_nolock(kioviter_t    *ioviter,
                                           void (*callback)(void *),
                                           void *cb_arg,
                                           void *hu_arg) {
-    size_t init_off    = ioviter->curr_off;
     size_t tot_rem     = KMIN(nbytes, KIOVITER_REMAINING(ioviter));
     size_t write_count = 0;
     int    ret         = 0;
@@ -298,11 +296,7 @@ int kioviter_write_from_ringbuffer_nolock(kioviter_t    *ioviter,
         *bytes_written = write_count;
     }
 
-    if (0 != ret) {
-        kioviter_goto(ioviter, init_off + write_count);
-    }
-
-    return ret;
+    return write_count > 0 ? 0 : ret;
 }
 
 struct iovec *kioviter_next(kioviter_t *ioviter) {

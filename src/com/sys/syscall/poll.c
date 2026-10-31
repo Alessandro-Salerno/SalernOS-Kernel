@@ -57,6 +57,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
     com_poller_t poller = {0};
     COM_SYS_THREAD_WAITLIST_INIT(&poller.waiters);
+    poller.lock = KSPINLOCK_NEW();
 
     bool      do_wait  = true;
     uintmax_t delay_ns = 0;
@@ -147,7 +148,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         if (0 != delay_ns) {
             uintmax_t curr_time = ARCH_CPU_GET_TIMESTAMP();
             uintmax_t elapsed   = ARCH_CPU_TIMESTAMP_TO_NS(curr_time -
-                                                         syscall_start);
+                                                           syscall_start);
             if (elapsed < delay_ns) {
                 syscall_start = curr_time;
                 delay_ns -= elapsed;
@@ -156,10 +157,21 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             }
         }
 
-        wait_ret = com_sys_sched_wait_nodrop_timeout(&poller.waiters, delay_ns);
+        kspinlock_acquire(&poller.lock);
+        if (!poller.notified) {
+            wait_ret = kspinlock_wait(&poller.lock,
+                                      &poller.waiters,
+                                      delay_ns,
+                                      true);
+        } else {
+            wait_ret = 0;
+        }
+        poller.notified = false;
+        kspinlock_release(&poller.lock);
+
     skip_wait:
 
-        if (ETIMEDOUT == wait_ret) {
+        if (0 != wait_ret) {
             last_recheck = true;
             continue;
         }

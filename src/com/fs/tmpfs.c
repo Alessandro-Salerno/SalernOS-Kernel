@@ -176,13 +176,13 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                              out,
-                              dir,
-                              name,
-                              namelen,
-                              attr,
-                              fsattr,
-                              E_COM_VNODE_TYPE_FILE);
+                                                   out,
+                                                   dir,
+                                                   name,
+                                                   namelen,
+                                                   attr,
+                                                   fsattr,
+                                                   E_COM_VNODE_TYPE_FILE);
     if (0 != inner) {
         return inner;
     }
@@ -213,13 +213,13 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                              out,
-                              parent,
-                              name,
-                              namelen,
-                              attr,
-                              fsattr,
-                              E_COM_VNODE_TYPE_DIR);
+                                                   out,
+                                                   parent,
+                                                   name,
+                                                   namelen,
+                                                   attr,
+                                                   fsattr,
+                                                   E_COM_VNODE_TYPE_DIR);
     if (0 != inner) {
         return inner;
     }
@@ -311,8 +311,8 @@ int com_fs_tmpfs_read(void        *buf,
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
         bool      page_present = com_fs_pagecache_get(&page,
-                                                 file->file.data,
-                                                 cur / ARCH_PAGE_SIZE);
+                                                      file->file.data,
+                                                      cur / ARCH_PAGE_SIZE);
 
         // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a
         // mask to floor the value to a multiple of ARCH_PAGE_SIZE. Then
@@ -631,13 +631,13 @@ int com_fs_tmpfs_mksocket(com_vnode_t **out,
                           uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                              out,
-                              dir,
-                              name,
-                              namelen,
-                              attr,
-                              fsattr,
-                              E_COM_VNODE_TYPE_SOCKET);
+                                                   out,
+                                                   dir,
+                                                   name,
+                                                   namelen,
+                                                   attr,
+                                                   fsattr,
+                                                   E_COM_VNODE_TYPE_SOCKET);
     if (0 != inner) {
         return inner;
     }
@@ -677,8 +677,8 @@ int com_fs_tmpfs_mmap(void             **out,
     for (uintmax_t curr = off; curr < off + size; curr += ARCH_PAGE_SIZE) {
         uintptr_t page;
         bool      present = com_fs_pagecache_get(&page,
-                                            file->file.data,
-                                            curr / ARCH_PAGE_SIZE);
+                                                 file->file.data,
+                                                 curr / ARCH_PAGE_SIZE);
         // If it is NULL or undefined, we'll ignore it thanks to FLAGS_ALLOCATE
         void *page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
         com_mm_pmm_hold(page_phys);

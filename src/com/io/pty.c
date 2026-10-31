@@ -116,7 +116,7 @@ static void ptm_poll_callback(void *arg) {
     kspinlock_acquire(&pty->master_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
-        com_sys_sched_notify(&polled->poller->waiters);
+        com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&pty->master_ph.lock);
 }
@@ -385,11 +385,11 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
     // This *ONLY* creates the pts device, it does NOT open it
     com_vnode_t *slave_vn;
     int          ret = com_fs_devfs_register(&slave_vn,
-                                    PtsDir,
-                                    pts_name,
-                                    kstrlen(pts_name),
-                                    &PtsDevOps,
-                                    pty);
+                                             PtsDir,
+                                             pts_name,
+                                             kstrlen(pts_name),
+                                             &PtsDevOps,
+                                             pty);
     if (0 != ret) {
         goto end;
     }

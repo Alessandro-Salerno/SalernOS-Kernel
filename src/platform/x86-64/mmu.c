@@ -124,7 +124,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
         }
         pml4[pml4offset] = (uint64_t)pdpt | ARCH_MMU_FLAGS_READ |
                            ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
-        pdpt = (uint64_t *)ARCH_PHYS_TO_HHDM(pdpt);
+        pdpt             = (uint64_t *)ARCH_PHYS_TO_HHDM(pdpt);
     }
 
     if (DEPTH_PD == depth) {
@@ -140,7 +140,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
         }
         pdpt[pdptoffset] = (uint64_t)pd | ARCH_MMU_FLAGS_READ |
                            ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
-        pd = (uint64_t *)ARCH_PHYS_TO_HHDM(pd);
+        pd               = (uint64_t *)ARCH_PHYS_TO_HHDM(pd);
     }
 
     if (DEPTH_PT == depth) {
@@ -156,7 +156,7 @@ add_page(arch_mmu_pagetable_t *top, void *vaddr, uint64_t entry, int depth) {
         }
         pd[pdoffset] = (uint64_t)pt | ARCH_MMU_FLAGS_READ |
                        ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_USER;
-        pt = (uint64_t *)ARCH_PHYS_TO_HHDM(pt);
+        pt           = (uint64_t *)ARCH_PHYS_TO_HHDM(pt);
     }
 
     pt[ptoffset] = entry;
@@ -200,7 +200,7 @@ static uint64_t duplicate_recursive(uint64_t entry, size_t level, size_t addr) {
                    : (entry & ~ARCH_MMU_FLAGS_WRITE) | (entry_writable << 9);
     }
 
-    uint64_t new    = (uint64_t)internal_alloc_phys();
+    uint64_t  new   = (uint64_t)internal_alloc_phys();
     uint64_t *nvirt = (uint64_t *)ARCH_PHYS_TO_HHDM(new);
 
     for (size_t i = 0; i < 512; i++) {

@@ -71,7 +71,10 @@ COM_SYS_SYSCALL(com_sys_syscall_recvmsg) {
         goto end;
     }
 
-    ret = COM_SYS_SYSCALL_OK(desc.count_done);
+    msg->msg_controllen = 0;
+    msg->msg_namelen    = 0;
+    msg->msg_flags      = 0;
+    ret                 = COM_SYS_SYSCALL_OK(desc.count_done);
 
 end:
     COM_FS_FILE_RELEASE(sockfile);

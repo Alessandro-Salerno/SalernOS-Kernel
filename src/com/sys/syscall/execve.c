@@ -56,11 +56,11 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_vmm_context_t *old_vmm_ctx = proc->vmm_context;
     com_vmm_context_t *new_vmm_ctx = NULL;
     int                status      = com_sys_elf64_prepare_proc(&new_vmm_ctx,
-                                            path,
-                                            argv,
-                                            env,
-                                            proc,
-                                            ctx);
+                                                                path,
+                                                                argv,
+                                                                env,
+                                                                proc,
+                                                                ctx);
 
     if (0 != status) {
         return COM_SYS_SYSCALL_ERR(status);

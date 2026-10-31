@@ -119,7 +119,7 @@ int com_sys_sched_yield_nolock(bool                   interruptible,
                                arch_context_message_t message) {
     com_profiler_data_t profiler_data = com_sys_profiler_start_function(
         E_COM_PROFILE_FUNC_SCHED_YIELD);
-    arch_cpu_t *cpu = ARCH_CPU_GET();
+    arch_cpu_t   *cpu  = ARCH_CPU_GET();
     com_thread_t *curr = cpu->thread;
     KASSERT(NULL == curr || KSPINLOCK_IS_HELD(curr->sched_lock));
     KASSERT(NULL == curr || 1 == curr->lock_depth || 2 == curr->lock_depth);
@@ -406,7 +406,7 @@ void com_sys_sched_prioritize_nolock(com_thread_t *thread) {
 }
 
 void com_sys_sched_init(void) {
-    arch_cpu_t *curr_cpu       = ARCH_CPU_GET();
+    arch_cpu_t *curr_cpu = ARCH_CPU_GET();
     SLIST_INIT(&curr_cpu->zombies);
     curr_cpu->idle_thread      = com_sys_thread_new_kernel(NULL, sched_idle);
     curr_cpu->idle_thread->cpu = curr_cpu;

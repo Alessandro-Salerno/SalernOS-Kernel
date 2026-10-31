@@ -70,7 +70,7 @@ void      com_sys_callout_add_bsp(com_intf_callout_t handler,
                                   void              *arg,
                                   uintmax_t          delay);
 void      com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue);
-com_callout_t      *
+com_callout_t *
 com_sys_callout_new(com_intf_callout_t handler, void *arg, uintmax_t ns);
 void com_sys_callout_destroy(com_callout_t *callout);
 void com_sys_callout_enqueue(com_callout_t *callout);

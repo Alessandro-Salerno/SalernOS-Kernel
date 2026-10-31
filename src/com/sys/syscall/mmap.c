@@ -46,13 +46,13 @@ static com_syscall_ret_t file_mmap(com_proc_t      *curr_proc,
 
     void *mmap_ret;
     int   vfs_err = com_fs_vfs_mmap(&mmap_ret,
-                                  file->vnode,
-                                  NULL,
-                                  hint,
-                                  size,
-                                  vmm_flags | COM_MM_VMM_FLAGS_FILE,
-                                  mmu_flags,
-                                  off);
+                                    file->vnode,
+                                    NULL,
+                                    hint,
+                                    size,
+                                    vmm_flags | COM_MM_VMM_FLAGS_FILE,
+                                    mmu_flags,
+                                    off);
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);
         goto end;

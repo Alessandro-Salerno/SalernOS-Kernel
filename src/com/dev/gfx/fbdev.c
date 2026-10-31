@@ -90,27 +90,27 @@ int com_dev_gfx_fbdev_init(com_fbdev_t **out) {
     com_fbdev_t        *fbdev = com_mm_slab_alloc(sizeof(com_fbdev_t));
     fbdev->fb                 = fb;
     int ret                   = com_fs_devfs_register(&fbdev->vnode,
-                                    NULL,
-                                    "fb0",
-                                    3,
-                                    &FbdevOps,
-                                    fbdev);
+                                                      NULL,
+                                                      "fb0",
+                                                      3,
+                                                      &FbdevOps,
+                                                      fbdev);
     if (0 != ret) {
         goto end;
     }
 
-    fbdev->fscreeninfo.smem_len = fb->pitch *
-                                  fb->height; /* Length of frame buffer mem */
-    fbdev->fscreeninfo.type        = FB_TYPE_PACKED_PIXELS; /* see FB_TYPE_* */
-    fbdev->fscreeninfo.type_aux    = 0; /* Interleave for interleaved Planes */
-    fbdev->fscreeninfo.visual      = FB_VISUAL_TRUECOLOR; /* see FB_VISUAL_* */
-    fbdev->fscreeninfo.xpanstep    = 0; /* zero if no hardware panning  */
-    fbdev->fscreeninfo.ypanstep    = 0; /* zero if no hardware panning  */
-    fbdev->fscreeninfo.ywrapstep   = 0; /* zero if no hardware ywrap    */
+    fbdev->fscreeninfo.smem_len  = fb->pitch *
+                                   fb->height; /* Length of frame buffer mem */
+    fbdev->fscreeninfo.type      = FB_TYPE_PACKED_PIXELS; /* see FB_TYPE_* */
+    fbdev->fscreeninfo.type_aux  = 0; /* Interleave for interleaved Planes */
+    fbdev->fscreeninfo.visual    = FB_VISUAL_TRUECOLOR; /* see FB_VISUAL_* */
+    fbdev->fscreeninfo.xpanstep  = 0; /* zero if no hardware panning  */
+    fbdev->fscreeninfo.ypanstep  = 0; /* zero if no hardware panning  */
+    fbdev->fscreeninfo.ywrapstep = 0; /* zero if no hardware ywrap    */
     fbdev->fscreeninfo.line_length = fb->pitch; /* length of a line in bytes */
-    fbdev->fscreeninfo.mmio_len    = fb->pitch *
+    fbdev->fscreeninfo.mmio_len = fb->pitch *
                                   fb->height; /* Length of Memory Mapped I/O  */
-    fbdev->fscreeninfo.accel        = 0;      /* Indicate to driver which	*/
+    fbdev->fscreeninfo.accel    = 0;          /* Indicate to driver which	*/
     fbdev->fscreeninfo.capabilities = 0;      /* see FB_CAP_* */
 
     fbdev->vscreeninfo.xres = fbdev->vscreeninfo.xres_virtual = fb->width;

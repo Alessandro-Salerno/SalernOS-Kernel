@@ -64,9 +64,9 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
     com_socket_addr_t new_client_addr;
     com_socket_t     *new_client;
     int               sock_ret = COM_IPC_SOCKET_ACCEPT(&new_client,
-                                         &new_client_addr,
-                                         server_socket,
-                                         sockfile->flags);
+                                                       &new_client_addr,
+                                                       server_socket,
+                                                       sockfile->flags);
     if (0 != sock_ret) {
         ret = COM_SYS_SYSCALL_ERR(sock_ret);
         goto end;

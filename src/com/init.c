@@ -155,11 +155,11 @@ void com_init_pid1(void) {
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, RootFs->root, RootFs->root);
     com_thread_t *thread  = com_sys_thread_new(proc, NULL, 0, NULL);
     int           elf_ret = com_sys_elf64_prepare_proc(&proc->vmm_context,
-                                             CONFIG_INIT_PATH,
-                                             argv,
-                                             envp,
-                                             proc,
-                                             &thread->ctx);
+                                                       CONFIG_INIT_PATH,
+                                                       argv,
+                                                       envp,
+                                                       proc,
+                                                       &thread->ctx);
 
     if (0 != elf_ret) {
         com_sys_panic(NULL,

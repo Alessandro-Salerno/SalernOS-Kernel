@@ -59,11 +59,11 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
 
     com_vnode_t *target  = NULL;
     int          vfs_err = com_fs_vfs_lookup(&target,
-                                    path,
-                                    pathlen,
-                                    curr_proc->root,
-                                    dir,
-                                    false);
+                                             path,
+                                             pathlen,
+                                             curr_proc->root,
+                                             dir,
+                                             false);
 
     if (0 != vfs_err) {
         ret = COM_SYS_SYSCALL_ERR(vfs_err);

@@ -22,8 +22,8 @@
 
 #define X86_64_CPUID_WITH_ECX(outptr, exc, leaf) \
     __hdr_x86_64_cpuid_with_ecx(outptr, ecx, leaf)
-#define X86_64_CPUID(outptr, leaf)   __hdr_x86_64_cpuid_with_ecx(outptr, leaf, 0)
-#define X86_64_CPUID_EXT_MAX_LEAF()  __hdr_x86_64_cpuid_ext_max_leaf()
+#define X86_64_CPUID(outptr, leaf)  __hdr_x86_64_cpuid_with_ecx(outptr, leaf, 0)
+#define X86_64_CPUID_EXT_MAX_LEAF() __hdr_x86_64_cpuid_ext_max_leaf()
 #define X86_64_CPUID_BASE_MAX_LEAF() __hdr_x86_64_cpuid_base_max_leaf()
 
 #define X86_64_CPUID_LEAF_1_EDX_TSC (1 << 4)

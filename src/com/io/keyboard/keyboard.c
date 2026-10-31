@@ -38,7 +38,7 @@ static void keyboard_poll_callback(void *arg) {
     kspinlock_acquire(&keyboard->pollhead.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &keyboard->pollhead.polled_list, polled_list, _) {
-        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&keyboard->pollhead.lock);
 }

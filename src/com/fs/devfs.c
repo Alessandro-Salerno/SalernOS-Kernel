@@ -65,12 +65,12 @@ int com_fs_devfs_create(com_vnode_t **out,
                         uintmax_t     attr,
                         uintmax_t     fsattr) {
     com_vnode_t *new = NULL;
-    int ret          = com_fs_tmpfs_create(&new,
-                                  dir,
-                                  name,
-                                  namelen,
-                                  attr,
-                                  fsattr | COM_FS_TMPFS_ATTR_GHOST);
+    int          ret = com_fs_tmpfs_create(&new,
+                                           dir,
+                                           name,
+                                           namelen,
+                                           attr,
+                                           fsattr | COM_FS_TMPFS_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
         *out = NULL;
@@ -95,12 +95,12 @@ int com_fs_devfs_mkdir(com_vnode_t **out,
     }
 
     com_vnode_t *new = NULL;
-    int ret          = com_fs_tmpfs_mkdir(&new,
-                                 parent,
-                                 name,
-                                 namelen,
-                                 attr,
-                                 fsattr | COM_FS_TMPFS_ATTR_GHOST);
+    int          ret = com_fs_tmpfs_mkdir(&new,
+                                          parent,
+                                          name,
+                                          namelen,
+                                          attr,
+                                          fsattr | COM_FS_TMPFS_ATTR_GHOST);
 
     if (0 != ret || NULL == new) {
         *out = NULL;
@@ -269,11 +269,11 @@ int com_fs_devfs_register_anonymous(com_vnode_t  **out,
                                     void          *devdata) {
     com_vnode_t *devnode = NULL;
     int          ret     = com_fs_devfs_create(&devnode,
-                                  Devfs->root,
-                                  NULL,
-                                  0,
-                                  0,
-                                  COM_FS_TMPFS_ATTR_NO_DIRENT);
+                                               Devfs->root,
+                                               NULL,
+                                               0,
+                                               0,
+                                               COM_FS_TMPFS_ATTR_NO_DIRENT);
 
     if (0 != ret || NULL == devnode) {
         *out = NULL;

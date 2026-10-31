@@ -126,7 +126,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 #endif
 
     void     *page_paddr = (void *)((uintptr_t)phys &
-                                ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+                                    ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     uintptr_t page_off   = (uintptr_t)phys % ARCH_PAGE_SIZE;
     size_t    size_p_off = page_off + len;
     size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
@@ -198,7 +198,7 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     size_t tmp_phys_buf_pages = (size_in_pages * sizeof(void *) +
                                  ARCH_PAGE_SIZE - 1) /
                                 ARCH_PAGE_SIZE;
-    size_t unmaps_done = 0;
+    size_t unmaps_done        = 0;
     if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
         tmp_phys_buf = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many(tmp_phys_buf_pages));

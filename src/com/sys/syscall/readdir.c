@@ -45,10 +45,10 @@ COM_SYS_SYSCALL(com_sys_syscall_readdir) {
 
     size_t bytes_read = 0;
     int    vfs_op     = com_fs_vfs_readdir(buf,
-                                    buflen,
-                                    &bytes_read,
-                                    file->vnode,
-                                    file->off);
+                                           buflen,
+                                           &bytes_read,
+                                           file->vnode,
+                                           file->off);
 
     if (0 != vfs_op) {
         ret.err = vfs_op;

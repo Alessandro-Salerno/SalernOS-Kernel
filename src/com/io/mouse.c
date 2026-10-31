@@ -33,7 +33,7 @@ static void mouse_poll_callback(void *arg) {
     kspinlock_acquire(&mouse->pollhead.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &mouse->pollhead.polled_list, polled_list, _) {
-        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&mouse->pollhead.lock);
 }

@@ -155,7 +155,7 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
         if (NULL != curr_thread->real_timer.itimer_arg) {
             struct itimer_callout_arg *old_arg = curr_thread->real_timer
                                                      .itimer_arg;
-            old_arg->cancelled = true;
+            old_arg->cancelled                 = true;
         }
 
         if (0 == new_delay) {

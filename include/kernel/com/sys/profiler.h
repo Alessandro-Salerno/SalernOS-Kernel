@@ -68,7 +68,7 @@ const char *com_sys_profiler_resolve_name(com_profile_func_t function_id);
 #if CONFIG_USE_PROFILER
 
 com_profiler_data_t
-     com_sys_profiler_start_function(com_profile_func_t function_id);
+com_sys_profiler_start_function(com_profile_func_t function_id);
 void com_sys_profiler_end_function(com_profiler_data_t *data);
 
 com_profiler_data_t com_sys_profiler_start_syscall(size_t syscall_number);

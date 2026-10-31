@@ -482,7 +482,7 @@ void com_io_tty_text_backend_poll_callback(void *data) {
     kspinlock_acquire(&backend->slave_ph.lock);
     com_polled_t *polled, *_;
     LIST_FOREACH_SAFE(polled, &backend->slave_ph.polled_list, polled_list, _) {
-        com_sys_sched_notify_all(&polled->poller->waiters);
+        com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&backend->slave_ph.lock);
 }
@@ -501,21 +501,21 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     if (ISIG & tty_backend->termios.c_lflag) {
         if (tty_backend->termios.c_cc[VINTR] == c) {
             ret     = com_io_tty_text_backend_echo(NULL,
-                                               tty_backend,
-                                               "^C",
-                                               2,
-                                               blocking,
-                                               passthrough);
+                                                   tty_backend,
+                                                   "^C",
+                                                   2,
+                                                   blocking,
+                                                   passthrough);
             sig     = SIGINT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
             ret     = com_io_tty_text_backend_echo(NULL,
-                                               tty_backend,
-                                               "^\\\\",
-                                               3,
-                                               blocking,
-                                               passthrough);
+                                                   tty_backend,
+                                                   "^\\\\",
+                                                   3,
+                                                   blocking,
+                                                   passthrough);
             sig     = SIGQUIT;
             handled = true;
         }
@@ -544,14 +544,14 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     // handle raw mode
     if (!(ICANON & tty_backend->termios.c_lflag)) {
         ret     = kringbuffer_write(NULL,
-                                &tty_backend->slave_rb,
-                                &c,
-                                1,
-                                KRINGBUFFER_NOATOMIC,
-                                false,
-                                com_io_tty_text_backend_poll_callback,
-                                tty_backend,
-                                NULL);
+                                    &tty_backend->slave_rb,
+                                    &c,
+                                    1,
+                                    KRINGBUFFER_NOATOMIC,
+                                    false,
+                                    com_io_tty_text_backend_poll_callback,
+                                    tty_backend,
+                                    NULL);
         handled = true;
         goto end;
     }
@@ -631,16 +631,16 @@ end:
     }
 
     if (line_done) {
-        size_t nbytes            = tty_backend->canon.index;
-        ret                      = kringbuffer_write(NULL,
-                                &tty_backend->slave_rb,
-                                tty_backend->canon.buffer,
-                                nbytes,
-                                KRINGBUFFER_NOATOMIC,
-                                blocking,
-                                com_io_tty_text_backend_poll_callback,
-                                tty_backend,
-                                NULL);
+        size_t nbytes = tty_backend->canon.index;
+        ret           = kringbuffer_write(NULL,
+                                          &tty_backend->slave_rb,
+                                          tty_backend->canon.buffer,
+                                          nbytes,
+                                          KRINGBUFFER_NOATOMIC,
+                                          blocking,
+                                          com_io_tty_text_backend_poll_callback,
+                                          tty_backend,
+                                          NULL);
         tty_backend->canon.index = 0;
     }
 
@@ -764,11 +764,11 @@ int com_io_tty_init_text(com_vnode_t **out,
 
     com_vnode_t *tty_dev;
     int          ret = com_fs_devfs_register(&tty_dev,
-                                    NULL,
-                                    tty_name,
-                                    kstrlen(tty_name),
-                                    &TextTtyDevOps,
-                                    tty_data);
+                                             NULL,
+                                             tty_name,
+                                             kstrlen(tty_name),
+                                             &TextTtyDevOps,
+                                             tty_data);
 
     if (0 != ret) {
         tty_dev = NULL;
@@ -822,11 +822,11 @@ int com_io_tty_devtty_init(com_vnode_t **devtty) {
 
     com_vnode_t *dev = NULL;
     int          ret = com_fs_devfs_register(&dev,
-                                    NULL,
-                                    "tty",
-                                    3,
-                                    &TtyCloneDevOps,
-                                    NULL);
+                                             NULL,
+                                             "tty",
+                                             3,
+                                             &TtyCloneDevOps,
+                                             NULL);
 
     *devtty = dev;
     return ret;

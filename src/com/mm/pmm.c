@@ -165,13 +165,13 @@ static inline void freelist_add_merged_nolock(struct freelist_head  *freelist,
                                               struct freelist_entry *entry) {
     uintptr_t entry_first_page = (uintptr_t)entry;
     uintptr_t entry_last_page  = entry_first_page +
-                                (entry->pages - 1) * ARCH_PAGE_SIZE;
+                                 (entry->pages - 1) * ARCH_PAGE_SIZE;
 
     struct freelist_entry *curr, *_;
     TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
         uintptr_t curr_first_page = (uintptr_t)curr;
         uintptr_t curr_last_page  = curr_first_page +
-                                   (entry->pages - 1) * ARCH_PAGE_SIZE;
+                                    (entry->pages - 1) * ARCH_PAGE_SIZE;
 
         if (curr_first_page == entry_last_page + ARCH_PAGE_SIZE) {
             entry->pages += curr->pages;
@@ -461,9 +461,9 @@ void com_mm_pmm_init(void) {
     KDEBUG("searched all segments, found highest address at %p", highest_addr);
 
     // Compute the actual size of the page meta array
-    size_t page_meta_size  = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
-    size_t page_meta_pages = (page_meta_size + ARCH_PAGE_SIZE - 1) /
-                             ARCH_PAGE_SIZE;
+    size_t page_meta_size         = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
+    size_t page_meta_pages        = (page_meta_size + ARCH_PAGE_SIZE - 1) /
+                                    ARCH_PAGE_SIZE;
     size_t page_meta_aligned_size = page_meta_pages * ARCH_PAGE_SIZE;
     KDEBUG("page meta array size = %zu byte(s) = %zu page(s) = %zu aligned "
            "byte(s)",
@@ -503,11 +503,11 @@ void com_mm_pmm_init(void) {
             if (entry->length >= page_meta_aligned_size + ARCH_PAGE_SIZE) {
                 size_t remaining_length = entry->length -
                                           page_meta_aligned_size;
-                size_t remaining_pages = remaining_length / ARCH_PAGE_SIZE;
+                size_t remaining_pages  = remaining_length / ARCH_PAGE_SIZE;
 
                 struct freelist_entry
                     *list_entry   = (void *)(ARCH_PHYS_TO_HHDM(entry->base) +
-                                           page_meta_aligned_size);
+                                             page_meta_aligned_size);
                 list_entry->pages = remaining_pages;
                 freelist_add_ordered_nolock(&MainFreeList, list_entry);
             }
