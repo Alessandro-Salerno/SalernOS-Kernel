@@ -21,6 +21,7 @@
 #include <kernel/com/sys/panic.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/profiler.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
 
@@ -174,4 +175,22 @@ void kspinlock_fake_acquire(void) {
 
 void kspinlock_fake_release(void) {
     decrement_lock_depth_tested();
+}
+
+static arch_context_message_t spinlock_wait_release(void *primitive) {
+    kspinlock_release(primitive);
+    return (arch_context_message_t){0};
+}
+
+static void spinlock_wait_acquire(void *primitive) {
+    kspinlock_acquire(primitive);
+}
+
+int kspinlock_wait(kspinlock_t         *lock,
+                   struct com_waitlist *waitlist,
+                   uintmax_t            timeout,
+                   bool                 interruptible) {
+    static const com_sched_wait_ops_t ops = {.release = spinlock_wait_release,
+                                             .acquire = spinlock_wait_acquire};
+    return com_sys_sched_wait(waitlist, timeout, interruptible, &ops, lock);
 }

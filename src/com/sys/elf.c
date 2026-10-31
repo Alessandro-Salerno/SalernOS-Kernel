@@ -329,6 +329,11 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
     PUSH(0);
     PUSH(0);
 
+    KASSERT(0 != elf_data.entry);
+    KASSERT(0 != elf_data.phdr);
+    KASSERT(0 != elf_data.phent_sz);
+    KASSERT(0 != elf_data.phent_num);
+
     PUSH(elf_data.entry);
     PUSH(AT_ENTRY);
 
@@ -356,6 +361,8 @@ uintptr_t com_sys_elf64_prepare_stack(com_elf_data_t elf_data,
     }
 
     PUSH(argc);
+    KASSERT((uintptr_t)stackptr < ARCH_PHYS_TO_HHDM(stack_end_phys));
+    KASSERT(ARCH_PHYS_TO_HHDM(stack_end_phys) - (uintptr_t)stackptr < ARCH_PAGE_SIZE);
     return stack_end_virt - ((uintptr_t)orig - (uintptr_t)stackptr);
 #undef PUSH
 }

@@ -19,20 +19,24 @@
 #pragma once
 
 #include <lib/spinlock.h>
+#include <stddef.h>
 #include <vendor/tailq.h>
 
 struct com_thread;
 TAILQ_HEAD(com_thread_tailq, com_thread);
+SLIST_HEAD(com_thread_slist, com_thread);
 
 #define COM_SYS_THREAD_WAITLIST_INIT(wl_ptr) \
     TAILQ_INIT(&(wl_ptr)->queue);            \
-    (wl_ptr)->lock = KSPINLOCK_NEW()
+    (wl_ptr)->count = 0;                     \
+    (wl_ptr)->lock  = KSPINLOCK_NEW()
 
 #define COM_SYS_THREAD_WAITLIST_EMPTY(wl_ptr) TAILQ_EMPTY(&(wl_ptr)->queue)
 
 typedef struct com_waitlist {
     struct com_thread_tailq queue;
     kspinlock_t             lock;
+    size_t                  count;
 } com_waitlist_t;
 
 typedef enum com_thread_state {
@@ -64,11 +68,17 @@ typedef struct com_thread {
     void                *kernel_stack;
     arch_context_t       ctx;
     arch_context_extra_t xctx;
-    kspinlock_t          sched_lock;
+    kspinlock_t         *sched_lock;
+    uintptr_t            epoch;
+    size_t               refs;
+    SLIST_ENTRY(com_thread) zombies;
+    bool                 exit_requested;
+    bool                 signal_stopped; // protected by proc->signal_lock
+    bool                 wait_interruptible;
     struct com_proc     *proc;
     struct arch_cpu     *cpu;
     struct arch_cpu     *last_cpu;
-    com_thread_state_t   state;
+    com_thread_state_t   state; // relaxed atomic accesses
     TAILQ_ENTRY(com_thread) threads;
     TAILQ_ENTRY(com_thread) proc_threads;
     int   lock_depth;
@@ -78,14 +88,12 @@ typedef struct com_thread {
     uintmax_t           ctime;
     uintmax_t           time_slept;
     struct com_callout *timed_wait_callout;
-    bool                timed_wait_expired;
+    int                 wait_error;
 
     com_sigmask_t pending_signals;
     com_sigmask_t masked_signals;
 
-    // TODO: whas if a thread exits while waiting for a timer? Callout will do
-    // its things and all of a sudden we got a page fault in kernel or memory
-    // corruption
+    // Each outstanding interval-timer callout owns a thread reference
     com_thread_timer_t real_timer;
 } com_thread_t;
 
@@ -95,11 +103,20 @@ com_thread_t *com_sys_thread_new(struct com_proc *proc,
                                  void            *entry);
 com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
 
+void com_sys_thread_lock(com_thread_t *thread);
+void com_sys_thread_unlock(com_thread_t *thread);
+void com_sys_thread_hold(com_thread_t *thread);
+void com_sys_thread_release(com_thread_t *thread);
+void com_sys_thread_reap(void);
+
 void com_sys_thread_transition(com_thread_t *thread, com_thread_state_t state);
 void com_sys_thread_transition_nolock(com_thread_t      *thread,
                                       com_thread_state_t state);
+void com_sys_thread_request_exit(com_thread_t *thread);
 void com_sys_thread_exit(com_thread_t *thread);
 void com_sys_thread_exit_nolock(com_thread_t *thread);
+// Release a caller-owned reference after switch-out and final freeing is
+// deferred
 void com_sys_thread_destroy(com_thread_t *thread);
 void com_sys_thread_ready_nolock(com_thread_t *thread);
 void com_sys_thread_ready(com_thread_t *thread);

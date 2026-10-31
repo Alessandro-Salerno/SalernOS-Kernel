@@ -69,6 +69,7 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
 
     switch (op) {
         case FUTEX_WAIT:
+            kmutex_acquire(&FutexLock);
             if (__atomic_compare_exchange_n(
                     word_ptr, // cast away const (we don't change value anyway)
                     &temp,    // expected value
@@ -79,7 +80,6 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     )) {
                 struct futex *futex;
 
-                kmutex_acquire(&FutexLock);
                 int get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
 
                 if (ENOENT == get_ret) {
@@ -96,13 +96,14 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     return COM_SYS_SYSCALL_ERR(get_ret);
                 }
 
+                kmutex_wait(&FutexLock, &futex->waiters, 0, true);
                 kmutex_release(&FutexLock);
-                com_sys_sched_wait_nodrop(&futex->waiters);
 
                 if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
                     return COM_SYS_SYSCALL_ERR(EINTR);
                 }
             } else {
+                kmutex_release(&FutexLock);
                 return COM_SYS_SYSCALL_ERR(EAGAIN);
             }
             break;

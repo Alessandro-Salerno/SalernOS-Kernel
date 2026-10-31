@@ -285,9 +285,13 @@ int kioviter_write_from_ringbuffer_nolock(kioviter_t    *ioviter,
             break;
         }
 
-        kioviter_skip(ioviter, copy_size);
+        kioviter_skip(ioviter, curr_count);
         write_count += curr_count;
         tot_rem -= curr_count;
+
+        if (curr_count < copy_size) {
+            break;
+        }
     } while (0 != tot_rem && !KIOVITER_FINISHED(ioviter));
 
     if (NULL != bytes_written) {

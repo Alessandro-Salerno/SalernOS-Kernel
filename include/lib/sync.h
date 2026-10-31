@@ -53,3 +53,5 @@ int  ksync_wait_timeout(ksync_t             *sync,
                         uintmax_t            timeout);
 void ksync_notify(ksync_t *sync, struct com_waitlist *waiters);
 void ksync_notify_all(ksync_t *sync, struct com_waitlist *waiters);
+
+void ksync_wait_uninterruptible(ksync_t *sync, com_waitlist_t *waitlist);

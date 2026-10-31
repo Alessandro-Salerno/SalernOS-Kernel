@@ -77,6 +77,8 @@ typedef struct arch_cpu {
 
     arch_mmu_pagetable_t *root_page_table;
 
+    struct com_thread_slist
+        zombies; // CPU-local, accessed with interrupts disabled
     kspinlock_t              runqueue_lock;
     struct com_thread_tailq  sched_queue;
     struct com_callout_queue callout;

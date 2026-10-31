@@ -34,18 +34,17 @@
     (src).rip    = (uint64_t)(entry);                          \
     (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
-#define ARCH_CONTEXT_THREAD_SET_KERNEL(src, stack_end, entry)            \
-    (src).cs     = 0x08;                                                 \
-    (src).ss     = 0x10;                                                 \
-    (src).rip    = (uint64_t)(entry);                                    \
-    (src).rsp    = (uint64_t)(stack_end) - 8;                            \
-    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);                \
-    (src).rsp -= sizeof(arch_context_t);                                 \
-    {                                                                    \
-        arch_context_t *new_context = (void *)(src).rsp;                 \
-        *new_context                = (src);                             \
-        (src).rsp -= 8;                                                  \
-        *(uint64_t *)(src).rsp = (uint64_t)arch_context_fork_trampoline; \
+#define ARCH_CONTEXT_THREAD_SET_KERNEL(src, stack_end, entry) \
+    (src).cs     = 0x08;                                      \
+    (src).ss     = 0x10;                                      \
+    (src).rip    = (uint64_t)(entry);                         \
+    (src).rsp    = (uint64_t)(stack_end) - 8;                 \
+    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);     \
+    (src).rsp -= sizeof(arch_context_t);                      \
+    {                                                         \
+        arch_context_t *new_context = (void *)(src).rsp;      \
+        *new_context                = (src);                  \
+        x86_64_ctx_prepare(&(src), new_context);              \
     }
 
 #define ARCH_CONTEXT_FORK(new_thread, orig_ctx)                              \
@@ -54,9 +53,7 @@
     {                                                                        \
         arch_context_t *new_context = (void *)new_thread->ctx.rsp;           \
         *new_context                = (orig_ctx); /* copy the old context */ \
-        new_thread->ctx.rsp -= 8;                                            \
-        *(uint64_t *)new_thread->ctx.rsp = (uint64_t)                        \
-            arch_context_fork_trampoline;                                    \
+        x86_64_ctx_prepare(&new_thread->ctx, new_context);                   \
         new_context->rax = 0;                                                \
         new_context->rdx = 0;                                                \
     }
@@ -67,14 +64,12 @@
     {                                                               \
         arch_context_t *new_context = (void *)new_thread->ctx.rsp;  \
         *new_context                = (arch_context_t){0};          \
-        new_thread->ctx.rsp -= 8;                                   \
-        *(uint64_t *)new_thread->ctx.rsp = (uint64_t)               \
-            arch_context_fork_trampoline;                           \
+        x86_64_ctx_prepare(&new_thread->ctx, new_context);          \
         ARCH_CONTEXT_THREAD_SET((*new_context), new_sp, 0, new_ip); \
     }
 
-#define ARCH_CONTEXT_SWITCH(to, from, from_sched_lock) \
-    x86_64_ctx_switch((to), (from), (from_sched_lock))
+#define ARCH_CONTEXT_SWITCH(to, from, callback, arg, value) \
+    x86_64_ctx_switch((to), (from), (callback), (arg), (value))
 
 #define ARCH_CONTEXT_RESTORE_TLC(ctx) \
     X86_64_MSR_WRITE(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
@@ -142,7 +137,19 @@ typedef struct {
     uint64_t gsbase;
 } __attribute__((packed)) arch_context_extra_t;
 
-void x86_64_ctx_switch(arch_context_t *to,
-                       arch_context_t *from,
-                       kspinlock_t    *from_sched_lock);
+// A three-word return uses the SysV hidden result pointer. The switch saves
+// that pointer on the outgoing stack and fills the incoming caller's result
+typedef struct arch_context_message {
+    void (*callback)(void *, uintptr_t, bool success);
+    void     *arg;
+    uintptr_t value;
+} arch_context_message_t;
+
+arch_context_message_t
+x86_64_ctx_switch(arch_context_t *to,
+                  arch_context_t *from,
+                  void (*callback)(void *, uintptr_t, bool),
+                  void     *arg,
+                  uintptr_t value);
+void x86_64_ctx_prepare(arch_context_t *ctx, arch_context_t *frame);
 void x86_64_ctx_test_trampoline(void);

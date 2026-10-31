@@ -35,13 +35,17 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
 
-    KASSERT(E_COM_THREAD_STATE_RUNNING == curr_thread->state);
-    com_sys_proc_remove_thread(curr_thread->proc, curr_thread);
+    KASSERT(E_COM_THREAD_STATE_RUNNING ==
+            __atomic_load_n(&curr_thread->state, __ATOMIC_RELAXED));
+    kspinlock_acquire(&curr_thread->proc->threads_lock);
+    __atomic_store_n(&curr_thread->exit_requested, true, __ATOMIC_RELEASE);
+    bool last = com_sys_proc_all_threads_exiting_nolock(curr_thread->proc);
+    kspinlock_release(&curr_thread->proc->threads_lock);
 
-    // com_sys_proc_terminate is not needed here because there's only this
-    // thread left
-    if (TAILQ_EMPTY(&curr_thread->proc->threads)) {
-        com_sys_proc_exit(0);
+    if (last) {
+        // Other exiting threads may still be switching out. Join their
+        // acknowledgements before releasing shared process resources
+        com_sys_proc_terminate(0);
     }
 
     com_sys_thread_exit(curr_thread);

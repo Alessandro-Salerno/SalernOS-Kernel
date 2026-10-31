@@ -37,9 +37,9 @@ void ksync_release(ksync_t *sync) {
 
 void ksync_wait(ksync_t *sync, com_waitlist_t *waitlist) {
     if (KSYNC_FLAGS_MUTEX & sync->flags) {
-        com_sys_sched_wait_mutex(waitlist, &sync->lock.mutex);
+        kmutex_wait(&sync->lock.mutex, waitlist, 0, true);
     } else {
-        com_sys_sched_wait(waitlist, &sync->lock.spinlock);
+        kspinlock_wait(&sync->lock.spinlock, waitlist, 0, true);
     }
 }
 
@@ -47,14 +47,9 @@ int ksync_wait_timeout(ksync_t             *sync,
                        struct com_waitlist *waitlist,
                        uintmax_t            timeout) {
     if (KSYNC_FLAGS_MUTEX & sync->flags) {
-        return com_sys_sched_wait_mutex_timeout(waitlist,
-                                                &sync->lock.mutex,
-                                                timeout);
-    } else {
-        return com_sys_sched_wait_spinlock_timeout(waitlist,
-                                                   &sync->lock.spinlock,
-                                                   timeout);
+        return kmutex_wait(&sync->lock.mutex, waitlist, timeout, true);
     }
+    return kspinlock_wait(&sync->lock.spinlock, waitlist, timeout, true);
 }
 
 void ksync_notify(ksync_t *sync, com_waitlist_t *waitlist) {
@@ -65,4 +60,12 @@ void ksync_notify(ksync_t *sync, com_waitlist_t *waitlist) {
 void ksync_notify_all(ksync_t *sync, com_waitlist_t *waitlist) {
     (void)sync;
     com_sys_sched_notify_all(waitlist);
+}
+
+void ksync_wait_uninterruptible(ksync_t *sync, com_waitlist_t *waitlist) {
+    if (KSYNC_FLAGS_MUTEX & sync->flags) {
+        kmutex_wait(&sync->lock.mutex, waitlist, 0, false);
+    } else {
+        kspinlock_wait(&sync->lock.spinlock, waitlist, 0, false);
+    }
 }

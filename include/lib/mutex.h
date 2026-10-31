@@ -41,3 +41,9 @@ bool kmutex_try_acquire(kmutex_t *mutex);
 void kmutex_acquire(kmutex_t *mutex);
 bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout);
 void kmutex_release(kmutex_t *mutex);
+
+// Wait on a condition while atomically releasing/reacquiring this mutex
+int kmutex_wait(kmutex_t       *mutex,
+                com_waitlist_t *waitlist,
+                uintmax_t       timeout,
+                bool            interruptible);

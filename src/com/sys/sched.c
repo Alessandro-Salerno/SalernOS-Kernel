@@ -71,49 +71,76 @@ static inline void sched_switch_vmm_context(com_thread_t *curr,
     }
 }
 
+// Caller holds thread authority and the waitlist lock. These helpers only
+// change membership and callers supply the state transition (if any)
 static void sched_waitlist_insert(com_waitlist_t *waitlist,
-                                  com_thread_t   *thread) {
-    // thread->cpu is nulled and curr is removed from runqueue in sched, no need
-    // to do it here. In fact, this has caused issues, specifically with
-    // testjoin 1000
+                                  com_thread_t   *thread,
+                                  bool            first) {
+    KASSERT(NULL == thread->waiting_on);
     thread->waiting_on = waitlist;
-    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_WAITING);
+    if (first) {
+        TAILQ_INSERT_HEAD(&waitlist->queue, thread, threads);
+    } else {
+        TAILQ_INSERT_TAIL(&waitlist->queue, thread, threads);
+    }
+    waitlist->count++;
+}
 
-    kspinlock_acquire(&waitlist->lock);
-    TAILQ_INSERT_TAIL(&waitlist->queue, thread, threads);
-    kspinlock_release(&waitlist->lock);
+static void sched_waitlist_remove(com_thread_t *thread) {
+    com_waitlist_t *waitlist = thread->waiting_on;
+    KASSERT(NULL != waitlist);
+    TAILQ_REMOVE(&waitlist->queue, thread, threads);
+    waitlist->count--;
+    thread->waiting_on = NULL;
 }
 
 static void sched_handle_timeout(com_callout_t *callout) {
-    com_thread_t *waiting_thread = callout->arg;
-    kspinlock_acquire(&waiting_thread->sched_lock);
-    waiting_thread->timed_wait_expired = true;
-    com_sys_sched_notify_thread_nolock(waiting_thread);
-    kspinlock_release(&waiting_thread->sched_lock);
+    com_thread_t *thread = callout->arg;
+    com_sys_thread_lock(thread);
+    if (callout->value == thread->epoch && NULL != thread->waiting_on) {
+        thread->wait_error = ETIMEDOUT;
+        com_sys_sched_notify_thread_nolock(thread);
+    }
+    com_sys_thread_unlock(thread);
+    com_sys_thread_release(thread);
 }
 
-void com_sys_sched_yield_nolock(void) {
+void com_sys_sched_switch_finish(arch_context_message_t message) {
+    // Keep completion non-preemptible, then restore the incoming lock depth
+    kspinlock_fake_acquire();
+    kspinlock_release(&ARCH_CPU_GET()->runqueue_lock);
+    if (NULL != message.callback) {
+        message.callback(message.arg, message.value, true);
+    }
+    kspinlock_fake_release();
+}
+
+int com_sys_sched_yield_nolock(bool                   interruptible,
+                               arch_context_message_t message) {
     com_profiler_data_t profiler_data = com_sys_profiler_start_function(
         E_COM_PROFILE_FUNC_SCHED_YIELD);
     arch_cpu_t *cpu = ARCH_CPU_GET();
-    kspinlock_acquire(&cpu->runqueue_lock);
     com_thread_t *curr = cpu->thread;
-    KASSERT(NULL == curr || KSPINLOCK_IS_HELD(&curr->sched_lock));
-    KASSERT(NULL == curr || 2 == curr->lock_depth || 3 == curr->lock_depth);
+    KASSERT(NULL == curr || KSPINLOCK_IS_HELD(curr->sched_lock));
+    KASSERT(NULL == curr || 1 == curr->lock_depth || 2 == curr->lock_depth);
     com_thread_t *next = TAILQ_FIRST(&cpu->sched_queue);
 
     if (NULL == curr) {
-        kspinlock_release(&cpu->runqueue_lock);
         com_sys_profiler_end_function(&profiler_data);
-        return;
+        return 0;
+    }
+
+    if (interruptible && COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+        com_sys_profiler_end_function(&profiler_data);
+        return EINTR;
     }
 
     if (NULL == next) {
-        if (E_COM_THREAD_STATE_RUNNING == curr->state) {
-            kspinlock_release(&cpu->runqueue_lock);
-            kspinlock_release(&curr->sched_lock);
+        if (E_COM_THREAD_STATE_RUNNING ==
+            __atomic_load_n(&curr->state, __ATOMIC_RELAXED)) {
             com_sys_profiler_end_function(&profiler_data);
-            return;
+            com_sys_sched_switch_finish(message);
+            return 0;
         }
 
         next = cpu->idle_thread;
@@ -135,17 +162,18 @@ void com_sys_sched_yield_nolock(void) {
         KASSERT(curr != next);
     }
 
-    if (E_COM_THREAD_STATE_RUNNING == curr->state) {
+    if (E_COM_THREAD_STATE_RUNNING ==
+        __atomic_load_n(&curr->state, __ATOMIC_RELAXED)) {
         com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_READY);
         if (curr != cpu->idle_thread) {
             TAILQ_INSERT_TAIL(&cpu->sched_queue, curr, threads);
         }
     }
-    KASSERT(E_COM_THREAD_STATE_RUNNING != curr->state);
+    KASSERT(E_COM_THREAD_STATE_RUNNING !=
+            __atomic_load_n(&curr->state, __ATOMIC_RELAXED));
 
     curr->cpu      = NULL;
     curr->last_cpu = cpu;
-    kspinlock_release(&cpu->runqueue_lock);
 
     sched_switch_vmm_context(curr, next);
 
@@ -156,11 +184,6 @@ void com_sys_sched_yield_nolock(void) {
 
     com_sys_profiler_end_function(&profiler_data);
 
-    // NOTE: this creates a subtle race that we don't care about for now. The
-    // obvious solution (i.e., doing it after the context switch) doesn't work
-    // probably because not all context switches lead to another instance of
-    // this function (for example, newly spawned threads will context switch
-    // elsewhere)
     cpu->thread = next;
     next->cpu   = cpu;
     com_sys_thread_transition_nolock(next, E_COM_THREAD_STATE_RUNNING);
@@ -178,25 +201,31 @@ void com_sys_sched_yield_nolock(void) {
     //        wait). Remember that, since the stack has changed, there's no
     //        guarantee that this function will return to the same point from
     //        which it was called, in fact, quite the opposite.
-    next->lock_depth--;
+    KASSERT(next->sched_lock == &cpu->runqueue_lock);
 #if CONFIG_TRACK_SLEEP_TIME
     uintmax_t sleep_start = ARCH_CPU_GET_TIMESTAMP();
 #endif
-    // This must drop the lock on curr->sched_lock
-    ARCH_CONTEXT_SWITCH(&next->ctx, &curr->ctx, &curr->sched_lock);
+    arch_context_message_t incoming = ARCH_CONTEXT_SWITCH(&next->ctx,
+                                                          &curr->ctx,
+                                                          message.callback,
+                                                          message.arg,
+                                                          message.value);
+    com_sys_sched_switch_finish(incoming);
 #if CONFIG_TRACK_SLEEP_TIME
     uintmax_t sleep_end  = ARCH_CPU_GET_TIMESTAMP();
     uintmax_t time_slept = sleep_end - sleep_start;
     __atomic_add_fetch(&curr->time_slept, time_slept, __ATOMIC_RELAXED);
 #endif
+    return 0;
 }
 
 void com_sys_sched_yield(void) {
+    com_sys_thread_reap();
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     if (NULL != curr_thread) {
-        kspinlock_acquire(&curr_thread->sched_lock);
+        com_sys_thread_lock(curr_thread);
     }
-    com_sys_sched_yield_nolock();
+    com_sys_sched_yield_nolock(false, (arch_context_message_t){0});
     // lock released elsewhere
 }
 
@@ -206,242 +235,179 @@ void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx) {
     com_sys_sched_yield();
 }
 
+int com_sys_sched_wait(com_waitlist_t             *waitlist,
+                       uintmax_t                   timeout,
+                       bool                        interruptible,
+                       const com_sched_wait_ops_t *ops,
+                       void                       *primitive) {
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    KASSERT(curr != ARCH_CPU_GET()->idle_thread);
+
+    if (NULL != ops && NULL != ops->prepare) {
+        ops->prepare(primitive);
+    }
+
+    com_sys_thread_lock(curr);
+    curr->wait_interruptible = interruptible;
+    curr->wait_error         = 0;
+
+    kspinlock_acquire(&waitlist->lock);
+    sched_waitlist_insert(waitlist, curr, false);
+    com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_WAITING);
+    kspinlock_release(&waitlist->lock);
+
+    if (timeout) {
+        // The firing owns this reference: a detached timeout may outlive
+        // this wait and even the thread's eventual exit
+        com_sys_thread_hold(curr);
+        curr->timed_wait_callout->value = curr->epoch;
+        com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
+                                        sched_handle_timeout,
+                                        timeout);
+    }
+
+    arch_context_message_t message = {0};
+    if (NULL != ops) {
+        message = ops->release(primitive);
+    }
+
+    int ret = com_sys_sched_yield_nolock(interruptible, message);
+    if (0 != ret) {
+        // The switch did not consume the message or release authority
+        kspinlock_acquire(&waitlist->lock);
+        sched_waitlist_remove(curr);
+        com_sys_thread_transition_nolock(curr, E_COM_THREAD_STATE_RUNNING);
+        kspinlock_release(&waitlist->lock);
+        com_sys_thread_unlock(curr);
+        if (NULL != message.callback) {
+            message.callback(message.arg, message.value, false);
+        }
+    }
+
+    if (timeout && com_sys_callout_cancel(curr->timed_wait_callout)) {
+        com_sys_thread_release(curr);
+    }
+
+    if (0 == ret) {
+        ret = curr->wait_error;
+    }
+
+    com_sys_thread_reap();
+
+    if (NULL != ops) {
+        ops->acquire(primitive);
+    }
+
+    return ret;
+}
+
 void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(0 == curr->lock_depth);
-    kspinlock_acquire(&curr->sched_lock);
-
-    sched_waitlist_insert(waitlist, curr);
-    com_sys_sched_yield_nolock();
-}
-
-void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(1 == curr->lock_depth);
-    kspinlock_acquire(&curr->sched_lock);
-
-    sched_waitlist_insert(waitlist, curr);
-    kspinlock_release(cond);
-    com_sys_sched_yield_nolock();
-
-    // This point is reached AFTER the thread is notified
-    kspinlock_acquire(cond);
-}
-
-void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    kspinlock_acquire(&curr->sched_lock);
-
-    sched_waitlist_insert(waitlist, curr);
-    kmutex_release(mutex);
-    com_sys_sched_yield_nolock();
-
-    // This point is reached AFTER the thread is notified
-    // We can do this because sched_lock is dropped by sched_yield
-    kmutex_acquire(mutex);
+    com_sys_sched_wait(waitlist, 0, true, NULL, NULL);
 }
 
 int com_sys_sched_wait_nodrop_timeout(com_waitlist_t *waitlist,
                                       uintmax_t       timeout) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(0 == curr->lock_depth);
-
-    curr->timed_wait_expired = false;
-    if (0 != timeout) {
-        com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
-                                        sched_handle_timeout,
-                                        timeout);
-    }
-
-    kspinlock_acquire(&curr->sched_lock);
-    sched_waitlist_insert(waitlist, curr);
-    com_sys_sched_yield_nolock();
-
-    // This point is reached AFTER the thread is notified
-    com_sys_callout_cancel(curr->timed_wait_callout);
-
-    if (0 == timeout) {
-        return 0;
-    }
-
-    int ret = 0;
-    kspinlock_acquire(&curr->sched_lock);
-    if (curr->timed_wait_expired) {
-        ret = ETIMEDOUT;
-    }
-    kspinlock_release(&curr->sched_lock);
-
-    return ret;
-}
-
-int com_sys_sched_wait_spinlock_timeout(com_waitlist_t *waitlist,
-                                        kspinlock_t    *lock,
-                                        uintmax_t       timeout) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(1 == curr->lock_depth);
-
-    curr->timed_wait_expired = false;
-    if (0 != timeout) {
-        com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
-                                        sched_handle_timeout,
-                                        timeout);
-    }
-
-    kspinlock_acquire(&curr->sched_lock);
-    sched_waitlist_insert(waitlist, curr);
-    kspinlock_release(lock);
-    com_sys_sched_yield_nolock();
-
-    // This point is reached AFTER the thread is notified
-    com_sys_callout_cancel(curr->timed_wait_callout);
-
-    int ret = 0;
-    if (0 == timeout) {
-        goto end;
-    }
-
-    kspinlock_acquire(&curr->sched_lock);
-    if (curr->timed_wait_expired) {
-        ret = ETIMEDOUT;
-    }
-    kspinlock_release(&curr->sched_lock);
-
-end:
-    kspinlock_acquire(lock);
-    return ret;
-}
-
-int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
-                                     kmutex_t       *mutex,
-                                     uintmax_t       timeout) {
-    com_thread_t *curr = ARCH_CPU_GET_THREAD();
-    KASSERT(0 == curr->lock_depth);
-
-    curr->timed_wait_expired = false;
-    if (0 != timeout) {
-        com_sys_callout_set_and_enqueue(curr->timed_wait_callout,
-                                        sched_handle_timeout,
-                                        timeout);
-    }
-
-    kspinlock_acquire(&curr->sched_lock);
-    sched_waitlist_insert(waitlist, curr);
-    kmutex_release(mutex);
-    com_sys_sched_yield_nolock();
-
-    // This point is reached AFTER the thread is notified
-    com_sys_callout_cancel(curr->timed_wait_callout);
-
-    int ret = 0;
-    if (0 == timeout) {
-        goto end;
-    }
-
-    kspinlock_acquire(&curr->sched_lock);
-    if (curr->timed_wait_expired) {
-        ret = ETIMEDOUT;
-    }
-    kspinlock_release(&curr->sched_lock);
-
-end:
-    kmutex_acquire(mutex);
-    return ret;
-}
-
-void com_sys_sched_notify(com_waitlist_t *waitlist) {
-    kspinlock_acquire(&waitlist->lock);
-    com_thread_t *next = TAILQ_FIRST(&waitlist->queue);
-    if (NULL != next) {
-        TAILQ_REMOVE_HEAD(&waitlist->queue, threads);
-    }
-    kspinlock_release(&waitlist->lock);
-
-    if (NULL != next) {
-        com_sys_thread_ready(next);
-    }
-}
-
-void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
-    // Move everything to a local queue. This is both good for lock order (let's
-    // avoid acquiring sched_lock while holding a waitlist lock), and for
-    // performance
-    kspinlock_acquire(&waitlist->lock);
-    struct com_thread_tailq local_queue;
-    TAILQ_INIT(&local_queue);
-    TAILQ_CONCAT(&local_queue, &waitlist->queue, threads);
-    kspinlock_release(&waitlist->lock);
-
-    com_thread_t *next, *_;
-    TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
-        com_sys_thread_ready(next);
-    }
+    return com_sys_sched_wait(waitlist, timeout, true, NULL, NULL);
 }
 
 void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters) {
-    // Similar strategy to notify_all
-    kspinlock_acquire(&waitlist->lock);
-    struct com_thread_tailq local_queue;
-    TAILQ_INIT(&local_queue);
-    for (size_t i = 0; i < num_waiters; i++) {
+    while (num_waiters > 0) {
+        kspinlock_acquire(&waitlist->lock);
         com_thread_t *thread = TAILQ_FIRST(&waitlist->queue);
         if (NULL == thread) {
-            break;
+            kspinlock_release(&waitlist->lock);
+            return;
         }
-        TAILQ_REMOVE(&waitlist->queue, thread, threads);
-        TAILQ_INSERT_TAIL(&local_queue, thread, threads);
-    }
-    kspinlock_release(&waitlist->lock);
-
-    com_thread_t *next, *_;
-    TAILQ_FOREACH_SAFE(next, &local_queue, threads, _) {
-        com_sys_thread_ready(next);
+        // Only retain the immortal lock pointer across the unlock. Neither
+        // the thread nor the sampled head needs to survive this slow path
+        kspinlock_t *lock = __atomic_load_n(&thread->sched_lock,
+                                            __ATOMIC_ACQUIRE);
+        kspinlock_release(&waitlist->lock);
+        kspinlock_acquire(lock);
+        kspinlock_acquire(&waitlist->lock);
+        thread = TAILQ_FIRST(&waitlist->queue);
+        if (NULL != thread &&
+            lock == __atomic_load_n(&thread->sched_lock, __ATOMIC_ACQUIRE)) {
+            sched_waitlist_remove(thread);
+            com_sys_thread_ready_nolock(thread);
+            num_waiters--;
+        }
+        kspinlock_release(&waitlist->lock);
+        kspinlock_release(lock);
     }
 }
 
+void com_sys_sched_notify(com_waitlist_t *waitlist) {
+    com_sys_sched_notify_n(waitlist, 1);
+}
+
+void com_sys_sched_notify_all(com_waitlist_t *waitlist) {
+    kspinlock_acquire(&waitlist->lock);
+    size_t count = waitlist->count;
+    kspinlock_release(&waitlist->lock);
+    com_sys_sched_notify_n(waitlist, count);
+}
+
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread) {
-    if (NULL != thread->waiting_on) {
-        KASSERT(NULL == thread->cpu);
-
-        kspinlock_acquire(&thread->waiting_on->lock);
-        TAILQ_REMOVE(&thread->waiting_on->queue, thread, threads);
-        kspinlock_release(&thread->waiting_on->lock);
-
+    com_waitlist_t *waitlist = thread->waiting_on;
+    if (NULL != waitlist) {
+        kspinlock_acquire(&waitlist->lock);
+        sched_waitlist_remove(thread);
         com_sys_thread_ready_nolock(thread);
+        kspinlock_release(&waitlist->lock);
+    }
+}
+
+// All asynchronous interruption, including termination, obeys wait policy
+void com_sys_sched_interrupt_nolock(com_thread_t *thread) {
+    com_thread_state_t state = __atomic_load_n(&thread->state,
+                                               __ATOMIC_RELAXED);
+    if (E_COM_THREAD_STATE_WAITING == state && thread->wait_interruptible) {
+        thread->wait_error = EINTR;
+        com_sys_sched_notify_thread_nolock(thread);
+    } else if (E_COM_THREAD_STATE_READY == state) {
+        com_sys_sched_prioritize_nolock(thread);
+    } else if (E_COM_THREAD_STATE_RUNNING == state &&
+               thread->cpu != ARCH_CPU_GET()) {
+        ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
     }
 }
 
 void com_sys_sched_notify_thread(com_thread_t *thread) {
-    kspinlock_acquire(&thread->sched_lock);
+    com_sys_thread_lock(thread);
     com_sys_sched_notify_thread_nolock(thread);
-    kspinlock_release(&thread->sched_lock);
+    com_sys_thread_unlock(thread);
 }
 
 void com_sys_sched_prioritize(com_thread_t *thread) {
-    kspinlock_acquire(&thread->sched_lock);
+    com_sys_thread_lock(thread);
     com_sys_sched_prioritize_nolock(thread);
-    kspinlock_release(&thread->sched_lock);
+    com_sys_thread_unlock(thread);
 }
 
 void com_sys_sched_prioritize_nolock(com_thread_t *thread) {
-    (void)thread;
-    // TODO: figure out why this doesn't work
-
-    /*arch_cpu_t *cpu = thread->last_cpu;
-    KASSERT(E_COM_THREAD_STATE_READY == thread->state);
-    KASSERT(NULL == thread->cpu);
-
-    if (NULL != cpu) {
-        kspinlock_acquire(&cpu->runqueue_lock);
-        KASSERT(cpu->thread != thread);
-        TAILQ_REMOVE(&cpu->sched_queue, thread, threads);
-        TAILQ_INSERT_HEAD(&cpu->sched_queue, thread, threads);
-        kspinlock_release(&cpu->runqueue_lock);
-        ARCH_CPU_SEND_IPI(cpu, ARCH_CPU_IPI_RESCHEDULE);
-    }*/
+    com_thread_state_t state = __atomic_load_n(&thread->state,
+                                               __ATOMIC_RELAXED);
+    if (E_COM_THREAD_STATE_WAITING == state) {
+        com_waitlist_t *waitlist = thread->waiting_on;
+        kspinlock_acquire(&waitlist->lock);
+        sched_waitlist_remove(thread);
+        sched_waitlist_insert(waitlist, thread, true);
+        kspinlock_release(&waitlist->lock);
+    } else if (E_COM_THREAD_STATE_READY == state) {
+        arch_cpu_t *cpu = thread->last_cpu;
+        if (thread != cpu->idle_thread) {
+            TAILQ_REMOVE(&cpu->sched_queue, thread, threads);
+            TAILQ_INSERT_HEAD(&cpu->sched_queue, thread, threads);
+        }
+    }
+    // Reordering does not end a wait: keep its epoch so pending timeout and
+    // deferred-notification messages remain valid
 }
 
 void com_sys_sched_init(void) {
     arch_cpu_t *curr_cpu       = ARCH_CPU_GET();
+    SLIST_INIT(&curr_cpu->zombies);
     curr_cpu->idle_thread      = com_sys_thread_new_kernel(NULL, sched_idle);
     curr_cpu->idle_thread->cpu = curr_cpu;
     // NOTE: this is different from other CPUs because those run the idle thread

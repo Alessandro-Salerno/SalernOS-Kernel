@@ -33,6 +33,10 @@ typedef struct com_callout {
     void              *arg;
     bool               reuse;
     bool               permanent;
+    // Snapshot callouts are permanent reusable slots. Dispatch copies arg/value
+    // before releasing the queue lock and never touches the slot afterwards
+    bool      snapshot;
+    uintptr_t value;
 
     kspinlock_t               entry_lock;  // only protects the following fields
     struct com_callout_queue *cpu_callout; // NULL if not scheduled
@@ -73,4 +77,6 @@ void com_sys_callout_enqueue(com_callout_t *callout);
 void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
                                      com_intf_callout_t handler,
                                      uintmax_t          delay);
-void com_sys_callout_cancel(com_callout_t *callout);
+// Returns true only if this call removed a queued firing
+// A detached handler runs independently
+bool com_sys_callout_cancel(com_callout_t *callout);

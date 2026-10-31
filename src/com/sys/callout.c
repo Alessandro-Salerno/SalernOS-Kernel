@@ -57,7 +57,9 @@ static void enqueue_callout(com_callout_queue_t *cpu_callout,
         TAILQ_INSERT_TAIL(&cpu_callout->queue, callout, queue);
     }
 
+    kspinlock_acquire(&callout->entry_lock);
     callout->cpu_callout = cpu_callout;
+    kspinlock_release(&callout->entry_lock);
 }
 
 static void callout_add_at(com_callout_queue_t *cpu_callout,
@@ -122,14 +124,19 @@ void com_sys_callout_run(void) {
         callout->reuse = false;
         kspinlock_acquire(&callout->entry_lock);
         TAILQ_REMOVE_HEAD(&cpu_callout->queue, queue);
+        bool          snapshot = callout->snapshot;
+        com_callout_t firing   = {.handler = callout->handler,
+                                  .arg     = callout->arg,
+                                  .value   = callout->value};
+        KASSERT(!snapshot || callout->permanent);
         callout->cpu_callout = NULL;
         kspinlock_release(&callout->entry_lock);
 
         kspinlock_release(&cpu_callout->lock);
-        callout->handler(callout);
+        firing.handler(snapshot ? &firing : callout);
         kspinlock_acquire(&cpu_callout->lock);
 
-        if (!callout->reuse && !callout->permanent) {
+        if (!snapshot && !callout->reuse && !callout->permanent) {
             com_mm_slab_free(callout, sizeof(com_callout_t));
         }
     }
@@ -235,18 +242,24 @@ void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
     kspinlock_release(&cpu_callout->lock);
 }
 
-void com_sys_callout_cancel(com_callout_t *callout) {
+// Callers serialize arming against cancellation. A handler already detached
+// from the queue owns its firing and snapshot handlers need no cancellation
+// join
+bool com_sys_callout_cancel(com_callout_t *callout) {
     kspinlock_acquire(&callout->entry_lock);
-    if (NULL != callout->cpu_callout) {
-        com_callout_queue_t *cpu_callout = callout->cpu_callout;
-        callout->cpu_callout             = NULL;
-        // avoid lock ordering issues
-        kspinlock_release(&callout->entry_lock);
-
-        kspinlock_acquire(&cpu_callout->lock);
-        TAILQ_REMOVE(&cpu_callout->queue, callout, queue);
-        kspinlock_release(&cpu_callout->lock);
-    } else {
-        kspinlock_release(&callout->entry_lock);
+    com_callout_queue_t *queue = callout->cpu_callout;
+    kspinlock_release(&callout->entry_lock);
+    if (NULL == queue) {
+        return false;
     }
+    kspinlock_acquire(&queue->lock);
+    kspinlock_acquire(&callout->entry_lock);
+    bool removed = queue == callout->cpu_callout;
+    if (removed) {
+        TAILQ_REMOVE(&queue->queue, callout, queue);
+        callout->cpu_callout = NULL;
+    }
+    kspinlock_release(&callout->entry_lock);
+    kspinlock_release(&queue->lock);
+    return removed;
 }

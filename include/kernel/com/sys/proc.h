@@ -68,6 +68,8 @@ typedef struct com_proc {
     // Threads
     kspinlock_t             threads_lock;
     struct com_thread_tailq threads;
+    struct com_waitlist     threads_waitlist;
+    struct com_thread      *threads_killer;
     size_t                  num_ref;
     size_t                  num_running_threads;
 
@@ -127,6 +129,12 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
 
 // Threads
+// Caller holds threads_lock, excludes except when non-NULL
+// Alive means final switch-out has not been acknowledged, even after EXITED
+bool com_sys_proc_threads_alive_nolock(com_proc_t        *proc,
+                                       struct com_thread *except);
+// Caller holds threads_lock, this checks requests rather than acknowledgements
+bool com_sys_proc_all_threads_exiting_nolock(com_proc_t *proc);
 void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,

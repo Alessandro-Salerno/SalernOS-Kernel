@@ -18,24 +18,28 @@ section .text
 
 global x86_64_ctx_switch
 x86_64_ctx_switch:
-  mov qword [rsi + 48], rbx
-  mov qword [rsi + 152], rbp
-  mov qword [rsi + 104], r12
-  mov qword [rsi + 112], r13
-  mov qword [rsi + 120], r14
-  mov qword [rsi + 128], r15
-  mov qword [rsi + 192], rsp
+  ; rdi: hidden result pointer, rsi: to, rdx: from, rcx/r8/r9: message
+  push rdi
+  mov qword [rdx + 48], rbx
+  mov qword [rdx + 152], rbp
+  mov qword [rdx + 104], r12
+  mov qword [rdx + 112], r13
+  mov qword [rdx + 120], r14
+  mov qword [rdx + 128], r15
+  mov qword [rdx + 192], rsp
 
-  mov rbx, qword [rdi + 48]
-  mov rbp, qword [rdi + 152]
-  mov r12, qword [rdi + 104]
-  mov r13, qword [rdi + 112]
-  mov r14, qword [rdi + 120]
-  mov r15, qword [rdi + 128]
-  mov rsp, qword [rdi + 192]
+  mov rbx, qword [rsi + 48]
+  mov rbp, qword [rsi + 152]
+  mov r12, qword [rsi + 104]
+  mov r13, qword [rsi + 112]
+  mov r14, qword [rsi + 120]
+  mov r15, qword [rsi + 128]
+  mov rsp, qword [rsi + 192]
 
-    mov [rdx], dword 0
-
+  pop rax
+  mov [rax], rcx
+  mov [rax + 8], r8
+  mov [rax + 16], r9
   ret
 
 global arch_context_trampoline
@@ -80,5 +84,9 @@ x86_64_ctx_test_trampoline:
 
 global arch_context_fork_trampoline
 arch_context_fork_trampoline:
-  mov rdi, rsp
-  jmp arch_context_trampoline
+  ; Fresh threads have no suspended C caller. Enter its C equivalent.
+  mov rdi, rax
+  mov rsi, [rax + 24]
+  sub rsp, 8
+  extern x86_64_ctx_first_entry
+  jmp x86_64_ctx_first_entry

@@ -321,6 +321,10 @@ static int unix_socket_accept(com_socket_t     **out_peer,
     // Here we know no client did connect() and we have to block
     while (NULL == new_client) {
         ksync_wait(&server->socket.lock, &server->srv_acceptwait);
+        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+            ret = EINTR;
+            goto end;
+        }
         new_client = TAILQ_FIRST(&server->srv_acceptq);
     }
 

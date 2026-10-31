@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define KSPINLOCK_BACKOFF_MAX 64
+
 #if CONFIG_SPINLOCK_DEBUG
 
 #define KSPINLOCK_HELD_VALUE 144
@@ -43,8 +45,6 @@ typedef struct kspinlock {
 #define KSPINLOCK_HELD_VALUE 1
 #define KSPINLOCK_FREE_VALUE 0
 
-#define KSPINLOCK_BACKOFF_MAX 64
-
 #define KSPINLOCK_NEW()            (kspinlock_t) KSPINLOCK_FREE_VALUE
 #define KSPINLOCK_IS_HELD(lockptr) (KSPINLOCK_HELD_VALUE == *(lockptr))
 
@@ -57,3 +57,10 @@ bool kspinlock_acquire_timeout(kspinlock_t *lock, uintmax_t timeout_ns);
 void kspinlock_release(kspinlock_t *lock);
 void kspinlock_fake_acquire(void);
 void kspinlock_fake_release(void);
+
+struct com_waitlist;
+// The lock is held both on entry and on every return
+int kspinlock_wait(kspinlock_t         *lock,
+                   struct com_waitlist *waitlist,
+                   uintmax_t            timeout,
+                   bool                 interruptible);

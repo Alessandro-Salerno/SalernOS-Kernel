@@ -82,6 +82,8 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 
     proc->threads_lock = KSPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);
+    COM_SYS_THREAD_WAITLIST_INIT(&proc->threads_waitlist);
+    proc->threads_killer = NULL;
 
     kspinlock_acquire(&Processes.lock);
     KASSERT(NextPid <= CONFIG_PROC_MAX);
@@ -298,6 +300,22 @@ end:
     return ret;
 }
 
+bool com_sys_proc_threads_alive_nolock(com_proc_t *proc, com_thread_t *except) {
+    com_thread_t *thread = TAILQ_FIRST(&proc->threads);
+    return NULL != thread &&
+           (thread != except || NULL != TAILQ_NEXT(thread, proc_threads));
+}
+
+bool com_sys_proc_all_threads_exiting_nolock(com_proc_t *proc) {
+    com_thread_t *thread;
+    TAILQ_FOREACH(thread, &proc->threads, proc_threads) {
+        if (!__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
     KASSERT(!proc->exited);
     kspinlock_acquire(&proc->threads_lock);
@@ -310,6 +328,7 @@ void com_sys_proc_remove_thread(com_proc_t *proc, com_thread_t *thread) {
     kspinlock_acquire(&proc->threads_lock);
     com_sys_proc_remove_thread_nolock(proc, thread);
     kspinlock_release(&proc->threads_lock);
+    com_sys_sched_notify_all(&proc->threads_waitlist);
 }
 
 void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
@@ -328,22 +347,27 @@ void com_sys_proc_kill_other_threads(void) {
     kspinlock_release(&curr_proc->threads_lock);
 }
 
-// TODO: this is wrong: we should wait for all threads to ack
+// Caller holds threads_lock. Wait for switch-out acknowledgement before
+// releasing process resources or replacing its address space during exec
 void com_sys_proc_kill_other_threads_nolock(void) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    KASSERT(NULL != curr_thread);
-    com_proc_t *curr_proc = curr_thread->proc;
-    KASSERT(NULL != curr_proc);
-
-    com_thread_t *t, *_;
-    TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
-        if (t->tid != curr_thread->tid) {
-            kspinlock_acquire(&t->sched_lock);
-            com_sys_thread_exit_nolock(t);
-            com_sys_proc_remove_thread_nolock(curr_proc, t);
-            kspinlock_release(&t->sched_lock);
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    com_proc_t   *proc = curr->proc;
+    if (NULL != proc->threads_killer && proc->threads_killer != curr) {
+        kspinlock_release(&proc->threads_lock);
+        com_sys_thread_exit(curr);
+        __builtin_unreachable();
+    }
+    proc->threads_killer = curr;
+    com_thread_t *thread;
+    TAILQ_FOREACH(thread, &proc->threads, proc_threads) {
+        if (thread != curr) {
+            com_sys_thread_request_exit(thread);
         }
     }
+    while (com_sys_proc_threads_alive_nolock(proc, curr)) {
+        kspinlock_wait(&proc->threads_lock, &proc->threads_waitlist, 0, false);
+    }
+    proc->threads_killer = NULL;
 }
 
 void com_sys_proc_exit(int status) {
@@ -361,18 +385,17 @@ void com_sys_proc_exit(int status) {
         }
     }
 
-    // We do all of this under the signal spinlock because all functions that
-    // are called are spinlock-safe and we don't want to be preempted midway
-    // through this section
+    // Publish status before notifying and never acquire authority under
+    // signal_lock
     kspinlock_acquire(&curr_proc->signal_lock);
     curr_proc->exited      = true;
     curr_proc->exit_status = status;
 
+    kspinlock_release(&curr_proc->signal_lock);
     com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
     KDEBUG("pid=%d exited with code %d", curr_proc->pid, status);
-    kspinlock_release(&curr_proc->signal_lock);
 }
 
 void com_sys_proc_stop_nolock(int stop_signal) {
@@ -389,15 +412,17 @@ void com_sys_proc_stop_nolock(int stop_signal) {
     curr_proc->stop_signal   = stop_signal;
     curr_proc->stop_notified = false;
 
+    kspinlock_release(&curr_proc->signal_lock);
     com_thread_t *t, *_;
     kspinlock_acquire(&curr_proc->threads_lock);
     TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
-        com_ipc_signal_send_to_thread_nolock(t, stop_signal, curr_proc);
+        com_ipc_signal_send_to_thread(t, stop_signal, curr_proc);
     }
     kspinlock_release(&curr_proc->threads_lock);
 
     com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
+    kspinlock_acquire(&curr_proc->signal_lock);
 }
 
 void com_sys_proc_terminate(int ecode) {
@@ -406,13 +431,12 @@ void com_sys_proc_terminate(int ecode) {
     com_proc_t *curr_proc = curr_thread->proc;
     KASSERT(NULL != curr_proc);
 
-    com_sys_proc_kill_other_threads_nolock();
+    com_sys_proc_kill_other_threads();
     com_sys_proc_exit(ecode);
     // NOTE: now the process is in an exited state, but this thread is still
     // running. We could be preempted here, so it's important that the scheduler
     // never refuses to run a thread if it's process has exited, because we want
     // to get back here and finish our job
-    com_sys_proc_remove_thread_nolock(curr_proc, curr_thread);
     com_sys_thread_exit(curr_thread);
 }
 

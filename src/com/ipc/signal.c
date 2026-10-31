@@ -37,9 +37,6 @@
 #define SA_CONT     0x20 /* continue if suspended */
 #define SA_CANTMASK 0x40 /* non-maskable, catchable */
 
-#define TKILL_STATUS_MASKED -1
-#define TKILL_STATUS_BAD    -2
-
 // CREDIT: vloxei64/ke
 static const int SignalProperties[] = {
     [SIGHUP]    = SA_KILL,
@@ -73,64 +70,76 @@ static const int SignalProperties[] = {
     [SIGUSR2]   = SA_KILL,
 };
 
-static int send_to_thread(com_thread_t *thread, int sig) {
+// Signal policy lives here. Scheduler callers ask only whether interruption
+// is pending and uninterruptible waits never consult this predicate
+static com_sigmask_t signal_pending(com_thread_t *thread) {
+    const com_sigmask_t kill    = 1UL << (SIGKILL - 1);
+    const com_sigmask_t stop    = 1UL << (SIGSTOP - 1);
+    const com_sigmask_t cont    = 1UL << (SIGCONT - 1);
+    com_sigmask_t       pending = thread->pending_signals &
+                                  (~thread->masked_signals | kill | stop);
+    if (thread->signal_stopped) {
+        pending &= kill;
+        if (COM_IPC_SIGNAL_NONE == thread->proc->stop_signal) {
+            pending |= cont;
+        }
+    }
+    if (__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
+        pending |= kill;
+    }
+    return pending;
+}
+
+void com_ipc_signal_kick(com_thread_t *thread) {
+    com_sys_thread_lock(thread);
+    kspinlock_acquire(&thread->proc->signal_lock);
+    bool pending = 0 != signal_pending(thread);
+    kspinlock_release(&thread->proc->signal_lock);
+    if (pending) {
+        com_sys_sched_interrupt_nolock(thread);
+    }
+    com_sys_thread_unlock(thread);
+}
+
+static void signal_publish(com_thread_t *thread, int sig) {
     COM_IPC_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
-    KDEBUG("sending signal %d to tid=%d", sig, thread->tid);
-
-    if (COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
-        return TKILL_STATUS_MASKED;
+    if (SIGCONT == sig) {
+        thread->proc->stop_signal   = COM_IPC_SIGNAL_NONE;
+        thread->proc->stop_notified = false;
     }
-
-    if (COM_IPC_SIGNAL_NONE != thread->proc->stop_signal && SIGCONT != sig) {
-        return TKILL_STATUS_BAD;
-    }
-
-    kspinlock_acquire(&thread->sched_lock);
-    if (E_COM_THREAD_STATE_WAITING == thread->state) {
-        com_sys_sched_notify_thread_nolock(thread);
-    } else if (E_COM_THREAD_STATE_READY == thread->state) {
-        com_sys_sched_prioritize_nolock(thread);
-    } else if (E_COM_THREAD_STATE_RUNNING == thread->state &&
-               thread->cpu != ARCH_CPU_GET()) {
-        KASSERT(thread->cpu->thread == thread);
-        ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_SIGNAL);
-    }
-
-    kspinlock_release(&thread->sched_lock);
-    return 0;
 }
 
 static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
     (void)sender;
-    // TODO: should I check permission to send the signal?
-
     if (NULL == proc) {
         return ESRCH;
     }
-
+    kspinlock_acquire(&proc->threads_lock);
     kspinlock_acquire(&proc->signal_lock);
     if (proc->exited) {
         kspinlock_release(&proc->signal_lock);
+        kspinlock_release(&proc->threads_lock);
         return ESRCH;
     }
-
-    kspinlock_acquire(&proc->threads_lock);
-    com_thread_t *t, *_;
     bool          found = false;
-    TAILQ_FOREACH_SAFE(t, &proc->threads, proc_threads, _) {
-        if (0 == send_to_thread(t, sig)) {
-            found = true;
+    com_thread_t *thread;
+    TAILQ_FOREACH(thread, &proc->threads, proc_threads) {
+        signal_publish(thread, sig);
+        com_sigmask_t pending  = signal_pending(thread);
+        bool          eligible = COM_IPC_SIGNAL_SIGMASK_ISSET(&pending, sig);
+        kspinlock_release(&proc->signal_lock);
+        com_ipc_signal_kick(thread);
+        kspinlock_acquire(&proc->signal_lock);
+        found |= eligible;
+        if (eligible && SIGCONT != sig) {
             break;
         }
     }
-
     if (!found) {
         COM_IPC_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
     }
-
-    kspinlock_release(&proc->threads_lock);
     kspinlock_release(&proc->signal_lock);
-
+    kspinlock_release(&proc->threads_lock);
     return 0;
 }
 
@@ -176,25 +185,32 @@ int com_ipc_signal_send_to_thread_nolock(struct com_thread *thread,
                                          int                sig,
                                          struct com_proc   *sender) {
     (void)sender;
-    // TODO: (same as for proc) actually check that this can be done (sender
-    // check)
-    send_to_thread(thread, sig);
+    signal_publish(thread, sig);
     return 0;
 }
 
 int com_ipc_signal_send_to_thread(struct com_thread *thread,
                                   int                sig,
                                   com_proc_t        *sender) {
-
     kspinlock_acquire(&thread->proc->signal_lock);
     int ret = com_ipc_signal_send_to_thread_nolock(thread, sig, sender);
     kspinlock_release(&thread->proc->signal_lock);
+    com_ipc_signal_kick(thread);
+    if (SIGCONT == sig) {
+        com_sys_sched_notify_all(&thread->proc->stop_waitlist);
+    }
     return ret;
 }
 
 void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     com_proc_t *proc = thread->proc;
 
+restart:
+    if (__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
+        thread->lock_depth = 0;
+        com_sys_thread_exit(thread);
+        __builtin_unreachable();
+    }
     kspinlock_acquire(&proc->signal_lock);
     int sig = com_ipc_signal_check_nolock();
 
@@ -226,39 +242,22 @@ void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
             KASSERT(false);
             __builtin_unreachable();
         } else if (SA_STOP & SignalProperties[sig]) {
-            // com_sys_proc_stop_nolock will return early if the stop signal has
-            // already been sent to a single thread. This way we don't flood the
-            // system with an infinite number of stop signals
             com_sys_proc_stop_nolock(sig);
-
-            // we clear the stop signal because com_sys_proc_stop_nolock may
-            // have sent it to us again
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
-            kspinlock_release(&proc->signal_lock);
-
-            // TODO: temporary hack
-            int lock_depth     = thread->lock_depth;
-            thread->lock_depth = 0;
-            // com_sys_proc_stop_nolock will ensure that the signal is sent to
-            // all threads, so all will arrive here, and all will wait on the
-            // process's stop_waitlist
-            com_sys_sched_wait_nodrop(&proc->stop_waitlist);
-            thread->lock_depth = lock_depth;
-
-            kspinlock_acquire(&proc->signal_lock);
-            KASSERT(COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->pending_signals,
-                                                 SIGCONT));
-
-            // After execution resumes
-            // Execution gets beck here after the process receives a SIGCONT, as
-            // can be seen in send_to_thread
-            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
-            if (COM_IPC_SIGNAL_NONE != proc->stop_signal) {
-                proc->stop_signal   = COM_IPC_SIGNAL_NONE;
-                proc->stop_notified = false;
-                com_sys_sched_notify_all(&proc->stop_waitlist);
+            thread->signal_stopped = true;
+            while (COM_IPC_SIGNAL_NONE != proc->stop_signal &&
+                   SIGKILL != com_ipc_signal_check_nolock()) {
+                kspinlock_release(&proc->signal_lock);
+                int depth          = thread->lock_depth;
+                thread->lock_depth = 0;
+                com_sys_sched_wait_nodrop(&proc->stop_waitlist);
+                thread->lock_depth = depth;
+                kspinlock_acquire(&proc->signal_lock);
             }
-            goto end;
+            thread->signal_stopped = false;
+            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
+            kspinlock_release(&proc->signal_lock);
+            goto restart;
         } else if (SA_IGNORE & SignalProperties[sig]) {
             goto end;
         }
@@ -346,26 +345,21 @@ int com_ipc_signal_set_mask(com_sigmask_t *mask,
 }
 
 int com_ipc_signal_check_nolock(void) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-
-    int           sig        = -1;
-    com_sigmask_t to_service = curr_thread->pending_signals &
-                               (~curr_thread->masked_signals);
-
-    if (to_service) {
-        sig = __builtin_ffsl(to_service);
+    com_thread_t *thread  = ARCH_CPU_GET_THREAD();
+    com_sigmask_t pending = signal_pending(thread);
+    if (COM_IPC_SIGNAL_SIGMASK_ISSET(&pending, SIGKILL)) {
+        return SIGKILL;
     }
-
-    return sig;
+    return pending ? __builtin_ffsl(pending) : COM_IPC_SIGNAL_NONE;
 }
 
 int com_ipc_signal_check(void) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
-
-    kspinlock_acquire(&curr_proc->signal_lock);
+    com_thread_t *thread = ARCH_CPU_GET_THREAD();
+    if (NULL == thread->proc) {
+        return COM_IPC_SIGNAL_NONE;
+    }
+    kspinlock_acquire(&thread->proc->signal_lock);
     int ret = com_ipc_signal_check_nolock();
-    kspinlock_release(&curr_proc->signal_lock);
-
+    kspinlock_release(&thread->proc->signal_lock);
     return ret;
 }

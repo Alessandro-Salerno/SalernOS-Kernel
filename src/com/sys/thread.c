@@ -34,12 +34,80 @@
 
 static pid_t NextTid = 0;
 
+// CPU locks outlive every thread. Recheck after acquiring a possibly stale
+// lock
+void com_sys_thread_lock(com_thread_t *thread) {
+    for (;;) {
+        kspinlock_t *lock = __atomic_load_n(&thread->sched_lock,
+                                            __ATOMIC_ACQUIRE);
+        kspinlock_acquire(lock);
+        if (lock == __atomic_load_n(&thread->sched_lock, __ATOMIC_ACQUIRE)) {
+            return;
+        }
+        kspinlock_release(lock);
+    }
+}
+
+void com_sys_thread_unlock(com_thread_t *thread) {
+    kspinlock_release(__atomic_load_n(&thread->sched_lock, __ATOMIC_RELAXED));
+}
+
+void com_sys_thread_hold(com_thread_t *thread) {
+    __atomic_add_fetch(&thread->refs, 1, __ATOMIC_RELAXED);
+}
+
+void com_sys_thread_release(com_thread_t *thread) {
+    if (0 == __atomic_sub_fetch(&thread->refs, 1, __ATOMIC_ACQ_REL)) {
+        KASSERT(E_COM_THREAD_STATE_EXITED ==
+                __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
+        KASSERT(NULL == thread->cpu && NULL == thread->waiting_on);
+        // Reclamation can sleep: never free from a switch-in or idle context
+        kspinlock_fake_acquire();
+        SLIST_INSERT_HEAD(&ARCH_CPU_GET()->zombies, thread, zombies);
+        kspinlock_fake_release();
+    }
+}
+
+void com_sys_thread_reap(void) {
+    com_thread_t *curr = ARCH_CPU_GET_THREAD();
+    if (NULL == curr || curr == ARCH_CPU_GET()->idle_thread ||
+        curr->lock_depth) {
+        return;
+    }
+    kspinlock_fake_acquire();
+    struct com_thread_slist zombies = ARCH_CPU_GET()->zombies;
+    SLIST_INIT(&ARCH_CPU_GET()->zombies);
+    kspinlock_fake_release();
+    while (!SLIST_EMPTY(&zombies)) {
+        com_thread_t *list = SLIST_FIRST(&zombies);
+        SLIST_REMOVE_HEAD(&zombies, zombies);
+        if (NULL != list->proc) {
+            COM_SYS_PROC_RELEASE(list->proc);
+        }
+        com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(list->kernel_stack) -
+                        ARCH_PAGE_SIZE);
+        com_sys_callout_destroy(list->timed_wait_callout);
+        com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(list));
+    }
+}
+
 static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     com_thread_t *thread = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     thread->proc         = proc;
     thread->ctx          = ctx;
     thread->lock_depth   = 1;
-    thread->sched_lock   = KSPINLOCK_NEW();
+    thread->last_cpu     = ARCH_CPU_GET();
+    __atomic_store_n(&thread->sched_lock,
+                     &thread->last_cpu->runqueue_lock,
+                     __ATOMIC_RELEASE);
+    // Scheduler ownership lasts until thread_exit_complete, after switch-out
+    thread->refs               = 1;
+    thread->epoch              = 0;
+    thread->wait_interruptible = false;
+    thread->exit_requested     = false;
+    thread->signal_stopped     = false;
+    thread->cpu                = NULL;
+    __atomic_store_n(&thread->state, E_COM_THREAD_STATE_NEW, __ATOMIC_RELAXED);
     thread->kernel_stack = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc()) +
                            ARCH_PAGE_SIZE;
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
@@ -49,6 +117,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->ctime              = ARCH_CPU_GET_TIMESTAMP();
     thread->timed_wait_callout = com_sys_callout_new(NULL, thread, 0);
     thread->timed_wait_callout->permanent = true;
+    thread->timed_wait_callout->snapshot  = true;
 
     thread->real_timer.lock = KSPINLOCK_NEW();
 
@@ -79,21 +148,23 @@ com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
 }
 
 void com_sys_thread_transition(com_thread_t *thread, com_thread_state_t state) {
-    kspinlock_acquire(&thread->sched_lock);
+    com_sys_thread_lock(thread);
     com_sys_thread_transition_nolock(thread, state);
-    kspinlock_release(&thread->sched_lock);
+    com_sys_thread_unlock(thread);
 }
 
 void com_sys_thread_transition_nolock(com_thread_t      *thread,
                                       com_thread_state_t state) {
     // debug checks
-    KASSERT(E_COM_THREAD_STATE_EXITED != thread->state);
+    KASSERT(E_COM_THREAD_STATE_EXITED !=
+            __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
     switch (state) {
         case E_COM_THREAD_STATE_NEW:
             KASSERT(!"cannot transition to new state from any state");
             break;
         case E_COM_THREAD_STATE_READY:
-            KASSERT(E_COM_THREAD_STATE_EXITED != thread->state);
+            KASSERT(E_COM_THREAD_STATE_EXITED !=
+                    __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
             KASSERT(NULL == thread->waiting_on);
             break;
         case E_COM_THREAD_STATE_WAITING:
@@ -110,52 +181,59 @@ void com_sys_thread_transition_nolock(com_thread_t      *thread,
             break;
     }
 
-    thread->state = state;
+    __atomic_store_n(&thread->state, state, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&thread->epoch, 1, __ATOMIC_RELAXED);
 }
 
 void com_sys_thread_exit(com_thread_t *thread) {
-    kspinlock_acquire(&thread->sched_lock);
+    com_sys_thread_lock(thread);
     com_sys_thread_exit_nolock(thread);
-    kspinlock_release(&thread->sched_lock);
 }
 
-// TODO: this is wrong, sending the RESCHEDULE IPI may cause deadlocks if
-// threads are holding mutexes, as they will have no chance of ever releasing
-// them
-void com_sys_thread_exit_nolock(com_thread_t *thread) {
-    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_EXITED);
-    if (NULL != thread->cpu) {
-        if (thread->cpu != ARCH_CPU_GET()) {
-            ARCH_CPU_SEND_IPI(thread->cpu, ARCH_CPU_IPI_RESCHEDULE);
-        } else {
-            com_sys_sched_yield_nolock();
-        }
+void com_sys_thread_request_exit(com_thread_t *thread) {
+    com_sys_thread_lock(thread);
+    __atomic_store_n(&thread->exit_requested, true, __ATOMIC_RELEASE);
+    com_sys_sched_interrupt_nolock(thread);
+    com_sys_thread_unlock(thread);
+}
+
+static void thread_exit_complete(void *arg, uintptr_t value, bool success) {
+    (void)value;
+    KASSERT(success);
+    com_thread_t *thread = arg;
+    if (NULL != thread->proc) {
+        // Acknowledge only after switching away, including the VMM context
+        com_sys_proc_remove_thread(thread->proc, thread);
     }
+    com_sys_thread_release(thread);
+}
+
+void com_sys_thread_exit_nolock(com_thread_t *thread) {
+    KASSERT(thread == ARCH_CPU_GET_THREAD());
+    KASSERT(E_COM_THREAD_STATE_RUNNING ==
+            __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
+    __atomic_store_n(&thread->exit_requested, true, __ATOMIC_RELEASE);
+    com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_EXITED);
+    com_sys_sched_yield_nolock(
+        false,
+        (arch_context_message_t){.callback = thread_exit_complete,
+                                 .arg      = thread});
+    __builtin_unreachable();
 }
 
 void com_sys_thread_destroy(com_thread_t *thread) {
-    KASSERT(E_COM_THREAD_STATE_EXITED == thread->state);
-    if (NULL != thread->proc) {
-        COM_SYS_PROC_RELEASE(thread->proc);
-    }
-    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread->kernel_stack) -
-                    ARCH_PAGE_SIZE);
-    com_sys_callout_destroy(thread->timed_wait_callout);
-    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(thread));
+    KASSERT(E_COM_THREAD_STATE_EXITED ==
+            __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
+    KASSERT(NULL == thread->cpu && NULL == thread->waiting_on);
+    com_sys_thread_release(thread);
 }
 
 void com_sys_thread_ready_nolock(com_thread_t *thread) {
     arch_cpu_t *ready_cpu = thread->last_cpu;
-    thread->waiting_on    = NULL;
+    KASSERT(NULL == thread->waiting_on);
+    KASSERT(thread->sched_lock == &ready_cpu->runqueue_lock);
     com_sys_thread_transition_nolock(thread, E_COM_THREAD_STATE_READY);
-
-    if (NULL == ready_cpu) {
-        ready_cpu = x86_64_smp_get_random();
-    }
-
-    kspinlock_acquire(&ready_cpu->runqueue_lock);
     TAILQ_INSERT_TAIL(&ready_cpu->sched_queue, thread, threads);
-    kspinlock_release(&ready_cpu->runqueue_lock);
 
     KDEBUG("thread with tid=%zu is now runnable on cpu %zu",
            thread->tid,
@@ -165,7 +243,24 @@ void com_sys_thread_ready_nolock(com_thread_t *thread) {
 }
 
 void com_sys_thread_ready(com_thread_t *thread) {
-    kspinlock_acquire(&thread->sched_lock);
+    arch_cpu_t *old  = thread->last_cpu;
+    arch_cpu_t *next = x86_64_smp_get_random();
+    // This entry point publishes a NEW thread, still owned by its creator
+    KASSERT(E_COM_THREAD_STATE_NEW ==
+            __atomic_load_n(&thread->state, __ATOMIC_RELAXED));
+    arch_cpu_t *first  = old->id < next->id ? old : next;
+    arch_cpu_t *second = old->id < next->id ? next : old;
+    kspinlock_acquire(&first->runqueue_lock);
+    if (first != second) {
+        kspinlock_acquire(&second->runqueue_lock);
+    }
+    thread->last_cpu = next;
+    __atomic_store_n(&thread->sched_lock,
+                     &next->runqueue_lock,
+                     __ATOMIC_RELEASE);
     com_sys_thread_ready_nolock(thread);
-    kspinlock_release(&thread->sched_lock);
+    if (first != second) {
+        kspinlock_release(&second->runqueue_lock);
+    }
+    kspinlock_release(&first->runqueue_lock);
 }

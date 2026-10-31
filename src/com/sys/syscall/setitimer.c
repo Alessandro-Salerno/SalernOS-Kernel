@@ -61,9 +61,14 @@ static void itimer_callout(com_callout_t *callout) {
     uintmax_t                  now       = com_sys_callout_get_time();
     kspinlock_acquire(&thread->real_timer.lock);
 
-    if (arg->cancelled) {
+    if (arg->cancelled ||
+        __atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
+        if (thread->real_timer.itimer_arg == arg) {
+            zero_timer_struct(&thread->real_timer);
+        }
         kspinlock_release(&thread->real_timer.lock);
         com_mm_slab_free(arg, sizeof(struct itimer_callout_arg));
+        com_sys_thread_release(thread);
         return;
     }
 
@@ -83,6 +88,10 @@ static void itimer_callout(com_callout_t *callout) {
     }
 
     com_ipc_signal_send_to_thread(thread, SIGALRM, thread->proc);
+    if (0 == new_delay) {
+        com_mm_slab_free(arg, sizeof(struct itimer_callout_arg));
+        com_sys_thread_release(thread);
+    }
 }
 
 // SYSCALL: setitimer(int which, struct itimerval *new_val, struct itimerval
@@ -165,6 +174,7 @@ end:
     kspinlock_release(&curr_thread->real_timer.lock);
 
     if (schedule_callout) {
+        com_sys_thread_hold(curr_thread);
         com_sys_callout_add(itimer_callout, callout_arg, new_delay);
     }
 

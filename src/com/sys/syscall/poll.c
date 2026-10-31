@@ -88,7 +88,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         int fd               = fds[i].fd;
 
         if (fd < 0) {
-            goto invalid_fd;
+            continue;
         }
 
         com_file_t *file = com_sys_proc_get_file_nolock(curr_proc, fd);
@@ -138,7 +138,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             }
         }
 
-        if (0 != count || !do_wait || last_recheck) {
+        if (0 != count || 0 != invalid_count || !do_wait || last_recheck) {
             break;
         }
 

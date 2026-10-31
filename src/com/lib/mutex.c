@@ -30,7 +30,8 @@ static bool try_acquire_internal(kmutex_t *mutex, size_t retries) {
             return true;
         }
 
-        if (mutex->owner->state != E_COM_THREAD_STATE_RUNNING) {
+        if (__atomic_load_n(&mutex->owner->state, __ATOMIC_RELAXED) !=
+            E_COM_THREAD_STATE_RUNNING) {
             kspinlock_release(&mutex->lock);
             return false;
         }
@@ -77,11 +78,11 @@ bool kmutex_acquire_timeout(kmutex_t *mutex, uintmax_t timeout) {
 
     kspinlock_acquire(&mutex->lock);
     while (mutex->locked) {
-        if (ETIMEDOUT == com_sys_sched_wait_spinlock_timeout(&mutex->waiters,
-                                                             &mutex->lock,
-                                                             timeout)) {
+        if (ETIMEDOUT ==
+            kspinlock_wait(&mutex->lock, &mutex->waiters, timeout, false)) {
             KASSERT(0 != timeout);
             kspinlock_release(&mutex->lock);
+            com_sys_sched_notify(&mutex->waiters);
             return false;
         }
     }
@@ -108,4 +109,57 @@ void kmutex_release(kmutex_t *mutex) {
     com_sys_sched_notify(&mutex->waiters);
     kspinlock_release(&mutex->lock);
     // com_sys_sched_yield();
+}
+
+static void mutex_wait_prepare(void *primitive) {
+    kmutex_t *mutex = primitive;
+    kspinlock_acquire(&mutex->lock);
+}
+
+static void mutex_post_switch(void *arg, uintptr_t epoch, bool success) {
+    com_thread_t *thread = arg;
+    if (NULL == thread) {
+        return;
+    }
+    if (success) {
+        com_sys_thread_lock(thread);
+        if (epoch == thread->epoch) {
+            KASSERT(NULL != thread->waiting_on);
+            com_sys_sched_notify_thread_nolock(thread);
+        }
+        com_sys_thread_unlock(thread);
+    }
+    com_sys_thread_release(thread);
+}
+
+static arch_context_message_t mutex_wait_release(void *primitive) {
+    kmutex_t              *mutex   = primitive;
+    arch_context_message_t message = {.callback = mutex_post_switch};
+    KASSERT(mutex->locked && mutex->owner == ARCH_CPU_GET_THREAD());
+    mutex->locked = false;
+    mutex->owner  = NULL;
+    kspinlock_acquire(&mutex->waiters.lock);
+    com_thread_t *thread = TAILQ_FIRST(&mutex->waiters.queue);
+    if (NULL != thread) {
+        com_sys_thread_hold(thread);
+        message.arg   = thread;
+        message.value = __atomic_load_n(&thread->epoch, __ATOMIC_RELAXED);
+    }
+    kspinlock_release(&mutex->waiters.lock);
+    kspinlock_release(&mutex->lock);
+    return message;
+}
+
+static void mutex_wait_acquire(void *primitive) {
+    kmutex_acquire(primitive);
+}
+
+int kmutex_wait(kmutex_t       *mutex,
+                com_waitlist_t *waitlist,
+                uintmax_t       timeout,
+                bool            interruptible) {
+    static const com_sched_wait_ops_t ops = {.prepare = mutex_wait_prepare,
+                                             .release = mutex_wait_release,
+                                             .acquire = mutex_wait_acquire};
+    return com_sys_sched_wait(waitlist, timeout, interruptible, &ops, mutex);
 }

@@ -23,7 +23,7 @@ void krwlock_acquire_read(krwlock_t *rwlock) {
     kspinlock_acquire(&rwlock->lock);
 
     while (rwlock->writer_active || rwlock->waiting_writers > 0) {
-        com_sys_sched_wait(&rwlock->readers_waitlist, &rwlock->lock);
+        kspinlock_wait(&rwlock->lock, &rwlock->readers_waitlist, 0, false);
     }
 
     rwlock->active_readers++;
@@ -46,7 +46,7 @@ void krwlock_acquire_write(krwlock_t *rwlock) {
     rwlock->waiting_writers++;
 
     while (rwlock->writer_active || rwlock->active_readers > 0) {
-        com_sys_sched_wait(&rwlock->writers_waitlist, &rwlock->lock);
+        kspinlock_wait(&rwlock->lock, &rwlock->writers_waitlist, 0, false);
     }
 
     KASSERT(!rwlock->writer_active);

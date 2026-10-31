@@ -18,6 +18,8 @@
 
 #include <arch/context.h>
 #include <kernel/com/ipc/signal.h>
+#include <kernel/com/sys/sched.h>
+#include <kernel/platform/context.h>
 #include <kernel/platform/x86-64/context.h>
 #include <vendor/printf.h>
 
@@ -132,4 +134,22 @@ void arch_context_restore_sigframe(com_sigframe_t **sframeptr,
     ctx->rip    = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP];
     ctx->rflags = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL];
     *sframeptr  = sframe;
+}
+
+void x86_64_ctx_prepare(arch_context_t *ctx, arch_context_t *frame) {
+    uintptr_t base = ((uintptr_t)frame - sizeof(arch_context_message_t) -
+                      sizeof(frame)) &
+                     ~(uintptr_t)15;
+    *(arch_context_t **)(base + sizeof(arch_context_message_t)) = frame;
+    uintptr_t *stack                                            = (void *)base;
+    *--stack = (uintptr_t)arch_context_fork_trampoline;
+    *--stack = base;
+    ctx->rsp = (uintptr_t)stack;
+}
+
+void x86_64_ctx_first_entry(arch_context_message_t *message,
+                            arch_context_t         *frame) {
+    com_sys_sched_switch_finish(*message);
+    arch_context_trampoline(frame);
+    __builtin_unreachable();
 }

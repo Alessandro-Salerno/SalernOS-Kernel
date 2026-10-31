@@ -21,29 +21,40 @@
 #include <arch/context.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/mutex.h>
 #include <lib/spinlock.h>
 
-void com_sys_sched_yield_nolock(void);
+// On EINTR authority remains held and on success it is released on switch-in
+int  com_sys_sched_yield_nolock(bool                   interruptible,
+                                arch_context_message_t message);
+void com_sys_sched_switch_finish(arch_context_message_t message);
+
 void com_sys_sched_yield(void);
 void com_sys_sched_isr(com_isr_t *isr, arch_context_t *ctx);
 
-void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist);
-void com_sys_sched_wait(com_waitlist_t *waitlist, kspinlock_t *cond);
-void com_sys_sched_wait_mutex(com_waitlist_t *waitlist, kmutex_t *mutex);
+// prepare precedes authority and release follows wait publication under
+// authority acquire runs outside authority and restores the primitive on every
+// return The message callback receives success=true on switch-in, or false
+// after failed-yield rollback and authority release, before reacquiring the
+// primitive
+typedef struct com_sched_wait_ops {
+    void (*prepare)(void *primitive);
+    arch_context_message_t (*release)(void *primitive);
+    void (*acquire)(void *primitive);
+} com_sched_wait_ops_t;
 
-int com_sys_sched_wait_nodrop_timeout(com_waitlist_t *waitlist,
-                                      uintmax_t       timeout);
-int com_sys_sched_wait_spinlock_timeout(com_waitlist_t *waitlist,
-                                        kspinlock_t    *lock,
-                                        uintmax_t       timeout);
-int com_sys_sched_wait_mutex_timeout(com_waitlist_t *waitlist,
-                                     kmutex_t       *mutex,
-                                     uintmax_t       timeout);
+int  com_sys_sched_wait(com_waitlist_t             *waitlist,
+                        uintmax_t                   timeout,
+                        bool                        interruptible,
+                        const com_sched_wait_ops_t *ops,
+                        void                       *primitive);
+void com_sys_sched_wait_nodrop(com_waitlist_t *waitlist);
+int  com_sys_sched_wait_nodrop_timeout(com_waitlist_t *waitlist,
+                                       uintmax_t       timeout);
 
 void com_sys_sched_notify(com_waitlist_t *waitlist);
 void com_sys_sched_notify_all(com_waitlist_t *waitlist);
 void com_sys_sched_notify_n(com_waitlist_t *waitlist, size_t num_waiters);
+void com_sys_sched_interrupt_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread_nolock(com_thread_t *thread);
 void com_sys_sched_notify_thread(com_thread_t *thread);
 

@@ -113,7 +113,7 @@ void com_io_term_putsn(com_term_t *term, const char *s, size_t n) {
 
     if (term->buffering.enabled) {
         while (term->buffering.index + n >= COM_IO_TERM_BUFSZ) {
-            ksync_wait(&term->lock, &term->buffering.waiters);
+            ksync_wait_uninterruptible(&term->lock, &term->buffering.waiters);
         }
         kmemcpy(&term->buffering.buffer[term->buffering.index], s, n);
         term->buffering.index += n;

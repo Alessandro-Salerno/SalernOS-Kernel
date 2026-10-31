@@ -29,6 +29,7 @@
 #include <kernel/opt/pci.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/mmu.h>
+#include <lib/mutex.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <uacpi/acpi.h>
