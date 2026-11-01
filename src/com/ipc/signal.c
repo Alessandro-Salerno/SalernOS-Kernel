@@ -77,7 +77,7 @@ static com_sigmask_t signal_pending(com_thread_t *thread) {
     const com_sigmask_t stop    = 1UL << (SIGSTOP - 1);
     const com_sigmask_t cont    = 1UL << (SIGCONT - 1);
     com_sigmask_t       pending = thread->pending_signals &
-                                  (~thread->masked_signals | kill | stop);
+                            (~thread->masked_signals | kill | stop);
     if (thread->signal_stopped) {
         pending &= kill;
         if (COM_IPC_SIGNAL_NONE == thread->proc->stop_signal) {
@@ -226,13 +226,16 @@ restart:
 
     if (NULL == sigaction || SIG_DFL == sigaction->sa_action) {
         if (SA_KILL & SignalProperties[sig]) {
-            KDEBUG("killing pid=%d because it received a deadly signal %d",
-                   proc->pid,
-                   sig);
             proc->stop_signal = sig;
             kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
+            KDEBUG("fatal signal %d, pid=%d (%s), rip=%p, rsp=%p",
+                   sig,
+                   proc->pid,
+                   proc->executable_path,
+                   (void *)ctx->rip,
+                   (void *)ctx->rsp);
             com_sys_proc_terminate(0);
 
             // This should never be reached

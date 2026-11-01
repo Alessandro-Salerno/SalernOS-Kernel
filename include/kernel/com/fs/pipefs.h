@@ -20,18 +20,18 @@
 
 #include <kernel/com/fs/vfs.h>
 
-int com_fs_pipefs_read(void        *buf,
-                       size_t       buflen,
-                       size_t      *bytes_read,
-                       com_vnode_t *node,
-                       uintmax_t    off,
-                       uintmax_t    flags);
-int com_fs_pipefs_write(size_t      *bytes_written,
+int com_fs_pipefs_readv(kioviter_t  *ioviter,
+                        size_t      *bytes_read,
                         com_vnode_t *node,
-                        void        *buf,
-                        size_t       buflen,
                         uintmax_t    off,
                         uintmax_t    flags);
+int com_fs_pipefs_writev(size_t      *bytes_written,
+                         com_vnode_t *node,
+                         kioviter_t  *ioviter,
+                         uintmax_t    off,
+                         uintmax_t    flags);
+int com_fs_pipefs_poll(short *revents, com_vnode_t *node, short events);
+int com_fs_pipefs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_pipefs_close(com_vnode_t *vnode);
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);
