@@ -34,23 +34,23 @@ typedef struct {
     char      interpreter_path[64];
 } com_elf_data_t;
 
-int       com_sys_elf64_load(com_elf_data_t    *out,
-                             const char        *exec_path,
-                             size_t             exec_path_len,
-                             com_vnode_t       *root,
-                             com_vnode_t       *cwd,
-                             uintptr_t          virt_off,
-                             com_vmm_context_t *vmm_context);
-int       com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
-                                      com_vmm_context_t *vmm_ctx,
-                                      com_elf_data_t     elf_data,
-                                      size_t             stack_end_virt,
-                                      size_t             stack_len,
-                                      char *const        argv[],
-                                      char *const        envp[]);
-int       com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
-                                     const char         *path,
-                                     char *const         argv[],
-                                     char *const         env[],
-                                     com_proc_t         *proc,
-                                     arch_context_t     *ctx);
+int com_sys_elf64_load(com_elf_data_t    *out,
+                       const char        *exec_path,
+                       size_t             exec_path_len,
+                       com_vnode_t       *root,
+                       com_vnode_t       *cwd,
+                       uintptr_t          virt_off,
+                       com_vmm_context_t *vmm_context);
+int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
+                                com_vmm_context_t *vmm_ctx,
+                                com_elf_data_t     elf_data,
+                                size_t             stack_end_virt,
+                                size_t             stack_len,
+                                char *const        argv[],
+                                char *const        envp[]);
+int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
+                               const char         *path,
+                               char *const         argv[],
+                               char *const         env[],
+                               com_proc_t         *proc,
+                               arch_context_t     *ctx);

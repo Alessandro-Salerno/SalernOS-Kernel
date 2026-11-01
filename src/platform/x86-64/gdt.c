@@ -54,6 +54,9 @@ void x86_64_gdt_init(void) {
     KDEBUG("applying changes to gdt template");
     uintptr_t ist_addr = (uintptr_t)&ARCH_CPU_GET()->ist;
 
+    // No I/O permission bitmap, user code cannot access any port
+    ARCH_CPU_GET()->ist.iopb = sizeof(x86_64_ist_t);
+
     // Add IST to GDT
     cur_cpu->gdt[5] |= ((ist_addr & 0xff000000) << 32) |
                        ((ist_addr & 0xff0000) << 16) |

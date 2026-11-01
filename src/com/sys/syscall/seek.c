@@ -45,7 +45,13 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    // TODO: handle errors (no seek on pipes etc, no seek out of bounds)
+    int seekable = com_fs_vfs_seekable(file->vnode);
+    if (0 != seekable) {
+        COM_FS_FILE_RELEASE(file);
+        return COM_SYS_SYSCALL_ERR(seekable);
+    }
+
+    // TODO: handle errors (no seek out of bounds)
 
     kspinlock_acquire(&file->off_lock);
     off_t new_off = file->off;

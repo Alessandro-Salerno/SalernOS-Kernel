@@ -38,6 +38,7 @@ static com_vnode_ops_t DevfsNodeOps = (com_vnode_ops_t){
     .mkdir     = com_fs_devfs_mkdir,
     .lookup    = com_fs_tmpfs_lookup,
     .isatty    = com_fs_devfs_isatty,
+    .seekable  = com_fs_devfs_seekable,
     .stat      = com_fs_devfs_stat,
     .poll_head = com_fs_devfs_poll_head,
     .poll      = com_fs_devfs_poll,
@@ -161,6 +162,16 @@ int com_fs_devfs_isatty(com_vnode_t *node) {
     }
 
     return dev->devops->isatty(dev->devdata);
+}
+
+int com_fs_devfs_seekable(com_vnode_t *node) {
+    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+
+    if (NULL == dev->devops->seekable) {
+        return 0;
+    }
+
+    return dev->devops->seekable(dev->devdata);
 }
 
 int com_fs_devfs_stat(struct stat *out, com_vnode_t *node) {

@@ -38,7 +38,20 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
     com_proc_t *proc = curr_proc;
-    KASSERT(NULL != proc);
+    if (0 != pid && pid != curr_proc->pid) {
+        proc = com_sys_proc_get_by_pid(pid);
+        if (NULL == proc) {
+            return COM_SYS_SYSCALL_ERR(ESRCH);
+        }
+        if (proc->parent_pid != curr_proc->pid) {
+            COM_SYS_PROC_RELEASE(proc);
+            return COM_SYS_SYSCALL_ERR(ESRCH);
+        }
+    }
+
+    kspinlock_acquire(&curr_proc->pg_lock);
+    com_proc_session_t *session = curr_proc->proc_group->session;
+    kspinlock_release(&curr_proc->pg_lock);
     kspinlock_acquire(&proc->pg_lock);
     KASSERT(NULL != proc->proc_group);
 
@@ -46,31 +59,19 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
         pgid = proc->pid;
     }
 
-    if (pgid == proc->proc_group->pgid) {
-        ret.value = 0;
+    if (proc != curr_proc && proc->did_execve) {
+        ret.err = EACCES;
         goto end;
     }
 
     KASSERT(NULL != proc->proc_group->session);
-    if (proc->pid == proc->proc_group->session->sid) {
+    if (proc->proc_group->session != session || proc->pid == session->sid) {
         ret.err = EPERM;
         goto end;
     }
 
-    if (0 != pid) {
-        kspinlock_release(&proc->pg_lock);
-        proc = com_sys_proc_get_by_pid(pid);
-        kspinlock_acquire(&proc->pg_lock);
-
-        if (NULL == proc || (proc->pid != curr_proc->pid &&
-                             proc->parent_pid != curr_proc->pid)) {
-            ret.err = ESRCH;
-            goto end;
-        }
-    }
-
-    if (proc->did_execve) {
-        ret.err = EACCES;
+    if (pgid == proc->proc_group->pgid) {
+        ret.value = 0;
         goto end;
     }
 
@@ -80,7 +81,14 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     // setsid, which first need to acquire the locks above (proc->pg_lock)
     com_proc_group_t *group = com_sys_proc_get_group_by_pgid(pgid);
     if (NULL == group) {
+        if (pgid != proc->pid) {
+            ret.err = EPERM;
+            goto end;
+        }
         group = com_sys_proc_new_group(proc, NULL);
+    } else if (group->session != session) {
+        ret.err = EPERM;
+        goto end;
     }
     com_sys_proc_join_group_nolock(proc, group);
 

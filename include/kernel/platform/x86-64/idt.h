@@ -18,9 +18,12 @@
 
 #pragma once
 
+#include <kernel/com/sys/interrupt.h>
 #include <stdint.h>
 
-void x86_64_idt_set_user_invocable(uintmax_t vec);
-void x86_64_idt_init();
-void x86_64_idt_reload();
-void x86_64_idt_stub(void);
+__attribute__((noreturn)) void x86_64_idt_exception_isr(com_isr_t      *isr,
+                                                        arch_context_t *ctx);
+void                           x86_64_idt_set_user_invocable(uintmax_t vec);
+void                           x86_64_idt_init();
+void                           x86_64_idt_reload();
+void                           x86_64_idt_stub(void);

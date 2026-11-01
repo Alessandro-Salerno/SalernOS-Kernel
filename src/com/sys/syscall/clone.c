@@ -43,6 +43,10 @@ COM_SYS_SYSCALL(com_sys_syscall_clone) {
     ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
     ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
 
+    kspinlock_acquire(&curr_proc->signal_lock);
+    new_thread->masked_signals = curr_thread->masked_signals;
+    kspinlock_release(&curr_proc->signal_lock);
+
     com_sys_thread_ready(new_thread);
 
     return COM_SYS_SYSCALL_OK(new_thread->tid);

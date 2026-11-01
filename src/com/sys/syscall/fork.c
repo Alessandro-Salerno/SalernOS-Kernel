@@ -75,6 +75,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
 
     kspinlock_acquire(&curr_proc->signal_lock);
+    new_thread->masked_signals = curr_thread->masked_signals;
     for (size_t i = 0; i < NSIG; i++) {
         if (NULL != curr_proc->sigaction[i]) {
             com_sigaction_t *sa    = com_mm_slab_alloc(sizeof(com_sigaction_t));

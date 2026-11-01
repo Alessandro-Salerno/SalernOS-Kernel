@@ -298,6 +298,11 @@ static int tty_isatty(void *devdata) {
     return 0;
 }
 
+static int tty_seekable(void *devdata) {
+    (void)devdata;
+    return ESPIPE;
+}
+
 static int tty_close(void *devdata) {
     (void)devdata;
     KASSERT(false);
@@ -345,6 +350,7 @@ static com_dev_ops_t TextTtyDevOps = {.read      = tty_read,
                                       .write     = tty_write,
                                       .ioctl     = tty_ioctl,
                                       .isatty    = tty_isatty,
+                                      .seekable  = tty_seekable,
                                       .close     = tty_close,
                                       .stat      = tty_stat,
                                       .poll_head = tty_poll_head,

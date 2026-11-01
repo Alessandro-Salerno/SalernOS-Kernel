@@ -59,6 +59,12 @@ typedef struct com_proc_group {
     TAILQ_ENTRY(com_proc_group) proc_groups;
 } com_proc_group_t;
 
+typedef enum com_proc_state {
+    E_COM_PROC_STATE_RUNNING = 0,
+    E_COM_PROC_STATE_STOPPED,
+    E_COM_PROC_STATE_EXITED
+} com_proc_state_t;
+
 typedef struct com_proc {
     pid_t              pid;
     pid_t              parent_pid;
@@ -80,13 +86,13 @@ typedef struct com_proc {
     bool did_execve;
 
     // Termination & signals
-    // COM_IPC_SIGNAL_NONE if not stopped, signal number otherwise
+    // state_cause_sig is the signal that caused the current state (if any)
     KCACHE_FRIENDLY kspinlock_t signal_lock;
     com_sigmask_t               pending_signals;
-    bool                        exited;
-    int                         stop_signal;
-    bool                        stop_notified;
-    int                         exit_status;
+    com_proc_state_t            state;
+    int                         state_cause_sig;
+    bool                        state_notified; // reported to the parent
+    int                         exit_code;
     struct com_waitlist         waitpid_waitlist;
     struct com_sigaction       *sigaction[NSIG];
     struct com_waitlist         stop_waitlist;
@@ -143,9 +149,12 @@ void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
 // These work exclusively on the running process
 void com_sys_proc_kill_other_threads(void);
 void com_sys_proc_kill_other_threads_nolock(void);
-void com_sys_proc_exit(int status);
+void com_sys_proc_transition_nolock(com_proc_t      *proc,
+                                    com_proc_state_t state,
+                                    int              cause_sig);
+void com_sys_proc_exit(int exit_code, int cause_sig);
 void com_sys_proc_stop_nolock(int stop_signal);
-void com_sys_proc_terminate(int ecode);
+void com_sys_proc_terminate(int exit_code, int cause_sig);
 
 void com_sys_proc_hide(com_proc_t *proc);
 

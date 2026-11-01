@@ -54,7 +54,8 @@ static com_vnode_ops_t PipefsNodeOps = {.readv     = com_fs_pipefs_readv,
                                         .writev    = com_fs_pipefs_writev,
                                         .poll      = com_fs_pipefs_poll,
                                         .poll_head = com_fs_pipefs_poll_head,
-                                        .close     = com_fs_pipefs_close};
+                                        .close     = com_fs_pipefs_close,
+                                        .seekable  = com_fs_pipefs_seekable};
 
 static void pipefs_poll_notify(struct pipefs_node *pipe) {
     kspinlock_acquire(&pipe->pollhead.lock);
@@ -222,6 +223,11 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
     }
     com_mm_slab_free(vnode, sizeof(com_vnode_t));
     return 0;
+}
+
+int com_fs_pipefs_seekable(com_vnode_t *node) {
+    (void)node;
+    return ESPIPE;
 }
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {

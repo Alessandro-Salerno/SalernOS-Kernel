@@ -134,6 +134,9 @@ void arch_context_restore_sigframe(com_sigframe_t **sframeptr,
     ctx->rip    = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP];
     ctx->rflags = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL];
     *sframeptr  = sframe;
+
+    // Do not let user code set privileged flags (e.g., IOPL)
+    ctx->rflags = (ctx->rflags & 0x40DD5) | 0x202;
 }
 
 void x86_64_ctx_prepare(arch_context_t *ctx, arch_context_t *frame) {

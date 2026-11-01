@@ -201,6 +201,11 @@ static int ptm_isatty(void *devdata) {
     return 0;
 }
 
+static int ptm_seekable(void *devdata) {
+    (void)devdata;
+    return ESPIPE;
+}
+
 static int ptm_close(void *devdata) {
     com_pty_t *pty = devdata;
     atomic_store(&pty->master_vn, NULL);
@@ -236,6 +241,7 @@ static com_dev_ops_t PtmDevOps = {.read      = ptm_read,
                                   .write     = ptm_write,
                                   .ioctl     = ptm_ioctl,
                                   .isatty    = ptm_isatty,
+                                  .seekable  = ptm_seekable,
                                   .poll_head = ptm_poll_head,
                                   .poll      = ptm_poll,
                                   .close     = ptm_close};
@@ -293,6 +299,11 @@ static int pts_ioctl(void *devdata, uintmax_t op, void *buf) {
 static int pts_isatty(void *devdata) {
     (void)devdata;
     return 0;
+}
+
+static int pts_seekable(void *devdata) {
+    (void)devdata;
+    return ESPIPE;
 }
 
 static int pts_close(void *devdata) {
@@ -369,6 +380,7 @@ static com_dev_ops_t PtsDevOps = {.read      = pts_read,
                                   .write     = pts_write,
                                   .ioctl     = pts_ioctl,
                                   .isatty    = pts_isatty,
+                                  .seekable  = pts_seekable,
                                   .stat      = pts_stat,
                                   .poll_head = pts_poll_head,
                                   .poll      = pts_poll,

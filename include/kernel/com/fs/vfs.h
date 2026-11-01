@@ -130,6 +130,7 @@ typedef struct com_vnode_ops {
                    uintmax_t    off);
     int (*ioctl)(com_vnode_t *node, uintmax_t op, void *buf);
     int (*isatty)(com_vnode_t *node);
+    int (*seekable)(com_vnode_t *node);
     int (*stat)(struct stat *out, com_vnode_t *node);
     int (*truncate)(com_vnode_t *node, size_t size);
     int (*vnctl)(com_vnode_t *node, uintmax_t op, void *buf);
@@ -228,6 +229,7 @@ int com_fs_vfs_readdir(void        *buf,
                        uintmax_t    off);
 int com_fs_vfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_vfs_isatty(com_vnode_t *node);
+int com_fs_vfs_seekable(com_vnode_t *node);
 int com_fs_vfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_vfs_truncate(com_vnode_t *node, size_t size);
 int com_fs_vfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);

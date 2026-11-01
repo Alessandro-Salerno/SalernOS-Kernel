@@ -20,6 +20,7 @@
 #include <arch/info.h>
 #include <kernel/com/init.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -41,11 +42,35 @@
 #include <kernel/platform/x86-64/tsc.h>
 #include <lib/str.h>
 #include <lib/util.h>
+#include <signal.h>
 #include <vendor/limine.h>
 #include <vendor/printf.h>
 #include <vendor/tailq.h>
 
 static arch_cpu_t BspCpu = {0};
+
+static const int ExceptionSignals[20] = {[0]  = SIGFPE,
+                                         [1]  = SIGTRAP,
+                                         [3]  = SIGTRAP,
+                                         [4]  = SIGSEGV,
+                                         [5]  = SIGSEGV,
+                                         [6]  = SIGILL,
+                                         [11] = SIGBUS,
+                                         [12] = SIGBUS,
+                                         [13] = SIGSEGV,
+                                         [16] = SIGFPE,
+                                         [17] = SIGBUS,
+                                         [19] = SIGFPE};
+
+static void user_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
+    if (!ARCH_CONTEXT_ISUSER(ctx)) {
+        x86_64_idt_exception_isr(isr, ctx);
+    }
+
+    com_ipc_signal_send_to_thread(ARCH_CPU_GET_THREAD(),
+                                  ExceptionSignals[isr->vec],
+                                  NULL);
+}
 
 static void cpu_panic(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
@@ -82,6 +107,11 @@ void x86_64_entry(void) {
     // PHASE 1: memory, interrupts, and processors
     com_init_memory();
     x86_64_idt_stub();
+    for (uintmax_t i = 0; i < 20; i++) {
+        if (0 != ExceptionSignals[i]) {
+            com_sys_interrupt_register(i, user_exception_isr, NULL);
+        }
+    }
     com_sys_interrupt_register(X86_64_LAPIC_TIMER_INTERRUPT,
                                com_sys_callout_isr,
                                x86_64_lapic_eoi);

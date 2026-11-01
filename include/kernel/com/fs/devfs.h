@@ -35,6 +35,7 @@ typedef struct com_dev_ops {
                  uintmax_t flags);
     int (*ioctl)(void *devdata, uintmax_t op, void *buf);
     int (*isatty)(void *devdata);
+    int (*seekable)(void *devdata);
     int (*close)(void *devdata);
     int (*stat)(struct stat *out, void *devdata);
     int (*poll_head)(struct com_poll_head **out, void *devdata);
@@ -79,6 +80,7 @@ int com_fs_devfs_write(size_t      *bytes_written,
                        uintmax_t    flags);
 int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_devfs_isatty(com_vnode_t *node);
+int com_fs_devfs_seekable(com_vnode_t *node);
 int com_fs_devfs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events);

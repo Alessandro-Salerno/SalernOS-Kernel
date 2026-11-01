@@ -45,7 +45,7 @@ COM_SYS_SYSCALL(com_sys_syscall_exit_thread) {
     if (last) {
         // Other exiting threads may still be switching out. Join their
         // acknowledgements before releasing shared process resources
-        com_sys_proc_terminate(0);
+        com_sys_proc_terminate(0, COM_IPC_SIGNAL_NONE);
     }
 
     com_sys_thread_exit(curr_thread);

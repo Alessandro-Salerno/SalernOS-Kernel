@@ -467,6 +467,14 @@ int com_fs_vfs_isatty(com_vnode_t *node) {
     return node->ops->isatty(node);
 }
 
+int com_fs_vfs_seekable(com_vnode_t *node) {
+    if (NULL == node->ops->seekable) {
+        return 0;
+    }
+
+    return node->ops->seekable(node);
+}
+
 int com_fs_vfs_stat(struct stat *out, com_vnode_t *node) {
     if (NULL == node->ops->stat) {
         return ENOSYS;

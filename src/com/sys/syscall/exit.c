@@ -34,6 +34,6 @@ COM_SYS_SYSCALL(com_sys_syscall_exit) {
 
     int exit_status = COM_SYS_SYSCALL_ARG(int, 1);
 
-    com_sys_proc_terminate(exit_status);
+    com_sys_proc_terminate(exit_status, COM_IPC_SIGNAL_NONE);
     __builtin_unreachable();
 }

@@ -34,13 +34,15 @@ COM_SYS_SYSCALL(com_sys_syscall_kill) {
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t       *curr_proc   = curr_thread->proc;
 
-    if (0 == pid) {
-        pid = curr_proc->proc_group->pgid;
-    }
-
     if (-1 == pid) {
         // TODO: implement signal to all
         return COM_SYS_SYSCALL_ERR(ENOSYS);
+    }
+
+    if (0 == pid) {
+        kspinlock_acquire(&curr_proc->pg_lock);
+        pid = -curr_proc->proc_group->pgid;
+        kspinlock_release(&curr_proc->pg_lock);
     }
 
     if (0 == sig) {

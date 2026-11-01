@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <errno.h>
 #include <kernel/com/fs/sockfs.h>
 
 static com_vnode_ops_t SockfsNodeOps = {.readv     = com_fs_sockfs_readv,
@@ -23,7 +24,8 @@ static com_vnode_ops_t SockfsNodeOps = {.readv     = com_fs_sockfs_readv,
                                         .ioctl     = com_fs_sockfs_ioctl,
                                         .poll_head = com_fs_sockfs_poll_head,
                                         .poll      = com_fs_sockfs_poll,
-                                        .close     = com_fs_sockfs_close};
+                                        .close     = com_fs_sockfs_close,
+                                        .seekable  = com_fs_sockfs_seekable};
 
 int com_fs_sockfs_readv(kioviter_t  *ioviter,
                         size_t      *bytes_read,
@@ -84,6 +86,11 @@ int com_fs_sockfs_close(com_vnode_t *node) {
         com_mm_slab_free(sockfs_vn, sizeof(com_socket_vnode_t));
     }
     return ret;
+}
+
+int com_fs_sockfs_seekable(com_vnode_t *node) {
+    (void)node;
+    return ESPIPE;
 }
 
 // OTHER FUNCTIONS

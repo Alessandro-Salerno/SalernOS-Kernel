@@ -41,6 +41,7 @@ int com_fs_sockfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 int com_fs_sockfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events);
 int com_fs_sockfs_close(com_vnode_t *node);
+int com_fs_sockfs_seekable(com_vnode_t *node);
 
 // OTHER FUNCTIONS
 

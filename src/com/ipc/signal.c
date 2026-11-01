@@ -77,10 +77,10 @@ static com_sigmask_t signal_pending(com_thread_t *thread) {
     const com_sigmask_t stop    = 1UL << (SIGSTOP - 1);
     const com_sigmask_t cont    = 1UL << (SIGCONT - 1);
     com_sigmask_t       pending = thread->pending_signals &
-                            (~thread->masked_signals | kill | stop);
+                                  (~thread->masked_signals | kill | stop);
     if (thread->signal_stopped) {
         pending &= kill;
-        if (COM_IPC_SIGNAL_NONE == thread->proc->stop_signal) {
+        if (E_COM_PROC_STATE_STOPPED != thread->proc->state) {
             pending |= cont;
         }
     }
@@ -103,9 +103,10 @@ void com_ipc_signal_kick(com_thread_t *thread) {
 
 static void signal_publish(com_thread_t *thread, int sig) {
     COM_IPC_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
-    if (SIGCONT == sig) {
-        thread->proc->stop_signal   = COM_IPC_SIGNAL_NONE;
-        thread->proc->stop_notified = false;
+    if (SIGCONT == sig && E_COM_PROC_STATE_STOPPED == thread->proc->state) {
+        com_sys_proc_transition_nolock(thread->proc,
+                                       E_COM_PROC_STATE_RUNNING,
+                                       SIGCONT);
     }
 }
 
@@ -116,7 +117,7 @@ static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
     }
     kspinlock_acquire(&proc->threads_lock);
     kspinlock_acquire(&proc->signal_lock);
-    if (proc->exited) {
+    if (E_COM_PROC_STATE_EXITED == proc->state) {
         kspinlock_release(&proc->signal_lock);
         kspinlock_release(&proc->threads_lock);
         return ESRCH;
@@ -226,7 +227,6 @@ restart:
 
     if (NULL == sigaction || SIG_DFL == sigaction->sa_action) {
         if (SA_KILL & SignalProperties[sig]) {
-            proc->stop_signal = sig;
             kspinlock_release(&proc->signal_lock);
             thread->lock_depth = 0;
 
@@ -236,7 +236,7 @@ restart:
                    proc->executable_path,
                    (void *)ctx->rip,
                    (void *)ctx->rsp);
-            com_sys_proc_terminate(0);
+            com_sys_proc_terminate(0, sig);
 
             // This should never be reached
             KDEBUG("tid=%d in pid=%d is somehow still alive",
@@ -248,7 +248,7 @@ restart:
             com_sys_proc_stop_nolock(sig);
             COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
             thread->signal_stopped = true;
-            while (COM_IPC_SIGNAL_NONE != proc->stop_signal &&
+            while (E_COM_PROC_STATE_STOPPED == proc->state &&
                    SIGKILL != com_ipc_signal_check_nolock()) {
                 kspinlock_release(&proc->signal_lock);
                 int depth          = thread->lock_depth;
@@ -284,10 +284,6 @@ restart:
         COM_IPC_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
     }
 
-    if (SA_RESETHAND & sigaction->sa_flags) {
-        sigaction->sa_action = SIG_DFL;
-    }
-
     KDEBUG("pid=%d has restorer at %p for signal %d",
            proc->pid,
            sigaction->sa_restorer,
@@ -298,6 +294,9 @@ restart:
                                    stack,
                                    sigaction->sa_action,
                                    sig);
+    if (SA_RESETHAND & sigaction->sa_flags) {
+        sigaction->sa_action = SIG_DFL;
+    }
 
 end:
     kspinlock_release(&proc->signal_lock);

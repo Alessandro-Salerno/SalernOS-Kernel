@@ -118,7 +118,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     kspinlock_release(&curr_proc->fd_lock);
 
     int  count        = 0;
-    int  sig          = COM_IPC_SIGNAL_NONE;
+    bool interrupted  = false;
     bool last_recheck = false;
 
     while (0 == count) {
@@ -172,13 +172,13 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     skip_wait:
 
         if (0 != wait_ret) {
+            interrupted  = EINTR == wait_ret;
             last_recheck = true;
             continue;
         }
 
-        sig = com_ipc_signal_check();
-
-        if (COM_IPC_SIGNAL_NONE != sig) {
+        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+            interrupted  = true;
             last_recheck = true;
             continue;
         }
@@ -203,7 +203,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(polleds), polleds_pages);
     }
 
-    if (COM_IPC_SIGNAL_NONE != sig && 0 == count + invalid_count) {
+    if (interrupted && 0 == count + invalid_count) {
         return COM_SYS_SYSCALL_ERR(EINTR);
     }
 

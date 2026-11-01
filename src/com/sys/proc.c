@@ -63,14 +63,14 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
                              pid_t              parent_pid,
                              com_vnode_t       *root,
                              com_vnode_t       *cwd) {
-    com_proc_t *proc    = com_mm_slab_alloc(sizeof(com_proc_t));
-    proc->vmm_context   = vmm_context;
-    proc->exited        = false;
-    proc->stop_signal   = COM_IPC_SIGNAL_NONE;
-    proc->stop_notified = false;
-    proc->exit_status   = 0;
-    proc->num_children  = 0;
-    proc->parent_pid    = parent_pid;
+    com_proc_t *proc      = com_mm_slab_alloc(sizeof(com_proc_t));
+    proc->vmm_context     = vmm_context;
+    proc->state           = E_COM_PROC_STATE_RUNNING;
+    proc->state_cause_sig = COM_IPC_SIGNAL_NONE;
+    proc->state_notified  = false;
+    proc->exit_code       = 0;
+    proc->num_children    = 0;
+    proc->parent_pid      = parent_pid;
     COM_FS_VFS_VNODE_HOLD(root);
     COM_FS_VFS_VNODE_HOLD(cwd);
     proc->root                = root;
@@ -116,7 +116,7 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 
 void com_sys_proc_destroy(com_proc_t *proc) {
     KASSERT(0 == proc->num_ref);
-    KASSERT(proc->exited);
+    KASSERT(E_COM_PROC_STATE_EXITED == proc->state);
 
     com_vmm_context_t *proc_vmm_ctx = proc->vmm_context;
     com_mm_slab_free(proc, sizeof(com_proc_t));
@@ -284,18 +284,29 @@ com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc) {
 
     com_proc_t *ret = NULL;
     for (int i = 0; i < NextPid + 1; i++) {
-        com_proc_t *candidate;
+        com_proc_t *candidate = NULL;
         kradixtree_get_nolock((void *)&candidate, &Processes, i);
 
-        if (NULL != candidate && candidate->parent_pid == proc->pid &&
-            !candidate->exited) {
-            COM_SYS_PROC_HOLD(candidate);
-            ret = candidate;
-            goto end;
+        if (NULL != candidate && candidate->parent_pid == proc->pid) {
+            kspinlock_acquire(&candidate->signal_lock);
+            bool eligible = E_COM_PROC_STATE_EXITED != candidate->state ||
+                            !candidate->state_notified;
+            bool ready    = (E_COM_PROC_STATE_EXITED == candidate->state ||
+                             E_COM_PROC_STATE_STOPPED == candidate->state) &&
+                            !candidate->state_notified;
+            kspinlock_release(&candidate->signal_lock);
+            if (eligible && (NULL == ret || ready)) {
+                ret = candidate;
+            }
+            if (eligible && ready) {
+                break;
+            }
         }
     }
 
-end:
+    if (NULL != ret) {
+        COM_SYS_PROC_HOLD(ret);
+    }
     kspinlock_release(&PIDNamespaceLock);
     return ret;
 }
@@ -317,7 +328,7 @@ bool com_sys_proc_all_threads_exiting_nolock(com_proc_t *proc) {
 }
 
 void com_sys_proc_add_thread(com_proc_t *proc, com_thread_t *thread) {
-    KASSERT(!proc->exited);
+    KASSERT(E_COM_PROC_STATE_EXITED != proc->state);
     kspinlock_acquire(&proc->threads_lock);
     TAILQ_INSERT_TAIL(&proc->threads, thread, proc_threads);
     COM_SYS_PROC_HOLD(proc);
@@ -370,7 +381,31 @@ void com_sys_proc_kill_other_threads_nolock(void) {
     proc->threads_killer = NULL;
 }
 
-void com_sys_proc_exit(int status) {
+void com_sys_proc_transition_nolock(com_proc_t      *proc,
+                                    com_proc_state_t state,
+                                    int              cause_sig) {
+    switch (state) {
+        case E_COM_PROC_STATE_RUNNING:
+            KASSERT(E_COM_PROC_STATE_STOPPED == proc->state);
+            break;
+        case E_COM_PROC_STATE_STOPPED:
+            KASSERT(E_COM_PROC_STATE_RUNNING == proc->state);
+            KASSERT(COM_IPC_SIGNAL_NONE != cause_sig);
+            break;
+        case E_COM_PROC_STATE_EXITED:
+            KASSERT(E_COM_PROC_STATE_EXITED != proc->state);
+            break;
+        default:
+            KASSERT(!"invalid argument");
+            break;
+    }
+
+    proc->state           = state;
+    proc->state_cause_sig = cause_sig;
+    proc->state_notified  = false;
+}
+
+void com_sys_proc_exit(int exit_code, int cause_sig) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL != curr_thread);
     com_proc_t *curr_proc = curr_thread->proc;
@@ -388,14 +423,18 @@ void com_sys_proc_exit(int status) {
     // Publish status before notifying and never acquire authority under
     // signal_lock
     kspinlock_acquire(&curr_proc->signal_lock);
-    curr_proc->exited      = true;
-    curr_proc->exit_status = status;
+    curr_proc->exit_code = exit_code;
+    com_sys_proc_transition_nolock(curr_proc,
+                                   E_COM_PROC_STATE_EXITED,
+                                   cause_sig);
 
     kspinlock_release(&curr_proc->signal_lock);
+    kspinlock_acquire(&curr_proc->threads_lock);
     com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
+    kspinlock_release(&curr_proc->threads_lock);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
-    KDEBUG("pid=%d exited with code %d", curr_proc->pid, status);
+    KDEBUG("pid=%d exited with code %d", curr_proc->pid, exit_code);
 }
 
 void com_sys_proc_stop_nolock(int stop_signal) {
@@ -405,12 +444,13 @@ void com_sys_proc_stop_nolock(int stop_signal) {
     KASSERT(NULL != curr_proc);
     KASSERT(COM_IPC_SIGNAL_NONE != stop_signal);
 
-    if (COM_IPC_SIGNAL_NONE != curr_proc->stop_signal) {
+    if (E_COM_PROC_STATE_RUNNING != curr_proc->state) {
         return;
     }
 
-    curr_proc->stop_signal   = stop_signal;
-    curr_proc->stop_notified = false;
+    com_sys_proc_transition_nolock(curr_proc,
+                                   E_COM_PROC_STATE_STOPPED,
+                                   stop_signal);
 
     kspinlock_release(&curr_proc->signal_lock);
     com_thread_t *t, *_;
@@ -418,21 +458,20 @@ void com_sys_proc_stop_nolock(int stop_signal) {
     TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
         com_ipc_signal_send_to_thread(t, stop_signal, curr_proc);
     }
-    kspinlock_release(&curr_proc->threads_lock);
-
     com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
+    kspinlock_release(&curr_proc->threads_lock);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
     kspinlock_acquire(&curr_proc->signal_lock);
 }
 
-void com_sys_proc_terminate(int ecode) {
+void com_sys_proc_terminate(int exit_code, int cause_sig) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     KASSERT(NULL != curr_thread);
     com_proc_t *curr_proc = curr_thread->proc;
     KASSERT(NULL != curr_proc);
 
     com_sys_proc_kill_other_threads();
-    com_sys_proc_exit(ecode);
+    com_sys_proc_exit(exit_code, cause_sig);
     // NOTE: now the process is in an exited state, but this thread is still
     // running. We could be preempted here, so it's important that the scheduler
     // never refuses to run a thread if it's process has exited, because we want

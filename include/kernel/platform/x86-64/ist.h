@@ -33,6 +33,7 @@ typedef struct {
     uint64_t ist5;
     uint64_t ist6;
     uint64_t ist7;
-    uint32_t reserved3[3];
-    uint32_t iopb;
+    uint64_t reserved3;
+    uint16_t reserved4;
+    uint16_t iopb;
 } __attribute__((packed)) x86_64_ist_t;
