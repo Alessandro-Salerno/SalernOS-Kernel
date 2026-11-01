@@ -121,6 +121,7 @@ void com_init_tty(com_term_backend_t (*new_backend)(void)) {
     com_tty_t   *main_tty_data = NULL;
     com_io_tty_init_text(&main_tty_dev, &main_tty_data, main_term);
     com_io_term_init();
+    com_io_console_init();
     com_io_console_add_tty(main_tty_data);
 
     for (size_t i = 0; i < CONFIG_TTY_MAX - 1; i++) {

@@ -69,7 +69,7 @@ static int text_tty_echo(size_t     *bytes_written,
 
 static void text_tty_kbd_convert(com_text_tty_t *tty, char c, int mod) {
     bool is_arrow     = COM_IO_TTY_MOD_ARROW & mod;
-    bool is_ctrl_held = COM_IO_TTY_MOD_LCTRL & mod;
+    bool is_ctrl_held = COM_IO_KEYBOARD_MOD_LCTRL & mod;
     bool is_del       = false;
 
     if (CONTROL_DEL == c) {
@@ -108,56 +108,22 @@ static void text_tty_kbd_convert(com_text_tty_t *tty, char c, int mod) {
 }
 
 static void text_tty_kbd_in(com_tty_t *self, com_kbd_packet_t *kbd_pkt) {
-    static int mod = 0;
-
     KASSERT(E_COM_TTY_TYPE_TEXT == self->type);
     com_text_tty_t *tty = &self->tty.text;
+    int             mod = kbd_pkt->keyboard->state.mod;
 
     if (COM_IO_KEYBOARD_KEYSTATE_RELEASED == kbd_pkt->keystate) {
-        switch (kbd_pkt->keycode) {
-            case COM_IO_KEYBOARD_KEY_LEFTCTRL:
-                mod &= ~(COM_IO_TTY_MOD_LCTRL);
-                return;
-            case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
-                mod &= ~(COM_IO_TTY_MOD_RCTRL);
-                return;
-            case COM_IO_KEYBOARD_KEY_LEFTALT:
-                mod &= ~(COM_IO_TTY_MOD_LALT);
-                return;
-            case COM_IO_KEYBOARD_KEY_RIGHTALT:
-                mod &= ~(COM_IO_TTY_MOD_RALT);
-                return;
-            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-                mod &= ~(COM_IO_TTY_MOD_LSHIFT);
-                return;
-            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-                mod &= ~(COM_IO_TTY_MOD_RSHIFT);
-                return;
-            default:
-                return;
-        }
+        return;
     }
 
-    // Here COM_IO_KEYBOARD_KEYSTATE_PRESSED == kbd_pkt->keystate
     switch (kbd_pkt->keycode) {
         // Modifiers
         case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-            mod = mod | COM_IO_TTY_MOD_LSHIFT;
-            return;
         case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-            mod = mod | COM_IO_TTY_MOD_RSHIFT;
-            return;
         case COM_IO_KEYBOARD_KEY_LEFTCTRL:
-            mod = mod | COM_IO_TTY_MOD_LCTRL;
-            return;
         case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
-            mod = mod | COM_IO_TTY_MOD_RCTRL;
-            return;
         case COM_IO_KEYBOARD_KEY_LEFTALT:
-            mod = mod | COM_IO_TTY_MOD_LALT;
-            return;
         case COM_IO_KEYBOARD_KEY_RIGHTALT:
-            mod = mod | COM_IO_TTY_MOD_RALT;
             return;
 
         // Special keys
@@ -264,7 +230,7 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
         uintptr_t mode = (uintptr_t)buf;
         switch (mode) {
             case KTTY_MODE_TEXT:
-                tty_data->type     = E_COM_TTY_TYPE_FRAMEBUFFER;
+                tty_data->type     = E_COM_TTY_TYPE_TEXT;
                 tty_data->kbd_in   = text_tty_kbd_in;
                 tty_data->mouse_in = NULL;
                 com_io_term_enable(tty_data->tty.text.term);
@@ -788,6 +754,7 @@ int com_io_tty_init_text(com_vnode_t **out,
     size_t rows, cols;
     com_io_term_get_size(term, &rows, &cols);
     com_io_tty_init_text_backend(&tty->backend, rows, cols, text_tty_echo);
+    KSYNC_INIT_MUTEX(&tty->backend.slave_rb.condvar);
 
 end:
     if (NULL != out) {

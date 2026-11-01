@@ -101,7 +101,8 @@ com_thread_t *com_sys_thread_new(struct com_proc *proc,
                                  void            *stack,
                                  uintmax_t        stack_size,
                                  void            *entry);
-com_thread_t *com_sys_thread_new_kernel(struct com_proc *proc, void *entry);
+com_thread_t *
+com_sys_thread_new_kernel(struct com_proc *proc, void *entry, void *arg);
 
 void com_sys_thread_lock(com_thread_t *thread);
 void com_sys_thread_unlock(com_thread_t *thread);

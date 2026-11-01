@@ -408,7 +408,7 @@ void com_sys_sched_prioritize_nolock(com_thread_t *thread) {
 void com_sys_sched_init(void) {
     arch_cpu_t *curr_cpu = ARCH_CPU_GET();
     SLIST_INIT(&curr_cpu->zombies);
-    curr_cpu->idle_thread      = com_sys_thread_new_kernel(NULL, sched_idle);
+    curr_cpu->idle_thread = com_sys_thread_new_kernel(NULL, sched_idle, NULL);
     curr_cpu->idle_thread->cpu = curr_cpu;
     // NOTE: this is different from other CPUs because those run the idle thread
     // as their first thread, while the BSP runs the init thread as its first

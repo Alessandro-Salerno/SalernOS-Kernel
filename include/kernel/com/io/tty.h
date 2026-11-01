@@ -31,13 +31,7 @@
 
 #define COM_IO_TTY_BUF_SZ (ARCH_PAGE_SIZE / 4)
 
-#define COM_IO_TTY_MOD_LCTRL  1UL
-#define COM_IO_TTY_MOD_RCTRL  2UL
-#define COM_IO_TTY_MOD_ARROW  4UL
-#define COM_IO_TTY_MOD_LSHIFT 8UL
-#define COM_IO_TTY_MOD_RSHIFT 16UL
-#define COM_IO_TTY_MOD_LALT   32UL
-#define COM_IO_TTY_MOD_RALT   64UL
+#define COM_IO_TTY_MOD_ARROW 256
 
 typedef enum com_tty_type {
     E_COM_TTY_TYPE_TEXT,
@@ -80,7 +74,7 @@ typedef struct com_tty {
 
     com_term_t *panic_term;
 
-    union {
+    struct {
         com_text_tty_t text;
         com_fb_tty_t   fb;
     } tty;

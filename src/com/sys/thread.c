@@ -140,10 +140,11 @@ com_thread_t *com_sys_thread_new(com_proc_t *proc,
     return new_thread(proc, ctx);
 }
 
-com_thread_t *com_sys_thread_new_kernel(com_proc_t *proc, void *entry) {
+com_thread_t *
+com_sys_thread_new_kernel(com_proc_t *proc, void *entry, void *arg) {
     arch_context_t ctx = {0};
     com_thread_t  *t   = new_thread(proc, ctx);
-    ARCH_CONTEXT_THREAD_SET_KERNEL(t->ctx, t->kernel_stack, entry);
+    ARCH_CONTEXT_THREAD_SET_KERNEL(t->ctx, t->kernel_stack, entry, arg);
     return t;
 }
 

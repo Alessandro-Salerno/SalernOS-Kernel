@@ -22,6 +22,15 @@
 #include <kernel/com/fs/vfs.h>
 #include <lib/ringbuffer.h>
 
+#define COM_IO_KEYBOARD_MOD_LCTRL  1
+#define COM_IO_KEYBOARD_MOD_RCTRL  2
+#define COM_IO_KEYBOARD_MOD_LSHIFT 4
+#define COM_IO_KEYBOARD_MOD_RSHIFT 8
+#define COM_IO_KEYBOARD_MOD_LALT   16
+#define COM_IO_KEYBOARD_MOD_RALT   32
+#define COM_IO_KEYBOARD_MOD_SHIFT \
+    (COM_IO_KEYBOARD_MOD_LSHIFT | COM_IO_KEYBOARD_MOD_RSHIFT)
+
 // TAKEN: Mathewnd/Astral
 #define COM_IO_KEYBOARD_KEY_RESERVED       0
 #define COM_IO_KEYBOARD_KEY_ESCAPE         1
@@ -158,7 +167,7 @@ typedef struct com_keyboard {
 
     // used by the layout driver to when to use uppercase
     struct {
-        bool shift_held;
+        int  mod;
         bool caps_lock;
     } state;
 } com_keyboard_t;
@@ -166,6 +175,7 @@ typedef struct com_keyboard {
 int             com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
                                             com_kbd_packet_t *pkt);
 com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout);
+void            com_io_keyboard_update_state(com_kbd_packet_t *pkt);
 
 // LAYOUTS
 

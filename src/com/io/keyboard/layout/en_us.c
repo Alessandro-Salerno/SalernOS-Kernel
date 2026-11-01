@@ -46,7 +46,8 @@ com_kbd_action_t com_io_keyboard_layout_en_us(com_kbd_packet_t *pkt) {
         return E_COM_KBD_ACTION_DISCARD;
     }
 
-    if (keyboard->state.shift_held ^ keyboard->state.caps_lock) {
+    bool shift = COM_IO_KEYBOARD_MOD_SHIFT & keyboard->state.mod;
+    if (shift ^ keyboard->state.caps_lock) {
         pkt->c = G_LAYOUT_EN_US_MAP_SHIFTED[pkt->keycode];
     } else {
         pkt->c = G_LAYOUT_EN_US_MAP[pkt->keycode];

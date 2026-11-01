@@ -34,17 +34,18 @@
     (src).rip    = (uint64_t)(entry);                          \
     (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);
 
-#define ARCH_CONTEXT_THREAD_SET_KERNEL(src, stack_end, entry) \
-    (src).cs     = 0x08;                                      \
-    (src).ss     = 0x10;                                      \
-    (src).rip    = (uint64_t)(entry);                         \
-    (src).rsp    = (uint64_t)(stack_end) - 8;                 \
-    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);     \
-    (src).rsp -= sizeof(arch_context_t);                      \
-    {                                                         \
-        arch_context_t *new_context = (void *)(src).rsp;      \
-        *new_context                = (src);                  \
-        x86_64_ctx_prepare(&(src), new_context);              \
+#define ARCH_CONTEXT_THREAD_SET_KERNEL(src, stack_end, entry, arg) \
+    (src).cs     = 0x08;                                           \
+    (src).ss     = 0x10;                                           \
+    (src).rip    = (uint64_t)(entry);                              \
+    (src).rdi    = (uint64_t)(arg);                                \
+    (src).rsp    = (uint64_t)(stack_end) - 8;                      \
+    (src).rflags = (1ul << 1) | (1ul << 9) | (1ul << 21);          \
+    (src).rsp -= sizeof(arch_context_t);                           \
+    {                                                              \
+        arch_context_t *new_context = (void *)(src).rsp;           \
+        *new_context                = (src);                       \
+        x86_64_ctx_prepare(&(src), new_context);                   \
     }
 
 #define ARCH_CONTEXT_FORK(new_thread, orig_ctx)                              \

@@ -19,15 +19,39 @@
 #include <fcntl.h>
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/term.h>
+#include <lib/ringbuffer.h>
 #include <lib/str.h>
 #include <lib/util.h>
+#include <lib/workqueue.h>
 #include <salernos/ktty.h>
 #include <stdint.h>
 #include <vendor/tailq.h>
 
+struct console_kbd_packet {
+    com_keyboard_t *keyboard;
+    uint8_t         keycode;
+    uint8_t         keystate;
+} __attribute__((packed));
+
+struct console_mouse_packet {
+    com_mouse_t *mouse;
+    uint8_t      buttons;
+    int16_t      dx;
+    int16_t      dy;
+    int8_t       dz;
+} __attribute__((packed));
+
 static com_tty_t *Ttys[CONFIG_TTY_MAX] = {NULL};
 static int        ForegroundTtyIdx     = 0;
 static int        TtyNext              = 0;
+
+static kringbuffer_t KbdRb;
+static kworkqueue_t  KbdQueue;
+static kwork_t       KbdWork;
+
+static kringbuffer_t MouseRb;
+static kworkqueue_t  MouseQueue;
+static kwork_t       MouseWork;
 
 static void switch_tty(int new_fg) {
     if (new_fg >= CONFIG_TTY_MAX) {
@@ -53,36 +77,10 @@ static void switch_tty(int new_fg) {
     }
 }
 
-void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
-    static int mod = 0;
+static void kbd_dispatch(com_kbd_packet_t *pkt) {
+    com_keyboard_t *keyboard = pkt->keyboard;
 
-    if (COM_IO_KEYBOARD_KEYSTATE_RELEASED == pkt->keystate) {
-        switch (pkt->keycode) {
-            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-                mod &= ~(COM_IO_TTY_MOD_LSHIFT);
-                break;
-            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-                mod &= ~(COM_IO_TTY_MOD_RSHIFT);
-                break;
-            default:
-                break;
-        }
-    } else if (COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate) {
-        switch (pkt->keycode) {
-            // Modifiers
-            case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-                mod = mod | COM_IO_TTY_MOD_LSHIFT;
-                break;
-            case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-                mod = mod | COM_IO_TTY_MOD_RSHIFT;
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    if ((COM_IO_TTY_MOD_LSHIFT | COM_IO_TTY_MOD_RSHIFT) & mod &&
+    if (COM_IO_KEYBOARD_MOD_SHIFT & keyboard->state.mod &&
         pkt->keycode >= COM_IO_KEYBOARD_KEY_F1 &&
         pkt->keycode <= COM_IO_KEYBOARD_KEY_F12) {
         size_t new_fg = pkt->keycode - COM_IO_KEYBOARD_KEY_F1;
@@ -99,13 +97,94 @@ void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
     }
 }
 
-void com_io_console_mouse_in(com_mouse_packet_t *pkt) {
+static void mouse_dispatch(com_mouse_packet_t *pkt) {
     com_tty_t
         *fg_tty = Ttys[__atomic_load_n(&ForegroundTtyIdx, __ATOMIC_SEQ_CST)];
 
     if (NULL != fg_tty) {
         com_io_tty_mouse_in(fg_tty, pkt);
     }
+}
+
+static void kbd_work(kwork_t *work) {
+    (void)work;
+    struct console_kbd_packet packed;
+
+    while (0 == kringbuffer_read(&packed,
+                                 NULL,
+                                 &KbdRb,
+                                 sizeof(packed),
+                                 sizeof(packed),
+                                 false,
+                                 NULL,
+                                 NULL,
+                                 NULL)) {
+        com_kbd_packet_t pkt = {.keyboard = packed.keyboard,
+                                .keycode  = packed.keycode,
+                                .keystate = packed.keystate};
+        if (E_COM_KBD_ACTION_SEND != pkt.keyboard->layout(&pkt)) {
+            continue;
+        }
+
+        com_io_keyboard_update_state(&pkt);
+        kbd_dispatch(&pkt);
+    }
+}
+
+static void mouse_work(kwork_t *work) {
+    (void)work;
+    struct console_mouse_packet packed;
+
+    while (0 == kringbuffer_read(&packed,
+                                 NULL,
+                                 &MouseRb,
+                                 sizeof(packed),
+                                 sizeof(packed),
+                                 false,
+                                 NULL,
+                                 NULL,
+                                 NULL)) {
+        com_mouse_packet_t pkt = {.mouse   = packed.mouse,
+                                  .buttons = packed.buttons,
+                                  .dx      = packed.dx,
+                                  .dy      = packed.dy,
+                                  .dz      = packed.dz};
+        mouse_dispatch(&pkt);
+    }
+}
+
+void com_io_console_kbd_in(com_kbd_packet_t *pkt) {
+    struct console_kbd_packet packed = {.keyboard = pkt->keyboard,
+                                        .keycode  = pkt->keycode,
+                                        .keystate = pkt->keystate};
+    kringbuffer_write(NULL,
+                      &KbdRb,
+                      &packed,
+                      sizeof(packed),
+                      sizeof(packed),
+                      false,
+                      NULL,
+                      NULL,
+                      NULL);
+    kworkqueue_push(&KbdQueue, &KbdWork);
+}
+
+void com_io_console_mouse_in(com_mouse_packet_t *pkt) {
+    struct console_mouse_packet packed = {.mouse   = pkt->mouse,
+                                          .buttons = pkt->buttons,
+                                          .dx      = pkt->dx,
+                                          .dy      = pkt->dy,
+                                          .dz      = pkt->dz};
+    kringbuffer_write(NULL,
+                      &MouseRb,
+                      &packed,
+                      sizeof(packed),
+                      sizeof(packed),
+                      false,
+                      NULL,
+                      NULL,
+                      NULL);
+    kworkqueue_push(&MouseQueue, &MouseWork);
 }
 
 void com_io_console_add_tty(com_tty_t *tty) {
@@ -116,5 +195,11 @@ void com_io_console_add_tty(com_tty_t *tty) {
 }
 
 void com_io_console_init(void) {
-    // Nothing for now, not needed
+    KRINGBUFFER_INIT(&KbdRb);
+    KWORK_INIT(&KbdWork, kbd_work);
+    kworkqueue_init(&KbdQueue);
+
+    KRINGBUFFER_INIT(&MouseRb);
+    KWORK_INIT(&MouseWork, mouse_work);
+    kworkqueue_init(&MouseQueue);
 }

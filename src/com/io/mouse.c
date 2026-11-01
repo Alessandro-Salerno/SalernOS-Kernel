@@ -154,6 +154,7 @@ com_mouse_t *com_io_mouse_new(void) {
 
     com_mouse_t *mouse = com_mm_slab_alloc(sizeof(com_mouse_t));
     KRINGBUFFER_INIT(&mouse->rb);
+    KSYNC_INIT_MUTEX(&mouse->rb.condvar);
     LIST_INIT(&mouse->pollhead.polled_list);
 
     int devfs_ret = com_fs_devfs_register(&mouse->vnode,

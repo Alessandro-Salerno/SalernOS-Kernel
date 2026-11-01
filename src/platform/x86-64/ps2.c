@@ -74,9 +74,17 @@
 #define PS2_CFG_MOUSE_EXISTS       (1 << 5)
 #define PS2_CFG_TRANSLATION_ENABLE (1 << 6)
 
+struct ps2_keyboard {
+    com_keyboard_t *keyboard;
+    bool            extended;
+};
+
 struct ps2_mouse {
     com_mouse_t *mouse;
     bool         has_wheel;
+    uint8_t      data[5];
+    size_t       cycle;
+    uintmax_t    last_time;
 };
 
 // TAKEN: Mathewnd/Astral
@@ -188,8 +196,8 @@ static const char G_PS2_KEYBOARD_EXT_SCANCODES[128] = {
     [0x53] = COM_IO_KEYBOARD_KEY_DELETE       // delete
 };
 
-static com_keyboard_t  *Ps2Keyboard = NULL;
-static struct ps2_mouse Ps2Mouse    = {0};
+static struct ps2_keyboard Ps2Keyboard = {0};
+static struct ps2_mouse    Ps2Mouse    = {0};
 
 // UTILITY CODE
 
@@ -237,16 +245,15 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
 
-    static bool extended = false;
-    uint8_t     scancode = X86_64_IO_INB(PS2_PORT_DATA);
+    uint8_t scancode = X86_64_IO_INB(PS2_PORT_DATA);
 
     if (PS2_KEYBOARD_EXTENDED_SCANCODE == scancode) {
-        extended = true;
+        Ps2Keyboard.extended = true;
         return;
     }
 
     com_kbd_packet_t pkt = {0};
-    pkt.keyboard         = Ps2Keyboard;
+    pkt.keyboard         = Ps2Keyboard.keyboard;
     pkt.keystate         = COM_IO_KEYBOARD_KEYSTATE_PRESSED;
 
     if (PS2_KEYBOARD_KEY_RELEASED & scancode) {
@@ -255,9 +262,9 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
     }
 
     const char *keycode_lookup = G_PS2_KEYBOARD_SCANCODES;
-    if (extended) {
-        keycode_lookup = G_PS2_KEYBOARD_EXT_SCANCODES;
-        extended       = false;
+    if (Ps2Keyboard.extended) {
+        keycode_lookup       = G_PS2_KEYBOARD_EXT_SCANCODES;
+        Ps2Keyboard.extended = false;
     }
 
     pkt.keycode = keycode_lookup[scancode];
@@ -266,21 +273,7 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
         return;
     }
 
-    com_kbd_action_t action = pkt.keyboard->layout(&pkt);
-    if (E_COM_KBD_ACTION_SEND == action) {
-        if (COM_IO_KEYBOARD_KEY_CAPSLOCK == pkt.keycode) {
-            pkt.keyboard->state.caps_lock ^= COM_IO_KEYBOARD_KEYSTATE_PRESSED ==
-                                             pkt.keystate;
-        }
-
-        if (COM_IO_KEYBOARD_KEY_LEFTSHIFT == pkt.keycode ||
-            COM_IO_KEYBOARD_KEY_RIGHTSHIFT == pkt.keycode) {
-            pkt.keyboard->state.shift_held = COM_IO_KEYBOARD_KEYSTATE_PRESSED ==
-                                             pkt.keystate;
-        }
-
-        com_io_console_kbd_in(&pkt);
-    }
+    com_io_console_kbd_in(&pkt);
 }
 
 // MOUSE HANDLERS
@@ -289,10 +282,6 @@ static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
 static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     (void)isr;
     (void)ctx;
-
-    static uint8_t   mouse_data[5] = {0};
-    static size_t    cycle         = 0;
-    static uintmax_t last_time     = 0;
 
     uint8_t status = X86_64_IO_INB(PS2_PORT_CNTL);
     if (0 == (PS2_STATUS_OUTDATA & status) ||
@@ -303,20 +292,22 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     uint8_t   curr_byte = X86_64_IO_INB(PS2_PORT_DATA);
     uintmax_t now       = X86_64_TSC_GET_NS();
 
-    if (PS2_MOUSEPKT_TIMEOUT_NS < now - last_time) {
-        cycle = 0;
+    if (PS2_MOUSEPKT_TIMEOUT_NS < now - Ps2Mouse.last_time) {
+        Ps2Mouse.cycle = 0;
     }
-    last_time = now;
+    Ps2Mouse.last_time = now;
 
-    if (0 == cycle && !PS2_MOUSEPKT_SYNCED(curr_byte)) {
+    if (0 == Ps2Mouse.cycle && !PS2_MOUSEPKT_SYNCED(curr_byte)) {
         return;
     }
 
-    mouse_data[cycle] = curr_byte;
-    cycle++;
-    if (!PS2_MOUSEPKT_ENOUGH(&Ps2Mouse, cycle)) {
+    Ps2Mouse.data[Ps2Mouse.cycle] = curr_byte;
+    Ps2Mouse.cycle++;
+    if (!PS2_MOUSEPKT_ENOUGH(&Ps2Mouse, Ps2Mouse.cycle)) {
         return;
     }
+
+    uint8_t *mouse_data = Ps2Mouse.data;
 
     com_mouse_packet_t pkt = {0};
     pkt.mouse              = Ps2Mouse.mouse;
@@ -326,7 +317,7 @@ static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
     pkt.dy                 = -pkt.dy;
     pkt.dz = (0x07 & mouse_data[3]) * (0x08 & mouse_data[3] ? -1 : 1);
 
-    cycle = 0;
+    Ps2Mouse.cycle = 0;
     com_io_console_mouse_in(&pkt);
 }
 
@@ -364,9 +355,9 @@ void x86_64_ps2_init(void) {
 
 void x86_64_ps2_keyboard_init(void) {
     KLOG("initializing ps/2 keyboard");
-    Ps2Keyboard        = com_io_keyboard_new(NULL);
-    com_isr_t *kbd_isr = com_sys_interrupt_allocate(ps2_keyboard_isr,
-                                                    x86_64_lapic_eoi);
+    Ps2Keyboard.keyboard = com_io_keyboard_new(NULL);
+    com_isr_t *kbd_isr   = com_sys_interrupt_allocate(ps2_keyboard_isr,
+                                                      x86_64_lapic_eoi);
     kbd_isr->flags |= COM_SYS_INTERRUPT_FLAGS_EOI_AFTER;
     x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_KEYBOARD,
                           kbd_isr->vec & 0xff,

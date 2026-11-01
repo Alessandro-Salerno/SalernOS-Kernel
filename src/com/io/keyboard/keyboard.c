@@ -124,6 +124,7 @@ com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout) {
     com_keyboard_t *keyboard = com_mm_slab_alloc(sizeof(com_keyboard_t));
     keyboard->layout         = DEFAULT_LAYOUT;
     KRINGBUFFER_INIT(&keyboard->rb);
+    KSYNC_INIT_MUTEX(&keyboard->rb.condvar);
     LIST_INIT(&keyboard->pollhead.polled_list);
 
     if (NULL != layout) {
@@ -142,4 +143,42 @@ com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout) {
     }
 
     return keyboard;
+}
+
+void com_io_keyboard_update_state(com_kbd_packet_t *pkt) {
+    com_keyboard_t *keyboard = pkt->keyboard;
+    bool            pressed = COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate;
+    int             mod     = 0;
+
+    switch (pkt->keycode) {
+        case COM_IO_KEYBOARD_KEY_CAPSLOCK:
+            keyboard->state.caps_lock ^= pressed;
+            return;
+        case COM_IO_KEYBOARD_KEY_LEFTCTRL:
+            mod = COM_IO_KEYBOARD_MOD_LCTRL;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
+            mod = COM_IO_KEYBOARD_MOD_RCTRL;
+            break;
+        case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
+            mod = COM_IO_KEYBOARD_MOD_LSHIFT;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
+            mod = COM_IO_KEYBOARD_MOD_RSHIFT;
+            break;
+        case COM_IO_KEYBOARD_KEY_LEFTALT:
+            mod = COM_IO_KEYBOARD_MOD_LALT;
+            break;
+        case COM_IO_KEYBOARD_KEY_RIGHTALT:
+            mod = COM_IO_KEYBOARD_MOD_RALT;
+            break;
+        default:
+            return;
+    }
+
+    if (pressed) {
+        keyboard->state.mod |= mod;
+    } else {
+        keyboard->state.mod &= ~mod;
+    }
 }
