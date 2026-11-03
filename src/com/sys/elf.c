@@ -557,7 +557,7 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
     }
 
     uintptr_t stack_end   = 0x60000000;
-    size_t    stack_len   = ARCH_PAGE_SIZE * 64;
+    size_t    stack_len   = ARCH_PAGE_SIZE * 2048;
     uintptr_t stack_start = stack_end - stack_len;
 
     com_mm_vmm_map(new_vmm_ctx,
