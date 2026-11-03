@@ -666,6 +666,7 @@ int com_fs_tmpfs_mmap(void             **out,
                       uintmax_t          off) {
     struct tmpfs_node *file       = node->extra;
     void              *range_base = hint;
+    bool               shared     = COM_MM_VMM_FLAGS_SHARED & vmm_flags;
 
     if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
         vmm_flags &= ~COM_MM_VMM_FLAGS_NOHINT;
@@ -674,22 +675,41 @@ int com_fs_tmpfs_mmap(void             **out,
                                                size);
     }
 
+    if (!shared) {
+        vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
+    }
+
+    krwlock_acquire_write(&file->lock);
+
     for (uintmax_t curr = off; curr < off + size; curr += ARCH_PAGE_SIZE) {
         uintptr_t page;
-        bool      present = com_fs_pagecache_get(&page,
-                                                 file->file.data,
-                                                 curr / ARCH_PAGE_SIZE);
-        // If it is NULL or undefined, we'll ignore it thanks to FLAGS_ALLOCATE
-        void *page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
-        com_mm_pmm_hold(page_phys);
+        bool      present = true;
+
+        if (shared) {
+            com_fs_pagecache_default(&page,
+                                     file->file.data,
+                                     curr / ARCH_PAGE_SIZE);
+        } else {
+            present = com_fs_pagecache_get(&page,
+                                           file->file.data,
+                                           curr / ARCH_PAGE_SIZE);
+        }
+
+        void *page_phys = NULL;
+        if (present) {
+            page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
+            com_mm_pmm_hold(page_phys);
+        }
+
         com_mm_vmm_map(vmm_context,
                        range_base + (curr - off),
                        page_phys,
                        ARCH_PAGE_SIZE,
-                       vmm_flags | COM_MM_VMM_FLAGS_PRIVATE |
-                           ((present) ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
+                       vmm_flags | ((present) ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
                        mmu_flags);
     }
+
+    krwlock_release_write(&file->lock);
 
     *out = (void *)((uintptr_t)range_base + (off % ARCH_PAGE_SIZE));
     return 0;
