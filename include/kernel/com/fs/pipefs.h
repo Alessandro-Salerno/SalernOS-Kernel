@@ -33,6 +33,7 @@ int com_fs_pipefs_writev(size_t      *bytes_written,
 int com_fs_pipefs_poll(short *revents, com_vnode_t *node, short events);
 int com_fs_pipefs_poll_head(struct com_poll_head **out, com_vnode_t *node);
 int com_fs_pipefs_close(com_vnode_t *vnode);
+int com_fs_pipefs_stat(struct stat *out, com_vnode_t *node);
 int com_fs_pipefs_seekable(com_vnode_t *node);
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write);

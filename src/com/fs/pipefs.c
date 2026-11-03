@@ -55,6 +55,7 @@ static com_vnode_ops_t PipefsNodeOps = {.readv     = com_fs_pipefs_readv,
                                         .poll      = com_fs_pipefs_poll,
                                         .poll_head = com_fs_pipefs_poll_head,
                                         .close     = com_fs_pipefs_close,
+                                        .stat      = com_fs_pipefs_stat,
                                         .seekable  = com_fs_pipefs_seekable};
 
 static void pipefs_poll_notify(struct pipefs_node *pipe) {
@@ -222,6 +223,14 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
     }
     com_mm_slab_free(vnode, sizeof(com_vnode_t));
+    return 0;
+}
+
+int com_fs_pipefs_stat(struct stat *out, com_vnode_t *node) {
+    out->st_ino     = (ino_t)node->extra;
+    out->st_mode    = S_IFIFO | 0600;
+    out->st_nlink   = 1;
+    out->st_blksize = PIPE_BUF_SZ;
     return 0;
 }
 
