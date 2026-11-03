@@ -21,9 +21,15 @@
 #include <kernel/com/io/keyboard.h>
 #include <kernel/com/io/mouse.h>
 #include <kernel/com/io/tty.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 void com_io_console_kbd_in(com_kbd_packet_t *pkt);
 void com_io_console_mouse_in(com_mouse_packet_t *pkt);
 void com_io_console_add_tty(com_tty_t *tty);
+bool com_io_console_switch(size_t tty_idx);
+bool com_io_console_release(com_tty_t *tty, bool allow);
+bool com_io_console_is_foreground(com_tty_t *tty);
+bool com_io_console_wait_foreground(com_tty_t *tty);
 void com_io_console_init(void);

@@ -25,13 +25,17 @@
 #include <fcntl.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/io/console.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
+#include <kernel/com/ipc/signal.h>
+#include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/ctype.h>
 #include <lib/mem.h>
+#include <lib/mutex.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
@@ -218,33 +222,104 @@ static int tty_write(size_t   *bytes_written,
                                         tty);
 }
 
+// KTTY FUNCTIONS
+
+static bool ktty_is_process_switched(com_tty_t *tty) {
+    return E_COM_TTY_TYPE_FRAMEBUFFER == tty->type &&
+           KTTY_SWITCH_PROCESS == tty->tty.fb.switchmode.mode;
+}
+
+static bool ktty_signal_owner(com_tty_t *tty, int sig) {
+    if (0 == com_ipc_signal_send_to_proc(tty->tty.fb.owner, sig, NULL)) {
+        return true;
+    }
+
+    // NOTE: the owner is gone, so we set it back to auto mode
+    tty->tty.fb.switchmode.mode = KTTY_SWITCH_AUTO;
+    return false;
+}
+
+static int ktty_set_mode(com_tty_t *tty, uintptr_t mode) {
+    if (KTTY_MODE_TEXT != mode && KTTY_MODE_GRAPHICS != mode) {
+        return EINVAL;
+    }
+
+    kmutex_acquire(&tty->lock);
+    bool fg = com_io_console_is_foreground(tty);
+
+    if (KTTY_MODE_TEXT == mode) {
+        tty->type     = E_COM_TTY_TYPE_TEXT;
+        tty->kbd_in   = text_tty_kbd_in;
+        tty->mouse_in = NULL;
+        tty->tty.fb   = (com_fb_tty_t){0};
+        if (fg) {
+            com_io_term_enable(tty->tty.text.term);
+        }
+    } else {
+        tty->type     = E_COM_TTY_TYPE_FRAMEBUFFER;
+        tty->kbd_in   = fb_tty_kbd_in;
+        tty->mouse_in = fb_tty_mouse_in;
+        tty->tty.fb = (com_fb_tty_t){.owner = ARCH_CPU_GET_THREAD()->proc->pid};
+        if (fg) {
+            com_io_term_disable(tty->tty.text.term);
+        }
+    }
+
+    kmutex_release(&tty->lock);
+    // Nobody is left to answer a pending release request
+    com_io_console_release(tty, true);
+    return 0;
+}
+
+static int ktty_set_switch_mode(com_tty_t *tty, struct ktty_switchmode *mode) {
+    if (KTTY_SWITCH_AUTO != mode->mode && KTTY_SWITCH_PROCESS != mode->mode) {
+        return EINVAL;
+    }
+
+    int ret = 0;
+    kmutex_acquire(&tty->lock);
+
+    if (E_COM_TTY_TYPE_FRAMEBUFFER != tty->type) {
+        ret = EINVAL;
+    } else if (ARCH_CPU_GET_THREAD()->proc->pid != tty->tty.fb.owner) {
+        ret = EPERM;
+    } else {
+        tty->tty.fb.switchmode = *mode;
+    }
+
+    kmutex_release(&tty->lock);
+
+    if (0 == ret && KTTY_SWITCH_AUTO == mode->mode) {
+        com_io_console_release(tty, true);
+    }
+
+    return ret;
+}
+
+static int ktty_release(com_tty_t *tty, uintptr_t answer) {
+    bool allow = KTTY_RELEASE_ALLOW == answer;
+    return com_io_console_release(tty, allow) ? 0 : EINVAL;
+}
+
 static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_tty_t *tty_data = devdata;
 
-    // In SalernOS, TTYs can either be graphical or text mode. Text mode TTYs
-    // have all the features implemented in this file and use a terminal
-    // backend, whereas graphical TTYs have none of these features and use a
-    // framebuffer backend. Userspace is responsible for management of graphical
-    // TTYs.
-    if (KTTY_IOCTL_SETMODE == op) {
-        uintptr_t mode = (uintptr_t)buf;
-        switch (mode) {
-            case KTTY_MODE_TEXT:
-                tty_data->type     = E_COM_TTY_TYPE_TEXT;
-                tty_data->kbd_in   = text_tty_kbd_in;
-                tty_data->mouse_in = NULL;
-                com_io_term_enable(tty_data->tty.text.term);
-                return 0;
-            case KTTY_MODE_GRAPHICS:
-                tty_data->type     = E_COM_TTY_TYPE_FRAMEBUFFER;
-                tty_data->kbd_in   = fb_tty_kbd_in;
-                tty_data->mouse_in = fb_tty_mouse_in;
-                com_io_term_disable(tty_data->tty.text.term);
-                tty_data->tty.fb.owner = tty_data->tty.text.backend.fg_pgid;
-                return 0;
-            default:
-                return EINVAL;
-        }
+    switch (op) {
+        case KTTY_IOCTL_SETMODE:
+            return ktty_set_mode(tty_data, (uintptr_t)buf);
+        case KTTY_IOCTL_SETSWITCHMODE:
+            return ktty_set_switch_mode(tty_data, buf);
+        case KTTY_IOCTL_RELEASE:
+            return ktty_release(tty_data, (uintptr_t)buf);
+        case KTTY_IOCTL_SWITCH:
+            return com_io_console_switch((uintptr_t)buf) ? 0 : ENXIO;
+        case KTTY_IOCTL_WAITFG:
+            return com_io_console_wait_foreground(tty_data) ? 0 : EINTR;
+        case KTTY_IOCTL_GETNUM:
+            *(int *)buf = tty_data->num;
+            return 0;
+        default:
+            break;
     }
 
     if (E_COM_TTY_TYPE_TEXT != tty_data->type) {
@@ -473,21 +548,21 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     if (ISIG & tty_backend->termios.c_lflag) {
         if (tty_backend->termios.c_cc[VINTR] == c) {
             ret     = com_io_tty_text_backend_echo(NULL,
-                                                   tty_backend,
-                                                   "^C",
-                                                   2,
-                                                   blocking,
-                                                   passthrough);
+                                               tty_backend,
+                                               "^C",
+                                               2,
+                                               blocking,
+                                               passthrough);
             sig     = SIGINT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
             ret     = com_io_tty_text_backend_echo(NULL,
-                                                   tty_backend,
-                                                   "^\\\\",
-                                                   3,
-                                                   blocking,
-                                                   passthrough);
+                                               tty_backend,
+                                               "^\\\\",
+                                               3,
+                                               blocking,
+                                               passthrough);
             sig     = SIGQUIT;
             handled = true;
         }
@@ -516,14 +591,14 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     // handle raw mode
     if (!(ICANON & tty_backend->termios.c_lflag)) {
         ret     = kringbuffer_write(NULL,
-                                    &tty_backend->slave_rb,
-                                    &c,
-                                    1,
-                                    KRINGBUFFER_NOATOMIC,
-                                    false,
-                                    com_io_tty_text_backend_poll_callback,
-                                    tty_backend,
-                                    NULL);
+                                &tty_backend->slave_rb,
+                                &c,
+                                1,
+                                KRINGBUFFER_NOATOMIC,
+                                false,
+                                com_io_tty_text_backend_poll_callback,
+                                tty_backend,
+                                NULL);
         handled = true;
         goto end;
     }
@@ -603,16 +678,16 @@ end:
     }
 
     if (line_done) {
-        size_t nbytes = tty_backend->canon.index;
-        ret           = kringbuffer_write(NULL,
-                                          &tty_backend->slave_rb,
-                                          tty_backend->canon.buffer,
-                                          nbytes,
-                                          KRINGBUFFER_NOATOMIC,
-                                          blocking,
-                                          com_io_tty_text_backend_poll_callback,
-                                          tty_backend,
-                                          NULL);
+        size_t nbytes            = tty_backend->canon.index;
+        ret                      = kringbuffer_write(NULL,
+                                &tty_backend->slave_rb,
+                                tty_backend->canon.buffer,
+                                nbytes,
+                                KRINGBUFFER_NOATOMIC,
+                                blocking,
+                                com_io_tty_text_backend_poll_callback,
+                                tty_backend,
+                                NULL);
         tty_backend->canon.index = 0;
     }
 
@@ -701,15 +776,45 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 // KERNEL TTY INTERFACE
 
 void com_io_tty_kbd_in(com_tty_t *tty, com_kbd_packet_t *kbd_pkt) {
+    kmutex_acquire(&tty->lock);
     if (NULL != tty->kbd_in) {
         tty->kbd_in(tty, kbd_pkt);
     }
+    kmutex_release(&tty->lock);
 }
 
 void com_io_tty_mouse_in(com_tty_t *tty, com_mouse_packet_t *mouse_pkt) {
+    kmutex_acquire(&tty->lock);
     if (NULL != tty->mouse_in) {
         tty->mouse_in(tty, mouse_pkt);
     }
+    kmutex_release(&tty->lock);
+}
+
+void com_io_tty_enter_foreground(com_tty_t *tty) {
+    kmutex_acquire(&tty->lock);
+    if (E_COM_TTY_TYPE_TEXT == tty->type) {
+        com_io_term_enable(tty->tty.text.term);
+    } else if (ktty_is_process_switched(tty)) {
+        ktty_signal_owner(tty, tty->tty.fb.switchmode.acqsig);
+    }
+    kmutex_release(&tty->lock);
+}
+
+void com_io_tty_leave_foreground(com_tty_t *tty) {
+    kmutex_acquire(&tty->lock);
+    if (E_COM_TTY_TYPE_TEXT == tty->type) {
+        com_io_term_disable(tty->tty.text.term);
+    }
+    kmutex_release(&tty->lock);
+}
+
+bool com_io_tty_request_release(com_tty_t *tty) {
+    kmutex_acquire(&tty->lock);
+    bool wait = ktty_is_process_switched(tty) &&
+                ktty_signal_owner(tty, tty->tty.fb.switchmode.relsig);
+    kmutex_release(&tty->lock);
+    return wait;
 }
 
 int com_io_tty_init_text(com_vnode_t **out,
@@ -718,10 +823,12 @@ int com_io_tty_init_text(com_vnode_t **out,
     size_t tty_num = __atomic_fetch_add(&NextttyNum, 1, __ATOMIC_SEQ_CST);
     KLOG("initializing text tty %zu", tty_num);
 
-    com_tty_t *tty_data  = com_mm_slab_alloc(sizeof(com_tty_t));
+    com_tty_t *tty_data = com_mm_slab_alloc(sizeof(com_tty_t));
+    KMUTEX_INIT(&tty_data->lock);
     tty_data->type       = E_COM_TTY_TYPE_TEXT;
     tty_data->kbd_in     = text_tty_kbd_in;
     tty_data->mouse_in   = NULL;
+    tty_data->tty.fb     = (com_fb_tty_t){0};
     tty_data->num        = tty_num;
     com_text_tty_t *tty  = &tty_data->tty.text;
     tty->term            = term;
@@ -736,11 +843,11 @@ int com_io_tty_init_text(com_vnode_t **out,
 
     com_vnode_t *tty_dev;
     int          ret = com_fs_devfs_register(&tty_dev,
-                                             NULL,
-                                             tty_name,
-                                             kstrlen(tty_name),
-                                             &TextTtyDevOps,
-                                             tty_data);
+                                    NULL,
+                                    tty_name,
+                                    kstrlen(tty_name),
+                                    &TextTtyDevOps,
+                                    tty_data);
 
     if (0 != ret) {
         tty_dev = NULL;
@@ -795,11 +902,11 @@ int com_io_tty_devtty_init(com_vnode_t **devtty) {
 
     com_vnode_t *dev = NULL;
     int          ret = com_fs_devfs_register(&dev,
-                                             NULL,
-                                             "tty",
-                                             3,
-                                             &TtyCloneDevOps,
-                                             NULL);
+                                    NULL,
+                                    "tty",
+                                    3,
+                                    &TtyCloneDevOps,
+                                    NULL);
 
     *devtty = dev;
     return ret;

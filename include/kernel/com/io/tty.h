@@ -24,8 +24,10 @@
 #include <kernel/com/io/mouse.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/mutex.h>
 #include <lib/ringbuffer.h>
 #include <lib/spinlock.h>
+#include <salernos/ktty.h>
 #include <stdint.h>
 #include <termios.h>
 
@@ -65,10 +67,12 @@ typedef struct com_text_tty {
 } com_text_tty_t;
 
 typedef struct com_fb_tty {
-    pid_t owner;
+    pid_t                  owner;
+    struct ktty_switchmode switchmode;
 } com_fb_tty_t;
 
 typedef struct com_tty {
+    kmutex_t       lock; // type and dependent fields
     com_tty_type_t type;
     com_vnode_t   *vnode;
 
@@ -115,6 +119,9 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
 
 void com_io_tty_kbd_in(com_tty_t *tty, com_kbd_packet_t *kbd_pkt);
 void com_io_tty_mouse_in(com_tty_t *tty, com_mouse_packet_t *mouse_pkt);
+void com_io_tty_enter_foreground(com_tty_t *tty);
+void com_io_tty_leave_foreground(com_tty_t *tty);
+bool com_io_tty_request_release(com_tty_t *tty);
 int  com_io_tty_init_text(com_vnode_t **out,
                           com_tty_t   **out_tty,
                           com_term_t   *term);
