@@ -63,9 +63,6 @@ static int unix_socket_rb_check_hangup(size_t        *new_nbytes,
                                        int            op,
                                        void          *arg) {
     (void)curr_nbytes;
-    (void)rb;
-    (void)new_nbytes;
-    (void)force_return;
     struct unix_socket *unix_socket = arg;
     KASSERT(NULL != unix_socket);
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -76,6 +73,11 @@ static int unix_socket_rb_check_hangup(size_t        *new_nbytes,
                                           SIGPIPE,
                                           curr_thread->proc);
             return EPIPE;
+        }
+    } else if (KRINGBUFFER_OP_READ == op) {
+        if (NULL == unix_socket->peer && 0 == KRINGBUFFER_AVAIL_READ(rb)) {
+            *new_nbytes   = 0;
+            *force_return = true;
         }
     }
 
@@ -402,6 +404,10 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
     if (KRINGBUFFER_AVAIL_WRITE(&unix_socket->rb) > 0) {
         out |= POLLOUT;
     }
+    if (E_COM_SOCKET_STATE_CONNECTED == unix_socket->socket.state &&
+        NULL == unix_socket->peer) {
+        out |= POLLIN | POLLHUP;
+    }
 
     ksync_release(&unix_socket->socket.lock);
     *revents = out;
@@ -429,7 +435,7 @@ static int unix_socket_destroy(com_socket_t *socket) {
         ksync_notify_all(&peer->rb.condvar, &peer->rb.read.queue);
         ksync_notify_all(&peer->rb.condvar, &peer->rb.write.queue);
 
-        unix_socket_poll_callback(unix_socket);
+        unix_socket_poll_callback(&peer->socket);
     }
 
     void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(unix_socket->rb.buffer);
