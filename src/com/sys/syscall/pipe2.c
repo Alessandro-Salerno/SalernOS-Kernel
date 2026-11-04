@@ -28,12 +28,13 @@
 #include <lib/util.h>
 #include <stdint.h>
 
-// SYSCALL: pipe(int *fildes);
-COM_SYS_SYSCALL(com_sys_syscall_pipe) {
+// SYSCALL: pipe2(int *fildes, int flags);
+COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
+    COM_SYS_SYSCALL_UNUSED_START(3);
 
     int *fildes = COM_SYS_SYSCALL_ARG(int *, 1);
+    int  flags  = COM_SYS_SYSCALL_ARG(int, 2);
 
     com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     int         rfd  = com_sys_proc_next_fd(curr);
@@ -49,18 +50,20 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe) {
 
     com_file_t *rf = com_mm_slab_alloc(sizeof(com_file_t));
     rf->vnode      = read;
-    rf->flags      = 0;
+    rf->flags      = O_NONBLOCK & flags;
     rf->num_ref    = 1;
     rf->off        = 0;
 
     com_file_t *wf = com_mm_slab_alloc(sizeof(com_file_t));
     wf->vnode      = write;
-    wf->flags      = 0;
+    wf->flags      = O_NONBLOCK & flags;
     wf->num_ref    = 1;
     wf->off        = 0;
 
-    curr->fd[rfd].file = rf;
-    curr->fd[wfd].file = wf;
+    curr->fd[rfd].file  = rf;
+    curr->fd[wfd].file  = wf;
+    curr->fd[rfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
+    curr->fd[wfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
 
     fildes[0] = rfd;
     fildes[1] = wfd;

@@ -357,11 +357,13 @@ void com_sys_syscall_init(void) {
                              "size");
 
     com_sys_syscall_register(0x10,
-                             "pipe",
-                             com_sys_syscall_pipe,
-                             1,
+                             "pipe2",
+                             com_sys_syscall_pipe2,
+                             2,
                              COM_SYS_SYSCALL_TYPE_PTR,
-                             "fildes");
+                             "fildes",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
 
     com_sys_syscall_register(0x11, "getpid", com_sys_syscall_getpid, 0);
 
