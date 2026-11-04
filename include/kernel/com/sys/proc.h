@@ -93,6 +93,7 @@ typedef struct com_proc {
     int                         state_cause_sig;
     bool                        state_notified; // reported to the parent
     int                         exit_code;
+    kspinlock_t                 waitpid_lock;
     struct com_waitlist         waitpid_waitlist;
     struct com_sigaction       *sigaction[NSIG];
     struct com_waitlist         stop_waitlist;

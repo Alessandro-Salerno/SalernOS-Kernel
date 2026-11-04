@@ -27,65 +27,80 @@
 #include <stdint.h>
 #include <sys/wait.h>
 
-static int waitpid_proc(com_proc_t *curr_proc,
-                        com_proc_t *towait,
-                        int        *status,
-                        int         flags) {
-    if (0 == __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) ||
-        NULL == towait || towait->parent_pid != curr_proc->pid) {
+static int waitpid_check(com_proc_t *curr_proc,
+                         com_proc_t *towait,
+                         int        *status,
+                         bool       *reaped) {
+    kspinlock_acquire(&towait->signal_lock);
+
+    if (E_COM_PROC_STATE_EXITED == towait->state && towait->state_notified) {
+        kspinlock_release(&towait->signal_lock);
         return -ECHILD;
     }
 
-    kspinlock_acquire(&towait->threads_lock);
-    while (true) {
-        kspinlock_acquire(&towait->signal_lock);
-
-        if (E_COM_PROC_STATE_EXITED == towait->state &&
-            towait->state_notified) {
-            kspinlock_release(&towait->signal_lock);
-            kspinlock_release(&towait->threads_lock);
-            return -ECHILD;
+    if (E_COM_PROC_STATE_EXITED == towait->state) {
+        if (NULL != status) {
+            *status = COM_IPC_SIGNAL_NONE == towait->state_cause_sig
+                          ? (towait->exit_code & 0xff) << 8
+                          : towait->state_cause_sig & 0x7f;
         }
-
-        if (E_COM_PROC_STATE_EXITED == towait->state) {
-            if (NULL != status) {
-                *status = COM_IPC_SIGNAL_NONE == towait->state_cause_sig
-                              ? (towait->exit_code & 0xff) << 8
-                              : towait->state_cause_sig & 0x7f;
-            }
-            towait->state_notified = true;
-            __atomic_sub_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
-            kspinlock_release(&towait->signal_lock);
-            kspinlock_release(&towait->threads_lock);
-            int ret = towait->pid;
-            COM_SYS_PROC_RELEASE(towait);
-            return ret;
-        }
-
-        if (E_COM_PROC_STATE_STOPPED == towait->state &&
-            !towait->state_notified) {
-            if (NULL != status) {
-                *status = 0x7F | (towait->state_cause_sig << 8);
-            }
-            towait->state_notified = true;
-            kspinlock_release(&towait->signal_lock);
-            kspinlock_release(&towait->threads_lock);
-            return towait->pid;
-        }
-
+        towait->state_notified = true;
+        __atomic_sub_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
         kspinlock_release(&towait->signal_lock);
-        if (WNOHANG & flags) {
-            kspinlock_release(&towait->threads_lock);
-            return 0;
+        *reaped = true;
+        return towait->pid;
+    }
+
+    if (E_COM_PROC_STATE_STOPPED == towait->state && !towait->state_notified) {
+        if (NULL != status) {
+            *status = 0x7F | (towait->state_cause_sig << 8);
+        }
+        towait->state_notified = true;
+        kspinlock_release(&towait->signal_lock);
+        return towait->pid;
+    }
+
+    kspinlock_release(&towait->signal_lock);
+    return 0;
+}
+
+static int
+waitpid_proc(com_proc_t *curr_proc, pid_t pid, int *status, int flags) {
+    while (true) {
+        kspinlock_acquire(&curr_proc->waitpid_lock);
+
+        com_proc_t *towait = -1 == pid
+                                 ? com_sys_proc_get_arbitrary_child(curr_proc)
+                                 : com_sys_proc_get_by_pid(pid);
+
+        int  ret    = -ECHILD;
+        bool reaped = false;
+        bool slept  = false;
+        if (NULL != towait &&
+            0 != __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) &&
+            towait->parent_pid == curr_proc->pid) {
+            ret = waitpid_check(curr_proc, towait, status, &reaped);
         }
 
-        int ret = kspinlock_wait(&towait->threads_lock,
-                                 &towait->waitpid_waitlist,
-                                 0,
-                                 true);
-        if (0 != ret) {
-            kspinlock_release(&towait->threads_lock);
-            return -ret;
+        if (0 == ret && !(WNOHANG & flags)) {
+            ret   = -kspinlock_wait(&curr_proc->waitpid_lock,
+                                    &curr_proc->waitpid_waitlist,
+                                    0,
+                                    true);
+            slept = true;
+        }
+
+        kspinlock_release(&curr_proc->waitpid_lock);
+
+        if (NULL != towait) {
+            if (reaped) {
+                COM_SYS_PROC_RELEASE(towait);
+            }
+            COM_SYS_PROC_RELEASE(towait);
+        }
+
+        if (!slept || 0 != ret) {
+            return ret;
         }
     }
 }
@@ -115,20 +130,7 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         goto end;
     }
 
-    com_proc_t *towait = NULL;
-
-    if (-1 == pid) {
-        towait = com_sys_proc_get_arbitrary_child(curr_proc);
-    } else {
-        towait = com_sys_proc_get_by_pid(pid);
-    }
-
-    if (NULL == towait) {
-        return COM_SYS_SYSCALL_ERR(ECHILD);
-    }
-
-    ret = waitpid_proc(curr_proc, towait, status, flags);
-    COM_SYS_PROC_RELEASE(towait);
+    ret = waitpid_proc(curr_proc, pid, status, flags);
 
 end:
     if (ret < 0) {

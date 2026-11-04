@@ -42,6 +42,16 @@ static kradixtree_t Processes;
 static pid_t        NextPid = 1;
 static kradixtree_t ProcGroupMap;
 
+static void proc_notify_parent(com_proc_t *proc) {
+    com_proc_t *parent = com_sys_proc_get_by_pid(proc->parent_pid);
+    if (NULL != parent) {
+        kspinlock_acquire(&parent->waitpid_lock);
+        com_sys_sched_notify_all(&parent->waitpid_waitlist);
+        kspinlock_release(&parent->waitpid_lock);
+        COM_SYS_PROC_RELEASE(parent);
+    }
+}
+
 static void proc_update_fd_hint(com_proc_t *proc) {
     // Best case: there's a file after the hint
     for (; proc->next_fd < CONFIG_OPEN_MAX; proc->next_fd++) {
@@ -77,6 +87,7 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
     proc->cwd                 = cwd;
     proc->num_ref             = 1; // 1 because of the parent
     proc->num_running_threads = 0;
+    proc->waitpid_lock        = KSPINLOCK_NEW();
     COM_SYS_THREAD_WAITLIST_INIT(&proc->waitpid_waitlist);
     COM_SYS_THREAD_WAITLIST_INIT(&proc->stop_waitlist);
 
@@ -93,6 +104,7 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 
     proc->fd_lock = KSPINLOCK_NEW();
     proc->next_fd = 0;
+    proc->max_fd  = 0;
 
     proc->pg_lock    = KSPINLOCK_NEW();
     proc->proc_group = NULL;
@@ -190,6 +202,7 @@ int com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
 
     proc->fd[new_fd]       = proc->fd[old_fd];
     proc->fd[new_fd].flags = 0;
+    proc->max_fd           = KMAX(proc->max_fd, new_fd + 1);
     proc_update_fd_hint(proc);
 
     COM_FS_FILE_HOLD(proc->fd[new_fd].file);
@@ -429,9 +442,7 @@ void com_sys_proc_exit(int exit_code, int cause_sig) {
                                    cause_sig);
 
     kspinlock_release(&curr_proc->signal_lock);
-    kspinlock_acquire(&curr_proc->threads_lock);
-    com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
-    kspinlock_release(&curr_proc->threads_lock);
+    proc_notify_parent(curr_proc);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
     KDEBUG("pid=%d exited with code %d", curr_proc->pid, exit_code);
@@ -458,8 +469,8 @@ void com_sys_proc_stop_nolock(int stop_signal) {
     TAILQ_FOREACH_SAFE(t, &curr_proc->threads, proc_threads, _) {
         com_ipc_signal_send_to_thread(t, stop_signal, curr_proc);
     }
-    com_sys_sched_notify_all(&curr_proc->waitpid_waitlist);
     kspinlock_release(&curr_proc->threads_lock);
+    proc_notify_parent(curr_proc);
     com_ipc_signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
     kspinlock_acquire(&curr_proc->signal_lock);
 }
