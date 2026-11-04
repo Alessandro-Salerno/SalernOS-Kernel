@@ -62,6 +62,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
 
     kspinlock_acquire(&curr_proc->fd_lock);
     new_proc->next_fd = curr_proc->next_fd;
+    new_proc->max_fd  = curr_proc->max_fd;
     for (int i = 0; i < curr_proc->max_fd; i++) {
         if (NULL != curr_proc->fd[i].file) {
             new_proc->fd[i].flags = curr_proc->fd[i].flags;
