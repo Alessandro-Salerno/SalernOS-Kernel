@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -32,6 +33,10 @@ COM_SYS_SYSCALL(com_sys_syscall_readdir) {
     int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
     void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
     size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+
+    if (!ARCH_MMU_RANGE_IS_USER(buf, buflen)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
 

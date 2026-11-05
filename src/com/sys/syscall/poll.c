@@ -19,6 +19,7 @@
 #define _GNU_SROUCE
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -51,6 +52,11 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     struct pollfd   *fds     = COM_SYS_SYSCALL_ARG(void *, 1);
     nfds_t           nfds    = COM_SYS_SYSCALL_ARG(nfds_t, 2);
     struct timespec *timeout = COM_SYS_SYSCALL_ARG(void *, 3);
+
+    if (!ARCH_MMU_ARRAY_IS_USER(fds, nfds, sizeof(*fds)) ||
+        !ARCH_MMU_RANGE_IS_USER(timeout, sizeof(*timeout))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

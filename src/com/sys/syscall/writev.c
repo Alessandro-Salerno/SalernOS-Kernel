@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -34,6 +35,13 @@ COM_SYS_SYSCALL(com_sys_syscall_writev) {
     int           fd     = COM_SYS_SYSCALL_ARG(int, 1);
     struct iovec *iov    = COM_SYS_SYSCALL_ARG(void *, 2);
     int           iovcnt = COM_SYS_SYSCALL_ARG(int, 3);
+
+    if (iovcnt < 0) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+    if (!ARCH_MMU_ARRAY_IS_USER(iov, iovcnt, sizeof(struct iovec))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 

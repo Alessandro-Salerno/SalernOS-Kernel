@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/syscall.h>
@@ -37,6 +39,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     struct sysinfo *sysinfo = COM_SYS_SYSCALL_ARG(struct sysinfo *, 1);
+
+    if (!ARCH_MMU_RANGE_IS_USER(sysinfo, sizeof(*sysinfo))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     // kstrcpy(sysinfo->cpu, "Not implemented");
     // kstrcpy(sysinfo->gpu, "Not implemented");

@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
@@ -29,6 +31,10 @@ COM_SYS_SYSCALL(com_sys_syscall_clock_get) {
 
     int              clock = COM_SYS_SYSCALL_ARG(int, 1);
     struct timespec *ts    = COM_SYS_SYSCALL_ARG(void *, 2);
+
+    if (!ARCH_MMU_RANGE_IS_USER(ts, sizeof(*ts))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     (void)clock; // TODO: what is this?
     uintmax_t ns = ARCH_CPU_GET_TIME();

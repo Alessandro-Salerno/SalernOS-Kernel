@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
@@ -33,6 +34,11 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
 
     if (sig < 1 || sig > NSIG) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
+    if (!ARCH_MMU_RANGE_IS_USER(act, sizeof(*act)) ||
+        !ARCH_MMU_RANGE_IS_USER(oact, sizeof(*oact))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;

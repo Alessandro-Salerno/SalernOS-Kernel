@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/context.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/context.h>
@@ -72,7 +74,11 @@ void arch_context_alloc_sigframe(com_sigframe_t **sframe,
     *stackptr = stack;
 }
 
-void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
+int arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
+    if (!ARCH_MMU_RANGE_IS_USER(sframe, sizeof(*sframe))) {
+        return EFAULT;
+    }
+
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8]  = ctx->r8;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9]  = ctx->r9;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10] = ctx->r10;
@@ -91,13 +97,19 @@ void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSP] = ctx->rsp;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP] = ctx->rip;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL] = ctx->rflags;
+    return 0;
 }
 
-void arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer) {
+int arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer) {
     uint64_t stack = *stackptr;
     stack -= 8;
+    if (!ARCH_MMU_RANGE_IS_USER(stack, sizeof(uint64_t))) {
+        return EFAULT;
+    }
+
     *(uint64_t *)stack = (uint64_t)restorer;
     *stackptr          = stack;
+    return 0;
 }
 
 void arch_context_signal_trampoline(com_sigframe_t *sframe,
@@ -112,9 +124,13 @@ void arch_context_signal_trampoline(com_sigframe_t *sframe,
     ctx->rdx = (uint64_t)(&sframe->uc);
 }
 
-void arch_context_restore_sigframe(com_sigframe_t **sframeptr,
-                                   arch_context_t  *ctx) {
+int arch_context_restore_sigframe(com_sigframe_t **sframeptr,
+                                  arch_context_t  *ctx) {
     com_sigframe_t *sframe = (void *)ctx->rsp;
+    if (!ARCH_MMU_RANGE_IS_USER(sframe, sizeof(*sframe))) {
+        return EFAULT;
+    }
+
     ctx->r8     = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8];
     ctx->r9     = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9];
     ctx->r10    = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10];
@@ -137,6 +153,7 @@ void arch_context_restore_sigframe(com_sigframe_t **sframeptr,
 
     // Do not let user code set privileged flags (e.g., IOPL)
     ctx->rflags = (ctx->rflags & 0x40DD5) | 0x202;
+    return 0;
 }
 
 void x86_64_ctx_prepare(arch_context_t *ctx, arch_context_t *frame) {

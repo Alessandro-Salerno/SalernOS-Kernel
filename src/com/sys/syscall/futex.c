@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -59,6 +60,13 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
     uint32_t *word_ptr = COM_SYS_SYSCALL_ARG(uint32_t *, 1);
     int       op       = COM_SYS_SYSCALL_ARG(int, 2);
     uint32_t  value    = COM_SYS_SYSCALL_ARG(uint32_t, 3);
+
+    if (!ARCH_MMU_RANGE_IS_USER(word_ptr, sizeof(*word_ptr))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
+    if (0 != (uintptr_t)word_ptr % sizeof(*word_ptr)) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,

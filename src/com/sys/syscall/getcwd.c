@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -38,6 +39,10 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
 
     if (size < 1) {
         return COM_SYS_SYSCALL_ERR(EOVERFLOW);
+    }
+
+    if (!ARCH_MMU_RANGE_IS_USER(buf, size)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();

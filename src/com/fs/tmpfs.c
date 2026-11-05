@@ -673,6 +673,9 @@ int com_fs_tmpfs_mmap(void             **out,
         range_base = com_mm_vmm_prealloc_range(vmm_context,
                                                E_COM_VMM_RANGE_TYPE_FILE,
                                                size);
+        if (NULL == range_base) {
+            return ENOMEM;
+        }
     }
 
     if (!shared) {

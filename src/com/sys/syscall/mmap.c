@@ -115,6 +115,10 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     int    fd    = COM_SYS_SYSCALL_ARG(int, 5);
     off_t  off   = COM_SYS_SYSCALL_ARG(off_t, 6);
 
+    if ((MAP_FIXED & flags) && !ARCH_MMU_RANGE_IS_USER(hint, size)) {
+        return COM_SYS_SYSCALL_ERR(ENOMEM);
+    }
+
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
     int              vmm_flags = make_vmm_flags(flags, prot);
@@ -132,6 +136,10 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
                                 size,
                                 vmm_flags | COM_MM_VMM_FLAGS_ALLOCATE,
                                 mmu_flags);
+
+    if (NULL == virt) {
+        return COM_SYS_SYSCALL_ERR(ENOMEM);
+    }
 
     return COM_SYS_SYSCALL_OK(virt);
 }

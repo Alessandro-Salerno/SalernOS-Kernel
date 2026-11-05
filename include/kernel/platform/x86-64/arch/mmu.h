@@ -26,7 +26,14 @@
 #define ARCH_MMU_USERSPACE_START   (void *)0x0000000000000000
 #define ARCH_MMU_USERSPACE_END     (void *)0x0000800000000000
 
-#define ARCH_MMU_ADDR_IS_USER(a) ((void *)a < ARCH_MMU_USERSPACE_END)
+#define ARCH_MMU_ADDR_IS_USER(a) ((void *)(a) < ARCH_MMU_USERSPACE_END)
+#define ARCH_MMU_RANGE_IS_USER(a, len) \
+    (ARCH_MMU_ADDR_IS_USER(a) &&       \
+     (uintmax_t)(len) <=               \
+         (uintptr_t)ARCH_MMU_USERSPACE_END - (uintptr_t)(void *)(a))
+#define ARCH_MMU_ARRAY_IS_USER(a, n, size)                           \
+    ((uintmax_t)(n) <= (uintptr_t)ARCH_MMU_USERSPACE_END / (size) && \
+     ARCH_MMU_RANGE_IS_USER(a, (uintmax_t)(n) * (size)))
 
 #define ARCH_MMU_FLAGS_READ    (uint64_t)1
 #define ARCH_MMU_FLAGS_WRITE   (uint64_t)2

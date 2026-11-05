@@ -18,6 +18,7 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
@@ -35,7 +36,11 @@ COM_SYS_SYSCALL(com_sys_syscall_sigreturn) {
     kspinlock_acquire(&curr_proc->signal_lock);
 
     com_sigframe_t *sframe;
-    arch_context_restore_sigframe(&sframe, ctx);
+    if (0 != arch_context_restore_sigframe(&sframe, ctx)) {
+        kspinlock_release(&curr_proc->signal_lock);
+        com_sys_proc_terminate(0, SIGSEGV);
+        __builtin_unreachable();
+    }
     curr_thread->masked_signals = sframe->uc.uc_sigmask.sig[0];
 
     kspinlock_release(&curr_proc->signal_lock);

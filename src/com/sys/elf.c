@@ -275,6 +275,11 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                 break;
 
             case PT_LOAD:
+                if (!ARCH_MMU_RANGE_IS_USER(vaddr, phdr.mem_sz) ||
+                    !ARCH_MMU_RANGE_IS_USER(vaddr, phdr.file_sz)) {
+                    ret = ENOEXEC;
+                    goto cleanup;
+                }
                 KDEBUG("found PT_LOAD at offset %zu with segment at offset %zu "
                        "and "
                        "virt %p",

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -39,6 +40,10 @@ COM_SYS_SYSCALL(com_sys_syscall_mkdirat) {
     const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
     mode_t      mode   = COM_SYS_SYSCALL_ARG(mode_t, 3);
     (void)mode;
+
+    if (!ARCH_MMU_ADDR_IS_USER(path)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

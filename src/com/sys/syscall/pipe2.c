@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -35,6 +36,10 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
 
     int *fildes = COM_SYS_SYSCALL_ARG(int *, 1);
     int  flags  = COM_SYS_SYSCALL_ARG(int, 2);
+
+    if (!ARCH_MMU_RANGE_IS_USER(fildes, 2 * sizeof(*fildes))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     int         rfd  = com_sys_proc_next_fd(curr);

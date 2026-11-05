@@ -37,9 +37,8 @@ COM_SYS_SYSCALL(com_sys_syscall_munmap) {
     void  *addr = COM_SYS_SYSCALL_ARG(void *, 1);
     size_t len  = COM_SYS_SYSCALL_ARG(size_t, 2);
 
-    if (0 != (uintptr_t)addr % ARCH_PAGE_SIZE ||
-        addr > ARCH_MMU_KERNELSPACE_START || 0 == len ||
-        addr + len > ARCH_MMU_KERNELSPACE_START) {
+    if (0 != (uintptr_t)addr % ARCH_PAGE_SIZE || 0 == len ||
+        !ARCH_MMU_RANGE_IS_USER(addr, len)) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 

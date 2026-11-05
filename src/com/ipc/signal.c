@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/context.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
@@ -273,10 +274,16 @@ restart:
     com_sigframe_t *sframe;
     uintptr_t       stack;
     arch_context_alloc_sigframe(&sframe, &stack, ctx);
+    if (!ARCH_MMU_RANGE_IS_USER(sframe, sizeof(*sframe))) {
+        goto bad_frame;
+    }
+
     kmemset(sframe, sizeof(com_sigframe_t), 0);
     sframe->info.si_signo        = sig;
     sframe->uc.uc_sigmask.sig[0] = thread->masked_signals;
-    arch_context_setup_sigframe(sframe, ctx);
+    if (0 != arch_context_setup_sigframe(sframe, ctx)) {
+        goto bad_frame;
+    }
 
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
@@ -288,7 +295,9 @@ restart:
            proc->pid,
            sigaction->sa_restorer,
            sig);
-    arch_context_setup_sigrestore(&stack, sigaction->sa_restorer);
+    if (0 != arch_context_setup_sigrestore(&stack, sigaction->sa_restorer)) {
+        goto bad_frame;
+    }
     arch_context_signal_trampoline(sframe,
                                    ctx,
                                    stack,
@@ -300,6 +309,17 @@ restart:
 
 end:
     kspinlock_release(&proc->signal_lock);
+    return;
+
+bad_frame:
+    // Not a signal: cannot be caught or blocked, so it cannot recurse
+    kspinlock_release(&proc->signal_lock);
+    thread->lock_depth = 0;
+    KDEBUG("bad signal frame, pid=%d (%s), rsp=%p",
+           proc->pid,
+           proc->executable_path,
+           (void *)ctx->rsp);
+    com_sys_proc_terminate(0, SIGSEGV);
 }
 
 int com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,

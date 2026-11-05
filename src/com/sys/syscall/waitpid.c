@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
@@ -121,6 +122,10 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     pid_t pid    = COM_SYS_SYSCALL_ARG(pid_t, 1);
     int  *status = COM_SYS_SYSCALL_ARG(int *, 2);
     int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
+
+    if (!ARCH_MMU_RANGE_IS_USER(status, sizeof(*status))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     int         ret       = 0; // 0 is NOT valid

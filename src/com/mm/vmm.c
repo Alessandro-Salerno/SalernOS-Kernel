@@ -18,6 +18,7 @@
 
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <arch/mmu.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
@@ -88,6 +89,26 @@ com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context) {
     return new_vmm_ctx;
 }
 
+static void *vmm_alloc_anon_range(com_vmm_context_t *context, size_t pages) {
+    KASSERT(&RootContext != context);
+    KASSERT(RootContext.pagetable != context->pagetable);
+
+    size_t max_pages = ((uintptr_t)ARCH_MMU_USERSPACE_END -
+                        CONFIG_VMM_ANON_START) /
+                       ARCH_PAGE_SIZE;
+    void  *base      = NULL;
+
+    kspinlock_acquire(&context->lock);
+    if (pages <= max_pages - context->anon_pages) {
+        base = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
+                        CONFIG_VMM_ANON_START);
+        context->anon_pages += pages;
+    }
+    kspinlock_release(&context->lock);
+
+    return base;
+}
+
 void *com_mm_vmm_map(com_vmm_context_t *context,
                      void              *virt,
                      void              *phys,
@@ -135,13 +156,10 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 
     if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
         if (COM_MM_VMM_FLAGS_ANONYMOUS & vmm_flags) {
-            KASSERT(&RootContext != context);
-            KASSERT(RootContext.pagetable != context->pagetable);
-            kspinlock_acquire(&context->lock);
-            virt = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
-                            CONFIG_VMM_ANON_START);
-            context->anon_pages += size_in_pages;
-            kspinlock_release(&context->lock);
+            virt = vmm_alloc_anon_range(context, size_in_pages);
+            if (NULL == virt) {
+                return NULL;
+            }
         } else if (COM_MM_VMM_FLAGS_PHYSICAL & vmm_flags) {
             virt = (void *)ARCH_PHYS_TO_HHDM(page_paddr);
             mmu_flags |= ARCH_MMU_FLAGS_GLOBAL;
@@ -366,16 +384,9 @@ void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
                                 size_t               len) {
     (void)rangetype;
     context = vmm_ensure_context(context);
-    KASSERT(&RootContext != context);
-    KASSERT(RootContext.pagetable != context->pagetable);
-
-    kspinlock_acquire(&context->lock);
-    void *range_base = (void *)(context->anon_pages * ARCH_PAGE_SIZE +
-                                CONFIG_VMM_ANON_START);
-    context->anon_pages += (len + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
-    kspinlock_release(&context->lock);
-
-    return range_base;
+    return vmm_alloc_anon_range(context,
+                                len / ARCH_PAGE_SIZE +
+                                    (0 != len % ARCH_PAGE_SIZE));
 }
 
 void com_mm_vmm_init_reaper(void) {

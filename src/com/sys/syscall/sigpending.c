@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
@@ -27,6 +29,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     com_sigset_t *sigset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 1);
+
+    if (!ARCH_MMU_RANGE_IS_USER(sigset, sizeof(*sigset))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

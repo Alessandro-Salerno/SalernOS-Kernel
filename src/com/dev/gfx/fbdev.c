@@ -77,7 +77,7 @@ static int fbdev_mmap(void             **out,
                           size,
                           vmm_flags,
                           mmu_flags | ARCH_MMU_FLAGS_WC);
-    return 0;
+    return (NULL == *out) ? ENOMEM : 0;
 }
 
 static com_dev_ops_t FbdevOps = {.ioctl = fbdev_ioctl,

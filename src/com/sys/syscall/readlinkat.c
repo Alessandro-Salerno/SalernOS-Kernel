@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -38,6 +39,10 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
     char       *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
     size_t      buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
+
+    if (!ARCH_MMU_ADDR_IS_USER(path) || !ARCH_MMU_RANGE_IS_USER(buf, buflen)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

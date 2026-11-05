@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/sockfs.h>
@@ -35,6 +36,10 @@ COM_SYS_SYSCALL(com_sys_syscall_connect) {
     int              sockfd   = COM_SYS_SYSCALL_ARG(int, 1);
     struct sockaddr *addr     = COM_SYS_SYSCALL_ARG(void *, 2);
     socklen_t        addr_len = COM_SYS_SYSCALL_ARG(socklen_t, 3);
+
+    if (!ARCH_MMU_RANGE_IS_USER(addr, addr_len)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

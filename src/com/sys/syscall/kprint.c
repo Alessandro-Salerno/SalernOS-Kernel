@@ -16,6 +16,8 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/util.h>
@@ -27,6 +29,10 @@ COM_SYS_SYSCALL(com_sys_syscall_kprint) {
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     const char *message = COM_SYS_SYSCALL_ARG(const char *, 1);
+
+    if (!ARCH_MMU_ADDR_IS_USER(message)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_io_log_lock();
     kinitlog("USER", "\033[36m");

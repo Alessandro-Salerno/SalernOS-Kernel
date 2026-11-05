@@ -19,6 +19,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -49,6 +50,11 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     const char     *path = COM_SYS_SYSCALL_ARG(const char *, 1);
     char *const    *argv = COM_SYS_SYSCALL_ARG(char *const *, 2);
     char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
+
+    if (!ARCH_MMU_ADDR_IS_USER(path) || !ARCH_MMU_ADDR_IS_USER(argv) ||
+        !ARCH_MMU_ADDR_IS_USER(env)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *proc   = thread->proc;

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/callout.h>
@@ -103,6 +104,11 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
     int               which   = COM_SYS_SYSCALL_ARG(int, 1);
     struct itimerval *new_val = COM_SYS_SYSCALL_ARG(void *, 2);
     struct itimerval *old_val = COM_SYS_SYSCALL_ARG(void *, 3);
+
+    if (!ARCH_MMU_RANGE_IS_USER(new_val, sizeof(*new_val)) ||
+        !ARCH_MMU_RANGE_IS_USER(old_val, sizeof(*old_val))) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_syscall_ret_t ret         = COM_SYS_SYSCALL_OK(0);
