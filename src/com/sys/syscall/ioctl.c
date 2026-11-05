@@ -53,6 +53,7 @@ fd_ioctl(int fd, uintmax_t op, void *buf, com_proc_t *proc) {
     kspinlock_acquire(&proc->fd_lock);
     com_filedesc_t *fildesc = com_sys_proc_get_fildesc_nolock(proc, fd);
     if (NULL == fildesc) {
+        kspinlock_release(&proc->fd_lock);
         return FDIOCTL_ERR(EBADF);
     }
 
