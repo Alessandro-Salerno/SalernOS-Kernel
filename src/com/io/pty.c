@@ -97,6 +97,7 @@ static com_pty_t *pty_alloc(void) {
 
     // ringbuffer initializations (slave is done by tty)
     KRINGBUFFER_INIT(&pty->master_rb);
+    KSYNC_INIT_MUTEX(&pty->master_rb.condvar);
     pty->master_rb.check_hangup           = pty_rb_check_hangup;
     pty->master_rb.fallback_hu_arg        = pty;
     pty->backend.slave_rb.check_hangup    = pty_rb_check_hangup;

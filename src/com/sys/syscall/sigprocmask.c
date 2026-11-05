@@ -22,6 +22,7 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/mem.h>
 
 // SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
 COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
@@ -37,17 +38,29 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
+    com_sigset_t  kset;
+    com_sigset_t  koset;
+    com_sigset_t *kset_ptr = NULL;
+    if (NULL != set) {
+        kmemcpy(&kset, set, sizeof(kset));
+        kset_ptr = &kset;
+    }
+
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     int sig_ret = com_ipc_signal_set_mask(&curr_thread->masked_signals,
                                           how,
-                                          set,
-                                          oset,
+                                          kset_ptr,
+                                          NULL != oset ? &koset : NULL,
                                           &curr_proc->signal_lock);
 
     if (0 != sig_ret) {
         return COM_SYS_SYSCALL_ERR(sig_ret);
+    }
+
+    if (NULL != oset) {
+        kmemcpy(oset, &koset, sizeof(koset));
     }
 
     return COM_SYS_SYSCALL_OK(0);

@@ -25,15 +25,14 @@ void arch_context_print(arch_context_t *ctx);
 void arch_context_trampoline(arch_context_t *ctx);
 void arch_context_fork_trampoline(void);
 
-void arch_context_alloc_sigframe(com_sigframe_t **sframe,
+int  arch_context_alloc_sigframe(com_sigframe_t **sframe,
                                  uintptr_t       *stackptr,
                                  arch_context_t  *ctxptr);
-int  arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx);
+void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx);
 int  arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer);
 void arch_context_signal_trampoline(com_sigframe_t *sframe,
                                     arch_context_t *ctx,
                                     uintptr_t       stack,
                                     void           *handler,
                                     int             sig);
-int  arch_context_restore_sigframe(com_sigframe_t **sframeptr,
-                                   arch_context_t  *ctx);
+int  arch_context_restore_sigframe(com_sigframe_t *sframe, arch_context_t *ctx);

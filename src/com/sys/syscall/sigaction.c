@@ -41,29 +41,35 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    kspinlock_acquire(&curr_proc->signal_lock);
-
-    if (NULL != oact) {
-        if (NULL != curr_proc->sigaction[sig]) {
-            *oact = *curr_proc->sigaction[sig];
-        } else {
-            com_sigaction_t sa = {.sa_action = SIG_DFL};
-            *oact              = sa;
-        }
+    com_sigaction_t *new_act = NULL;
+    if (NULL != act) {
+        new_act = com_mm_slab_alloc(sizeof(com_sigaction_t));
+        kmemcpy(new_act, act, sizeof(com_sigaction_t));
     }
 
-    if (NULL != act) {
-        if (NULL != curr_proc->sigaction[sig]) {
-            com_mm_slab_free(curr_proc->sigaction[sig],
-                             sizeof(com_sigaction_t));
-        }
+    com_proc_t      *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    com_sigaction_t  old_act   = {.sa_action = SIG_DFL};
+    com_sigaction_t *to_free   = NULL;
+    kspinlock_acquire(&curr_proc->signal_lock);
 
-        com_sigaction_t *new_act = com_mm_slab_alloc(sizeof(com_sigaction_t));
-        kmemcpy(new_act, act, sizeof(com_sigaction_t));
+    if (NULL != curr_proc->sigaction[sig]) {
+        old_act = *curr_proc->sigaction[sig];
+    }
+
+    if (NULL != new_act) {
+        to_free                   = curr_proc->sigaction[sig];
         curr_proc->sigaction[sig] = new_act;
     }
 
     kspinlock_release(&curr_proc->signal_lock);
+
+    if (NULL != to_free) {
+        com_mm_slab_free(to_free, sizeof(com_sigaction_t));
+    }
+
+    if (NULL != oact) {
+        kmemcpy(oact, &old_act, sizeof(com_sigaction_t));
+    }
+
     return COM_SYS_SYSCALL_OK(0);
 }

@@ -31,6 +31,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/mem.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
@@ -78,21 +79,27 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         }
     }
 
-    com_polled_t  stack_polleds[NUM_STACK_POLLEDS] = {0};
-    com_polled_t *polleds                          = stack_polleds;
-    size_t polleds_pages = nfds * sizeof(com_polled_t) / ARCH_PAGE_SIZE + 1;
+    com_polled_t   stack_polleds[NUM_STACK_POLLEDS] = {0};
+    struct pollfd  stack_kfds[NUM_STACK_POLLEDS];
+    com_polled_t  *polleds = stack_polleds;
+    struct pollfd *kfds    = stack_kfds;
+    size_t polleds_pages   = nfds * (sizeof(com_polled_t) + sizeof(*kfds)) /
+                               ARCH_PAGE_SIZE +
+                           1;
     if (POLL_SHOULD_ALLOC(nfds)) {
         polleds = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many_zero(polleds_pages));
+        kfds = (void *)&polleds[nfds];
     }
+    kmemcpy(kfds, fds, nfds * sizeof(*kfds));
 
     int invalid_count = 0;
     kspinlock_acquire(&curr_proc->fd_lock);
     for (nfds_t i = 0; i < nfds; i++) {
         com_polled_t *polled = &polleds[i];
         polled->poller       = &poller;
-        fds[i].revents       = 0;
-        int fd               = fds[i].fd;
+        kfds[i].revents      = 0;
+        int fd               = kfds[i].fd;
 
         if (fd < 0) {
             continue;
@@ -118,7 +125,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
 
         continue;
     invalid_fd:
-        fds[i].revents |= POLLNVAL;
+        kfds[i].revents |= POLLNVAL;
         invalid_count++;
     }
     kspinlock_release(&curr_proc->fd_lock);
@@ -136,11 +143,11 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
             }
 
             short revents = 0;
-            com_fs_vfs_poll(&revents, polled->file->vnode, fds[i].events);
-            revents &= fds[i].events | POLLHUP | POLLERR;
+            com_fs_vfs_poll(&revents, polled->file->vnode, kfds[i].events);
+            revents &= kfds[i].events | POLLHUP | POLLERR;
 
             if (0 != revents) {
-                fds[i].revents = revents;
+                kfds[i].revents = revents;
                 count++;
             }
         }
@@ -202,6 +209,10 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         }
 
         COM_FS_FILE_RELEASE(polled->file);
+    }
+
+    for (nfds_t i = 0; i < nfds; i++) {
+        fds[i].revents = kfds[i].revents;
     }
 
     // If we had allocated polleds, we shall also free it

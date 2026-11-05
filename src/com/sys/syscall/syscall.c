@@ -25,6 +25,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/syscall.h>
+#include <lib/str.h>
 #include <stdint.h>
 
 // NOTE: not static so others can call
@@ -33,15 +34,54 @@ static com_syscall_aux_t SyscallAuxTable[CONFIG_SYSCALL_MAX];
 static size_t            NumSyscalls = 0;
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
-static void log_syscall(com_syscall_aux_t *aux, arch_syscall_arg_t args[]) {
+#define LOG_STR_MAX 64
+
+// String arguments are copied before taking the log lock
+static void fetch_str_args(char               strs[][LOG_STR_MAX],
+                           com_syscall_aux_t *aux,
+                           arch_syscall_arg_t args[]) {
+    for (size_t i = 0; i < aux->num_args; i++) {
+        const char *str = (const char *)args[i];
+        if (COM_SYS_SYSCALL_TYPE_STR != aux->arg_types[i]) {
+            continue;
+        }
+#if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
+        if (NULL == str) {
+            kstrcpy(strs[i], "NULL");
+            continue;
+        }
+        // TODO: poor man's usercopy, only the first page is checked
+        com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+        if (NULL == arch_mmu_get_physical(NULL,
+                                          NULL,
+                                          curr_proc->vmm_context->pagetable,
+                                          (void *)str)) {
+            kstrcpy(strs[i], "**UNMAPPED**");
+            continue;
+        }
+        size_t n     = 0;
+        strs[i][n++] = '"';
+        for (; n < LOG_STR_MAX - 2 && '\0' != *str; n++, str++) {
+            strs[i][n] = *str;
+        }
+        strs[i][n++] = '"';
+        strs[i][n]   = '\0';
+#else
+        (void)str;
+        kstrcpy(strs[i], "**UNSAFE**");
+#endif
+    }
+}
+
+static void log_syscall(com_syscall_aux_t *aux,
+                        arch_syscall_arg_t args[],
+                        char               strs[][LOG_STR_MAX]) {
     printf("%s(", aux->name);
 
     for (size_t i = 0; i < aux->num_args; i++) {
         int         arg_type = aux->arg_types[i];
         const char *arg_name = aux->arg_names[i];
         printf("%s = ", arg_name);
-
-        com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
 
         switch (arg_type) {
             case COM_SYS_SYSCALL_TYPE_INT:
@@ -62,25 +102,7 @@ static void log_syscall(com_syscall_aux_t *aux, arch_syscall_arg_t args[]) {
                 break;
             }
             case COM_SYS_SYSCALL_TYPE_STR:
-#if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
-                if (NULL != (void *)args[i]) {
-                    // TODO: poor man's usercopy, if the string is longer than
-                    // ARCH_PAGE_SIZE this may still crash
-                    if (NULL !=
-                        arch_mmu_get_physical(NULL,
-                                              NULL,
-                                              curr_proc->vmm_context->pagetable,
-                                              (void *)args[i])) {
-                        printf("\"%s\"", (void *)args[i]);
-                    } else {
-                        printf("**UNMAPPED**");
-                    }
-                } else {
-                    printf("NULL");
-                }
-#else
-                printf("**UNSAFE**");
-#endif
+                printf("%s", strs[i]);
                 break;
             case COM_SYS_SYSCALL_TYPE_FLAGS:
             case COM_SYS_SYSCALL_TYPE_MODE:
@@ -154,10 +176,12 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
     com_syscall_aux_t *aux     = &SyscallAuxTable[number];
     arch_syscall_arg_t args[6] = {arg1, arg2, arg3, arg4, arg5, arg6};
+    char               strs[6][LOG_STR_MAX];
+    fetch_str_args(strs, aux, args);
 #if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
-    log_syscall(aux, args);
+    log_syscall(aux, args, strs);
     printf(" at %p\n", invoke_ip);
     KRESET_COLOR();
     com_io_log_unlock();
@@ -177,7 +201,7 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
 #ifdef DO_SYSCALL_LOG_AFTER
     com_io_log_lock();
     kinitlog("SYSCALL", "\033[33m");
-    log_syscall(aux, args);
+    log_syscall(aux, args, strs);
     printf(" -> {ret = %p, errno = %zu}\n", ret.value, ret.err);
     KRESET_COLOR();
     com_io_log_unlock();

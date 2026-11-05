@@ -90,6 +90,7 @@ static struct unix_socket *unix_socket_alloc(void) {
     size_t rb_pages          = CONFIG_UNIX_SOCK_RB_SIZE / ARCH_PAGE_SIZE + 1;
     void  *rb_buff = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(rb_pages));
     KRINGBUFFER_INIT_CUSTOM(&sock->rb, rb_buff, CONFIG_UNIX_SOCK_RB_SIZE);
+    KSYNC_INIT_MUTEX(&sock->rb.condvar);
     sock->rb.fallback_hu_arg = sock;
     sock->rb.check_hangup    = unix_socket_rb_check_hangup;
     TAILQ_INIT(&sock->srv_acceptq);

@@ -62,11 +62,18 @@ static int text_tty_echo(size_t     *bytes_written,
                          void       *passthrough) {
     (void)blocking;
 
+    // term->lock is a spinlock (panic needs it), so never render from buf
     com_text_tty_t *tty = passthrough;
-    com_io_term_putsn(tty->term, buf, buflen);
+    char            chunk[128];
+    for (size_t done = 0; done < buflen;) {
+        size_t n = KMIN(buflen - done, sizeof(chunk));
+        kmemcpy(chunk, buf + done, n);
+        com_io_term_putsn(tty->term, chunk, n);
 #if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
-    printf("%.*s", (int)buflen, buf);
+        printf("%.*s", (int)n, chunk);
 #endif
+        done += n;
+    }
     *bytes_written = buflen;
     return 0;
 }
@@ -739,6 +746,7 @@ void com_io_tty_init_text_backend(com_text_tty_backend_t *backend,
                                               void       *passthrough)) {
     kmemset(backend, sizeof(com_text_tty_backend_t), 0);
     KRINGBUFFER_INIT(&backend->slave_rb);
+    KSYNC_INIT_MUTEX(&backend->slave_rb.condvar);
     LIST_INIT(&backend->slave_ph.polled_list);
     backend->slave_ph.lock = KSPINLOCK_NEW();
     backend->echo          = echo;
@@ -861,7 +869,6 @@ int com_io_tty_init_text(com_vnode_t **out,
     size_t rows, cols;
     com_io_term_get_size(term, &rows, &cols);
     com_io_tty_init_text_backend(&tty->backend, rows, cols, text_tty_echo);
-    KSYNC_INIT_MUTEX(&tty->backend.slave_rb.condvar);
 
 end:
     if (NULL != out) {

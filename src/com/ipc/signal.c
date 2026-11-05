@@ -78,7 +78,7 @@ static com_sigmask_t signal_pending(com_thread_t *thread) {
     const com_sigmask_t stop    = 1UL << (SIGSTOP - 1);
     const com_sigmask_t cont    = 1UL << (SIGCONT - 1);
     com_sigmask_t       pending = thread->pending_signals &
-                                  (~thread->masked_signals | kill | stop);
+                            (~thread->masked_signals | kill | stop);
     if (thread->signal_stopped) {
         pending &= kill;
         if (E_COM_PROC_STATE_STOPPED != thread->proc->state) {
@@ -206,13 +206,14 @@ int com_ipc_signal_send_to_thread(struct com_thread *thread,
 
 void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
     com_proc_t *proc = thread->proc;
+    KASSERT(0 == thread->lock_depth);
 
 restart:
     if (__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
-        thread->lock_depth = 0;
         com_sys_thread_exit(thread);
         __builtin_unreachable();
     }
+
     kspinlock_acquire(&proc->signal_lock);
     int sig = com_ipc_signal_check_nolock();
 
@@ -229,7 +230,6 @@ restart:
     if (NULL == sigaction || SIG_DFL == sigaction->sa_action) {
         if (SA_KILL & SignalProperties[sig]) {
             kspinlock_release(&proc->signal_lock);
-            thread->lock_depth = 0;
 
             KDEBUG("fatal signal %d, pid=%d (%s), rip=%p, rsp=%p",
                    sig,
@@ -252,10 +252,7 @@ restart:
             while (E_COM_PROC_STATE_STOPPED == proc->state &&
                    SIGKILL != com_ipc_signal_check_nolock()) {
                 kspinlock_release(&proc->signal_lock);
-                int depth          = thread->lock_depth;
-                thread->lock_depth = 0;
                 com_sys_sched_wait_nodrop(&proc->stop_waitlist);
-                thread->lock_depth = depth;
                 kspinlock_acquire(&proc->signal_lock);
             }
             thread->signal_stopped = false;
@@ -271,19 +268,14 @@ restart:
         goto end;
     }
 
-    com_sigframe_t *sframe;
-    uintptr_t       stack;
-    arch_context_alloc_sigframe(&sframe, &stack, ctx);
-    if (!ARCH_MMU_RANGE_IS_USER(sframe, sizeof(*sframe))) {
-        goto bad_frame;
-    }
+    void (*handler)(int)   = sigaction->sa_action;
+    void (*restorer)(void) = sigaction->sa_restorer;
 
-    kmemset(sframe, sizeof(com_sigframe_t), 0);
-    sframe->info.si_signo        = sig;
-    sframe->uc.uc_sigmask.sig[0] = thread->masked_signals;
-    if (0 != arch_context_setup_sigframe(sframe, ctx)) {
-        goto bad_frame;
-    }
+    com_sigframe_t kframe;
+    kmemset(&kframe, sizeof(kframe), 0);
+    kframe.info.si_signo        = sig;
+    kframe.uc.uc_sigmask.sig[0] = thread->masked_signals;
+    arch_context_setup_sigframe(&kframe, ctx);
 
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
@@ -291,21 +283,26 @@ restart:
         COM_IPC_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
     }
 
-    KDEBUG("pid=%d has restorer at %p for signal %d",
-           proc->pid,
-           sigaction->sa_restorer,
-           sig);
-    if (0 != arch_context_setup_sigrestore(&stack, sigaction->sa_restorer)) {
-        goto bad_frame;
-    }
-    arch_context_signal_trampoline(sframe,
-                                   ctx,
-                                   stack,
-                                   sigaction->sa_action,
-                                   sig);
     if (SA_RESETHAND & sigaction->sa_flags) {
         sigaction->sa_action = SIG_DFL;
     }
+
+    kspinlock_release(&proc->signal_lock);
+
+    KDEBUG("pid=%d has restorer at %p for signal %d", proc->pid, restorer, sig);
+
+    com_sigframe_t *sframe;
+    uintptr_t       stack;
+    if (0 != arch_context_alloc_sigframe(&sframe, &stack, ctx)) {
+        goto bad_frame;
+    }
+    kmemcpy(sframe, &kframe, sizeof(kframe));
+
+    if (0 != arch_context_setup_sigrestore(&stack, restorer)) {
+        goto bad_frame;
+    }
+    arch_context_signal_trampoline(sframe, ctx, stack, handler, sig);
+    return;
 
 end:
     kspinlock_release(&proc->signal_lock);
@@ -313,8 +310,6 @@ end:
 
 bad_frame:
     // Not a signal: cannot be caught or blocked, so it cannot recurse
-    kspinlock_release(&proc->signal_lock);
-    thread->lock_depth = 0;
     KDEBUG("bad signal frame, pid=%d (%s), rsp=%p",
            proc->pid,
            proc->executable_path,

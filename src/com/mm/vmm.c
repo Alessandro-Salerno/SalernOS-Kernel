@@ -97,7 +97,7 @@ static void *vmm_alloc_anon_range(com_vmm_context_t *context, size_t pages) {
     size_t max_pages = ((uintptr_t)ARCH_MMU_USERSPACE_END -
                         CONFIG_VMM_ANON_START) /
                        ARCH_PAGE_SIZE;
-    void  *base      = NULL;
+    void *base = NULL;
 
     kspinlock_acquire(&context->lock);
     if (pages <= max_pages - context->anon_pages) {
@@ -148,7 +148,7 @@ void *com_mm_vmm_map(com_vmm_context_t *context,
 #endif
 
     void     *page_paddr = (void *)((uintptr_t)phys &
-                                    ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+                                ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     uintptr_t page_off   = (uintptr_t)phys % ARCH_PAGE_SIZE;
     size_t    size_p_off = page_off + len;
     size_t size_in_pages = (size_p_off + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
@@ -204,9 +204,9 @@ void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr) {
     arch_mmu_flags_t flags;
     int              attr;
     void            *phys = arch_mmu_get_physical(&flags,
-                                                  &attr,
-                                                  context->pagetable,
-                                                  virt_addr);
+                                       &attr,
+                                       context->pagetable,
+                                       virt_addr);
     if (NULL == phys ||
         !(attr & (COM_MM_VMM_FAULT_ATTR_MAP | COM_MM_VMM_FAULT_ATTR_COW))) {
         return phys;
@@ -248,7 +248,7 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     size_t tmp_phys_buf_pages = (size_in_pages * sizeof(void *) +
                                  ARCH_PAGE_SIZE - 1) /
                                 ARCH_PAGE_SIZE;
-    size_t unmaps_done        = 0;
+    size_t unmaps_done = 0;
     if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
         tmp_phys_buf = (void *)ARCH_PHYS_TO_HHDM(
             com_mm_pmm_alloc_many(tmp_phys_buf_pages));
@@ -277,13 +277,8 @@ void com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len) {
     }
 }
 
-// TODO: this **MUST** be restrucutred. In its current state, this caues
-// deadlocks and other nasty things. The issue is as follows: this can only
-// executge with interrupts enabled otherwise MMU shootdowns may fail due to
-// IPIs not being delivered. However, forcing interrupts to be enabled here
-// creates major issues for cases where user memory is accessed directly under a
-// spinlock, which is frequent as of now. Thus, this implies deeper kernel
-// restructuring.
+// NOTE: always runs in thread context with interrupts on, unless a kernel bug
+// caused it, in which case the state is unknown
 void com_mm_vmm_handle_fault(void            *fault_virt,
                              void            *fault_phys,
                              arch_context_t  *fault_ctx,
@@ -301,8 +296,25 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
                       fault_phys);
     }
 
-    com_proc_t *curr_proc = curr_thread->proc;
-    bool        is_user   = ARCH_CONTEXT_ISUSER(&curr_thread->ctx);
+    com_proc_t *curr_proc  = curr_thread->proc;
+    bool        is_user    = ARCH_CONTEXT_ISUSER(&curr_thread->ctx);
+    bool        thread_ctx = ARCH_CONTEXT_ISUSER(fault_ctx) ||
+                      ARCH_MMU_ADDR_IS_USER(fault_virt);
+    if (KUNKLIKELY(!thread_ctx)) {
+        goto kernel_fault;
+    }
+
+    // Spinlocks disable interrupts, so this also catches faults under them
+    if (KUNKLIKELY(!ARCH_CONTEXT_INTSTATUS(fault_ctx))) {
+        com_sys_panic(fault_ctx,
+                      "page fault on user memory with interrupts disabled "
+                      "(virt = %p)",
+                      fault_virt);
+    }
+    KASSERT(1 == curr_thread->lock_depth);
+    curr_thread->lock_depth = 0;
+    ARCH_CPU_ENABLE_INTERRUPTS();
+
     if (KUNKLIKELY(!is_user || NULL == curr_proc)) {
         goto kernel_thread;
     }
@@ -360,9 +372,11 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
     }
 
 kernel_thread:
-    if (ARCH_MMU_ADDR_IS_USER(fault_virt) && kusercopy_fixup(fault_ctx)) {
+    if (kusercopy_fixup(fault_ctx)) {
         goto end;
     }
+
+kernel_fault:
 
     com_sys_panic(fault_ctx,
                   "unrecoverable page fault by %s thread (tid = %d) on "
@@ -374,6 +388,10 @@ kernel_thread:
                   ARCH_CONTEXT_ISUSER(fault_ctx) ? "USER" : "KERNEL");
 
 end:
+    if (thread_ctx) {
+        ARCH_CPU_DISABLE_INTERRUPTS();
+        curr_thread->lock_depth = 1;
+    }
     com_sys_profiler_end_function(&profiler_data);
 }
 

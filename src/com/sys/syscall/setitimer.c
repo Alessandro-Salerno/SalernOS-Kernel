@@ -23,6 +23,7 @@
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <lib/mem.h>
 #include <lib/util.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -121,14 +122,18 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
     bool                       schedule_callout = false;
     struct itimer_callout_arg *callout_arg      = NULL;
 
+    struct itimerval knew;
+    struct itimerval kold;
+
     // We allocate here to avoid allocating under spinlocks
     if (NULL != new_val) {
-        if (!timeval_is_canonical(new_val->it_value) ||
-            !timeval_is_canonical(new_val->it_interval)) {
+        kmemcpy(&knew, new_val, sizeof(knew));
+        if (!timeval_is_canonical(knew.it_value) ||
+            !timeval_is_canonical(knew.it_interval)) {
             return COM_SYS_SYSCALL_ERR(EINVAL);
         }
 
-        new_delay = timeval_to_ns(new_val->it_value);
+        new_delay = timeval_to_ns(knew.it_value);
         if (0 != new_delay) {
             callout_arg = com_mm_slab_alloc(sizeof(struct itimer_callout_arg));
         }
@@ -153,8 +158,8 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
         if (elapsed < it_value) {
             rem = it_value - elapsed;
         }
-        old_val->it_value    = timeval_from_ns(rem);
-        old_val->it_interval = curr_thread->real_timer.itimerval.it_interval;
+        kold.it_value    = timeval_from_ns(rem);
+        kold.it_interval = curr_thread->real_timer.itimerval.it_interval;
     }
 
     if (NULL != new_val) {
@@ -171,13 +176,17 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
 
         callout_arg->thread                = curr_thread;
         curr_thread->real_timer.ctime      = now;
-        curr_thread->real_timer.itimerval  = *new_val;
+        curr_thread->real_timer.itimerval  = knew;
         curr_thread->real_timer.itimer_arg = callout_arg;
         schedule_callout                   = true;
     }
 
 end:
     kspinlock_release(&curr_thread->real_timer.lock);
+
+    if (NULL != old_val) {
+        kmemcpy(old_val, &kold, sizeof(kold));
+    }
 
     if (schedule_callout) {
         com_sys_thread_hold(curr_thread);

@@ -241,7 +241,7 @@ int com_fs_pipefs_seekable(com_vnode_t *node) {
 
 void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
-    KSYNC_INIT_SPINLOCK(&pipe->condvar);
+    KSYNC_INIT_MUTEX(&pipe->condvar);
     pipe->pollhead.lock = KSPINLOCK_NEW();
     LIST_INIT(&pipe->pollhead.polled_list);
     COM_SYS_THREAD_WAITLIST_INIT(&pipe->readers);

@@ -105,8 +105,15 @@ void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
     }
 
     if (ARCH_CONTEXT_ISUSER(ctx)) {
-        KASSERT(0 == curr_thread->lock_depth || 1 == curr_thread->lock_depth);
+        // NOTE: events that interrupt a user thread are by definition thread
+        // context, so this is safe
+        int depth = curr_thread->lock_depth;
+        KASSERT(0 == depth || 1 == depth);
+        curr_thread->lock_depth = 0;
+        ARCH_CPU_ENABLE_INTERRUPTS();
         com_ipc_signal_dispatch(ctx, curr_thread);
+        ARCH_CPU_DISABLE_INTERRUPTS();
+        curr_thread->lock_depth = depth;
     }
 
     if (NULL != curr_thread && !no_reset) {

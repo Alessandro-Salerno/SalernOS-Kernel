@@ -118,10 +118,7 @@ void x86_64_entry(void) {
     com_sys_interrupt_register(ARCH_CPU_IPI_RESCHEDULE,
                                com_sys_sched_isr,
                                x86_64_lapic_eoi);
-    com_isr_t *pf_iser = com_sys_interrupt_register(0x0E,
-                                                    x86_64_mmu_fault_isr,
-                                                    NULL);
-    pf_iser->flags |= COM_SYS_INTERRUPT_FLAGS_NO_RESET;
+    com_sys_interrupt_register(0x0E, x86_64_mmu_fault_isr, NULL);
     com_isr_t *sig_isr = com_sys_interrupt_register(ARCH_CPU_IPI_SIGNAL,
                                                     NULL,
                                                     x86_64_lapic_eoi);

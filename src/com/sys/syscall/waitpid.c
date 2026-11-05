@@ -40,11 +40,9 @@ static int waitpid_check(com_proc_t *curr_proc,
     }
 
     if (E_COM_PROC_STATE_EXITED == towait->state) {
-        if (NULL != status) {
-            *status = COM_IPC_SIGNAL_NONE == towait->state_cause_sig
-                          ? (towait->exit_code & 0xff) << 8
-                          : towait->state_cause_sig & 0x7f;
-        }
+        *status = COM_IPC_SIGNAL_NONE == towait->state_cause_sig
+                      ? (towait->exit_code & 0xff) << 8
+                      : towait->state_cause_sig & 0x7f;
         towait->state_notified = true;
         __atomic_sub_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
         kspinlock_release(&towait->signal_lock);
@@ -53,9 +51,7 @@ static int waitpid_check(com_proc_t *curr_proc,
     }
 
     if (E_COM_PROC_STATE_STOPPED == towait->state && !towait->state_notified) {
-        if (NULL != status) {
-            *status = 0x7F | (towait->state_cause_sig << 8);
-        }
+        *status = 0x7F | (towait->state_cause_sig << 8);
         towait->state_notified = true;
         kspinlock_release(&towait->signal_lock);
         return towait->pid;
@@ -135,7 +131,11 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
         goto end;
     }
 
-    ret = waitpid_proc(curr_proc, pid, status, flags);
+    int kstatus = 0;
+    ret         = waitpid_proc(curr_proc, pid, &kstatus, flags);
+    if (ret > 0 && NULL != status) {
+        *status = kstatus;
+    }
 
 end:
     if (ret < 0) {

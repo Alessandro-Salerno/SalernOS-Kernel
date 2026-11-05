@@ -104,7 +104,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
     ret = COM_SYS_SYSCALL_ERR(ENOSYS);
 
 end:
-    COM_FS_FILE_RELEASE(file);
     kspinlock_release(&curr_proc->fd_lock);
+    COM_FS_FILE_RELEASE(file);
     return ret;
 }

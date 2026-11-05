@@ -22,6 +22,7 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/mem.h>
 
 // SYSCALL: sigpending(sigset_t *set)
 COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
@@ -37,10 +38,12 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_ipc_signal_sigset_emptY(sigset);
+    com_sigset_t kset;
+    com_ipc_signal_sigset_emptY(&kset);
     kspinlock_acquire(&curr_proc->signal_lock);
-    sigset->sig[0] = curr_thread->pending_signals;
+    kset.sig[0] = curr_thread->pending_signals;
     kspinlock_release(&curr_proc->signal_lock);
+    kmemcpy(sigset, &kset, sizeof(kset));
 
     return COM_SYS_SYSCALL_OK(0);
 }

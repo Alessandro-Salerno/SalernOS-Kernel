@@ -34,11 +34,29 @@ COM_SYS_SYSCALL(com_sys_syscall_kprint) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
-    com_io_log_lock();
-    kinitlog("USER", "\033[36m");
-    com_io_log_puts_nolock(message);
-    com_io_log_putc_nolock('\n');
-    com_io_log_unlock();
+    char chunk[128];
+    for (bool first = true;; first = false) {
+        size_t n = 0;
+        for (; n < sizeof(chunk) && '\0' != message[n]; n++) {
+            chunk[n] = message[n];
+        }
+        bool last = n < sizeof(chunk);
+
+        com_io_log_lock();
+        if (first) {
+            kinitlog("USER", "\033[36m");
+        }
+        com_io_log_putsn_nolock(chunk, n);
+        if (last) {
+            com_io_log_putc_nolock('\n');
+        }
+        com_io_log_unlock();
+
+        if (last) {
+            break;
+        }
+        message += n;
+    }
 #else
     COM_SYS_SYSCALL_UNUSED_START(0);
 #endif
