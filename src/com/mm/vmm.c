@@ -322,12 +322,16 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
     if (KLIKELY(COM_MM_VMM_FAULT_ATTR_MAP & attr)) {
         void *fault_virt_page = (void *)((uintptr_t)fault_virt &
                                          ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
-        for (size_t i = 0; i < num_pages_hint; i++) {
-            void *new_phys = com_mm_pmm_alloc_zero();
-            arch_mmu_map(curr_proc->vmm_context->pagetable,
-                         fault_virt_page + ARCH_PAGE_SIZE * i,
-                         new_phys,
-                         mmu_flags_hint);
+        for (size_t i = 0; i < num_pages_hint;) {
+            size_t got;
+            void  *new_phys = com_mm_pmm_alloc_max_zero(&got,
+                                                        num_pages_hint - i);
+            for (size_t j = 0; j < got; j++, i++) {
+                arch_mmu_map(curr_proc->vmm_context->pagetable,
+                             fault_virt_page + ARCH_PAGE_SIZE * i,
+                             new_phys + ARCH_PAGE_SIZE * j,
+                             mmu_flags_hint);
+            }
         }
         arch_mmu_invalidate(curr_proc->vmm_context->pagetable,
                             fault_virt_page,

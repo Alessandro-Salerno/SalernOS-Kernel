@@ -211,9 +211,7 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         COM_FS_FILE_RELEASE(polled->file);
     }
 
-    for (nfds_t i = 0; i < nfds; i++) {
-        fds[i].revents = kfds[i].revents;
-    }
+    kmemcpy(fds, kfds, nfds * sizeof(*kfds));
 
     // If we had allocated polleds, we shall also free it
     if (POLL_SHOULD_ALLOC(nfds)) {

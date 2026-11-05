@@ -176,13 +176,13 @@ int com_fs_tmpfs_create(com_vnode_t **out,
                         uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                                                   out,
-                                                   dir,
-                                                   name,
-                                                   namelen,
-                                                   attr,
-                                                   fsattr,
-                                                   E_COM_VNODE_TYPE_FILE);
+                              out,
+                              dir,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_FILE);
     if (0 != inner) {
         return inner;
     }
@@ -213,13 +213,13 @@ int com_fs_tmpfs_mkdir(com_vnode_t **out,
                        uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                                                   out,
-                                                   parent,
-                                                   name,
-                                                   namelen,
-                                                   attr,
-                                                   fsattr,
-                                                   E_COM_VNODE_TYPE_DIR);
+                              out,
+                              parent,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_DIR);
     if (0 != inner) {
         return inner;
     }
@@ -311,8 +311,8 @@ int com_fs_tmpfs_read(void        *buf,
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
         bool      page_present = com_fs_pagecache_get(&page,
-                                                      file->file.data,
-                                                      cur / ARCH_PAGE_SIZE);
+                                                 file->file.data,
+                                                 cur / ARCH_PAGE_SIZE);
 
         // ~((uintptr_t)ARCH_PAGE_SIZE - 1) is like & 0b111...000 so it is a
         // mask to floor the value to a multiple of ARCH_PAGE_SIZE. Then
@@ -631,13 +631,13 @@ int com_fs_tmpfs_mksocket(com_vnode_t **out,
                           uintmax_t     fsattr) {
     struct tmpfs_dir_entry *dirent = NULL;
     int                     inner  = create_common(&dirent,
-                                                   out,
-                                                   dir,
-                                                   name,
-                                                   namelen,
-                                                   attr,
-                                                   fsattr,
-                                                   E_COM_VNODE_TYPE_SOCKET);
+                              out,
+                              dir,
+                              name,
+                              namelen,
+                              attr,
+                              fsattr,
+                              E_COM_VNODE_TYPE_SOCKET);
     if (0 != inner) {
         return inner;
     }
@@ -682,7 +682,13 @@ int com_fs_tmpfs_mmap(void             **out,
         vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
     }
 
-    krwlock_acquire_write(&file->lock);
+    // Only shared mappings may populate the page tree, so we can gain a bit of
+    // scalability here
+    if (shared) {
+        krwlock_acquire_write(&file->lock);
+    } else {
+        krwlock_acquire_read(&file->lock);
+    }
 
     for (uintmax_t curr = off; curr < off + size; curr += ARCH_PAGE_SIZE) {
         uintptr_t page;
@@ -712,7 +718,11 @@ int com_fs_tmpfs_mmap(void             **out,
                        mmu_flags);
     }
 
-    krwlock_release_write(&file->lock);
+    if (shared) {
+        krwlock_release_write(&file->lock);
+    } else {
+        krwlock_release_read(&file->lock);
+    }
 
     *out = (void *)((uintptr_t)range_base + (off % ARCH_PAGE_SIZE));
     return 0;

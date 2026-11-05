@@ -77,16 +77,31 @@ static int pty_echo(size_t     *bytes_written,
                     size_t      buflen,
                     bool        blocking,
                     void       *passthrough) {
-    com_pty_t *pty = passthrough;
-    return kringbuffer_write(bytes_written,
-                             &pty->master_rb,
-                             (void *)buf,
-                             buflen,
-                             KRINGBUFFER_NOATOMIC,
-                             blocking,
-                             ptm_poll_callback,
-                             pty,
-                             NULL);
+    // master_rb is a spinlock, so never copy into it from buf
+    com_pty_t *pty  = passthrough;
+    size_t     done = 0;
+    int        ret  = 0;
+    char       chunk[128];
+    while (done < buflen) {
+        size_t n = KMIN(buflen - done, sizeof(chunk));
+        size_t w = 0;
+        kmemcpy(chunk, buf + done, n);
+        ret = kringbuffer_write(&w,
+                                &pty->master_rb,
+                                chunk,
+                                n,
+                                KRINGBUFFER_NOATOMIC,
+                                blocking,
+                                ptm_poll_callback,
+                                pty,
+                                NULL);
+        done += w;
+        if (0 != ret || w < n) {
+            break;
+        }
+    }
+    *bytes_written = done;
+    return ret;
 }
 
 static com_pty_t *pty_alloc(void) {
@@ -97,7 +112,6 @@ static com_pty_t *pty_alloc(void) {
 
     // ringbuffer initializations (slave is done by tty)
     KRINGBUFFER_INIT(&pty->master_rb);
-    KSYNC_INIT_MUTEX(&pty->master_rb.condvar);
     pty->master_rb.check_hangup           = pty_rb_check_hangup;
     pty->master_rb.fallback_hu_arg        = pty;
     pty->backend.slave_rb.check_hangup    = pty_rb_check_hangup;
@@ -129,16 +143,32 @@ static int ptm_read(void     *buf,
                     uintmax_t off,
                     uintmax_t flags) {
     (void)off;
-    com_pty_t *pty = devdata;
-    return kringbuffer_read(buf,
-                            bytes_read,
-                            &pty->master_rb,
-                            buflen,
-                            KRINGBUFFER_NOATOMIC,
-                            !(O_NONBLOCK & flags),
-                            ptm_poll_callback,
-                            pty,
-                            NULL);
+    // master_rb is a spinlock, so never copy from it into buf. Only the first
+    // chunk may block, then return whatever was already available
+    com_pty_t *pty  = devdata;
+    size_t     done = 0;
+    int        ret  = 0;
+    char       chunk[128];
+    while (done < buflen) {
+        size_t n = KMIN(buflen - done, sizeof(chunk));
+        size_t r = 0;
+        ret      = kringbuffer_read(chunk,
+                                    &r,
+                                    &pty->master_rb,
+                                    n,
+                                    KRINGBUFFER_NOATOMIC,
+                                    0 == done && !(O_NONBLOCK & flags),
+                                    ptm_poll_callback,
+                                    pty,
+                                    NULL);
+        kmemcpy((char *)buf + done, chunk, r);
+        done += r;
+        if (0 != ret || r < n) {
+            break;
+        }
+    }
+    *bytes_read = done;
+    return 0 != done ? 0 : ret;
 }
 
 static int ptm_write(size_t   *bytes_written,

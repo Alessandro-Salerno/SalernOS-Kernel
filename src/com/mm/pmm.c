@@ -332,6 +332,9 @@ void *com_mm_pmm_alloc_many_zero(size_t pages) {
 
 void *com_mm_pmm_alloc_max(size_t *out_alloc_size, size_t pages) {
     if (1 == pages) {
+        if (NULL != out_alloc_size) {
+            *out_alloc_size = 1;
+        }
         return com_mm_pmm_alloc();
     }
 
