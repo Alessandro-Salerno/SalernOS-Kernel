@@ -113,6 +113,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
     thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_RELAXED);
 
+    thread->usercopy_ctx       = NULL;
     thread->waiting_on         = NULL;
     thread->ctime              = ARCH_CPU_GET_TIMESTAMP();
     thread->timed_wait_callout = com_sys_callout_new(NULL, thread, 0);

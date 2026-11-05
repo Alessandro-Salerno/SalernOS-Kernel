@@ -72,6 +72,12 @@
 #define ARCH_CONTEXT_SWITCH(to, from, callback, arg, value) \
     x86_64_ctx_switch((to), (from), (callback), (arg), (value))
 
+#define ARCH_CONTEXT_SAVE_AND_CALL(fn, arg) \
+    x86_64_ctx_save_and_call((fn), (arg))
+#define ARCH_CONTEXT_RESUME_SAVED(ctx, saved, ret) \
+    *(ctx)     = *(saved);                         \
+    (ctx)->rax = (uint64_t)(ret)
+
 #define ARCH_CONTEXT_RESTORE_TLC(ctx) \
     X86_64_MSR_WRITE(X86_64_MSR_KERNELGSBASE, (uint64_t)(ctx)->gs)
 
@@ -147,10 +153,11 @@ typedef struct arch_context_message {
 } arch_context_message_t;
 
 arch_context_message_t
-x86_64_ctx_switch(arch_context_t *to,
-                  arch_context_t *from,
-                  void (*callback)(void *, uintptr_t, bool),
-                  void     *arg,
-                  uintptr_t value);
+     x86_64_ctx_switch(arch_context_t *to,
+                       arch_context_t *from,
+                       void (*callback)(void *, uintptr_t, bool),
+                       void     *arg,
+                       uintptr_t value);
+int  x86_64_ctx_save_and_call(void (*fn)(arch_context_t *, void *), void *arg);
 void x86_64_ctx_prepare(arch_context_t *ctx, arch_context_t *frame);
 void x86_64_ctx_test_trampoline(void);

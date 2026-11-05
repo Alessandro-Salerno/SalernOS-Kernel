@@ -42,6 +42,47 @@ x86_64_ctx_switch:
   mov [rax + 16], r9
   ret
 
+global x86_64_ctx_save_and_call
+x86_64_ctx_save_and_call:
+  ; rdi: fn(ctx, arg), rsi: arg
+  ; The pushed arch_context_t resumes our caller as if we had returned
+  mov  rax, [rsp]
+  lea  rcx, [rsp + 8]
+  push qword 0x10 ; ss
+  push rcx        ; rsp
+  pushfq
+  push qword 0x08 ; cs
+  push rax        ; rip
+  push qword 0    ; error
+  push rbp
+  push rsi
+  push rdi
+  push r15
+  push r14
+  push r13
+  push r12
+  push r11
+  push r10
+  push r9
+  push r8
+  push rdx
+  push rcx
+  push rbx
+  push qword 0    ; rax: return value
+  push qword 0x10 ; ds
+  push qword 0x10 ; es
+  push qword 0    ; fs
+  push qword 0    ; gs
+  push qword 0    ; cr2
+
+  mov  rax, rdi
+  mov  rdi, rsp
+  sub  rsp, 8 ; 208-byte frame + return address: realign to 16
+  call rax
+  add  rsp, 208 + 8
+  xor  eax, eax
+  ret
+
 global arch_context_trampoline
 arch_context_trampoline:
 	; rdi is the pointer to the context struct

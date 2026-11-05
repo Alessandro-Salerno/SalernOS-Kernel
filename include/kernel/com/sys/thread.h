@@ -84,6 +84,8 @@ typedef struct com_thread {
     int   lock_depth;
     pid_t tid;
 
+    arch_context_t *usercopy_ctx;
+
     com_waitlist_t     *waiting_on;
     uintmax_t           ctime;
     uintmax_t           time_slept;

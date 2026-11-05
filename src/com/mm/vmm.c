@@ -29,6 +29,7 @@
 #include <kernel/platform/mmu.h>
 #include <lib/str.h>
 #include <lib/sync.h>
+#include <lib/usercopy.h>
 #include <stdatomic.h>
 
 #define UNMAP_MAX_ARRAY_ON_STACK 64
@@ -359,6 +360,10 @@ void com_mm_vmm_handle_fault(void            *fault_virt,
     }
 
 kernel_thread:
+    if (ARCH_MMU_ADDR_IS_USER(fault_virt) && kusercopy_fixup(fault_ctx)) {
+        goto end;
+    }
+
     com_sys_panic(fault_ctx,
                   "unrecoverable page fault by %s thread (tid = %d) on "
                   "address (virt = %p, phys = %p) in %s context",
