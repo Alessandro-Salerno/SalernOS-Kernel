@@ -26,14 +26,17 @@ static bool                  ProfilerInitialized = false;
 static inline void profiler_calc_elapsed_time(uintmax_t *out_real_time,
                                               uintmax_t *out_cpu_time,
                                               com_profiler_data_t *data) {
-    com_thread_t *curr_thread  = ARCH_CPU_GET_THREAD();
-    uintmax_t     end_real     = ARCH_CPU_GET_TIMESTAMP();
-    uintmax_t     real_elapsed = end_real - data->real_start;
+    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
+    // Opposite order to the start, so a preemption in between can only
+    // inflate the CPU time, never make it negative
+    uintmax_t end_thread_slept = NULL != curr_thread ? curr_thread->time_slept
+                                                     : 0;
+    uintmax_t end_real         = ARCH_CPU_GET_TIMESTAMP();
+    uintmax_t real_elapsed     = end_real - data->real_start;
 
     *out_real_time = real_elapsed;
 
     if (NULL != curr_thread) {
-        uintmax_t end_thread_slept = curr_thread->time_slept;
         uintmax_t time_slept = end_thread_slept - data->thread_slept_start;
         *out_cpu_time        = real_elapsed - time_slept;
     } else {

@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/context.h>
+#include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
@@ -62,21 +63,26 @@ void arch_context_print(arch_context_t *ctx) {
     // printf("%p %p\n", *(uint64_t *)ctx->rip, *(((uint64_t *)ctx->rip) + 1));
 }
 
+// The FPU state goes right after the frame, aligned for fxsave/fxrstor
+#define SIGFRAME_FPU_OFFSET ((sizeof(com_sigframe_t) + 15) & ~(size_t)15)
+#define SIGFRAME_SIZE       (SIGFRAME_FPU_OFFSET + sizeof(struct _fpstate))
+
 int arch_context_alloc_sigframe(com_sigframe_t **sframe,
                                 uintptr_t       *stackptr,
                                 arch_context_t  *ctx) {
     uint64_t stack = (uint64_t)ctx->rsp;
     stack -= 128;
     stack &= ~0xFL;
-    stack -= sizeof(com_sigframe_t);
-    stack &= ~0xFL;
+    stack -= SIGFRAME_SIZE;
     *sframe   = (void *)stack;
     *stackptr = stack;
 
-    return ARCH_MMU_RANGE_IS_USER(*sframe, sizeof(com_sigframe_t)) ? 0 : EFAULT;
+    return ARCH_MMU_RANGE_IS_USER(*sframe, SIGFRAME_SIZE) ? 0 : EFAULT;
 }
 
-void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
+void arch_context_setup_sigframe(com_sigframe_t *sframe,
+                                 com_sigframe_t *uframe,
+                                 arch_context_t *ctx) {
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8]  = ctx->r8;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9]  = ctx->r9;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10] = ctx->r10;
@@ -95,6 +101,13 @@ void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RSP] = ctx->rsp;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP] = ctx->rip;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_EFL] = ctx->rflags;
+
+    struct _fpstate *ufpu = (void *)((uintptr_t)uframe + SIGFRAME_FPU_OFFSET);
+    sframe->uc.uc_mcontext.fpregs = ufpu;
+    // A switch during the copy saves the same live state again
+    arch_context_extra_t *xctx = &ARCH_CPU_GET_THREAD()->xctx;
+    ARCH_CONTEXT_SAVE_EXTRA(*xctx);
+    kmemcpy(ufpu, xctx->fpu, sizeof(xctx->fpu));
 }
 
 int arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer) {
@@ -119,6 +132,9 @@ void arch_context_signal_trampoline(com_sigframe_t *sframe,
     ctx->rdi = sig;
     ctx->rsi = (uint64_t)(&sframe->info);
     ctx->rdx = (uint64_t)(&sframe->uc);
+
+    uint32_t mxcsr = 0x1f80;
+    asm volatile("fninit\n\tldmxcsr %0" : : "m"(mxcsr));
 }
 
 int arch_context_restore_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
@@ -127,6 +143,18 @@ int arch_context_restore_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
         return EFAULT;
     }
     kmemcpy(sframe, uframe, sizeof(*sframe));
+
+    struct _fpstate *ufpu = sframe->uc.uc_mcontext.fpregs;
+    if (NULL == ufpu || !ARCH_MMU_RANGE_IS_USER(ufpu, sizeof(*ufpu))) {
+        return EFAULT;
+    }
+    // Reserved MXCSR bits would make fxrstor fault
+    struct _fpstate fpu __attribute__((aligned(16)));
+    asm volatile("fxsave %0" : "=m"(fpu));
+    uint32_t mxcsr_mask = (0 != fpu.mxcr_mask) ? fpu.mxcr_mask : 0xffbf;
+    kmemcpy(&fpu, ufpu, sizeof(fpu));
+    fpu.mxcsr &= mxcsr_mask;
+    asm volatile("fxrstor %0" : : "m"(fpu));
 
     ctx->r8     = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8];
     ctx->r9     = sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9];

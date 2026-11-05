@@ -28,7 +28,9 @@ void arch_context_fork_trampoline(void);
 int  arch_context_alloc_sigframe(com_sigframe_t **sframe,
                                  uintptr_t       *stackptr,
                                  arch_context_t  *ctxptr);
-void arch_context_setup_sigframe(com_sigframe_t *sframe, arch_context_t *ctx);
+void arch_context_setup_sigframe(com_sigframe_t *kframe,
+                                 com_sigframe_t *uframe,
+                                 arch_context_t *ctx);
 int  arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer);
 void arch_context_signal_trampoline(com_sigframe_t *sframe,
                                     arch_context_t *ctx,

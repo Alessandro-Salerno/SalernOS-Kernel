@@ -101,12 +101,10 @@
         (xctx).gsbase = 0;                                 \
     }
 
-#define ARCH_CONTEXT_FORK_EXTRA(child_xctx, parent_xctx) \
-    {                                                    \
-        kmemcpy((child_xctx).fpu,                        \
-                (parent_xctx).fpu,                       \
-                sizeof((parent_xctx).fpu));              \
-        (child_xctx).fsbase = (parent_xctx).fsbase;      \
+#define ARCH_CONTEXT_FORK_EXTRA(child_xctx)                       \
+    {                                                             \
+        ARCH_CONTEXT_SAVE_EXTRA(child_xctx);                      \
+        (child_xctx).fsbase = X86_64_MSR_READ(X86_64_MSR_FSBASE); \
     }
 
 typedef struct {

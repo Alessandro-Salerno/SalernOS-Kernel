@@ -210,9 +210,13 @@ int com_sys_sched_yield_nolock(bool                   interruptible,
                                                           message.callback,
                                                           message.arg,
                                                           message.value);
+#if CONFIG_TRACK_SLEEP_TIME
+    // NOTE: this goes here, otherwise it may sample after interrupts are turned
+    // back on and the value may be wrong due to nested preemption
+    uintmax_t sleep_end = ARCH_CPU_GET_TIMESTAMP();
+#endif
     com_sys_sched_switch_finish(incoming);
 #if CONFIG_TRACK_SLEEP_TIME
-    uintmax_t sleep_end  = ARCH_CPU_GET_TIMESTAMP();
     uintmax_t time_slept = sleep_end - sleep_start;
     __atomic_add_fetch(&curr->time_slept, time_slept, __ATOMIC_RELAXED);
 #endif

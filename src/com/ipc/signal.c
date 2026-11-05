@@ -275,7 +275,6 @@ restart:
     kmemset(&kframe, sizeof(kframe), 0);
     kframe.info.si_signo        = sig;
     kframe.uc.uc_sigmask.sig[0] = thread->masked_signals;
-    arch_context_setup_sigframe(&kframe, ctx);
 
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
@@ -296,6 +295,7 @@ restart:
     if (0 != arch_context_alloc_sigframe(&sframe, &stack, ctx)) {
         goto bad_frame;
     }
+    arch_context_setup_sigframe(&kframe, sframe, ctx);
     kmemcpy(sframe, &kframe, sizeof(kframe));
 
     if (0 != arch_context_setup_sigrestore(&stack, restorer)) {

@@ -593,10 +593,10 @@ void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx) {
         start_virt  = (void *)((uintptr_t)start_virt - ARCH_PAGE_SIZE);
     }
 
-    for (; num_pages < CONFIG_VMM_PREFAULT_MAX; num_pages++) {
+    for (size_t i = 1; num_pages < CONFIG_VMM_PREFAULT_MAX; i++, num_pages++) {
         uint64_t *next_entry = get_page(curr_pt,
                                         (char *)fault_virt +
-                                            ARCH_PAGE_SIZE * num_pages);
+                                            ARCH_PAGE_SIZE * i);
         if (NULL == next_entry) {
             break;
         }
