@@ -25,6 +25,7 @@
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -37,8 +38,13 @@ COM_SYS_SYSCALL(com_sys_syscall_connect) {
     struct sockaddr *addr     = COM_SYS_SYSCALL_ARG(void *, 2);
     socklen_t        addr_len = COM_SYS_SYSCALL_ARG(socklen_t, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(addr, addr_len)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    struct sockaddr_storage kaddr;
+    if (addr_len < sizeof(sa_family_t) || addr_len > sizeof(kaddr)) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+    int copy_ret = kmemcpy_from_user(&kaddr, addr, addr_len);
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -63,7 +69,9 @@ COM_SYS_SYSCALL(com_sys_syscall_connect) {
     com_socket_t *socket = socket_vn->socket;
 
     com_socket_addr_t sys_addr;
-    int sock_ret = com_ipc_socket_addr_from_abi(&sys_addr, addr, addr_len);
+    int sock_ret = com_ipc_socket_addr_from_abi(&sys_addr,
+                                                (struct sockaddr *)&kaddr,
+                                                addr_len);
     if (0 != sock_ret) {
         ret = COM_SYS_SYSCALL_ERR(sock_ret);
         goto end;

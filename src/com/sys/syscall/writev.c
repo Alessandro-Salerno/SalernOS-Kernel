@@ -36,11 +36,13 @@ COM_SYS_SYSCALL(com_sys_syscall_writev) {
     struct iovec *iov    = COM_SYS_SYSCALL_ARG(void *, 2);
     int           iovcnt = COM_SYS_SYSCALL_ARG(int, 3);
 
-    if (iovcnt < 0) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
-    if (!ARCH_MMU_ARRAY_IS_USER(iov, iovcnt, sizeof(struct iovec))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    kioviter_t ioviter;
+    int        iov_ret = kioviter_init_user(&ioviter,
+                                            ARCH_CPU_GET_THREAD()->scratch,
+                                            iov,
+                                            iovcnt);
+    if (0 != iov_ret) {
+        return COM_SYS_SYSCALL_ERR(iov_ret);
     }
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
@@ -53,8 +55,6 @@ COM_SYS_SYSCALL(com_sys_syscall_writev) {
         return ret;
     }
 
-    kioviter_t ioviter;
-    kioviter_init(&ioviter, iov, iovcnt);
     size_t bytes_written = 0;
     int    vfs_op        = com_fs_vfs_writev(&bytes_written,
                                              file->vnode,

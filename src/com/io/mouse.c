@@ -23,6 +23,7 @@
 #include <kernel/com/sys/sched.h>
 #include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <poll.h>
 
 static size_t NextMouseNum = 0;
@@ -54,7 +55,11 @@ static int mouse_read(void     *buf,
     if (0 == KRINGBUFFER_AVAIL_READ(&mouse->rb) &&
         mouse->consolidated.present) {
         size_t copy_size = KMIN(buflen, sizeof(com_mouse_packet_t));
-        kmemcpy(buf, &mouse->consolidated.packet, copy_size);
+        ret = kmemcpy_maybe_user(buf, &mouse->consolidated.packet, copy_size);
+        if (0 != ret) {
+            *bytes_read = 0;
+            goto end;
+        }
         kmemset(&mouse->consolidated.packet, sizeof(com_mouse_packet_t), 0);
         mouse->consolidated.present = false;
         *bytes_read                 = copy_size;
@@ -98,8 +103,8 @@ static int mouse_poll(short *revents, void *devdata, short events) {
 }
 
 static int mouse_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 512;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0666;
     out->st_dev     = 10 << 8;
     out->st_rdev    = 10 << 8;
@@ -113,11 +118,14 @@ static com_dev_ops_t MouseDevOps = {.read      = mouse_read,
                                     .poll      = mouse_poll,
                                     .stat      = mouse_stat};
 
+// Packets reach userspace, so they must not carry kernel addresses
 int com_io_mouse_send_packet(com_mouse_t *mouse, com_mouse_packet_t *pkt) {
+    com_mouse_packet_t upkt = *pkt;
+    upkt.mouse              = NULL;
     ksync_acquire(&mouse->rb.condvar);
     int rb_err = kringbuffer_write_nolock(NULL,
                                           &mouse->rb,
-                                          pkt,
+                                          &upkt,
                                           sizeof(com_mouse_packet_t),
                                           sizeof(com_mouse_packet_t),
                                           false,

@@ -26,6 +26,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -40,7 +41,7 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     char       *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
     size_t      buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path) || !ARCH_MMU_RANGE_IS_USER(buf, buflen)) {
+    if (!ARCH_MMU_ADDR_IS_USER(path)) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
@@ -63,15 +64,15 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     }
 
     com_vnode_t *target  = NULL;
-    int          vfs_err = com_fs_vfs_lookup(&target,
+    int          err     = com_fs_vfs_lookup(&target,
                                              path,
                                              pathlen,
                                              curr_proc->root,
                                              dir,
                                              false);
 
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+    if (0 != err) {
+        ret = COM_SYS_SYSCALL_ERR(err);
         goto end;
     }
 
@@ -82,15 +83,19 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
 
     const char *link    = NULL;
     size_t      linklen = 0;
-    vfs_err             = com_fs_vfs_readlink(&link, &linklen, target);
+    err                 = com_fs_vfs_readlink(&link, &linklen, target);
 
-    if (vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+    if (err) {
+        ret = COM_SYS_SYSCALL_ERR(err);
         goto end;
     }
 
     size_t user_linklen = KMIN(linklen, buflen);
-    kmemcpy(buf, link, user_linklen);
+    err                 = kmemcpy_to_user(buf, link, user_linklen);
+    if (0 != err) {
+        ret = COM_SYS_SYSCALL_ERR(err);
+        goto end;
+    }
 
     ret = COM_SYS_SYSCALL_OK(user_linklen);
 

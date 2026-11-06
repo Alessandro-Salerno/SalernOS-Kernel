@@ -34,13 +34,16 @@
 #include <lib/mem.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <poll.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define NUM_STACK_POLLEDS       32
-#define POLL_SHOULD_ALLOC(nfds) ((nfds) > NUM_STACK_POLLEDS)
+_Static_assert(CONFIG_OPEN_MAX *
+                       (sizeof(com_polled_t) + sizeof(struct pollfd)) <=
+                   ARCH_PAGE_SIZE,
+               "poll state must fit the thread scratch page");
 
 // CREDIT: vloxei64/ke
 // SYSCALL: poll(struct pollfd fds[], nfds_t nfds, struct timespec *timeout)
@@ -54,9 +57,8 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     nfds_t           nfds    = COM_SYS_SYSCALL_ARG(nfds_t, 2);
     struct timespec *timeout = COM_SYS_SYSCALL_ARG(void *, 3);
 
-    if (!ARCH_MMU_ARRAY_IS_USER(fds, nfds, sizeof(*fds)) ||
-        !ARCH_MMU_RANGE_IS_USER(timeout, sizeof(*timeout))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    if (nfds > CONFIG_OPEN_MAX) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -69,29 +71,28 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
     bool      do_wait  = true;
     uintmax_t delay_ns = 0;
     if (NULL != timeout) {
-        if (0 == timeout->tv_sec && 0 == timeout->tv_nsec) {
+        struct timespec ktimeout;
+        int copy_ret = kmemcpy_from_user(&ktimeout, timeout, sizeof(ktimeout));
+        if (0 != copy_ret) {
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
+        if (0 == ktimeout.tv_sec && 0 == ktimeout.tv_nsec) {
             do_wait = false;
-        } else if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 ||
-                   (uintmax_t)timeout->tv_nsec >= KNANOS_PER_SEC) {
+        } else if (ktimeout.tv_sec < 0 || ktimeout.tv_nsec < 0 ||
+                   (uintmax_t)ktimeout.tv_nsec >= KNANOS_PER_SEC) {
             return COM_SYS_SYSCALL_ERR(EINVAL);
-        } else if (timeout->tv_sec >= 0 && timeout->tv_nsec >= 0) {
-            delay_ns = timeout->tv_sec * KNANOS_PER_SEC + timeout->tv_nsec;
+        } else {
+            delay_ns = ktimeout.tv_sec * KNANOS_PER_SEC + ktimeout.tv_nsec;
         }
     }
 
-    com_polled_t   stack_polleds[NUM_STACK_POLLEDS] = {0};
-    struct pollfd  stack_kfds[NUM_STACK_POLLEDS];
-    com_polled_t  *polleds = stack_polleds;
-    struct pollfd *kfds    = stack_kfds;
-    size_t polleds_pages   = nfds * (sizeof(com_polled_t) + sizeof(*kfds)) /
-                               ARCH_PAGE_SIZE +
-                           1;
-    if (POLL_SHOULD_ALLOC(nfds)) {
-        polleds = (void *)ARCH_PHYS_TO_HHDM(
-            com_mm_pmm_alloc_many_zero(polleds_pages));
-        kfds = (void *)&polleds[nfds];
+    com_polled_t  *polleds = curr_thread->scratch;
+    struct pollfd *kfds    = (void *)&polleds[nfds];
+    kmemset(polleds, nfds * sizeof(*polleds), 0);
+    int copy_ret = kmemcpy_from_user(kfds, fds, nfds * sizeof(*kfds));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
     }
-    kmemcpy(kfds, fds, nfds * sizeof(*kfds));
 
     int invalid_count = 0;
     kspinlock_acquire(&curr_proc->fd_lock);
@@ -211,11 +212,9 @@ COM_SYS_SYSCALL(com_sys_syscall_poll) {
         COM_FS_FILE_RELEASE(polled->file);
     }
 
-    kmemcpy(fds, kfds, nfds * sizeof(*kfds));
-
-    // If we had allocated polleds, we shall also free it
-    if (POLL_SHOULD_ALLOC(nfds)) {
-        com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(polleds), polleds_pages);
+    copy_ret = kmemcpy_to_user(fds, kfds, nfds * sizeof(*kfds));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
     }
 
     if (interrupted && 0 == count + invalid_count) {

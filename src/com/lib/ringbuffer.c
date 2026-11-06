@@ -16,11 +16,13 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
 #include <lib/mem.h>
 #include <lib/ringbuffer.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdint.h>
 
@@ -58,6 +60,39 @@ static int check_hangup(size_t        *new_nbytes,
     return rb->check_hangup(new_nbytes, curr_nbytes, force_return, rb, op, arg);
 }
 
+// A user fault under a spinlock panics, so spinlock rings only take kernel
+// memory and their callers bounce user data through the stack
+static int rb_memcpy(kringbuffer_t *rb, void *dst, const void *src, size_t n) {
+    if (!(KSYNC_FLAGS_MUTEX & rb->condvar.flags)) {
+        KASSERT(!ARCH_MMU_ADDR_IS_USER(dst) && !ARCH_MMU_ADDR_IS_USER(src));
+        kmemcpy(dst, src, n);
+        return 0;
+    }
+
+    return kmemcpy_maybe_user(dst, src, n);
+}
+
+// The ring wraps around, so a copy may take two pieces
+static int rb_copy_in(kringbuffer_t *rb, const void *buf, size_t n) {
+    size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
+    size_t left   = rb->buffer_size - idxoff;
+    int    ret    = rb_memcpy(rb, &rb->buffer[idxoff], buf, KMIN(n, left));
+    if (0 == ret && n > left) {
+        ret = rb_memcpy(rb, rb->buffer, (const uint8_t *)buf + left, n - left);
+    }
+    return ret;
+}
+
+static int rb_copy_out(void *dst, kringbuffer_t *rb, size_t n) {
+    size_t idxoff = KMOD_FAST(rb->read.index, rb->buffer_size);
+    size_t left   = rb->buffer_size - idxoff;
+    int    ret    = rb_memcpy(rb, dst, &rb->buffer[idxoff], KMIN(n, left));
+    if (0 == ret && n > left) {
+        ret = rb_memcpy(rb, (uint8_t *)dst + left, rb->buffer, n - left);
+    }
+    return ret;
+}
+
 static int write_blocking(kringbuffer_t *rb,
                           void          *buf,
                           size_t        *buflen,
@@ -91,13 +126,10 @@ static int write_blocking(kringbuffer_t *rb,
             to_write,
             KRINGBUFFER_AVAIL_WRITE(rb)); // Available space (till
                                           // end + wrap around)
-        size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
-        // Positions left till th end of the array
-        size_t left = rb->buffer_size - idxoff;
-
-        kmemcpy(&rb->buffer[idxoff], buf, KMIN(can_write, left));
-        if (can_write > left) {
-            kmemcpy(rb->buffer, &((uint8_t *)buf)[left], can_write - left);
+        int copy_ret = rb_copy_in(rb, buf, can_write);
+        if (0 != copy_ret) {
+            *buflen = bytes_written;
+            return 0 == bytes_written ? copy_ret : 0;
         }
 
         rb->write.index += can_write;
@@ -134,13 +166,10 @@ static int write_nonblocking(kringbuffer_t *rb,
         return EAGAIN;
     }
 
-    size_t idxoff = KMOD_FAST(rb->write.index, rb->buffer_size);
-    // Positions left till th end of the array
-    size_t left = rb->buffer_size - idxoff;
-
-    kmemcpy(&rb->buffer[idxoff], buf, KMIN(can_write, left));
-    if (can_write > left) {
-        kmemcpy(rb->buffer, &((uint8_t *)buf)[left], can_write - left);
+    int copy_ret = rb_copy_in(rb, buf, can_write);
+    if (0 != copy_ret) {
+        *buflen = 0;
+        return copy_ret;
     }
 
     rb->write.index += can_write;
@@ -266,12 +295,12 @@ int kringbuffer_read_nolock(void          *dst,
 
     size_t space    = KRINGBUFFER_AVAIL_READ(rb);
     size_t can_read = KMIN(nbytes, space);
-    size_t idxoff   = KMOD_FAST(rb->read.index, rb->buffer_size);
-    size_t left     = rb->buffer_size - idxoff;
 
-    kmemcpy(dst, &rb->buffer[idxoff], KMIN(can_read, left));
-    if (can_read > left) {
-        kmemcpy(&((uint8_t *)dst)[left], rb->buffer, can_read - left);
+    // The data stays in the ring if it cannot be delivered
+    ret = rb_copy_out(dst, rb, can_read);
+    if (0 != ret) {
+        nbytes = 0;
+        goto end;
     }
 
     rb->read.index += can_read;

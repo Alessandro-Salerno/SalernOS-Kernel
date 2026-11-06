@@ -23,6 +23,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -119,10 +120,6 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
     int  *status = COM_SYS_SYSCALL_ARG(int *, 2);
     int   flags  = COM_SYS_SYSCALL_ARG(int, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(status, sizeof(*status))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
     int         ret       = 0; // 0 is NOT valid
 
@@ -133,8 +130,9 @@ COM_SYS_SYSCALL(com_sys_syscall_waitpid) {
 
     int kstatus = 0;
     ret         = waitpid_proc(curr_proc, pid, &kstatus, flags);
-    if (ret > 0 && NULL != status) {
-        *status = kstatus;
+    if (ret > 0 && NULL != status &&
+        0 != kmemcpy_to_user(status, &kstatus, sizeof(kstatus))) {
+        ret = -EFAULT;
     }
 
 end:

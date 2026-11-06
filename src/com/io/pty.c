@@ -27,6 +27,7 @@
 #include <kernel/com/sys/sched.h>
 #include <lib/ringbuffer.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -77,31 +78,17 @@ static int pty_echo(size_t     *bytes_written,
                     size_t      buflen,
                     bool        blocking,
                     void       *passthrough) {
-    // master_rb is a spinlock, so never copy into it from buf
-    com_pty_t *pty  = passthrough;
-    size_t     done = 0;
-    int        ret  = 0;
-    char       chunk[128];
-    while (done < buflen) {
-        size_t n = KMIN(buflen - done, sizeof(chunk));
-        size_t w = 0;
-        kmemcpy(chunk, buf + done, n);
-        ret = kringbuffer_write(&w,
-                                &pty->master_rb,
-                                chunk,
-                                n,
-                                KRINGBUFFER_NOATOMIC,
-                                blocking,
-                                ptm_poll_callback,
-                                pty,
-                                NULL);
-        done += w;
-        if (0 != ret || w < n) {
-            break;
-        }
-    }
-    *bytes_written = done;
-    return ret;
+    KASSERT(!ARCH_MMU_RANGE_IS_USER(buf, buflen));
+    com_pty_t *pty = passthrough;
+    return kringbuffer_write(bytes_written,
+                             &pty->master_rb,
+                             (void *)buf,
+                             buflen,
+                             KRINGBUFFER_NOATOMIC,
+                             blocking,
+                             ptm_poll_callback,
+                             pty,
+                             NULL);
 }
 
 static com_pty_t *pty_alloc(void) {
@@ -153,15 +140,20 @@ static int ptm_read(void     *buf,
         size_t n = KMIN(buflen - done, sizeof(chunk));
         size_t r = 0;
         ret      = kringbuffer_read(chunk,
-                                    &r,
-                                    &pty->master_rb,
-                                    n,
-                                    KRINGBUFFER_NOATOMIC,
-                                    0 == done && !(O_NONBLOCK & flags),
-                                    ptm_poll_callback,
-                                    pty,
-                                    NULL);
-        kmemcpy((char *)buf + done, chunk, r);
+                               &r,
+                               &pty->master_rb,
+                               n,
+                               KRINGBUFFER_NOATOMIC,
+                               0 == done && !(O_NONBLOCK & flags),
+                               ptm_poll_callback,
+                               pty,
+                               NULL);
+        // The chunk is lost if it cannot be delivered
+        int copy_ret = kmemcpy_maybe_user((char *)buf + done, chunk, r);
+        if (0 != copy_ret) {
+            ret = copy_ret;
+            break;
+        }
         done += r;
         if (0 != ret || r < n) {
             break;
@@ -198,30 +190,30 @@ static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
     }
 
     if (TIOCGPTN == op) {
-        *(int *)buf = pty->pts_num;
-        return 0;
+        int num = pty->pts_num;
+        return kmemcpy_to_user(buf, &num, sizeof(num));
     }
 
     if (TIOCSWINSZ == op) {
-        struct winsize *ws = (void *)buf;
-        pty->backend.cols  = ws->ws_col;
-        pty->backend.rows  = ws->ws_row;
-        return 0;
+        struct winsize ws;
+        int            ret = kmemcpy_from_user(&ws, buf, sizeof(ws));
+        if (0 == ret) {
+            pty->backend.cols = ws.ws_col;
+            pty->backend.rows = ws.ws_row;
+        }
+        return ret;
     }
 
     if (TIOCGWINSZ == op) {
-        struct winsize *ws = (void *)buf;
-        ws->ws_col         = pty->backend.cols;
-        ws->ws_row         = pty->backend.rows;
-        ws->ws_ypixel      = 0;
-        ws->ws_xpixel      = 0;
-        return 0;
+        struct winsize ws = {.ws_row = pty->backend.rows,
+                             .ws_col = pty->backend.cols};
+        return kmemcpy_to_user(buf, &ws, sizeof(ws));
     }
 
     if (TCGETS == op) {
-        struct termios *termios = buf;
-        *termios                = pty->backend.termios;
-        return 0;
+        return kmemcpy_to_user(buf,
+                               &pty->backend.termios,
+                               sizeof(pty->backend.termios));
     }
 
     return ENOSYS;
@@ -354,8 +346,8 @@ static int pts_close(void *devdata) {
 }
 
 static int pts_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 0;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0622; // apparently makes xterm happy
     out->st_mode |= S_IFCHR;
     return 0;
@@ -428,11 +420,11 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
     // This *ONLY* creates the pts device, it does NOT open it
     com_vnode_t *slave_vn;
     int          ret = com_fs_devfs_register(&slave_vn,
-                                             PtsDir,
-                                             pts_name,
-                                             kstrlen(pts_name),
-                                             &PtsDevOps,
-                                             pty);
+                                    PtsDir,
+                                    pts_name,
+                                    kstrlen(pts_name),
+                                    &PtsDevOps,
+                                    pty);
     if (0 != ret) {
         goto end;
     }
@@ -451,8 +443,8 @@ end:
 }
 
 static int ptmx_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 0;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0622; // apparently makes xterm happy
     out->st_mode |= S_IFCHR;
     return 0;

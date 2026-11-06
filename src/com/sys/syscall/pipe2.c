@@ -26,6 +26,7 @@
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdint.h>
 
@@ -36,10 +37,6 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
 
     int *fildes = COM_SYS_SYSCALL_ARG(int *, 1);
     int  flags  = COM_SYS_SYSCALL_ARG(int, 2);
-
-    if (!ARCH_MMU_RANGE_IS_USER(fildes, 2 * sizeof(*fildes))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
 
     com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     int         rfd  = com_sys_proc_next_fd(curr);
@@ -70,8 +67,13 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
     curr->fd[rfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
     curr->fd[wfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
 
-    fildes[0] = rfd;
-    fildes[1] = wfd;
+    int kfildes[2] = {rfd, wfd};
+    int copy_ret   = kmemcpy_to_user(fildes, kfildes, sizeof(kfildes));
+    if (0 != copy_ret) {
+        com_sys_proc_close_file(curr, rfd);
+        com_sys_proc_close_file(curr, wfd);
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
     KDEBUG("returning fd=(%d, %d), read_vn=%p, write_vn=%p",
            rfd,
            wfd,

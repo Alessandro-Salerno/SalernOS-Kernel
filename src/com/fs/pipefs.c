@@ -48,6 +48,7 @@ struct pipefs_node {
     com_vnode_t    *read_end;
     com_vnode_t    *write_end;
     com_poll_head_t pollhead;
+    ino_t           ino;
 };
 
 static com_vnode_ops_t PipefsNodeOps = {.readv     = com_fs_pipefs_readv,
@@ -102,10 +103,14 @@ int com_fs_pipefs_readv(kioviter_t  *ioviter,
     }
     size_t modidx = pipe->read % PIPE_BUF_SZ;
     size_t first  = KMIN(read_count, PIPE_BUF_SZ - modidx);
-    kioviter_write(NULL, ioviter, pipe->buf + modidx, first);
-    if (read_count > first) {
-        kioviter_write(NULL, ioviter, pipe->buf, read_count - first);
+    size_t done   = 0;
+    ret           = kioviter_write(&done, ioviter, pipe->buf + modidx, first);
+    if (0 == ret && done == first && read_count > first) {
+        size_t second = 0;
+        ret = kioviter_write(&second, ioviter, pipe->buf, read_count - first);
+        done += second;
     }
+    read_count = done;
     pipe->read += read_count;
     ksync_notify_all(&pipe->condvar, &pipe->writers);
     pipefs_poll_notify(pipe);
@@ -113,7 +118,7 @@ int com_fs_pipefs_readv(kioviter_t  *ioviter,
 end:
     ksync_release(&pipe->condvar);
     *bytes_read = read_count;
-    return ret;
+    return read_count > 0 ? 0 : ret;
 }
 
 int com_fs_pipefs_writev(size_t      *bytes_written,
@@ -152,15 +157,22 @@ int com_fs_pipefs_writev(size_t      *bytes_written,
         size_t writesz = KMIN(left, av_space);
         size_t modidx  = pipe->write % PIPE_BUF_SZ;
         size_t first   = KMIN(writesz, PIPE_BUF_SZ - modidx);
-        kioviter_read(pipe->buf + modidx, first, NULL, ioviter);
-        if (writesz > first) {
-            kioviter_read(pipe->buf, writesz - first, NULL, ioviter);
+        size_t done    = 0;
+        ret = kioviter_read(pipe->buf + modidx, first, &done, ioviter);
+        if (0 == ret && done == first && writesz > first) {
+            size_t second = 0;
+            ret = kioviter_read(pipe->buf, writesz - first, &second, ioviter);
+            done += second;
         }
-        pipe->write += writesz;
-        left -= writesz;
-        write_count += writesz;
+        pipe->write += done;
+        left -= done;
+        write_count += done;
         ksync_notify_all(&pipe->condvar, &pipe->readers);
         pipefs_poll_notify(pipe);
+        if (done < writesz) {
+            ret = EFAULT;
+            goto end;
+        }
     }
 
 end:
@@ -227,7 +239,8 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
 }
 
 int com_fs_pipefs_stat(struct stat *out, com_vnode_t *node) {
-    out->st_ino     = (ino_t)node->extra;
+    struct pipefs_node *pipe = node->extra;
+    out->st_ino              = pipe->ino;
     out->st_mode    = S_IFIFO | 0600;
     out->st_nlink   = 1;
     out->st_blksize = PIPE_BUF_SZ;
@@ -248,6 +261,7 @@ void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     COM_SYS_THREAD_WAITLIST_INIT(&pipe->writers);
     pipe->read  = 0;
     pipe->write = 0;
+    pipe->ino   = com_fs_vfs_new_ino();
     pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
     com_vnode_t *r  = com_mm_slab_alloc(sizeof(com_vnode_t));

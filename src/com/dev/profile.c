@@ -21,48 +21,62 @@
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <salernos/devprofile.h>
+
+static int devprofile_copy_row(struct devprofile_fn_res *r,
+                               size_t                    i,
+                               const char               *name,
+                               com_profile_func_data_t  *data) {
+    struct devprofile_fn_data d = {0};
+    kmemcpy(d.name, name, KMIN(kstrlen(name), sizeof(d.name) - 1));
+    d.real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
+    d.cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
+    d.num_calls    = data->num_calls;
+    return kmemcpy_to_user(&r->data[i], &d, sizeof(d));
+}
 
 static int devprofile_ioctl(void *devdata, uintmax_t op, void *buf) {
     (void)devdata;
 
     if (DEVPROFILE_IOCTL_GET_NUM_FUNCTIONS == op) {
-        *(size_t *)buf = E_COM_PROFILE_FUNC__MAX;
-        return 0;
+        size_t num = E_COM_PROFILE_FUNC__MAX;
+        return kmemcpy_to_user(buf, &num, sizeof(num));
     } else if (DEVPROFILE_IOCTL_GET_NUM_SYSCALLS == op) {
-        com_sys_syscall_get_tables(NULL, NULL, (size_t *)buf);
-        return 0;
+        size_t num = 0;
+        com_sys_syscall_get_tables(NULL, NULL, &num);
+        return kmemcpy_to_user(buf, &num, sizeof(num));
     } else if (DEVPROFILE_IOCTL_GET_FUNCTIONS == op) {
-        struct devprofile_fn_res *r        = buf;
-        com_syswide_profile_t    *profiler = com_sys_profiler_get_syswide();
+        com_syswide_profile_t *profiler = com_sys_profiler_get_syswide();
 
         for (com_profile_func_t i = 0; i < E_COM_PROFILE_FUNC__MAX; i++) {
-            struct devprofile_fn_data *d    = &r->data[i];
-            com_profile_func_data_t   *data = &profiler->functions[i];
-            kstrcpy(d->name, com_sys_profiler_resolve_name(i));
-            d->real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
-            d->cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
-            d->num_calls    = data->num_calls;
+            int ret = devprofile_copy_row(buf,
+                                          i,
+                                          com_sys_profiler_resolve_name(i),
+                                          &profiler->functions[i]);
+            if (0 != ret) {
+                return ret;
+            }
         }
 
         return 0;
     } else if (DEVPROFILE_IOCTL_GET_SYSCALLS == op) {
-        struct devprofile_fn_res *r            = buf;
-        size_t                    num_syscalls = 0;
-        com_syscall_aux_t        *aux_syscalls;
+        size_t             num_syscalls = 0;
+        com_syscall_aux_t *aux_syscalls;
         com_sys_syscall_get_tables(NULL, &aux_syscalls, &num_syscalls);
         com_syswide_profile_t *profiler = com_sys_profiler_get_syswide();
 
         for (size_t i = 0; i < num_syscalls; i++) {
-            struct devprofile_fn_data *d    = &r->data[i];
-            com_syscall_aux_t         *aux  = &aux_syscalls[i];
-            com_profile_func_data_t   *data = &profiler->syscalls[i];
-            kstrcpy(d->name, aux->name);
-            d->real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
-            d->cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
-            d->num_calls    = data->num_calls;
+            int ret = devprofile_copy_row(buf,
+                                          i,
+                                          aux_syscalls[i].name,
+                                          &profiler->syscalls[i]);
+            if (0 != ret) {
+                return ret;
+            }
         }
 
         return 0;

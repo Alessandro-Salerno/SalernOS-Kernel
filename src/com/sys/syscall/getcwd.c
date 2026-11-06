@@ -25,6 +25,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/spinlock.h>
+#include <lib/usercopy.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -38,22 +39,21 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
     size_t size = COM_SYS_SYSCALL_ARG(size_t, 2);
 
     if (size < 1) {
-        return COM_SYS_SYSCALL_ERR(EOVERFLOW);
-    }
-
-    if (!ARCH_MMU_RANGE_IS_USER(buf, size)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+        return COM_SYS_SYSCALL_ERR(ERANGE);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
     com_vnode_t  *curr_cwd    = atomic_load(&curr_proc->cwd);
 
+    // The path is built backwards from the end of kbuf
+    char         kbuf[CONFIG_PATH_MAX];
+    size_t       ksize     = KMIN(size, sizeof(kbuf));
     int          err       = 0;
     com_vnode_t *parent    = NULL;
-    ssize_t      place_idx = (ssize_t)size -
+    ssize_t      place_idx = (ssize_t)ksize -
                              2; // if you're above that, that's your problem
-    buf[size - 1]          = 0; // string terminator
+    kbuf[ksize - 1]        = 0; // string terminator
 
     while (0 == err) {
         com_vnctl_name_t name;
@@ -67,17 +67,22 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
             break;
         }
 
+        // Past the first component, the root is the / already in place
+        if (0 == name.namelen && place_idx < (ssize_t)ksize - 2) {
+            break;
+        }
+
         place_idx -= name.namelen - 1;
         if (place_idx - 1 < 0) { // -1 for the /
             // same as above
             COM_FS_VFS_VNODE_RELEASE(parent);
-            err = EOVERFLOW;
+            err = ksize == size ? ERANGE : ENAMETOOLONG;
             break;
         }
 
-        kmemcpy(&buf[place_idx], name.name, name.namelen);
-        if ('/' != buf[place_idx]) { // avoid //usr caes
-            buf[place_idx - 1] = '/';
+        kmemcpy(&kbuf[place_idx], name.name, name.namelen);
+        if ('/' != kbuf[place_idx]) { // avoid //usr caes
+            kbuf[place_idx - 1] = '/';
             place_idx -= 2; // currently, it points to the first letter of the
                             // current name, thus -1 is the /, -2 is the last
                             // slot for the previous name
@@ -111,8 +116,11 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
         return COM_SYS_SYSCALL_ERR(err);
     }
 
-    size_t written = size - place_idx - 1;
-    kmemmove(buf, &buf[place_idx + 1], written);
+    size_t written  = ksize - place_idx - 1;
+    int    copy_ret = kmemcpy_to_user(buf, &kbuf[place_idx + 1], written);
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
 
     return COM_SYS_SYSCALL_OK((uintptr_t)buf);
 }

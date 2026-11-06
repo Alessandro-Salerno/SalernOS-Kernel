@@ -25,6 +25,7 @@
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <stdint.h>
 
 // SYSCALL: sendmsg(int sockfd, struct msghdr *msg, int flags)
@@ -36,12 +37,23 @@ COM_SYS_SYSCALL(com_sys_syscall_sendmsg) {
     struct msghdr *msg    = COM_SYS_SYSCALL_ARG(void *, 2);
     int            flags  = COM_SYS_SYSCALL_ARG(int, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(msg, sizeof(*msg))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
+
+    struct msghdr kmsg;
+    int           copy_ret = kmemcpy_from_user(&kmsg, msg, sizeof(kmsg));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
+
+    kioviter_t ioviter;
+    copy_ret = kioviter_init_user(&ioviter,
+                                  curr_thread->scratch,
+                                  kmsg.msg_iov,
+                                  kmsg.msg_iovlen);
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
 
     com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
 
@@ -61,8 +73,6 @@ COM_SYS_SYSCALL(com_sys_syscall_sendmsg) {
     KASSERT(NULL != socket_vn->socket);
     com_socket_t *socket = socket_vn->socket;
 
-    kioviter_t ioviter;
-    kioviter_init(&ioviter, msg->msg_iov, msg->msg_iovlen);
     com_socket_desc_t desc = {.ioviter    = &ioviter,
                               .count      = ioviter.total_size,
                               .count_done = 0,

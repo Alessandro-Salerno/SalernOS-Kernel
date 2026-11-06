@@ -560,6 +560,12 @@ int com_fs_vfs_mmap(void             **out,
 
 // UTILITY FUNCTIONS
 
+// Inode numbers are not derived from kernel addresses, so they leak nothing
+ino_t com_fs_vfs_new_ino(void) {
+    static ino_t next = 1;
+    return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
+}
+
 int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
                            com_vfs_t       *vfs,
                            com_vnode_type_t type,

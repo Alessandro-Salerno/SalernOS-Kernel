@@ -85,6 +85,8 @@ typedef struct com_thread {
     pid_t tid;
 
     arch_context_t *usercopy_ctx;
+    // One page for copies of syscall arguments, valid until the syscall returns
+    void *scratch;
 
     com_waitlist_t     *waiting_on;
     uintmax_t           ctime;

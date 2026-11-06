@@ -252,11 +252,12 @@ int com_fs_vfs_mmap(void             **out,
 
 // UTILITY FUNCTIONS
 
-int com_fs_vfs_alloc_vnode(com_vnode_t    **out,
-                           com_vfs_t       *vfs,
-                           com_vnode_type_t type,
-                           com_vnode_ops_t *ops,
-                           void            *extra);
+ino_t com_fs_vfs_new_ino(void);
+int   com_fs_vfs_alloc_vnode(com_vnode_t    **out,
+                             com_vfs_t       *vfs,
+                             com_vnode_type_t type,
+                             com_vnode_ops_t *ops,
+                             void            *extra);
 int com_fs_vfs_create_any(com_vnode_t **out,
                           const char   *path,
                           size_t        pathlen,

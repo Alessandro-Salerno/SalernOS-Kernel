@@ -23,6 +23,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/mem.h>
+#include <lib/usercopy.h>
 
 // SYSCALL: sigpending(sigset_t *set)
 COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
@@ -30,10 +31,6 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     com_sigset_t *sigset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 1);
-
-    if (!ARCH_MMU_RANGE_IS_USER(sigset, sizeof(*sigset))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
@@ -43,7 +40,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     kspinlock_acquire(&curr_proc->signal_lock);
     kset.sig[0] = curr_thread->pending_signals;
     kspinlock_release(&curr_proc->signal_lock);
-    kmemcpy(sigset, &kset, sizeof(kset));
+    int copy_ret = kmemcpy_to_user(sigset, &kset, sizeof(kset));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
 
     return COM_SYS_SYSCALL_OK(0);
 }

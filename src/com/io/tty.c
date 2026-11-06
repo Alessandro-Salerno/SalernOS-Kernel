@@ -38,7 +38,9 @@
 #include <lib/mutex.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
+#include <limits.h>
 #include <poll.h>
 #include <salernos/ktty.h>
 #include <stdbool.h>
@@ -62,18 +64,11 @@ static int text_tty_echo(size_t     *bytes_written,
                          void       *passthrough) {
     (void)blocking;
 
-    // term->lock is a spinlock (panic needs it), so never render from buf
     com_text_tty_t *tty = passthrough;
-    char            chunk[128];
-    for (size_t done = 0; done < buflen;) {
-        size_t n = KMIN(buflen - done, sizeof(chunk));
-        kmemcpy(chunk, buf + done, n);
-        com_io_term_putsn(tty->term, chunk, n);
+    com_io_term_putsn(tty->term, buf, buflen);
 #if CONFIG_LOG_LEVEL == CONST_LOG_LEVEL_TTY
-        printf("%.*s", (int)n, chunk);
+    printf("%.*s", (int)buflen, buf);
 #endif
-        done += n;
-    }
     *bytes_written = buflen;
     return 0;
 }
@@ -314,17 +309,21 @@ static int tty_ioctl(void *devdata, uintmax_t op, void *buf) {
     switch (op) {
         case KTTY_IOCTL_SETMODE:
             return ktty_set_mode(tty_data, (uintptr_t)buf);
-        case KTTY_IOCTL_SETSWITCHMODE:
-            return ktty_set_switch_mode(tty_data, buf);
+        case KTTY_IOCTL_SETSWITCHMODE: {
+            struct ktty_switchmode mode;
+            int ret = kmemcpy_from_user(&mode, buf, sizeof(mode));
+            return 0 != ret ? ret : ktty_set_switch_mode(tty_data, &mode);
+        }
         case KTTY_IOCTL_RELEASE:
             return ktty_release(tty_data, (uintptr_t)buf);
         case KTTY_IOCTL_SWITCH:
             return com_io_console_switch((uintptr_t)buf) ? 0 : ENXIO;
         case KTTY_IOCTL_WAITFG:
             return com_io_console_wait_foreground(tty_data) ? 0 : EINTR;
-        case KTTY_IOCTL_GETNUM:
-            *(int *)buf = tty_data->num;
-            return 0;
+        case KTTY_IOCTL_GETNUM: {
+            int num = tty_data->num;
+            return kmemcpy_to_user(buf, &num, sizeof(num));
+        }
         default:
             break;
     }
@@ -357,8 +356,8 @@ static int tty_close(void *devdata) {
 }
 
 static int tty_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 0;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0622; // apparently makes xterm happy
     out->st_mode |= S_IFCHR;
     return 0;
@@ -414,24 +413,24 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
     com_proc_t   *curr_proc   = curr_thread->proc;
 
     if (TIOCGWINSZ == op) {
-        struct winsize *ws = buf;
-        ws->ws_row         = tty_backend->rows;
-        ws->ws_col         = tty_backend->cols;
-        ws->ws_ypixel      = 0;
-        ws->ws_xpixel      = 0;
-        return 0;
+        struct winsize ws = {.ws_row = tty_backend->rows,
+                             .ws_col = tty_backend->cols};
+        return kmemcpy_to_user(buf, &ws, sizeof(ws));
     }
 
     if (TCGETS == op) {
-        struct termios *termios = buf;
-        *termios                = tty_backend->termios;
-        return 0;
+        return kmemcpy_to_user(buf,
+                               &tty_backend->termios,
+                               sizeof(tty_backend->termios));
     }
 
     if (TCSETS == op || TCSETSF == op || TCSETSW == op) {
-        struct termios *termios = buf;
-        tty_backend->termios    = *termios;
-        return 0;
+        struct termios termios;
+        int            ret = kmemcpy_from_user(&termios, buf, sizeof(termios));
+        if (0 == ret) {
+            tty_backend->termios = termios;
+        }
+        return ret;
     }
 
     if (TIOCGPGRP == op) {
@@ -441,15 +440,11 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
             return ENOTTY;
         }
 
-        if (0 != tty_backend->fg_pgid) {
-            *(pid_t *)buf = tty_backend->fg_pgid;
-        } else {
-            *(pid_t *)buf = 1000000; // POSIX says this must be an arbitrarly
-                                     // high number which is not assigned to
-                                     // anyu process or process group
-        }
-
-        return 0;
+        // POSIX says this must be an arbitrarly high number which is not
+        // assigned to anyu process or process group
+        _Static_assert(sizeof(pid_t) == sizeof(int), "pid_t is not an int");
+        pid_t pgid = 0 != tty_backend->fg_pgid ? tty_backend->fg_pgid : INT_MAX;
+        return kmemcpy_to_user(buf, &pgid, sizeof(pgid));
     }
 
     if (TIOCSCTTY == op) {
@@ -470,20 +465,24 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
             return ENOTTY;
         }
 
-        tty_backend->fg_pgid = *(pid_t *)buf;
-        return 0;
+        pid_t pgid;
+        int   ret = kmemcpy_from_user(&pgid, buf, sizeof(pgid));
+        if (0 == ret) {
+            tty_backend->fg_pgid = pgid;
+        }
+        return ret;
     }
 
     KDEBUG("unsupported ioctl 0x%X", op);
     return ENOSYS;
 }
 
-int com_io_tty_text_backend_echo(size_t                 *bytes_written,
-                                 com_text_tty_backend_t *tty_backend,
-                                 const char             *buf,
-                                 size_t                  buflen,
-                                 bool                    blocking,
-                                 void                   *passthrough) {
+static int backend_echo(size_t                 *bytes_written,
+                        com_text_tty_backend_t *tty_backend,
+                        const char             *buf,
+                        size_t                  buflen,
+                        bool                    blocking,
+                        void                   *passthrough) {
     size_t utmp;
     if (NULL == bytes_written) {
         bytes_written = &utmp;
@@ -530,6 +529,38 @@ no_newline:
     return tty_backend->echo(bytes_written, buf, buflen, blocking, passthrough);
 }
 
+// The backends may hold spinlocks, so they only ever see kernel memory
+int com_io_tty_text_backend_echo(size_t                 *bytes_written,
+                                 com_text_tty_backend_t *tty_backend,
+                                 const char             *buf,
+                                 size_t                  buflen,
+                                 bool                    blocking,
+                                 void                   *passthrough) {
+    char   chunk[128];
+    size_t done = 0;
+    int    ret  = 0;
+
+    while (done < buflen) {
+        size_t n = KMIN(buflen - done, sizeof(chunk));
+        size_t w = 0;
+        ret      = kmemcpy_maybe_user(chunk, buf + done, n);
+        if (0 != ret) {
+            break;
+        }
+        ret = backend_echo(&w, tty_backend, chunk, n, blocking, passthrough);
+        done += w;
+        if (0 != ret || w < n) {
+            break;
+        }
+    }
+
+    if (NULL != bytes_written) {
+        *bytes_written = done;
+    }
+
+    return 0 != done ? 0 : ret;
+}
+
 void com_io_tty_text_backend_poll_callback(void *data) {
     com_text_tty_backend_t *backend = data;
 
@@ -554,22 +585,22 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
     if (ISIG & tty_backend->termios.c_lflag) {
         if (tty_backend->termios.c_cc[VINTR] == c) {
-            ret     = com_io_tty_text_backend_echo(NULL,
-                                               tty_backend,
-                                               "^C",
-                                               2,
-                                               blocking,
-                                               passthrough);
+            ret     = backend_echo(NULL,
+                                   tty_backend,
+                                   "^C",
+                                   2,
+                                   blocking,
+                                   passthrough);
             sig     = SIGINT;
             handled = true;
         }
         if (tty_backend->termios.c_cc[VQUIT] == c) {
-            ret     = com_io_tty_text_backend_echo(NULL,
-                                               tty_backend,
-                                               "^\\\\",
-                                               3,
-                                               blocking,
-                                               passthrough);
+            ret     = backend_echo(NULL,
+                                   tty_backend,
+                                   "^\\\\",
+                                   3,
+                                   blocking,
+                                   passthrough);
             sig     = SIGQUIT;
             handled = true;
         }
@@ -628,12 +659,12 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
     if (tty_backend->termios.c_cc[VERASE] == c) {
         if (tty_backend->canon.index > 0) {
             if (ECHOE & tty_backend->termios.c_lflag) {
-                ret = com_io_tty_text_backend_echo(NULL,
-                                                   tty_backend,
-                                                   "\b \b",
-                                                   3,
-                                                   blocking,
-                                                   passthrough);
+                ret = backend_echo(NULL,
+                                   tty_backend,
+                                   "\b \b",
+                                   3,
+                                   blocking,
+                                   passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -653,12 +684,12 @@ int com_io_tty_process_char(com_text_tty_backend_t *tty_backend,
 
             tty_backend->canon.index--;
             if (ECHOKE & tty_backend->termios.c_lflag) {
-                ret = com_io_tty_text_backend_echo(NULL,
-                                                   tty_backend,
-                                                   "\b \b",
-                                                   3,
-                                                   blocking,
-                                                   passthrough);
+                ret = backend_echo(NULL,
+                                   tty_backend,
+                                   "\b \b",
+                                   3,
+                                   blocking,
+                                   passthrough);
                 if (0 != ret) {
                     goto end;
                 }
@@ -672,12 +703,7 @@ end:
     if (!handled) {
         tty_backend->canon.buffer[tty_backend->canon.index++] = c;
         if (ECHO & tty_backend->termios.c_lflag) {
-            ret = com_io_tty_text_backend_echo(NULL,
-                                               tty_backend,
-                                               &c,
-                                               1,
-                                               blocking,
-                                               passthrough);
+            ret = backend_echo(NULL, tty_backend, &c, 1, blocking, passthrough);
             if (0 != ret) {
                 goto sighandler;
             }
@@ -714,11 +740,26 @@ int com_io_tty_process_chars(size_t                 *bytes_processed,
                              void                   *passthrough) {
     int    ret = 0;
     size_t i   = 0;
-    for (; i < buflen; i++) {
-        ret = com_io_tty_process_char(tty_backend,
-                                      buf[i],
-                                      blocking,
-                                      passthrough);
+    char   chunk[128];
+    while (i < buflen) {
+        size_t n = KMIN(buflen - i, sizeof(chunk));
+        ret      = kmemcpy_maybe_user(chunk, buf + i, n);
+        if (0 != ret) {
+            break;
+        }
+
+        size_t j = 0;
+        for (; j < n; j++) {
+            ret = com_io_tty_process_char(tty_backend,
+                                          chunk[j],
+                                          blocking,
+                                          passthrough);
+            if (0 != ret) {
+                break;
+            }
+        }
+
+        i += j;
         if (0 != ret) {
             break;
         }

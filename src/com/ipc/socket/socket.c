@@ -18,7 +18,10 @@
 
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/ipc/socket/unix.h>
+#include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/util.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -39,12 +42,18 @@ com_socket_t *com_ipc_socket_new(com_socket_type_t type) {
 int com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
                                  struct sockaddr   *abi_addr,
                                  socklen_t          abi_addr_len) {
-    (void)abi_addr_len;
-
     switch (abi_addr->sa_family) {
         case AF_UNIX: {
             struct sockaddr_un *unaddr = (void *)abi_addr;
-            out->local.pathlen         = kstrlen(unaddr->sun_path);
+            size_t max_len             = abi_addr_len -
+                                         offsetof(struct sockaddr_un, sun_path);
+            if (abi_addr_len < offsetof(struct sockaddr_un, sun_path) ||
+                max_len > sizeof(unaddr->sun_path)) {
+                return EINVAL;
+            }
+            char *nul          = kmemchr(unaddr->sun_path, 0, max_len);
+            out->local.pathlen = NULL != nul ? (size_t)(nul - unaddr->sun_path)
+                                             : max_len;
             kmemcpy(out->local.path, unaddr->sun_path, out->local.pathlen);
             return 0;
         }
@@ -63,9 +72,11 @@ int com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
                                  socklen_t          max_abi_addr_len) {
     switch (socktype) {
         case E_COM_SOCKET_TYPE_UNIX: {
+            (void)max_abi_addr_len;
             struct sockaddr_un *unaddr = (void *)abi_addr;
             unaddr->sun_family         = AF_UNIX;
-            size_t copy_size = KMIN(addr->local.pathlen, max_abi_addr_len - 1);
+            size_t copy_size           = KMIN(addr->local.pathlen,
+                                              sizeof(unaddr->sun_path) - 1);
             kmemcpy(unaddr->sun_path, addr->local.path, copy_size);
             unaddr->sun_path[copy_size] = 0;
             *abi_addr_len               = copy_size;

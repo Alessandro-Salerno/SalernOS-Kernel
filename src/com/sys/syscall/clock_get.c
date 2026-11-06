@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <time.h>
 
@@ -32,14 +33,15 @@ COM_SYS_SYSCALL(com_sys_syscall_clock_get) {
     int              clock = COM_SYS_SYSCALL_ARG(int, 1);
     struct timespec *ts    = COM_SYS_SYSCALL_ARG(void *, 2);
 
-    if (!ARCH_MMU_RANGE_IS_USER(ts, sizeof(*ts))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     (void)clock; // TODO: what is this?
-    uintmax_t ns = ARCH_CPU_GET_TIME();
-    ts->tv_nsec  = ns % KNANOS_PER_SEC;
-    ts->tv_sec   = ns / KNANOS_PER_SEC;
+    uintmax_t       ns  = ARCH_CPU_GET_TIME();
+    struct timespec kts = {.tv_sec  = ns / KNANOS_PER_SEC,
+                           .tv_nsec = ns % KNANOS_PER_SEC};
+
+    int copy_ret = kmemcpy_to_user(ts, &kts, sizeof(kts));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
 
     return COM_SYS_SYSCALL_OK(0);
 }

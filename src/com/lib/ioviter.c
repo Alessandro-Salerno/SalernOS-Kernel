@@ -22,13 +22,13 @@
 #include <lib/ioviter.h>
 #include <lib/ringbuffer.h>
 #include <lib/spinlock.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
+#include <limits.h>
 #include <stdbool.h>
 
 // CREDIT: Mathwnd/Astral
 // This code was inspired by the Astral Operating System
-
-// TODO: check user access to pages pointed to by the iovecs
 
 // NOTE: names may be a bit confusing: the ioviter is NEVER the subject: you
 // read FROM the ioviter into a buffer, write from a ringbuffer INTO the ioviter
@@ -52,6 +52,35 @@ void kioviter_init(kioviter_t *ioviter, struct iovec *iov, int iovcnt) {
     ioviter->curr_off   = 0;
     ioviter->total_off  = 0;
     ioviter->total_size = ioviter_size(ioviter);
+}
+
+// kiov must hold CONFIG_IOV_MAX iovecs, so the user array is read only once
+int kioviter_init_user(kioviter_t         *ioviter,
+                       struct iovec       *kiov,
+                       const struct iovec *uiov,
+                       int                 iovcnt) {
+    if (iovcnt < 0 || iovcnt > CONFIG_IOV_MAX) {
+        return EINVAL;
+    }
+
+    int ret = kmemcpy_from_user(kiov, uiov, iovcnt * sizeof(*kiov));
+    if (0 != ret) {
+        return ret;
+    }
+
+    size_t total = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        if (kiov[i].iov_len > SSIZE_MAX - total) {
+            return EINVAL;
+        }
+        if (!ARCH_MMU_RANGE_IS_USER(kiov[i].iov_base, kiov[i].iov_len)) {
+            return EFAULT;
+        }
+        total += kiov[i].iov_len;
+    }
+
+    kioviter_init(ioviter, kiov, iovcnt);
+    return 0;
 }
 
 size_t kioviter_skip(kioviter_t *ioviter, size_t count) {
@@ -91,14 +120,19 @@ int kioviter_read(void       *buf,
                   kioviter_t *ioviter) {
     size_t tot_rem    = KMIN(buflen, KIOVITER_REMAINING(ioviter));
     size_t read_count = 0;
+    int    ret        = 0;
 
     do {
         size_t curr_rem  = KIOVITER_CURR_REMAINING(ioviter);
         size_t copy_size = KMIN(curr_rem, tot_rem);
 
-        kmemcpy((uint8_t *)buf + read_count,
-                (uint8_t *)ioviter->curr_iov->iov_base + ioviter->curr_off,
-                copy_size);
+        ret = kmemcpy_maybe_user((uint8_t *)buf + read_count,
+                                 (uint8_t *)ioviter->curr_iov->iov_base +
+                                     ioviter->curr_off,
+                                 copy_size);
+        if (0 != ret) {
+            break;
+        }
 
         kioviter_skip(ioviter, copy_size);
         read_count += copy_size;
@@ -109,7 +143,7 @@ int kioviter_read(void       *buf,
         *bytes_read = read_count;
     }
 
-    return 0;
+    return read_count > 0 ? 0 : ret;
 }
 
 int kioviter_write(size_t     *bytes_written,
@@ -118,14 +152,19 @@ int kioviter_write(size_t     *bytes_written,
                    size_t      buflen) {
     size_t tot_rem     = KMIN(buflen, KIOVITER_REMAINING(ioviter));
     size_t write_count = 0;
+    int    ret         = 0;
 
     do {
         size_t curr_rem  = KIOVITER_CURR_REMAINING(ioviter);
         size_t copy_size = KMIN(curr_rem, tot_rem);
 
-        kmemcpy((uint8_t *)ioviter->curr_iov->iov_base + ioviter->curr_off,
-                (uint8_t *)buf + write_count,
-                copy_size);
+        ret = kmemcpy_maybe_user((uint8_t *)ioviter->curr_iov->iov_base +
+                                     ioviter->curr_off,
+                                 (uint8_t *)buf + write_count,
+                                 copy_size);
+        if (0 != ret) {
+            break;
+        }
 
         kioviter_skip(ioviter, copy_size);
         write_count += copy_size;
@@ -136,7 +175,7 @@ int kioviter_write(size_t     *bytes_written,
         *bytes_written = write_count;
     }
 
-    return 0;
+    return write_count > 0 ? 0 : ret;
 }
 
 int kioviter_memset(kioviter_t *ioviter, uint8_t value, size_t len) {
@@ -146,9 +185,13 @@ int kioviter_memset(kioviter_t *ioviter, uint8_t value, size_t len) {
         size_t curr_rem  = KIOVITER_CURR_REMAINING(ioviter);
         size_t copy_size = KMIN(curr_rem, tot_rem);
 
-        kmemset((uint8_t *)ioviter->curr_iov->iov_base + ioviter->curr_off,
-                len,
-                value);
+        int ret = kmemset_maybe_user((uint8_t *)ioviter->curr_iov->iov_base +
+                                         ioviter->curr_off,
+                                     copy_size,
+                                     value);
+        if (0 != ret) {
+            return ret;
+        }
 
         kioviter_skip(ioviter, copy_size);
         tot_rem -= copy_size;

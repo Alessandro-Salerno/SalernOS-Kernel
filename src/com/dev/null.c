@@ -69,8 +69,8 @@ static int dev_null_poll(short *revents, void *devdata, short events) {
 }
 
 static int dev_null_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 0;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0777;
     out->st_mode |= S_IFCHR;
     return 0;

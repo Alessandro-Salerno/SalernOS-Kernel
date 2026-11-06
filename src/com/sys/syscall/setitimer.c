@@ -24,6 +24,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/mem.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -106,11 +107,6 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
     struct itimerval *new_val = COM_SYS_SYSCALL_ARG(void *, 2);
     struct itimerval *old_val = COM_SYS_SYSCALL_ARG(void *, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(new_val, sizeof(*new_val)) ||
-        !ARCH_MMU_RANGE_IS_USER(old_val, sizeof(*old_val))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
     com_syscall_ret_t ret         = COM_SYS_SYSCALL_OK(0);
 
@@ -127,7 +123,10 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
 
     // We allocate here to avoid allocating under spinlocks
     if (NULL != new_val) {
-        kmemcpy(&knew, new_val, sizeof(knew));
+        int copy_ret = kmemcpy_from_user(&knew, new_val, sizeof(knew));
+        if (0 != copy_ret) {
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
         if (!timeval_is_canonical(knew.it_value) ||
             !timeval_is_canonical(knew.it_interval)) {
             return COM_SYS_SYSCALL_ERR(EINVAL);
@@ -184,8 +183,9 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
 end:
     kspinlock_release(&curr_thread->real_timer.lock);
 
-    if (NULL != old_val) {
-        kmemcpy(old_val, &kold, sizeof(kold));
+    // The new timer is armed even if the old one cannot be reported
+    if (NULL != old_val && 0 != kmemcpy_to_user(old_val, &kold, sizeof(kold))) {
+        ret = COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
     if (schedule_callout) {

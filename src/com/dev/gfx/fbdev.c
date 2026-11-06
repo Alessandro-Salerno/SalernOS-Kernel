@@ -27,6 +27,7 @@
 #include <kernel/com/mm/vmm.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <linux/fb.h>
 #include <sys/mman.h>
@@ -35,14 +36,20 @@ static int fbdev_ioctl(void *devdata, uintmax_t op, void *buf) {
     com_fbdev_t *fbdev = devdata;
 
     if (FBIOGET_FSCREENINFO == op) {
-        *(struct fb_fix_screeninfo *)buf = fbdev->fscreeninfo;
-        return 0;
+        return kmemcpy_to_user(buf,
+                               &fbdev->fscreeninfo,
+                               sizeof(fbdev->fscreeninfo));
     } else if (FBIOGET_VSCREENINFO == op) {
-        *(struct fb_var_screeninfo *)buf = fbdev->vscreeninfo;
-        return 0;
+        return kmemcpy_to_user(buf,
+                               &fbdev->vscreeninfo,
+                               sizeof(fbdev->vscreeninfo));
     } else if (FBIOPUT_VSCREENINFO == op) {
-        fbdev->vscreeninfo = *(struct fb_var_screeninfo *)buf;
-        return 0;
+        struct fb_var_screeninfo vscreeninfo;
+        int ret = kmemcpy_from_user(&vscreeninfo, buf, sizeof(vscreeninfo));
+        if (0 == ret) {
+            fbdev->vscreeninfo = vscreeninfo;
+        }
+        return ret;
     } else if (FBIOPUTCMAP == op || FBIOBLANK == op) {
         return 0;
     }
@@ -51,8 +58,8 @@ static int fbdev_ioctl(void *devdata, uintmax_t op, void *buf) {
 }
 
 static int fbdev_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 0;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0777;
     out->st_mode |= S_IFCHR;
     return 0;

@@ -76,6 +76,7 @@
 #define CONFIG_SYSCALL_MAX      128    /* Maximum number of syscall handlers */
 #define CONFIG_SYMLINK_MAX      32
 #define CONFIG_PATH_MAX         256
+#define CONFIG_IOV_MAX 256 /* <= ARCH_PAGE_SIZE / sizeof(struct iovec) */
 #define CONFIG_TTY_MAX          7
 #define CONFIG_VMM_PREFAULT_MAX 512 /* max n. pages faultable at once */
 

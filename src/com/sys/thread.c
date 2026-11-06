@@ -30,7 +30,11 @@
 #include <lib/spinlock.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <sys/uio.h>
 #include <vendor/tailq.h>
+
+_Static_assert(CONFIG_IOV_MAX * sizeof(struct iovec) <= ARCH_PAGE_SIZE,
+               "the scratch page must hold CONFIG_IOV_MAX iovecs");
 
 static pid_t NextTid = 0;
 
@@ -87,6 +91,7 @@ void com_sys_thread_reap(void) {
         com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(list->kernel_stack) -
                         ARCH_PAGE_SIZE);
         com_sys_callout_destroy(list->timed_wait_callout);
+        com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(list->scratch));
         com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(list));
     }
 }
@@ -114,6 +119,7 @@ static com_thread_t *new_thread(com_proc_t *proc, arch_context_t ctx) {
     thread->tid = __atomic_fetch_add(&NextTid, 1, __ATOMIC_RELAXED);
 
     thread->usercopy_ctx       = NULL;
+    thread->scratch            = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
     thread->waiting_on         = NULL;
     thread->ctime              = ARCH_CPU_GET_TIMESTAMP();
     thread->timed_wait_callout = com_sys_callout_new(NULL, thread, 0);

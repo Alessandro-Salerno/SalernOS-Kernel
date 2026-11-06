@@ -26,6 +26,7 @@
 #include <lib/ringbuffer.h>
 #include <lib/str.h>
 #include <lib/sync.h>
+#include <lib/usercopy.h>
 #include <poll.h>
 #include <stdatomic.h>
 
@@ -450,8 +451,8 @@ static int unix_socket_ioctl(com_socket_t *socket, uintmax_t op, void *buf) {
     struct unix_socket *unix_socket = (void *)socket;
 
     if (FIONREAD == op) {
-        *(int *)buf = KRINGBUFFER_AVAIL_READ(&unix_socket->rb);
-        return 0;
+        int avail = KRINGBUFFER_AVAIL_READ(&unix_socket->rb);
+        return kmemcpy_to_user(buf, &avail, sizeof(avail));
     }
 
     return ENODEV;

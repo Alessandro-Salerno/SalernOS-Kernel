@@ -181,7 +181,9 @@ int com_fs_devfs_stat(struct stat *out, com_vnode_t *node) {
         return ENOSYS;
     }
 
-    return dev->devops->stat(out, dev->devdata);
+    int ret     = dev->devops->stat(out, dev->devdata);
+    out->st_ino = com_fs_tmpfs_get_ino(node);
+    return ret;
 }
 
 int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {

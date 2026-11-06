@@ -26,6 +26,7 @@
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <stdint.h>
 
 // SYSCALL: getpeername(int sockfd, struct sockaddr *addr, socklen_t
@@ -37,10 +38,6 @@ COM_SYS_SYSCALL(com_sys_syscall_getpeername) {
     int              sockfd      = COM_SYS_SYSCALL_ARG(int, 1);
     struct sockaddr *addr        = COM_SYS_SYSCALL_ARG(void *, 2);
     socklen_t        max_addrlen = COM_SYS_SYSCALL_ARG(socklen_t, 3);
-
-    if (!ARCH_MMU_RANGE_IS_USER(addr, max_addrlen)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
@@ -64,19 +61,24 @@ COM_SYS_SYSCALL(com_sys_syscall_getpeername) {
     com_socket_t *socket = socket_vn->socket;
 
     com_socket_addr_t peer_addr;
-    int               sock_ret = COM_IPC_SOCKET_GETPEERNAME(&peer_addr, socket);
-    if (0 != sock_ret) {
-        ret = COM_SYS_SYSCALL_ERR(sock_ret);
+    int               err = COM_IPC_SOCKET_GETPEERNAME(&peer_addr, socket);
+    if (0 != err) {
+        ret = COM_SYS_SYSCALL_ERR(err);
+        goto end;
     }
 
-    socklen_t addr_len;
-    sock_ret = com_ipc_socket_abi_from_addr(&addr_len,
-                                            addr,
-                                            &peer_addr,
-                                            socket->type,
-                                            max_addrlen);
-    if (0 != sock_ret) {
-        ret = COM_SYS_SYSCALL_ERR(sock_ret);
+    struct sockaddr_storage kaddr = {0};
+    socklen_t               addr_len;
+    err = com_ipc_socket_abi_from_addr(&addr_len,
+                                       (struct sockaddr *)&kaddr,
+                                       &peer_addr,
+                                       socket->type,
+                                       max_addrlen);
+    if (0 == err) {
+        err = kmemcpy_to_user(addr, &kaddr, KMIN(max_addrlen, sizeof(kaddr)));
+    }
+    if (0 != err) {
+        ret = COM_SYS_SYSCALL_ERR(err);
         goto end;
     }
 

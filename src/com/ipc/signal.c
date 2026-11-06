@@ -23,6 +23,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/context.h>
 #include <lib/mem.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdbool.h>
 #include <vendor/tailq.h>
@@ -295,8 +296,10 @@ restart:
     if (0 != arch_context_alloc_sigframe(&sframe, &stack, ctx)) {
         goto bad_frame;
     }
-    arch_context_setup_sigframe(&kframe, sframe, ctx);
-    kmemcpy(sframe, &kframe, sizeof(kframe));
+    if (0 != arch_context_setup_sigframe(&kframe, sframe, ctx) ||
+        0 != kmemcpy_to_user(sframe, &kframe, sizeof(kframe))) {
+        goto bad_frame;
+    }
 
     if (0 != arch_context_setup_sigrestore(&stack, restorer)) {
         goto bad_frame;

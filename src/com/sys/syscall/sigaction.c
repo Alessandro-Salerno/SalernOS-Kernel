@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <signal.h>
 
 // SYSCALL: sigaction(int sig, struct sigaction *act, struct sigaction *oact)
@@ -36,15 +37,14 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
-    if (!ARCH_MMU_RANGE_IS_USER(act, sizeof(*act)) ||
-        !ARCH_MMU_RANGE_IS_USER(oact, sizeof(*oact))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     com_sigaction_t *new_act = NULL;
     if (NULL != act) {
-        new_act = com_mm_slab_alloc(sizeof(com_sigaction_t));
-        kmemcpy(new_act, act, sizeof(com_sigaction_t));
+        new_act      = com_mm_slab_alloc(sizeof(com_sigaction_t));
+        int copy_ret = kmemcpy_from_user(new_act, act, sizeof(*new_act));
+        if (0 != copy_ret) {
+            com_mm_slab_free(new_act, sizeof(*new_act));
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
     }
 
     com_proc_t      *curr_proc = ARCH_CPU_GET_THREAD()->proc;
@@ -68,7 +68,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
     }
 
     if (NULL != oact) {
-        kmemcpy(oact, &old_act, sizeof(com_sigaction_t));
+        int copy_ret = kmemcpy_to_user(oact, &old_act, sizeof(old_act));
+        if (0 != copy_ret) {
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
     }
 
     return COM_SYS_SYSCALL_OK(0);

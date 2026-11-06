@@ -23,6 +23,7 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <lib/mem.h>
+#include <lib/usercopy.h>
 
 // SYSCALL: sigprocmask(int how, sigset_t *set, sigset_t *oset)
 COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
@@ -33,16 +34,14 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
     com_sigset_t *set  = COM_SYS_SYSCALL_ARG(com_sigset_t *, 2);
     com_sigset_t *oset = COM_SYS_SYSCALL_ARG(com_sigset_t *, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(set, sizeof(*set)) ||
-        !ARCH_MMU_RANGE_IS_USER(oset, sizeof(*oset))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
-
     com_sigset_t  kset;
     com_sigset_t  koset;
     com_sigset_t *kset_ptr = NULL;
     if (NULL != set) {
-        kmemcpy(&kset, set, sizeof(kset));
+        int copy_ret = kmemcpy_from_user(&kset, set, sizeof(kset));
+        if (0 != copy_ret) {
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
         kset_ptr = &kset;
     }
 
@@ -60,7 +59,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sigprocmask) {
     }
 
     if (NULL != oset) {
-        kmemcpy(oset, &koset, sizeof(koset));
+        int copy_ret = kmemcpy_to_user(oset, &koset, sizeof(koset));
+        if (0 != copy_ret) {
+            return COM_SYS_SYSCALL_ERR(copy_ret);
+        }
     }
 
     return COM_SYS_SYSCALL_OK(0);

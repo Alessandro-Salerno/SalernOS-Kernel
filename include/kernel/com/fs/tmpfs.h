@@ -94,3 +94,4 @@ int com_fs_tmpfs_mmap(void             **out,
 
 void  com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data);
 void *com_fs_tmpfs_get_other(com_vnode_t *vnode);
+ino_t com_fs_tmpfs_get_ino(com_vnode_t *vnode);

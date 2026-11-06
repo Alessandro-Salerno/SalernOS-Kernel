@@ -49,6 +49,10 @@ typedef struct kioviter {
 } kioviter_t;
 
 void          kioviter_init(kioviter_t *ioviter, struct iovec *iov, int iovcnt);
+int           kioviter_init_user(kioviter_t         *ioviter,
+                                 struct iovec       *kiov,
+                                 const struct iovec *uiov,
+                                 int                 iovcnt);
 size_t        kioviter_skip(kioviter_t *ioviter, size_t count);
 size_t        kioviter_goto(kioviter_t *ioviter, size_t off);
 int           kioviter_read(void       *buf,

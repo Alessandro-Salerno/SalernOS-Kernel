@@ -82,8 +82,8 @@ static int keyboard_poll(short *revents, void *devdata, short events) {
 }
 
 static int keyboard_stat(struct stat *out, void *devdata) {
+    (void)devdata;
     out->st_blksize = 512;
-    out->st_ino     = (ino_t)devdata;
     out->st_mode    = 0666;
     out->st_mode |= S_IFCHR;
     out->st_dev   = (10 << 8);
@@ -97,11 +97,14 @@ static com_dev_ops_t KeyboardDevOps = {.read      = keyboard_read,
                                        .poll      = keyboard_poll,
                                        .stat      = keyboard_stat};
 
+// Packets reach userspace, so they must not carry kernel addresses
 int com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
                                 com_kbd_packet_t *pkt) {
+    com_kbd_packet_t upkt = *pkt;
+    upkt.keyboard         = NULL;
     return kringbuffer_write(NULL,
                              &keyboard->rb,
-                             pkt,
+                             &upkt,
                              sizeof(com_kbd_packet_t),
                              sizeof(com_kbd_packet_t),
                              false,

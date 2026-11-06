@@ -24,6 +24,7 @@
 #include <kernel/com/sys/sched.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/x86-64/context.h>
+#include <lib/usercopy.h>
 #include <vendor/printf.h>
 
 void arch_context_print(arch_context_t *ctx) {
@@ -80,9 +81,9 @@ int arch_context_alloc_sigframe(com_sigframe_t **sframe,
     return ARCH_MMU_RANGE_IS_USER(*sframe, SIGFRAME_SIZE) ? 0 : EFAULT;
 }
 
-void arch_context_setup_sigframe(com_sigframe_t *sframe,
-                                 com_sigframe_t *uframe,
-                                 arch_context_t *ctx) {
+int arch_context_setup_sigframe(com_sigframe_t *sframe,
+                                com_sigframe_t *uframe,
+                                arch_context_t *ctx) {
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R8]  = ctx->r8;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R9]  = ctx->r9;
     sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_R10] = ctx->r10;
@@ -107,19 +108,16 @@ void arch_context_setup_sigframe(com_sigframe_t *sframe,
     // A switch during the copy saves the same live state again
     arch_context_extra_t *xctx = &ARCH_CPU_GET_THREAD()->xctx;
     ARCH_CONTEXT_SAVE_EXTRA(*xctx);
-    kmemcpy(ufpu, xctx->fpu, sizeof(xctx->fpu));
+    return kmemcpy_to_user(ufpu, xctx->fpu, sizeof(xctx->fpu));
 }
 
 int arch_context_setup_sigrestore(uintptr_t *stackptr, void *restorer) {
-    uint64_t stack = *stackptr;
-    stack -= 8;
-    if (!ARCH_MMU_RANGE_IS_USER(stack, sizeof(uint64_t))) {
-        return EFAULT;
+    uint64_t stack = *stackptr - 8;
+    int      ret = kmemcpy_to_user((void *)stack, &restorer, sizeof(restorer));
+    if (0 == ret) {
+        *stackptr = stack;
     }
-
-    *(uint64_t *)stack = (uint64_t)restorer;
-    *stackptr          = stack;
-    return 0;
+    return ret;
 }
 
 void arch_context_signal_trampoline(com_sigframe_t *sframe,
@@ -139,20 +137,23 @@ void arch_context_signal_trampoline(com_sigframe_t *sframe,
 
 int arch_context_restore_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
     com_sigframe_t *uframe = (void *)ctx->rsp;
-    if (!ARCH_MMU_RANGE_IS_USER(uframe, sizeof(*uframe))) {
-        return EFAULT;
+    int             ret    = kmemcpy_from_user(sframe, uframe, sizeof(*sframe));
+    if (0 != ret) {
+        return ret;
     }
-    kmemcpy(sframe, uframe, sizeof(*sframe));
 
     struct _fpstate *ufpu = sframe->uc.uc_mcontext.fpregs;
-    if (NULL == ufpu || !ARCH_MMU_RANGE_IS_USER(ufpu, sizeof(*ufpu))) {
+    if (NULL == ufpu) {
         return EFAULT;
     }
     // Reserved MXCSR bits would make fxrstor fault
     struct _fpstate fpu __attribute__((aligned(16)));
     asm volatile("fxsave %0" : "=m"(fpu));
     uint32_t mxcsr_mask = (0 != fpu.mxcr_mask) ? fpu.mxcr_mask : 0xffbf;
-    kmemcpy(&fpu, ufpu, sizeof(fpu));
+    ret                 = kmemcpy_from_user(&fpu, ufpu, sizeof(fpu));
+    if (0 != ret) {
+        return ret;
+    }
     fpu.mxcsr &= mxcsr_mask;
     asm volatile("fxrstor %0" : : "m"(fpu));
 

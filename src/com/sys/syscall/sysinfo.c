@@ -24,6 +24,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <stdint.h>
 
 struct sysinfo {
@@ -40,16 +41,14 @@ COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
 
     struct sysinfo *sysinfo = COM_SYS_SYSCALL_ARG(struct sysinfo *, 1);
 
-    if (!ARCH_MMU_RANGE_IS_USER(sysinfo, sizeof(*sysinfo))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
+    struct sysinfo ksysinfo = {0};
+    kstrcpy(ksysinfo.kernel, "SalernOS Kernel 0.2.5 (indev)");
+    com_mm_pmm_get_stats(&ksysinfo.memory);
 
-    // kstrcpy(sysinfo->cpu, "Not implemented");
-    // kstrcpy(sysinfo->gpu, "Not implemented");
-    kmemset(sysinfo->cpu, 64, 0);
-    kmemset(sysinfo->gpu, 64, 0);
-    kstrcpy(sysinfo->kernel, "SalernOS Kernel 0.2.5 (indev)");
-    com_mm_pmm_get_stats(&sysinfo->memory);
+    int copy_ret = kmemcpy_to_user(sysinfo, &ksysinfo, sizeof(ksysinfo));
+    if (0 != copy_ret) {
+        return COM_SYS_SYSCALL_ERR(copy_ret);
+    }
 
     return COM_SYS_SYSCALL_OK(0);
 }

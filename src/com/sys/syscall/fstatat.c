@@ -27,6 +27,7 @@
 #include <kernel/com/sys/syscall.h>
 #include <lib/spinlock.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -42,8 +43,7 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     struct stat *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
     int          flags  = COM_SYS_SYSCALL_ARG(int, 4);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path) ||
-        !ARCH_MMU_RANGE_IS_USER(buf, sizeof(*buf))) {
+    if (!ARCH_MMU_ADDR_IS_USER(path)) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
@@ -66,29 +66,33 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     }
 
     do_lookup            = !((AT_EMPTY_PATH & flags) && 0 == kstrlen(path));
-    int          vfs_err = 0;
+    int          err     = 0;
     com_vnode_t *target  = dir;
 
     if (do_lookup) {
-        vfs_err = com_fs_vfs_lookup(&target,
-                                    path,
-                                    kstrlen(path),
-                                    curr_proc->root,
-                                    dir,
-                                    (AT_SYMLINK_FOLLOW & flags) |
-                                        !(AT_SYMLINK_NOFOLLOW & flags));
+        err = com_fs_vfs_lookup(&target,
+                                path,
+                                kstrlen(path),
+                                curr_proc->root,
+                                dir,
+                                (AT_SYMLINK_FOLLOW & flags) |
+                                    !(AT_SYMLINK_NOFOLLOW & flags));
     }
 
-    if (0 != vfs_err) {
+    if (0 != err) {
         do_lookup = false;
-        ret.err   = vfs_err;
+        ret.err   = err;
         goto end;
     }
 
-    vfs_err = com_fs_vfs_stat(buf, target);
+    struct stat kstat;
+    err = com_fs_vfs_stat(&kstat, target);
+    if (0 == err) {
+        err = kmemcpy_to_user(buf, &kstat, sizeof(kstat));
+    }
 
-    if (vfs_err) {
-        ret.err = vfs_err;
+    if (err) {
+        ret.err = err;
         goto end;
     }
 

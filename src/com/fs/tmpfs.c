@@ -29,6 +29,7 @@
 #include <lib/mem.h>
 #include <lib/rwlock.h>
 #include <lib/spinlock.h>
+#include <lib/usercopy.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
@@ -45,6 +46,7 @@ TAILQ_HEAD(tmpfs_dir_entries, tmpfs_dir_entry);
 
 struct tmpfs_node {
     com_vnode_t            *vnode;
+    ino_t                   ino;
     size_t                  num_links;
     struct tmpfs_dir_entry *dirent;
     struct tmpfs_node      *parent;
@@ -101,6 +103,7 @@ static int create_common(struct tmpfs_dir_entry **outent,
     struct tmpfs_node *tn_new = com_mm_slab_alloc(sizeof(struct tmpfs_node));
     KRWLOCK_INIT(&tn_new->lock);
     tn_new->num_links = 1;
+    tn_new->ino       = com_fs_vfs_new_ino();
 
     struct tmpfs_dir_entry *dirent = NULL;
     if (!(COM_FS_TMPFS_ATTR_NO_DIRENT & fsattr)) {
@@ -150,6 +153,7 @@ int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
                            tn_root);
     tn_root->dirent = NULL;
     tn_root->parent = NULL;
+    tn_root->ino    = com_fs_vfs_new_ino();
     vn_root->isroot = true;
     tn_root->vnode  = vn_root;
 
@@ -306,6 +310,7 @@ int com_fs_tmpfs_read(void        *buf,
     }
 
     size_t read_count = 0;
+    int    ret        = 0;
     krwlock_acquire_read(&file->lock);
 
     for (uintmax_t cur = off; cur < off + buflen;) {
@@ -325,11 +330,14 @@ int com_fs_tmpfs_read(void        *buf,
         }
 
         if (page_present) {
-            kmemcpy((uint8_t *)buf + cur - off,
-                    (uint8_t *)page + (cur % ARCH_PAGE_SIZE),
-                    end - cur);
+            ret = kmemcpy_maybe_user((uint8_t *)buf + cur - off,
+                                     (uint8_t *)page + (cur % ARCH_PAGE_SIZE),
+                                     end - cur);
         } else {
-            kmemset((uint8_t *)buf + cur - off, end - cur, 0);
+            ret = kmemset_maybe_user((uint8_t *)buf + cur - off, end - cur, 0);
+        }
+        if (0 != ret) {
+            break;
         }
 
         read_count += end - cur;
@@ -338,7 +346,7 @@ int com_fs_tmpfs_read(void        *buf,
 
     krwlock_release_read(&file->lock);
     *bytes_read = read_count;
-    return 0;
+    return 0 != read_count ? 0 : ret;
 }
 
 int com_fs_tmpfs_write(size_t      *bytes_written,
@@ -358,11 +366,8 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
 
     struct tmpfs_node *file        = node->extra;
     size_t             write_count = 0;
+    int                ret         = 0;
     krwlock_acquire_write(&file->lock);
-
-    if (off + buflen > file->file.size) {
-        file->file.size = off + buflen;
-    }
 
     for (uintmax_t cur = off; cur < off + buflen;) {
         uintptr_t page;
@@ -378,16 +383,23 @@ int com_fs_tmpfs_write(size_t      *bytes_written,
             end = off + buflen;
         }
 
-        kmemcpy((uint8_t *)page + (cur % ARCH_PAGE_SIZE),
-                (uint8_t *)buf + cur - off,
-                end - cur);
+        ret = kmemcpy_maybe_user((uint8_t *)page + (cur % ARCH_PAGE_SIZE),
+                                 (uint8_t *)buf + cur - off,
+                                 end - cur);
+        if (0 != ret) {
+            break;
+        }
         write_count += end - cur;
         cur = end;
     }
 
+    if (off + write_count > file->file.size) {
+        file->file.size = off + write_count;
+    }
+
     krwlock_release_write(&file->lock);
     *bytes_written = write_count;
-    return 0;
+    return 0 != write_count ? 0 : ret;
 }
 
 int com_fs_tmpfs_symlink(com_vnode_t *dir,
@@ -466,7 +478,7 @@ end:
 int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node) {
     struct tmpfs_node *file = node->extra;
     out->st_blksize         = 512;
-    out->st_ino             = (unsigned long)file;
+    out->st_ino             = file->ino;
     out->st_mode            = 0700;
     if (E_COM_VNODE_TYPE_FILE == node->type) {
         out->st_mode |= S_IFREG;
@@ -499,6 +511,33 @@ int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size) {
     return 0;
 }
 
+static int readdir_emit(size_t       *bytes_read,
+                        void         *buf,
+                        size_t        buflen,
+                        com_dirent_t *hdr,
+                        const char   *name,
+                        size_t        namelen) {
+    size_t req_size = sizeof(com_dirent_t) + namelen + 1;
+    if (buflen < req_size) {
+        return EOVERFLOW; // is this right?
+    }
+
+    hdr->reclen       = req_size;
+    com_dirent_t *ud  = buf;
+    char          nul = 0;
+    int           ret = kmemcpy_maybe_user(ud, hdr, sizeof(*hdr));
+    if (0 == ret) {
+        ret = kmemcpy_maybe_user(ud->name, name, namelen);
+    }
+    if (0 == ret) {
+        ret = kmemcpy_maybe_user(ud->name + namelen, &nul, 1);
+    }
+    if (0 == ret) {
+        *bytes_read = req_size;
+    }
+    return ret;
+}
+
 int com_fs_tmpfs_readdir(void        *buf,
                          size_t       buflen,
                          size_t      *bytes_read,
@@ -512,37 +551,23 @@ int com_fs_tmpfs_readdir(void        *buf,
         return 0;
     }
 
-    struct tmpfs_node *node   = dir->extra;
-    com_dirent_t      *dirent = buf;
+    struct tmpfs_node *node = dir->extra;
+    com_dirent_t       hdr  = {0};
 
     // return "." entry
     if (0 == off) {
-        if (buflen < sizeof(com_dirent_t) + sizeof(".")) {
-            return EOVERFLOW; // is this right?
-        }
-
-        dirent->reclen = sizeof(com_dirent_t) + sizeof(".");
-        dirent->ino    = (ino_t)node;
-        dirent->off    = 0;
-        dirent->type   = DT_DIR;
-        kmemcpy(dirent->name, ".", sizeof("."));
-        *bytes_read = dirent->reclen;
-        return 0;
+        hdr.ino  = node->ino;
+        hdr.off  = 0;
+        hdr.type = DT_DIR;
+        return readdir_emit(bytes_read, buf, buflen, &hdr, ".", 1);
     }
 
     // return ".." entry
     if (1 == off) {
-        if (buflen < sizeof(com_dirent_t) + sizeof("..")) {
-            return EOVERFLOW;
-        }
-
-        dirent->reclen = sizeof(com_dirent_t) + sizeof("..");
-        dirent->ino    = (ino_t)node->parent;
-        dirent->off    = 1;
-        dirent->type   = DT_DIR;
-        kmemcpy(dirent->name, "..", sizeof(".."));
-        *bytes_read = dirent->reclen;
-        return 0;
+        hdr.ino  = NULL != node->parent ? node->parent->ino : node->ino;
+        hdr.off  = 1;
+        hdr.type = DT_DIR;
+        return readdir_emit(bytes_read, buf, buflen, &hdr, "..", 2);
     }
 
     int ret = 0;
@@ -562,38 +587,30 @@ int com_fs_tmpfs_readdir(void        *buf,
         goto end;
     }
 
-    size_t req_size = sizeof(com_dirent_t) + cur->namelen + 1;
-    if (buflen < req_size) {
-        ret = EOVERFLOW;
-        goto end;
-    }
-
-    dirent->reclen = req_size;
-    dirent->ino    = (ino_t)cur->tnode;
-    kmemcpy(dirent->name, cur->name, cur->namelen);
-    dirent->name[cur->namelen] = 0;
-    dirent->off                = off;
-    *bytes_read                = req_size;
+    hdr.ino = cur->tnode->ino;
+    hdr.off = off;
 
     if (NULL == cur->tnode->vnode) {
-        dirent->type = DT_UNKNOWN;
+        hdr.type = DT_UNKNOWN;
     } else if (E_COM_VNODE_TYPE_DIR == cur->tnode->vnode->type) {
-        dirent->type = DT_DIR;
+        hdr.type = DT_DIR;
     } else if (E_COM_VNODE_TYPE_FILE == cur->tnode->vnode->type) {
-        dirent->type = DT_REG;
+        hdr.type = DT_REG;
     } else if (E_COM_VNODE_TYPE_LINK == cur->tnode->vnode->type) {
-        dirent->type = DT_LNK;
+        hdr.type = DT_LNK;
     } else if (E_COM_VNODE_TYPE_CHARDEV == cur->tnode->vnode->type) {
-        dirent->type = DT_CHR;
+        hdr.type = DT_CHR;
     } else if (E_COM_VNODE_TYPE_FIFO == cur->tnode->vnode->type) {
-        dirent->type = DT_FIFO;
+        hdr.type = DT_FIFO;
     } else if (E_COM_VNODE_TYPE_SOCKET == cur->tnode->vnode->type) {
-        dirent->type = DT_SOCK;
+        hdr.type = DT_SOCK;
     } else if (E_COM_VNODE_TYPE_BLOCKDEV == cur->tnode->vnode->type) {
-        dirent->type = DT_BLK;
+        hdr.type = DT_BLK;
     } else {
-        dirent->type = DT_UNKNOWN;
+        hdr.type = DT_UNKNOWN;
     }
+
+    ret = readdir_emit(bytes_read, buf, buflen, &hdr, cur->name, cur->namelen);
 
 end:
     krwlock_release_read(&node->lock);
@@ -738,4 +755,9 @@ void com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data) {
 void *com_fs_tmpfs_get_other(com_vnode_t *vnode) {
     struct tmpfs_node *n = vnode->extra;
     return n->other.data;
+}
+
+ino_t com_fs_tmpfs_get_ino(com_vnode_t *vnode) {
+    struct tmpfs_node *n = vnode->extra;
+    return n->ino;
 }

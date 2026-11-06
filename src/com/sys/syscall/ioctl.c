@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <asm/ioctls.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -78,10 +77,6 @@ COM_SYS_SYSCALL(com_sys_syscall_ioctl) {
     int       fd  = COM_SYS_SYSCALL_ARG(int, 1);
     uintmax_t op  = COM_SYS_SYSCALL_ARG(uintmax_t, 2);
     void     *buf = COM_SYS_SYSCALL_ARG(void *, 3);
-
-    if (!ARCH_MMU_ADDR_IS_USER(buf)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
 
     com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_OK();
     com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
