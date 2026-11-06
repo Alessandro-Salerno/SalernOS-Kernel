@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -31,18 +30,25 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-// SYSCALL: readlinkat(int dir, const char *path, char *buf, size_t buflen)
+// SYSCALL: readlinkat(int dir, const struct syscall_str *path, char *buf,
+// size_t buflen)
 COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(5);
 
-    int         dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
-    char       *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
-    size_t      buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
+    int                       dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
+    const struct syscall_str *upath  = COM_SYS_SYSCALL_ARG(void *, 2);
+    char                     *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
+    size_t                    buflen = COM_SYS_SYSCALL_ARG(size_t, 4);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    char   path[CONFIG_PATH_MAX];
+    size_t pathlen;
+    int    path_ret = com_sys_syscall_copy_str(&pathlen,
+                                               path,
+                                               sizeof(path),
+                                               upath);
+    if (0 != path_ret) {
+        return COM_SYS_SYSCALL_ERR(path_ret);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -52,7 +58,6 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
 
     com_vnode_t *dir      = NULL;
     com_file_t  *dir_file = NULL;
-    size_t       pathlen  = kstrlen(path);
 
     int dir_ret = com_sys_proc_get_directory(&dir_file,
                                              &dir,
@@ -63,13 +68,13 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
         goto end;
     }
 
-    com_vnode_t *target  = NULL;
-    int          err     = com_fs_vfs_lookup(&target,
-                                             path,
-                                             pathlen,
-                                             curr_proc->root,
-                                             dir,
-                                             false);
+    com_vnode_t *target = NULL;
+    int          err    = com_fs_vfs_lookup(&target,
+                                            path,
+                                            pathlen,
+                                            curr_proc->root,
+                                            dir,
+                                            false);
 
     if (0 != err) {
         ret = COM_SYS_SYSCALL_ERR(err);

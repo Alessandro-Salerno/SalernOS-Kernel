@@ -18,7 +18,6 @@
 
 #define _GNU_SOURCE
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -33,18 +32,25 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// SYSCALL: fstatat(int dir_fd, const char *path, struct stat *buf, int flags)
+// SYSCALL: fstatat(int dir_fd, const struct syscall_str *path, struct stat
+// *buf, int flags)
 COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(5);
 
-    int          dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    const char  *path   = COM_SYS_SYSCALL_ARG(void *, 2);
-    struct stat *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
-    int          flags  = COM_SYS_SYSCALL_ARG(int, 4);
+    int                       dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
+    const struct syscall_str *upath  = COM_SYS_SYSCALL_ARG(void *, 2);
+    struct stat              *buf    = COM_SYS_SYSCALL_ARG(void *, 3);
+    int                       flags  = COM_SYS_SYSCALL_ARG(int, 4);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    char   path[CONFIG_PATH_MAX];
+    size_t pathlen;
+    int    path_ret = com_sys_syscall_copy_str(&pathlen,
+                                               path,
+                                               sizeof(path),
+                                               upath);
+    if (0 != path_ret) {
+        return COM_SYS_SYSCALL_ERR(path_ret);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -65,14 +71,14 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
         goto end;
     }
 
-    do_lookup            = !((AT_EMPTY_PATH & flags) && 0 == kstrlen(path));
-    int          err     = 0;
-    com_vnode_t *target  = dir;
+    do_lookup           = !((AT_EMPTY_PATH & flags) && 0 == pathlen);
+    int          err    = 0;
+    com_vnode_t *target = dir;
 
     if (do_lookup) {
         err = com_fs_vfs_lookup(&target,
                                 path,
-                                kstrlen(path),
+                                pathlen,
                                 curr_proc->root,
                                 dir,
                                 (AT_SYMLINK_FOLLOW & flags) |

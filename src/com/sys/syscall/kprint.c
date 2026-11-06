@@ -16,47 +16,48 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
-#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/syscall.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 
-// SYSCALL: kprint(const char *message)
+#include <salernos/syscall_str.h>
+
+// SYSCALL: kprint(const struct syscall_str *message)
 COM_SYS_SYSCALL(com_sys_syscall_kprint) {
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_USER
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(2);
 
-    const char *message = COM_SYS_SYSCALL_ARG(const char *, 1);
+    const struct syscall_str *umessage = COM_SYS_SYSCALL_ARG(void *, 1);
 
-    if (!ARCH_MMU_ADDR_IS_USER(message)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    struct syscall_str message;
+    int ret = kmemcpy_from_user(&message, umessage, sizeof(message));
+    if (0 != ret) {
+        return COM_SYS_SYSCALL_ERR(ret);
     }
 
-    char chunk[128];
-    for (bool first = true;; first = false) {
-        size_t n = 0;
-        for (; n < sizeof(chunk) && '\0' != message[n]; n++) {
-            chunk[n] = message[n];
+    char   chunk[128];
+    size_t done = 0;
+    do {
+        size_t n = KMIN(message.len - done, sizeof(chunk));
+        ret      = kmemcpy_from_user(chunk, message.str + done, n);
+        if (0 != ret) {
+            return COM_SYS_SYSCALL_ERR(ret);
         }
-        bool last = n < sizeof(chunk);
 
         com_io_log_lock();
-        if (first) {
+        if (0 == done) {
             kinitlog("USER", "\033[36m");
         }
         com_io_log_putsn_nolock(chunk, n);
-        if (last) {
+        done += n;
+        if (done == message.len) {
             com_io_log_putc_nolock('\n');
         }
         com_io_log_unlock();
-
-        if (last) {
-            break;
-        }
-        message += n;
-    }
+    } while (done < message.len);
 #else
     COM_SYS_SYSCALL_UNUSED_START(0);
 #endif

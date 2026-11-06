@@ -35,6 +35,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <salernos/syscall_str.h>
+
 // TODO: I used to take sched_lock here because back in 0.2.3 not doing it
 // somehow crashed the kernel sometimes, but now the opposite seems to happen:
 // use icewm, when passing on the main bar, it does execve for some reason and
@@ -42,17 +44,31 @@
 // com_sys_sched_notify_all which also takes the sched_lock. So I need to check
 // which version is correct.
 
-// SYSCALL: execve(const char *path, char *const *argv, char *const *envp)
+// SYSCALL: execve(const struct syscall_str *path, const struct syscall_str
+// *argv, size_t argc, const struct syscall_str *envp, size_t envc)
 COM_SYS_SYSCALL(com_sys_syscall_execve) {
-    COM_SYS_SYSCALL_UNUSED_START(4);
+    COM_SYS_SYSCALL_UNUSED_START(6);
 
-    arch_context_t *ctx  = COM_SYS_SYSCALL_CONTEXT();
-    const char     *path = COM_SYS_SYSCALL_ARG(const char *, 1);
-    char *const    *argv = COM_SYS_SYSCALL_ARG(char *const *, 2);
-    char *const    *env  = COM_SYS_SYSCALL_ARG(char *const *, 3);
+    arch_context_t           *ctx   = COM_SYS_SYSCALL_CONTEXT();
+    const struct syscall_str *upath = COM_SYS_SYSCALL_ARG(void *, 1);
+    const struct syscall_str *argv  = COM_SYS_SYSCALL_ARG(void *, 2);
+    size_t                    argc  = COM_SYS_SYSCALL_ARG(size_t, 3);
+    const struct syscall_str *envp  = COM_SYS_SYSCALL_ARG(void *, 4);
+    size_t                    envc  = COM_SYS_SYSCALL_ARG(size_t, 5);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path) || !ARCH_MMU_ADDR_IS_USER(argv) ||
-        !ARCH_MMU_ADDR_IS_USER(env)) {
+    char   path[CONFIG_PATH_MAX];
+    size_t pathlen;
+    int    path_ret = com_sys_syscall_copy_str(&pathlen,
+                                            path,
+                                            sizeof(path),
+                                            upath);
+    if (0 != path_ret) {
+        return COM_SYS_SYSCALL_ERR(path_ret);
+    }
+
+    // The strings themselves are checked while they are copied
+    if (!ARCH_MMU_ARRAY_IS_USER(argv, argc, sizeof(*argv)) ||
+        !ARCH_MMU_ARRAY_IS_USER(envp, envc, sizeof(*envp))) {
         return COM_SYS_SYSCALL_ERR(EFAULT);
     }
 
@@ -62,11 +78,14 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_vmm_context_t *old_vmm_ctx = proc->vmm_context;
     com_vmm_context_t *new_vmm_ctx = NULL;
     int                status      = com_sys_elf64_prepare_proc(&new_vmm_ctx,
-                                                                path,
-                                                                argv,
-                                                                env,
-                                                                proc,
-                                                                ctx);
+                                            path,
+                                            pathlen,
+                                            argv,
+                                            argc,
+                                            envp,
+                                            envc,
+                                            proc,
+                                            ctx);
 
     if (0 != status) {
         return COM_SYS_SYSCALL_ERR(status);
@@ -88,8 +107,9 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     com_mm_vmm_switch(new_vmm_ctx);
     proc->vmm_context = new_vmm_ctx;
     KASSERT(proc->num_ref > 0);
-    com_mm_vmm_destroy_context(old_vmm_ctx);
     ARCH_CPU_ENABLE_INTERRUPTS();
+
+    com_mm_vmm_destroy_context(old_vmm_ctx);
 
     // NOTE: we don't need to take locks here because we're guaranteed to be the
     // only running thread of this process. Thus process-local resources are

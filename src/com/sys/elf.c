@@ -30,6 +30,8 @@
 #include <kernel/platform/mmu.h>
 #include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
+#include <lib/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -259,6 +261,11 @@ int com_sys_elf64_load(com_elf_data_t    *out,
         switch (phdr.type) {
             case PT_INTERP:
                 KDEBUG("found PT_INTERP at offset %zu", phdr_off);
+                if (phdr.file_sz < 2 ||
+                    phdr.file_sz > sizeof(out->interpreter_path)) {
+                    ret = ENOEXEC;
+                    goto cleanup;
+                }
                 ret = com_fs_vfs_read(out->interpreter_path,
                                       phdr.file_sz,
                                       &bytes_read,
@@ -266,6 +273,15 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                                       phdr.off,
                                       0);
                 if (0 != ret) {
+                    goto cleanup;
+                }
+                out->interpreter_len = phdr.file_sz - 1;
+                if (bytes_read != phdr.file_sz ||
+                    '\0' != out->interpreter_path[out->interpreter_len] ||
+                    NULL != kmemchr(out->interpreter_path,
+                                    '\0',
+                                    out->interpreter_len)) {
+                    ret = ENOEXEC;
                     goto cleanup;
                 }
                 break;
@@ -302,13 +318,15 @@ cleanup:
     return ret;
 }
 
+// If is_str is set, buf is a string that must not contain NULs
 static int push_buffer(com_vmm_context_t *vmm_ctx,
                        uintptr_t          stack_virt_end,
                        size_t             stack_len,
                        size_t            *stack_off,
                        void             **stack_page,
                        const void        *buf,
-                       size_t             len) {
+                       size_t             len,
+                       bool               is_str) {
     if (*stack_off > stack_len || len > stack_len - *stack_off) {
         return E2BIG;
     }
@@ -329,10 +347,15 @@ static int push_buffer(com_vmm_context_t *vmm_ctx,
         size_t can_write         = KMIN(len, page_rem);
 
         *stack_off += can_write;
-        size_t write_at = stack_page_cur - can_write;
-        kmemcpy((unsigned char *)*stack_page + write_at,
-                end - can_write,
-                can_write);
+        size_t         write_at = stack_page_cur - can_write;
+        unsigned char *dst      = (unsigned char *)*stack_page + write_at;
+        int ret = kmemcpy_maybe_user(dst, end - can_write, can_write);
+        if (0 != ret) {
+            return ret;
+        }
+        if (is_str && NULL != kmemchr(dst, '\0', can_write)) {
+            return EINVAL;
+        }
 
         end -= can_write;
         len -= can_write;
@@ -352,19 +375,44 @@ static int push_buffer(com_vmm_context_t *vmm_ctx,
     return 0;
 }
 
-static int push_string(com_vmm_context_t *vmm_ctx,
-                       uintptr_t          stack_virt_end,
-                       size_t             stack_len,
-                       size_t            *stack_off,
-                       void             **stack_page,
-                       const char        *str) {
+// Each entry is read once. A user array must only point to user strings
+static int push_string(com_vmm_context_t        *vmm_ctx,
+                       uintptr_t                 stack_virt_end,
+                       size_t                    stack_len,
+                       size_t                   *stack_off,
+                       void                    **stack_page,
+                       const struct syscall_str *entry,
+                       bool                      user) {
+    struct syscall_str str;
+    int                ret = kmemcpy_maybe_user(&str, entry, sizeof(str));
+    if (0 != ret) {
+        return ret;
+    }
+
+    if (user && !ARCH_MMU_RANGE_IS_USER(str.str, str.len)) {
+        return EFAULT;
+    }
+
+    ret = push_buffer(vmm_ctx,
+                      stack_virt_end,
+                      stack_len,
+                      stack_off,
+                      stack_page,
+                      "",
+                      1,
+                      false);
+    if (0 != ret) {
+        return ret;
+    }
+
     return push_buffer(vmm_ctx,
                        stack_virt_end,
                        stack_len,
                        stack_off,
                        stack_page,
-                       str,
-                       kstrlen(str) + 1);
+                       str.str,
+                       str.len,
+                       true);
 }
 
 static int push_value(com_vmm_context_t *vmm_ctx,
@@ -379,7 +427,52 @@ static int push_value(com_vmm_context_t *vmm_ctx,
                        stack_off,
                        stack_page,
                        &value,
-                       sizeof(uintptr_t));
+                       sizeof(uintptr_t),
+                       false);
+}
+
+// Pushes a pointer to each string in [lo, hi) of the new stack, lowest first.
+// The strings have no NULs of their own, so each NUL ends one of them
+static int push_string_ptrs(com_vmm_context_t *vmm_ctx,
+                            uintptr_t          stack_virt_end,
+                            size_t             stack_len,
+                            size_t            *stack_off,
+                            void             **stack_page,
+                            uintptr_t          lo,
+                            uintptr_t          hi) {
+    uintptr_t start = lo;
+
+    for (uintptr_t va = lo; va < hi;) {
+        size_t pgoff = va % ARCH_PAGE_SIZE;
+        size_t n     = KMIN(hi - va, ARCH_PAGE_SIZE - pgoff);
+        void  *phys  = com_mm_vmm_get_physical(vmm_ctx, (void *)va);
+        if (NULL == phys) {
+            return EFAULT;
+        }
+
+        const char *page = (void *)ARCH_PHYS_TO_HHDM(
+            (uintptr_t)phys & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
+        const char *cur = page + pgoff;
+        const char *end = cur + n;
+        const char *nul;
+        while (NULL != (nul = kmemchr(cur, '\0', end - cur))) {
+            int ret = push_value(vmm_ctx,
+                                 stack_virt_end,
+                                 stack_len,
+                                 stack_off,
+                                 stack_page,
+                                 start);
+            if (0 != ret) {
+                return ret;
+            }
+            start = va + (nul - (page + pgoff)) + 1;
+            cur   = nul + 1;
+        }
+
+        va += n;
+    }
+
+    return 0;
 }
 
 static int align_stack(com_vmm_context_t *vmm_ctx,
@@ -396,16 +489,19 @@ static int align_stack(com_vmm_context_t *vmm_ctx,
                        stack_off,
                        stack_page,
                        dummy,
-                       to_align);
+                       to_align,
+                       false);
 }
 
-int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
-                                com_vmm_context_t *vmm_ctx,
-                                com_elf_data_t     elf_data,
-                                size_t             stack_end_virt,
-                                size_t             stack_len,
-                                char *const        argv[],
-                                char *const        envp[]) {
+int com_sys_elf64_prepare_stack(uintptr_t                *out_stack_ptr,
+                                com_vmm_context_t        *vmm_ctx,
+                                com_elf_data_t            elf_data,
+                                size_t                    stack_end_virt,
+                                size_t                    stack_len,
+                                const struct syscall_str *argv,
+                                size_t                    argc,
+                                const struct syscall_str *envp,
+                                size_t                    envc) {
 #define PUSH(x)                             \
     {                                       \
         int _r = push_value(vmm_ctx,        \
@@ -433,14 +529,14 @@ int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
         (uintptr_t)stack_phys & ~(uintptr_t)(ARCH_PAGE_SIZE - 1));
     size_t stack_off = 0;
 
-    size_t envc = 0;
-    for (; envp[envc]; envc++) {
+    for (size_t i = 0; i < envc; i++) {
         int ret = push_string(vmm_ctx,
                               stack_end_virt,
                               stack_len,
                               &stack_off,
                               &stack_page,
-                              envp[envc]);
+                              &envp[i],
+                              ARCH_MMU_ADDR_IS_USER(envp));
         if (0 != ret) {
             return ret;
         }
@@ -448,14 +544,14 @@ int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
 
     size_t env_bytes = stack_off;
 
-    size_t argc = 0;
-    for (; argv[argc]; argc++) {
+    for (size_t i = 0; i < argc; i++) {
         int ret = push_string(vmm_ctx,
                               stack_end_virt,
                               stack_len,
                               &stack_off,
                               &stack_page,
-                              argv[argc]);
+                              &argv[i],
+                              ARCH_MMU_ADDR_IS_USER(argv));
         if (0 != ret) {
             return ret;
         }
@@ -495,22 +591,28 @@ int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
     PUSH(elf_data.phent_num);
     PUSH(AT_PHNUM);
 
-    uintptr_t off = env_bytes;
-
     PUSH(0);
-    for (size_t i = envc; i > 0;) {
-        i--;
-        PUSH(stack_end_virt - off);
-        off -= kstrlen(envp[i]) + 1;
+    int ptrs_ret = push_string_ptrs(vmm_ctx,
+                                    stack_end_virt,
+                                    stack_len,
+                                    &stack_off,
+                                    &stack_page,
+                                    stack_end_virt - env_bytes,
+                                    stack_end_virt);
+    if (0 != ptrs_ret) {
+        return ptrs_ret;
     }
 
-    off = strings_bytes;
-
     PUSH(0);
-    for (size_t i = argc; i > 0;) {
-        i--;
-        PUSH(stack_end_virt - off);
-        off -= kstrlen(argv[i]) + 1;
+    ptrs_ret = push_string_ptrs(vmm_ctx,
+                                stack_end_virt,
+                                stack_len,
+                                &stack_off,
+                                &stack_page,
+                                stack_end_virt - strings_bytes,
+                                stack_end_virt - env_bytes);
+    if (0 != ptrs_ret) {
+        return ptrs_ret;
     }
 
     PUSH(argc);
@@ -520,19 +622,23 @@ int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
 #undef PUSH
 }
 
-int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
-                               const char         *path,
-                               char *const         argv[],
-                               char *const         env[],
-                               com_proc_t         *proc,
-                               arch_context_t     *ctx) {
+int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
+                               const char               *path,
+                               size_t                    pathlen,
+                               const struct syscall_str *argv,
+                               size_t                    argc,
+                               const struct syscall_str *envp,
+                               size_t                    envc,
+                               com_proc_t               *proc,
+                               arch_context_t           *ctx) {
+    KASSERT(pathlen < sizeof(proc->executable_path));
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_new_context(NULL);
     *out_vmm_context               = new_vmm_ctx;
 
     com_elf_data_t prog_data = {0};
     int            status    = com_sys_elf64_load(&prog_data,
                                                   path,
-                                                  kstrlen(path),
+                                                  pathlen,
                                                   proc->root,
                                                   proc->cwd,
                                                   0,
@@ -544,11 +650,11 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
 
     uintptr_t entry = prog_data.entry;
 
-    if (0 != prog_data.interpreter_path[0]) {
+    if (0 != prog_data.interpreter_len) {
         com_elf_data_t interp_data = {0};
         status = com_sys_elf64_load(&interp_data,
                                     prog_data.interpreter_path,
-                                    kstrlen(prog_data.interpreter_path),
+                                    prog_data.interpreter_len,
                                     proc->root,
                                     proc->cwd,
                                     0x40000000,
@@ -573,7 +679,7 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
                    ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE |
                        ARCH_MMU_FLAGS_NOEXEC | ARCH_MMU_FLAGS_USER);
 
-    *ctx                = (arch_context_t){0};
+    // ctx belongs to the caller, so it is only touched on success
     uintptr_t stack_ptr = 0;
     status              = com_sys_elf64_prepare_stack(&stack_ptr,
                                                       new_vmm_ctx,
@@ -581,12 +687,16 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
                                                       stack_end,
                                                       stack_len,
                                                       argv,
-                                                      env);
+                                                      argc,
+                                                      envp,
+                                                      envc);
     if (0 != status) {
         goto fail;
     }
+    *ctx = (arch_context_t){0};
     ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
-    kstrncpy(proc->executable_path, path, CONFIG_PATH_MAX);
+    kmemcpy(proc->executable_path, path, pathlen);
+    proc->executable_path[pathlen] = '\0';
     return 0;
 
 fail:

@@ -18,6 +18,7 @@
 
 #include <arch/context.h>
 #include <arch/cpu.h>
+#include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/interrupt.h>
@@ -25,8 +26,13 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/syscall.h>
+#include <lib/mem.h>
 #include <lib/str.h>
+#include <lib/usercopy.h>
+#include <lib/util.h>
 #include <stdint.h>
+
+#include <salernos/syscall_str.h>
 
 // NOTE: not static so others can call
 com_syscall_t            SyscallTable[CONFIG_SYSCALL_MAX];
@@ -36,38 +42,51 @@ static size_t            NumSyscalls = 0;
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
 #define LOG_STR_MAX 64
 
-// String arguments are copied before taking the log lock
+#if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
+static bool log_is_mapped(const void *ptr) {
+    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    return NULL != arch_mmu_get_physical(NULL,
+                                         NULL,
+                                         curr_proc->vmm_context->pagetable,
+                                         (void *)ptr);
+}
+#endif
+
+// String arguments are copied before taking the log lock. Logging is only built
+// into debug kernels, so it trusts the user pointers instead of using usercopy.
+// In this context, usercopy mainly protects us against muti-threaded processes
+// unmapping the string memory under our feet, but we assume that not to be the
+// case when debugging the kernel. The yield would be minimal and the effort
+// would be considerable.
 static void fetch_str_args(char               strs[][LOG_STR_MAX],
                            com_syscall_aux_t *aux,
                            arch_syscall_arg_t args[]) {
     for (size_t i = 0; i < aux->num_args; i++) {
-        const char *str = (const char *)args[i];
+        const struct syscall_str *ustr = (const void *)args[i];
         if (COM_SYS_SYSCALL_TYPE_STR != aux->arg_types[i]) {
             continue;
         }
 #if CONFIG_LOG_SYSCALL_MODE == CONST_LOG_SYSCALL_BEFORE
-        if (NULL == str) {
+        if (NULL == ustr) {
             kstrcpy(strs[i], "NULL");
             continue;
         }
-        // TODO: poor man's usercopy, only the first page is checked
-        com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-        if (NULL == arch_mmu_get_physical(NULL,
-                                          NULL,
-                                          curr_proc->vmm_context->pagetable,
-                                          (void *)str)) {
+        if (!log_is_mapped(ustr) ||
+            (0 != ustr->len && !log_is_mapped(ustr->str))) {
             kstrcpy(strs[i], "**UNMAPPED**");
             continue;
         }
-        size_t n     = 0;
-        strs[i][n++] = '"';
-        for (; n < LOG_STR_MAX - 2 && '\0' != *str; n++, str++) {
-            strs[i][n] = *str;
+        const char *str = ustr->str;
+        size_t      len = KMIN(ustr->len, LOG_STR_MAX - 3);
+        size_t      n   = 0;
+        strs[i][n++]    = '"';
+        for (size_t j = 0; j < len; j++) {
+            strs[i][n++] = str[j];
         }
         strs[i][n++] = '"';
         strs[i][n]   = '\0';
 #else
-        (void)str;
+        (void)ustr;
         kstrcpy(strs[i], "**UNSAFE**");
 #endif
     }
@@ -210,6 +229,34 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
     return ret;
 }
 
+int com_sys_syscall_copy_str(size_t                   *len,
+                             char                     *buf,
+                             size_t                    bufsz,
+                             const struct syscall_str *ustr) {
+    struct syscall_str str;
+    int                ret = kmemcpy_from_user(&str, ustr, sizeof(str));
+    if (0 != ret) {
+        return ret;
+    }
+
+    if (str.len >= bufsz) {
+        return ENAMETOOLONG;
+    }
+
+    ret = kmemcpy_from_user(buf, str.str, str.len);
+    if (0 != ret) {
+        return ret;
+    }
+
+    if (NULL != kmemchr(buf, '\0', str.len)) {
+        return EINVAL;
+    }
+
+    buf[str.len] = '\0';
+    *len         = str.len;
+    return 0;
+}
+
 void com_sys_syscall_get_tables(com_syscall_t     **syscall_table,
                                 com_syscall_aux_t **aux_table,
                                 size_t             *num_syscalls) {
@@ -259,13 +306,17 @@ void com_sys_syscall_init(void) {
     com_sys_syscall_register(0x03,
                              "execve",
                              com_sys_syscall_execve,
-                             3,
+                             5,
                              COM_SYS_SYSCALL_TYPE_STR,
                              "path",
                              COM_SYS_SYSCALL_TYPE_PTR,
                              "argv",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "argc",
                              COM_SYS_SYSCALL_TYPE_PTR,
-                             "envp");
+                             "envp",
+                             COM_SYS_SYSCALL_TYPE_SIZET,
+                             "envc");
 
     com_sys_syscall_register(0x04, "fork", com_sys_syscall_fork, 0);
 

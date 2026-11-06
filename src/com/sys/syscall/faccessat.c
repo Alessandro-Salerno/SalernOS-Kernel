@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
@@ -30,16 +29,23 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-// SYSCALL: faccessat(int dir_fd, const char *path, int mode, int flags)
+// SYSCALL: faccessat(int dir_fd, const struct syscall_str *path, int mode,
+// int flags)
 COM_SYS_SYSCALL(com_sys_syscall_faccessat) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(3); // TODO: implement mode and flags
 
-    int         dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
-    const char *path   = COM_SYS_SYSCALL_ARG(void *, 2);
+    int                       dir_fd = COM_SYS_SYSCALL_ARG(int, 1);
+    const struct syscall_str *upath  = COM_SYS_SYSCALL_ARG(void *, 2);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    char   path[CONFIG_PATH_MAX];
+    size_t pathlen;
+    int    path_ret = com_sys_syscall_copy_str(&pathlen,
+                                               path,
+                                               sizeof(path),
+                                               upath);
+    if (0 != path_ret) {
+        return COM_SYS_SYSCALL_ERR(path_ret);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -49,7 +55,6 @@ COM_SYS_SYSCALL(com_sys_syscall_faccessat) {
 
     com_vnode_t *dir      = NULL;
     com_file_t  *dir_file = NULL;
-    size_t       pathlen  = kstrlen(path);
 
     int dir_ret = com_sys_proc_get_directory(&dir_file,
                                              &dir,

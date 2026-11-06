@@ -26,12 +26,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <salernos/syscall_str.h>
+
 typedef struct {
     uintptr_t entry;
     size_t    phdr;
     size_t    phent_sz;
     size_t    phent_num;
     char      interpreter_path[64];
+    size_t    interpreter_len;
 } com_elf_data_t;
 
 int com_sys_elf64_load(com_elf_data_t    *out,
@@ -41,16 +44,24 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                        com_vnode_t       *cwd,
                        uintptr_t          virt_off,
                        com_vmm_context_t *vmm_context);
-int com_sys_elf64_prepare_stack(uintptr_t         *out_stack_ptr,
-                                com_vmm_context_t *vmm_ctx,
-                                com_elf_data_t     elf_data,
-                                size_t             stack_end_virt,
-                                size_t             stack_len,
-                                char *const        argv[],
-                                char *const        envp[]);
-int com_sys_elf64_prepare_proc(com_vmm_context_t **out_vmm_context,
-                               const char         *path,
-                               char *const         argv[],
-                               char *const         env[],
-                               com_proc_t         *proc,
-                               arch_context_t     *ctx);
+
+// argv and envp are either kernel arrays of kernel strings or user arrays of
+// user strings
+int com_sys_elf64_prepare_stack(uintptr_t                *out_stack_ptr,
+                                com_vmm_context_t        *vmm_ctx,
+                                com_elf_data_t            elf_data,
+                                size_t                    stack_end_virt,
+                                size_t                    stack_len,
+                                const struct syscall_str *argv,
+                                size_t                    argc,
+                                const struct syscall_str *envp,
+                                size_t                    envc);
+int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
+                               const char               *path,
+                               size_t                    pathlen,
+                               const struct syscall_str *argv,
+                               size_t                    argc,
+                               const struct syscall_str *envp,
+                               size_t                    envc,
+                               com_proc_t               *proc,
+                               arch_context_t           *ctx);

@@ -146,19 +146,36 @@ void com_init_devices(void) {
     com_dev_profile_init();
 }
 
+// The config lists are NULL-terminated
+static size_t init_strs(struct syscall_str *out, const char *const *in) {
+    size_t n = 0;
+    for (; NULL != in[n]; n++) {
+        out[n] = (struct syscall_str){in[n], kstrlen(in[n])};
+    }
+    return n;
+}
+
 void com_init_pid1(void) {
     com_sys_proc_init();
     com_sys_syscall_futex_init();
 
     KASSERT(NULL != RootFs);
-    char *const   argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};
-    char *const   envp[] = {CONFIG_INIT_ENV};
+    const char *const  init_argv[] = {CONFIG_INIT_PATH, CONFIG_INIT_ARGV};
+    const char *const  init_envp[] = {CONFIG_INIT_ENV};
+    struct syscall_str argv[sizeof(init_argv) / sizeof(*init_argv)];
+    struct syscall_str envp[sizeof(init_envp) / sizeof(*init_envp)];
+    size_t             argc = init_strs(argv, init_argv);
+    size_t             envc = init_strs(envp, init_envp);
+
     com_proc_t   *proc = com_sys_proc_new(NULL, 0, RootFs->root, RootFs->root);
     com_thread_t *thread  = com_sys_thread_new(proc, NULL, 0, NULL);
     int           elf_ret = com_sys_elf64_prepare_proc(&proc->vmm_context,
-                                                       CONFIG_INIT_PATH,
+                                                       argv[0].str,
+                                                       argv[0].len,
                                                        argv,
+                                                       argc,
                                                        envp,
+                                                       envc,
                                                        proc,
                                                        &thread->ctx);
 

@@ -21,6 +21,7 @@
 #include <arch/context.h>
 #include <arch/syscall.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define COM_SYS_SYSCALL(name)                                \
@@ -190,4 +191,10 @@ COM_SYS_SYSCALL(com_sys_syscall_sysprofile);
 
 // SYSCALL UTILITIES
 
+struct syscall_str;
+
+int  com_sys_syscall_copy_str(size_t                   *len,
+                              char                     *buf,
+                              size_t                    bufsz,
+                              const struct syscall_str *ustr);
 void com_sys_syscall_futex_init(void);

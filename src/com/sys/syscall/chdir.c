@@ -17,7 +17,6 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
-#include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -27,15 +26,21 @@
 #include <lib/str.h>
 #include <stdatomic.h>
 
-// SYSCALL: chdir(const char *path)
+// SYSCALL: chdir(const struct syscall_str *path)
 COM_SYS_SYSCALL(com_sys_syscall_chdir) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
     COM_SYS_SYSCALL_UNUSED_START(2);
 
-    const char *path = COM_SYS_SYSCALL_ARG(const char *, 1);
+    const struct syscall_str *upath = COM_SYS_SYSCALL_ARG(void *, 1);
 
-    if (!ARCH_MMU_ADDR_IS_USER(path)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    char   path[CONFIG_PATH_MAX];
+    size_t pathlen;
+    int    path_ret = com_sys_syscall_copy_str(&pathlen,
+                                               path,
+                                               sizeof(path),
+                                               upath);
+    if (0 != path_ret) {
+        return COM_SYS_SYSCALL_ERR(path_ret);
     }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
@@ -45,7 +50,7 @@ COM_SYS_SYSCALL(com_sys_syscall_chdir) {
     com_vnode_t *new_cwd = NULL;
     int          lk_ret  = com_fs_vfs_lookup(&new_cwd,
                                              path,
-                                             kstrlen(path),
+                                             pathlen,
                                              curr_proc->root,
                                              old_cwd,
                                              true);
