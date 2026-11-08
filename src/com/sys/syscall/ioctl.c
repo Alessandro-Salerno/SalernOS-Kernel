@@ -61,8 +61,6 @@ fd_ioctl(int fd, uintmax_t op, void *buf, com_proc_t *proc) {
     if (FIOCLEX == op) {
         fildesc->flags |= FD_CLOEXEC;
         ret = FDIOCTL_OK(0);
-    } else if (FIONREAD == op) {
-        ret = FDIOCTL_OK(0);
     }
 
     kspinlock_release(&proc->fd_lock);

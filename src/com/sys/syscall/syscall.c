@@ -162,6 +162,8 @@ void com_sys_syscall_register(uintmax_t          number,
 
     aux->name     = name;
     aux->num_args = num_args;
+    // Numbers may have gaps, so this is the size of the table, not a count
+    NumSyscalls = KMAX(NumSyscalls, number + 1);
 
     if (0 == num_args) {
         return;
@@ -176,8 +178,6 @@ void com_sys_syscall_register(uintmax_t          number,
         aux->arg_types[i]    = arg_type;
     }
     va_end(args);
-
-    NumSyscalls++;
 }
 
 com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
@@ -189,7 +189,10 @@ com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
                                          arch_syscall_arg_t arg5,
                                          arch_syscall_arg_t arg6,
                                          uintptr_t          invoke_ip) {
-    KASSERT(number < CONFIG_SYSCALL_MAX);
+    // The number comes from user space
+    if (number >= CONFIG_SYSCALL_MAX || NULL == SyscallTable[number].handler) {
+        return COM_SYS_SYSCALL_ERR(ENOSYS);
+    }
     com_syscall_t *syscall = &SyscallTable[number];
 
 #if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_SYSCALL
@@ -782,4 +785,56 @@ void com_sys_syscall_init(void) {
                              "addr",
                              COM_SYS_SYSCALL_TYPE_SIZET,
                              "len");
+
+    com_sys_syscall_register(0x38,
+                             "linkat",
+                             com_sys_syscall_linkat,
+                             5,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "old_dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "oldpath",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "new_dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "newpath",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
+
+    com_sys_syscall_register(0x39,
+                             "renameat",
+                             com_sys_syscall_renameat,
+                             4,
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "old_dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "oldpath",
+                             COM_SYS_SYSCALL_TYPE_INT,
+                             "new_dir_fd",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "newpath");
+
+    com_sys_syscall_register(0x3A,
+                             "mount",
+                             com_sys_syscall_mount,
+                             5,
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "source",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "target",
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "fstype",
+                             COM_SYS_SYSCALL_TYPE_LONGFLAGS,
+                             "flags",
+                             COM_SYS_SYSCALL_TYPE_PTR,
+                             "data");
+
+    com_sys_syscall_register(0x3B,
+                             "umount2",
+                             com_sys_syscall_umount2,
+                             2,
+                             COM_SYS_SYSCALL_TYPE_STR,
+                             "target",
+                             COM_SYS_SYSCALL_TYPE_FLAGS,
+                             "flags");
 }

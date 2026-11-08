@@ -30,10 +30,12 @@
 #include <kernel/com/sys/thread.h>
 #include <lib/ioviter.h>
 #include <lib/sync.h>
+#include <lib/usercopy.h>
 #include <lib/util.h>
 #include <poll.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/ioctl.h>
 #include <vendor/tailq.h>
 
 #define PIPE_BUF_SZ ARCH_PAGE_SIZE
@@ -48,16 +50,18 @@ struct pipefs_node {
     com_vnode_t    *read_end;
     com_vnode_t    *write_end;
     com_poll_head_t pollhead;
-    ino_t           ino;
 };
+
+static int pipefs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
 
 static com_vnode_ops_t PipefsNodeOps = {.readv     = com_fs_pipefs_readv,
                                         .writev    = com_fs_pipefs_writev,
                                         .poll      = com_fs_pipefs_poll,
                                         .poll_head = com_fs_pipefs_poll_head,
-                                        .close     = com_fs_pipefs_close,
+                                        .inactive  = com_fs_pipefs_inactive,
                                         .stat      = com_fs_pipefs_stat,
-                                        .seekable  = com_fs_pipefs_seekable};
+                                        .seekable  = com_fs_pipefs_seekable,
+                                        .ioctl     = pipefs_ioctl};
 
 static void pipefs_poll_notify(struct pipefs_node *pipe) {
     kspinlock_acquire(&pipe->pollhead.lock);
@@ -66,6 +70,18 @@ static void pipefs_poll_notify(struct pipefs_node *pipe) {
         com_fs_poll_notify(polled->poller);
     }
     kspinlock_release(&pipe->pollhead.lock);
+}
+
+static int pipefs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
+    if (FIONREAD != op) {
+        return ENOSYS;
+    }
+
+    struct pipefs_node *pipe = node->extra;
+    ksync_acquire(&pipe->condvar);
+    int avail = pipe->write - pipe->read;
+    ksync_release(&pipe->condvar);
+    return kmemcpy_to_user(buf, &avail, sizeof(avail));
 }
 
 int com_fs_pipefs_readv(kioviter_t  *ioviter,
@@ -215,7 +231,8 @@ int com_fs_pipefs_poll_head(com_poll_head_t **out, com_vnode_t *node) {
     return 0;
 }
 
-int com_fs_pipefs_close(com_vnode_t *vnode) {
+// Pipe vnodes are only referenced by their files and operations in progress
+void com_fs_pipefs_inactive(com_vnode_t *vnode) {
     struct pipefs_node *pipe = vnode->extra;
     ksync_acquire(&pipe->condvar);
     if (vnode == pipe->read_end) {
@@ -235,13 +252,11 @@ int com_fs_pipefs_close(com_vnode_t *vnode) {
         com_mm_slab_free(pipe, sizeof(struct pipefs_node));
     }
     com_mm_slab_free(vnode, sizeof(com_vnode_t));
-    return 0;
 }
 
 int com_fs_pipefs_stat(struct stat *out, com_vnode_t *node) {
-    struct pipefs_node *pipe = node->extra;
-    out->st_ino              = pipe->ino;
-    out->st_mode    = S_IFIFO | 0600;
+    (void)node;
+    out->st_mode    = 0600;
     out->st_nlink   = 1;
     out->st_blksize = PIPE_BUF_SZ;
     return 0;
@@ -261,23 +276,15 @@ void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
     COM_SYS_THREAD_WAITLIST_INIT(&pipe->writers);
     pipe->read  = 0;
     pipe->write = 0;
-    pipe->ino   = com_fs_vfs_new_ino();
     pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
 
-    com_vnode_t *r  = com_mm_slab_alloc(sizeof(com_vnode_t));
-    r->extra        = pipe;
-    r->mountpointof = NULL;
-    r->ops          = &PipefsNodeOps;
-    r->vfs          = NULL;
-    r->num_ref      = 1;
-    pipe->read_end  = r;
+    com_vnode_t *r = com_mm_slab_alloc(sizeof(com_vnode_t));
+    com_fs_vfs_vnode_init(r, NULL, E_COM_VNODE_TYPE_FIFO, &PipefsNodeOps, pipe);
+    pipe->read_end = r;
 
-    com_vnode_t *w  = com_mm_slab_alloc(sizeof(com_vnode_t));
-    w->extra        = pipe;
-    w->mountpointof = NULL;
-    w->ops          = &PipefsNodeOps;
-    w->vfs          = NULL;
-    w->num_ref      = 1;
+    com_vnode_t *w = com_mm_slab_alloc(sizeof(com_vnode_t));
+    com_fs_vfs_vnode_init(w, NULL, E_COM_VNODE_TYPE_FIFO, &PipefsNodeOps, pipe);
+    w->ino          = r->ino;
     pipe->write_end = w;
 
     *read  = r;

@@ -44,82 +44,23 @@ COM_SYS_SYSCALL(com_sys_syscall_getcwd) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
-    com_vnode_t  *curr_cwd    = atomic_load(&curr_proc->cwd);
+    com_vnode_t  *cwd         = com_sys_proc_get_cwd(curr_proc);
 
-    // The path is built backwards from the end of kbuf
-    char         kbuf[CONFIG_PATH_MAX];
-    size_t       ksize     = KMIN(size, sizeof(kbuf));
-    int          err       = 0;
-    com_vnode_t *parent    = NULL;
-    ssize_t      place_idx = (ssize_t)ksize -
-                             2; // if you're above that, that's your problem
-    kbuf[ksize - 1]        = 0; // string terminator
-
-    while (0 == err) {
-        com_vnctl_name_t name;
-        err = com_fs_vfs_vnctl(curr_cwd, COM_FS_VFS_VNCTL_GETNAME, &name);
-
-        if (0 != err) {
-            // parent is either NULL (operation discarded) or equal to curr_cwd.
-            // If parent == curr_cwd, however, it means that the curr_cwd is not
-            // the original, so in case of failure it needs to be released
-            COM_FS_VFS_VNODE_RELEASE(parent);
-            break;
-        }
-
-        // Past the first component, the root is the / already in place
-        if (0 == name.namelen && place_idx < (ssize_t)ksize - 2) {
-            break;
-        }
-
-        place_idx -= name.namelen - 1;
-        if (place_idx - 1 < 0) { // -1 for the /
-            // same as above
-            COM_FS_VFS_VNODE_RELEASE(parent);
-            err = ksize == size ? ERANGE : ENAMETOOLONG;
-            break;
-        }
-
-        kmemcpy(&kbuf[place_idx], name.name, name.namelen);
-        if ('/' != kbuf[place_idx]) { // avoid //usr caes
-            kbuf[place_idx - 1] = '/';
-            place_idx -= 2; // currently, it points to the first letter of the
-                            // current name, thus -1 is the /, -2 is the last
-                            // slot for the previous name
-        } else {
-            place_idx--; // there's no path sep, so just -1
-        }
-
-        // If namelen == 0, then we reached the root
-        if (0 == name.namelen) {
-            break;
-        }
-
-        com_vnode_t *old_parent = parent;
-        err                     = com_fs_vfs_lookup(&parent,
-                                                    "..",
-                                                    2,
-                                                    curr_proc->root,
-                                                    curr_cwd,
-                                                    true);
-
-        if (0 == err) {
-            // here we release the old parent.
-            // This was either NULL (discarded) or a previously acquired
-            // directory The original cwd is never released
-            COM_FS_VFS_VNODE_RELEASE(old_parent);
-            curr_cwd = parent;
-        }
+    // A path that does not fit the user's buffer is ERANGE, one that does not
+    // fit ours is ENAMETOOLONG
+    char   kbuf[CONFIG_PATH_MAX];
+    size_t ksize = KMIN(size, sizeof(kbuf));
+    size_t start = 0;
+    int    err = com_fs_vfs_get_path(&start, kbuf, ksize, cwd, curr_proc->root);
+    COM_FS_VFS_VNODE_RELEASE(cwd);
+    if (ERANGE == err && ksize != size) {
+        err = ENAMETOOLONG;
     }
-
+    if (0 == err) {
+        err = kmemcpy_to_user(buf, &kbuf[start], ksize - start);
+    }
     if (0 != err) {
         return COM_SYS_SYSCALL_ERR(err);
-    }
-
-    size_t written  = ksize - place_idx - 1;
-    int    copy_ret = kmemcpy_to_user(buf, &kbuf[place_idx + 1], written);
-    if (0 != copy_ret) {
-        return COM_SYS_SYSCALL_ERR(copy_ret);
     }
 
     return COM_SYS_SYSCALL_OK((uintptr_t)buf);

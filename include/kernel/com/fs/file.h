@@ -18,11 +18,30 @@
 
 #pragma once
 
-#include <kernel/com/fs/vfs.h>
-#include <kernel/com/mm/slab.h>
 #include <lib/spinlock.h>
 #include <lib/util.h>
 #include <stdint.h>
+
+// NOTE: before the includes, which may include this header again through
+// <kernel/com/sys/proc.h>
+struct com_vnode;
+
+typedef struct com_file {
+    kspinlock_t       off_lock;
+    uintmax_t         off;
+    uintmax_t         flags;
+    uintmax_t         num_ref;
+    struct com_vnode *vnode;
+} com_file_t;
+
+typedef struct com_filedesc {
+    com_file_t *file;
+    uintmax_t   flags;
+    bool        reserved; // see com_sys_proc_next_fd
+} com_filedesc_t;
+
+#include <kernel/com/fs/vfs.h>
+#include <kernel/com/mm/slab.h>
 
 #define COM_FS_FILE_HOLD(file)                                   \
     if (NULL != (file)) {                                        \
@@ -37,24 +56,10 @@
                                              __ATOMIC_ACQ_REL); \
             if (0 == n) {                                       \
                 KDEBUG("freeing file %p", (file));              \
+                com_fs_vfs_close(file->vnode);                  \
                 COM_FS_VFS_VNODE_RELEASE(file->vnode);          \
                 com_mm_slab_free(file, sizeof(com_file_t));     \
                 file = NULL;                                    \
             }                                                   \
         }                                                       \
     })
-
-typedef struct com_file {
-    kspinlock_t off_lock;
-    uintmax_t   off;
-    uintmax_t   flags;
-    uintmax_t num_ref; // this is used because multiple file descripts may point
-                       // to the same file (e.g., if stdout and stderr and the
-                       // same) or if the process was forked
-    com_vnode_t *vnode;
-} com_file_t;
-
-typedef struct com_filedesc {
-    com_file_t *file;
-    uintmax_t   flags;
-} com_filedesc_t;

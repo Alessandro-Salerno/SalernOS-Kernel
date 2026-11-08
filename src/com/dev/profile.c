@@ -32,7 +32,9 @@ static int devprofile_copy_row(struct devprofile_fn_res *r,
                                const char               *name,
                                com_profile_func_data_t  *data) {
     struct devprofile_fn_data d = {0};
-    kmemcpy(d.name, name, KMIN(kstrlen(name), sizeof(d.name) - 1));
+    if (NULL != name) {
+        kmemcpy(d.name, name, KMIN(kstrlen(name), sizeof(d.name) - 1));
+    }
     d.real_time_ns = ARCH_CPU_TIMESTAMP_TO_NS(data->real_time);
     d.cpu_time_ns  = ARCH_CPU_TIMESTAMP_TO_NS(data->cpu_time);
     d.num_calls    = data->num_calls;
@@ -85,7 +87,8 @@ static int devprofile_ioctl(void *devdata, uintmax_t op, void *buf) {
     return ENOSYS;
 }
 
-static com_dev_ops_t DevprofileDevops = {.ioctl = devprofile_ioctl};
+static com_dev_ops_t DevprofileDevops = {.type  = E_COM_VNODE_TYPE_CHARDEV,
+                                         .ioctl = devprofile_ioctl};
 
 int com_dev_profile_init(void) {
 #if CONFIG_USE_PROFILER

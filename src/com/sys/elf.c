@@ -196,12 +196,14 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                                               exec_path_len,
                                               root,
                                               cwd,
-                                              true);
+                                              COM_FS_VFS_LOOKUP_FOLLOW);
     if (0 != ret) {
         return ret;
     }
 
+    // POSIX.1-2017, exec: EACCES if the file is not a regular file
     if (E_COM_VNODE_TYPE_FILE != elf_file->type) {
+        ret = EACCES;
         goto cleanup;
     }
 
@@ -236,7 +238,10 @@ int com_sys_elf64_load(com_elf_data_t    *out,
         goto cleanup;
     }
 
-    KASSERT(sizeof(struct elf_header) == bytes_read);
+    if (sizeof(struct elf_header) != bytes_read) {
+        ret = ENOEXEC;
+        goto cleanup;
+    }
 
     out->phdr      = 0;
     out->phent_sz  = sizeof(struct elf_phdr);
@@ -634,13 +639,14 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
     KASSERT(pathlen < sizeof(proc->executable_path));
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_new_context(NULL);
     *out_vmm_context               = new_vmm_ctx;
+    com_vnode_t *cwd               = com_sys_proc_get_cwd(proc);
 
     com_elf_data_t prog_data = {0};
     int            status    = com_sys_elf64_load(&prog_data,
                                                   path,
                                                   pathlen,
                                                   proc->root,
-                                                  proc->cwd,
+                                                  cwd,
                                                   0,
                                                   new_vmm_ctx);
 
@@ -656,7 +662,7 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
                                     prog_data.interpreter_path,
                                     prog_data.interpreter_len,
                                     proc->root,
-                                    proc->cwd,
+                                    cwd,
                                     0x40000000,
                                     new_vmm_ctx);
 
@@ -697,9 +703,11 @@ int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
     ARCH_CONTEXT_THREAD_SET((*ctx), stack_ptr, 0, entry);
     kmemcpy(proc->executable_path, path, pathlen);
     proc->executable_path[pathlen] = '\0';
+    COM_FS_VFS_VNODE_RELEASE(cwd);
     return 0;
 
 fail:
+    COM_FS_VFS_VNODE_RELEASE(cwd);
     com_mm_vmm_destroy_context(new_vmm_ctx);
     return status;
 }

@@ -21,6 +21,7 @@
 #include <kernel/com/fs/vfs.h>
 
 typedef struct com_dev_ops {
+    com_vnode_type_t type; // CHARDEV or BLOCKDEV
     int (*read)(void     *buf,
                 size_t    buflen,
                 size_t   *bytes_read,
@@ -36,11 +37,9 @@ typedef struct com_dev_ops {
     int (*ioctl)(void *devdata, uintmax_t op, void *buf);
     int (*isatty)(void *devdata);
     int (*seekable)(void *devdata);
-    int (*close)(void *devdata);
     int (*stat)(struct stat *out, void *devdata);
     int (*poll_head)(struct com_poll_head **out, void *devdata);
     int (*poll)(short *revents, void *devdata, short events);
-    int (*open)(com_vnode_t **out, void *devdata);
     int (*mmap)(void             **out,
                 void              *devdata,
                 com_vmm_context_t *vmm_context,
@@ -49,54 +48,12 @@ typedef struct com_dev_ops {
                 int                vmm_flags,
                 arch_mmu_flags_t   mmu_flags,
                 uintmax_t          off);
+
+    int (*open)(com_vnode_t **out, void *devdata);
+    int (*close)(void *devdata);
+    void (*inactive)(void *devdata);
 } com_dev_ops_t;
 
-// VNODE OPS
-
-int com_fs_devfs_close(com_vnode_t *vnode);
-int com_fs_devfs_create(com_vnode_t **out,
-                        com_vnode_t  *dir,
-                        const char   *name,
-                        size_t        namelen,
-                        uintmax_t     attr,
-                        uintmax_t     fsattr);
-int com_fs_devfs_mkdir(com_vnode_t **out,
-                       com_vnode_t  *parent,
-                       const char   *name,
-                       size_t        namelen,
-                       uintmax_t     attr,
-                       uintmax_t     fsattr);
-int com_fs_devfs_read(void        *buf,
-                      size_t       buflen,
-                      size_t      *bytes_read,
-                      com_vnode_t *node,
-                      uintmax_t    off,
-                      uintmax_t    flags);
-int com_fs_devfs_write(size_t      *bytes_written,
-                       com_vnode_t *node,
-                       void        *buf,
-                       size_t       buflen,
-                       uintmax_t    off,
-                       uintmax_t    flags);
-int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
-int com_fs_devfs_isatty(com_vnode_t *node);
-int com_fs_devfs_seekable(com_vnode_t *node);
-int com_fs_devfs_stat(struct stat *out, com_vnode_t *node);
-int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
-int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events);
-int com_fs_devfs_open(com_vnode_t **out, com_vnode_t *node);
-int com_fs_devfs_mmap(void             **out,
-                      com_vnode_t       *node,
-                      com_vmm_context_t *vmm_context,
-                      void              *hint,
-                      size_t             size,
-                      int                vmm_flags,
-                      arch_mmu_flags_t   mmu_flags,
-                      uintmax_t          off);
-
-// OTHER FUNCTIONS
-
-void *com_fs_devfs_get_data(com_vnode_t *node);
 int   com_fs_devfs_register(com_vnode_t  **out,
                             com_vnode_t   *dir,
                             const char    *name,
@@ -106,4 +63,9 @@ int   com_fs_devfs_register(com_vnode_t  **out,
 int   com_fs_devfs_register_anonymous(com_vnode_t  **out,
                                       com_dev_ops_t *devops,
                                       void          *devdata);
+int   com_fs_devfs_mkdir(com_vnode_t **out,
+                         com_vnode_t  *parent,
+                         const char   *name,
+                         size_t        namelen);
+void *com_fs_devfs_get_data(com_vnode_t *node);
 int   com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs);

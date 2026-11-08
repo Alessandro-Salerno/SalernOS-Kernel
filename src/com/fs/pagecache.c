@@ -51,5 +51,22 @@ void com_fs_pagecache_default(uintptr_t       *out,
 }
 
 com_pagecache_t *com_fs_pagecache_new(void) {
-    return kradixtree_new(4);
+    return kradixtree_new(COM_FS_PAGECACHE_LAYERS);
+}
+
+static void free_layer(kradixtree_back_t *node, size_t layers_left) {
+    for (size_t i = 0; i < KRADIXTREE_LAYER_SIZE; i++) {
+        if (layers_left > 1 && NULL != node->branches[i]) {
+            free_layer(node->branches[i], layers_left - 1);
+        } else if (1 == layers_left && NULL != node->leaves[i]) {
+            com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(node->leaves[i]));
+        }
+    }
+
+    com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(node));
+}
+
+void com_fs_pagecache_free(com_pagecache_t *root) {
+    free_layer(root->back, root->num_layers);
+    kradixtree_free(root);
 }

@@ -37,6 +37,10 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
     off_t offset = COM_SYS_SYSCALL_ARG(off_t, 2);
     int   whence = COM_SYS_SYSCALL_ARG(int, 3);
 
+    if (SEEK_SET != whence && SEEK_CUR != whence && SEEK_END != whence) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
     com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
     com_proc_t       *curr = ARCH_CPU_GET_THREAD()->proc;
     com_file_t       *file = com_sys_proc_get_file(curr, fd);
@@ -51,34 +55,37 @@ COM_SYS_SYSCALL(com_sys_syscall_seek) {
         return COM_SYS_SYSCALL_ERR(seekable);
     }
 
-    // TODO: handle errors (no seek out of bounds)
-
-    kspinlock_acquire(&file->off_lock);
-    off_t new_off = file->off;
-    switch (whence) {
-        case SEEK_SET:
-            new_off = offset;
-            break;
-        case SEEK_CUR:
-            new_off += offset;
-            break;
-        case SEEK_END: {
-            struct stat statbuf;
-            int         vfs_ret = com_fs_vfs_stat(&statbuf, file->vnode);
-            if (0 != vfs_ret) {
-                ret.err = vfs_ret;
-                goto cleanup;
-            }
-            new_off = statbuf.st_size + offset;
-            break;
+    off_t base = 0;
+    if (SEEK_END == whence) {
+        struct stat statbuf;
+        int         vfs_ret = com_fs_vfs_stat(&statbuf, file->vnode, true);
+        if (0 != vfs_ret) {
+            ret = COM_SYS_SYSCALL_ERR(vfs_ret);
+            goto cleanup;
         }
+        base = statbuf.st_size;
     }
 
-    file->off = new_off;
-    ret.value = new_off;
+    kspinlock_acquire(&file->off_lock);
+    if (SEEK_CUR == whence) {
+        base = file->off;
+    }
+
+    off_t new_off;
+    int   err = 0;
+    if (__builtin_add_overflow(base, offset, &new_off)) {
+        err = EOVERFLOW;
+    } else if (new_off < 0) {
+        err = EINVAL;
+    } else {
+        file->off = new_off;
+    }
+    kspinlock_release(&file->off_lock);
+
+    ret = 0 != err ? COM_SYS_SYSCALL_ERR(err) : COM_SYS_SYSCALL_OK(new_off);
+
 cleanup:
     KASSERT(NULL != file);
-    kspinlock_release(&file->off_lock);
     COM_FS_FILE_RELEASE(file);
     return ret;
 }

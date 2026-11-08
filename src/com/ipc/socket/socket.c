@@ -79,7 +79,11 @@ int com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
                                               sizeof(unaddr->sun_path) - 1);
             kmemcpy(unaddr->sun_path, addr->local.path, copy_size);
             unaddr->sun_path[copy_size] = 0;
-            *abi_addr_len               = copy_size;
+            // Unnamed sockets only have the family, the others include the NUL
+            *abi_addr_len = offsetof(struct sockaddr_un, sun_path);
+            if (0 != copy_size) {
+                *abi_addr_len += copy_size + 1;
+            }
             return 0;
         }
 

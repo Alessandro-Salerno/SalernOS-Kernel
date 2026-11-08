@@ -24,103 +24,55 @@
 #include <kernel/com/mm/slab.h>
 
 struct devfs_dev {
-    com_vnode_t   *vnode;
     com_dev_ops_t *devops;
     void          *devdata;
 };
 
-static com_vnode_ops_t DevfsNodeOps = (com_vnode_ops_t){
-    .read      = com_fs_devfs_read,
-    .write     = com_fs_devfs_write,
-    .ioctl     = com_fs_devfs_ioctl,
-    .close     = com_fs_devfs_close,
-    .create    = com_fs_devfs_create,
-    .mkdir     = com_fs_devfs_mkdir,
-    .lookup    = com_fs_tmpfs_lookup,
-    .isatty    = com_fs_devfs_isatty,
-    .seekable  = com_fs_devfs_seekable,
-    .stat      = com_fs_devfs_stat,
-    .poll_head = com_fs_devfs_poll_head,
-    .poll      = com_fs_devfs_poll,
-    .open      = com_fs_devfs_open,
-    .mmap      = com_fs_devfs_mmap};
-
 static com_vfs_t *Devfs = NULL;
+
+static struct devfs_dev *dev_of(com_vnode_t *node) {
+    return com_fs_tmpfs_private(node);
+}
 
 // VNODE OPS
 
-int com_fs_devfs_close(com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
+static int devfs_open(com_vnode_t **out, com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
+    if (NULL == dev->devops->open) {
+        COM_FS_VFS_VNODE_HOLD(node);
+        *out = node;
+        return 0;
+    }
 
+    return dev->devops->open(out, dev->devdata);
+}
+
+static int devfs_close(com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->close) {
-        return ENOSYS;
+        return 0;
     }
 
     return dev->devops->close(dev->devdata);
 }
 
-int com_fs_devfs_create(com_vnode_t **out,
-                        com_vnode_t  *dir,
-                        const char   *name,
-                        size_t        namelen,
-                        uintmax_t     attr,
-                        uintmax_t     fsattr) {
-    com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_create(&new,
-                                           dir,
-                                           name,
-                                           namelen,
-                                           attr,
-                                           fsattr | COM_FS_TMPFS_ATTR_GHOST);
-
-    if (0 != ret || NULL == new) {
-        *out = NULL;
-        return ret;
+static void devfs_inactive(com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
+    if (NULL != dev->devops->inactive) {
+        dev->devops->inactive(dev->devdata);
     }
 
-    struct devfs_dev *dev = com_mm_slab_alloc(sizeof(struct devfs_dev));
-    com_fs_tmpfs_set_other(new, dev);
-    new->ops = &DevfsNodeOps;
-    *out     = new;
-    return 0;
+    com_mm_slab_free(dev, sizeof(struct devfs_dev));
+    com_fs_tmpfs_inactive(node);
 }
 
-int com_fs_devfs_mkdir(com_vnode_t **out,
-                       com_vnode_t  *parent,
-                       const char   *name,
-                       size_t        namelen,
-                       uintmax_t     attr,
-                       uintmax_t     fsattr) {
-    if (NULL == parent) {
-        parent = Devfs->root;
-    }
-
-    com_vnode_t *new = NULL;
-    int          ret = com_fs_tmpfs_mkdir(&new,
-                                          parent,
-                                          name,
-                                          namelen,
-                                          attr,
-                                          fsattr | COM_FS_TMPFS_ATTR_GHOST);
-
-    if (0 != ret || NULL == new) {
-        *out = NULL;
-        return ret;
-    }
-
-    // new->ops = &DevfsNodeOps;
-    *out = new;
-    return 0;
-}
-
-int com_fs_devfs_read(void        *buf,
+static int devfs_read(void        *buf,
                       size_t       buflen,
                       size_t      *bytes_read,
                       com_vnode_t *node,
                       uintmax_t    off,
                       uintmax_t    flags) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->read) {
         return ENOSYS;
     }
@@ -128,14 +80,13 @@ int com_fs_devfs_read(void        *buf,
     return dev->devops->read(buf, buflen, bytes_read, dev->devdata, off, flags);
 }
 
-int com_fs_devfs_write(size_t      *bytes_written,
+static int devfs_write(size_t      *bytes_written,
                        com_vnode_t *node,
                        void        *buf,
                        size_t       buflen,
                        uintmax_t    off,
                        uintmax_t    flags) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->write) {
         return ENOSYS;
     }
@@ -144,9 +95,8 @@ int com_fs_devfs_write(size_t      *bytes_written,
         ->write(bytes_written, dev->devdata, buf, buflen, off, flags);
 }
 
-int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+static int devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->ioctl) {
         return ENOSYS;
     }
@@ -154,9 +104,8 @@ int com_fs_devfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
     return dev->devops->ioctl(dev->devdata, op, buf);
 }
 
-int com_fs_devfs_isatty(com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+static int devfs_isatty(com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->isatty) {
         return ENOSYS;
     }
@@ -164,9 +113,8 @@ int com_fs_devfs_isatty(com_vnode_t *node) {
     return dev->devops->isatty(dev->devdata);
 }
 
-int com_fs_devfs_seekable(com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+static int devfs_seekable(com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->seekable) {
         return 0;
     }
@@ -174,21 +122,18 @@ int com_fs_devfs_seekable(com_vnode_t *node) {
     return dev->devops->seekable(dev->devdata);
 }
 
-int com_fs_devfs_stat(struct stat *out, com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
-    if (NULL == dev->devops->stat) {
-        return ENOSYS;
+static int devfs_stat(struct stat *out, com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
+    int ret = NULL != dev->devops->stat ? dev->devops->stat(out, dev->devdata)
+                                        : ENOSYS;
+    if (0 == ret || ENOSYS == ret) {
+        out->st_nlink = com_fs_tmpfs_nlink(node);
     }
-
-    int ret     = dev->devops->stat(out, dev->devdata);
-    out->st_ino = com_fs_tmpfs_get_ino(node);
     return ret;
 }
 
-int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+static int devfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->poll_head) {
         return ENOSYS;
     }
@@ -196,9 +141,8 @@ int com_fs_devfs_poll_head(struct com_poll_head **out, com_vnode_t *node) {
     return dev->devops->poll_head(out, dev->devdata);
 }
 
-int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+static int devfs_poll(short *revents, com_vnode_t *node, short events) {
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->poll) {
         return ENOSYS;
     }
@@ -206,27 +150,15 @@ int com_fs_devfs_poll(short *revents, com_vnode_t *node, short events) {
     return dev->devops->poll(revents, dev->devdata, events);
 }
 
-int com_fs_devfs_open(com_vnode_t **out, com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
-    if (NULL == dev->devops->open) {
-        *out = node;
-        return 0;
-    }
-
-    return dev->devops->open(out, dev->devdata);
-}
-
-int com_fs_devfs_mmap(void             **out,
+static int devfs_mmap(void             **out,
                       com_vnode_t       *node,
                       com_vmm_context_t *vmm_context,
                       void              *hint,
                       size_t             size,
-                      int                vmm_falgs,
+                      int                vmm_flags,
                       arch_mmu_flags_t   mmu_flags,
                       uintmax_t          off) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-
+    struct devfs_dev *dev = dev_of(node);
     if (NULL == dev->devops->mmap) {
         return ENOSYS;
     }
@@ -236,16 +168,46 @@ int com_fs_devfs_mmap(void             **out,
                              vmm_context,
                              hint,
                              size,
-                             vmm_falgs,
+                             vmm_flags,
                              mmu_flags,
                              off);
 }
 
-// OTHER FUNCTIONS
+static com_vnode_ops_t DevfsNodeOps = {.open      = devfs_open,
+                                       .close     = devfs_close,
+                                       .inactive  = devfs_inactive,
+                                       .read      = devfs_read,
+                                       .write     = devfs_write,
+                                       .ioctl     = devfs_ioctl,
+                                       .isatty    = devfs_isatty,
+                                       .seekable  = devfs_seekable,
+                                       .stat      = devfs_stat,
+                                       .poll_head = devfs_poll_head,
+                                       .poll      = devfs_poll,
+                                       .mmap      = devfs_mmap};
 
-void *com_fs_devfs_get_data(com_vnode_t *node) {
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(node);
-    return dev->devdata;
+// INTERFACE
+
+static int make_dev_attr(com_vnode_attr_t       *attr,
+                         com_fs_tmpfs_special_t *special,
+                         struct devfs_dev      **dev,
+                         com_dev_ops_t          *devops,
+                         void                   *devdata) {
+    KASSERT(E_COM_VNODE_TYPE_CHARDEV == devops->type ||
+            E_COM_VNODE_TYPE_BLOCKDEV == devops->type);
+
+    *dev = com_mm_slab_alloc(sizeof(struct devfs_dev));
+    if (NULL == *dev) {
+        return ENOMEM;
+    }
+
+    (*dev)->devops   = devops;
+    (*dev)->devdata  = devdata;
+    special->ops     = &DevfsNodeOps;
+    special->private = *dev;
+    *attr            = COM_FS_VFS_ATTR(devops->type);
+    attr->fsdata     = special;
+    return 0;
 }
 
 int com_fs_devfs_register(com_vnode_t  **out,
@@ -254,24 +216,29 @@ int com_fs_devfs_register(com_vnode_t  **out,
                           size_t         namelen,
                           com_dev_ops_t *devops,
                           void          *devdata) {
-    if (NULL == dir) {
-        dir = Devfs->root;
-    }
-
-    com_vnode_t *devnode = NULL;
-    int          ret = com_fs_devfs_create(&devnode, dir, name, namelen, 0, 0);
-
-    if (0 != ret || NULL == devnode) {
-        *out = NULL;
+    com_vnode_attr_t       attr;
+    com_fs_tmpfs_special_t special;
+    struct devfs_dev      *dev;
+    int ret = make_dev_attr(&attr, &special, &dev, devops, devdata);
+    if (0 != ret) {
         return ret;
     }
 
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(devnode);
-    dev->devops           = devops;
-    dev->devdata          = devdata;
+    com_vnode_t *node = NULL;
+    ret               = com_fs_vfs_create(&node,
+                                          NULL != dir ? dir : Devfs->root,
+                                          name,
+                                          namelen,
+                                          &attr);
+    if (0 != ret) {
+        com_mm_slab_free(dev, sizeof(struct devfs_dev));
+        return ret;
+    }
 
     if (NULL != out) {
-        *out = devnode;
+        *out = node;
+    } else {
+        COM_FS_VFS_VNODE_RELEASE(node);
     }
 
     return 0;
@@ -280,43 +247,64 @@ int com_fs_devfs_register(com_vnode_t  **out,
 int com_fs_devfs_register_anonymous(com_vnode_t  **out,
                                     com_dev_ops_t *devops,
                                     void          *devdata) {
-    com_vnode_t *devnode = NULL;
-    int          ret     = com_fs_devfs_create(&devnode,
-                                               Devfs->root,
-                                               NULL,
-                                               0,
-                                               0,
-                                               COM_FS_TMPFS_ATTR_NO_DIRENT);
-
-    if (0 != ret || NULL == devnode) {
-        *out = NULL;
+    com_vnode_attr_t       attr;
+    com_fs_tmpfs_special_t special;
+    struct devfs_dev      *dev;
+    int ret = make_dev_attr(&attr, &special, &dev, devops, devdata);
+    if (0 != ret) {
         return ret;
     }
 
-    struct devfs_dev *dev = com_fs_tmpfs_get_other(devnode);
-    dev->devops           = devops;
-    dev->devdata          = devdata;
-    *out                  = devnode;
-    return 0;
+    ret = com_fs_tmpfs_new_orphan(out, Devfs, &attr);
+    if (0 != ret) {
+        com_mm_slab_free(dev, sizeof(struct devfs_dev));
+    }
+
+    return ret;
+}
+
+int com_fs_devfs_mkdir(com_vnode_t **out,
+                       com_vnode_t  *parent,
+                       const char   *name,
+                       size_t        namelen) {
+    return com_fs_vfs_create(out,
+                             NULL != parent ? parent : Devfs->root,
+                             name,
+                             namelen,
+                             &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR));
+}
+
+void *com_fs_devfs_get_data(com_vnode_t *node) {
+    return dev_of(node)->devdata;
 }
 
 int com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs) {
     KLOG("mounting devfs in /dev/");
-    com_vnode_t *devdir = NULL;
-    int          ret    = com_fs_vfs_mkdir(&devdir, rootfs->root, "dev", 3, 0);
+    *out             = NULL;
+    com_vnode_t *dir = NULL;
+    int ret = com_fs_vfs_create(&dir,
+                                rootfs->root,
+                                "dev",
+                                3,
+                                &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR));
 
+    // The initrd may already have /dev
+    if (EEXIST == ret) {
+        ret = com_fs_vfs_lookup(&dir, "dev", 3, rootfs->root, rootfs->root, 0);
+    }
     if (0 != ret) {
-        *out = NULL;
         return ret;
     }
 
     com_vfs_t *devfs = NULL;
-    if (0 != com_fs_tmpfs_mount(&devfs, devdir)) {
-        *out = NULL;
+    ret              = com_fs_tmpfs_mount(&devfs, dir);
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != ret) {
         return ret;
     }
 
-    // devfs->root->ops = &DevfsNodeOps;
+    // Never dropped, so devfs is never unmounted
+    COM_FS_VFS_VNODE_HOLD(devfs->root);
     Devfs = devfs;
     *out  = devfs;
     return 0;

@@ -56,12 +56,11 @@ COM_SYS_SYSCALL(com_sys_syscall_socket) {
     com_socket_vnode_t *sockfs_vn = (void *)socket_vn;
     sockfs_vn->socket             = socket;
 
-    curr_proc->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *file       = curr_proc->fd[fd].file;
-    file->vnode            = socket_vn;
-    file->flags            = 0;
-    file->num_ref          = 1;
-    file->off              = 0;
+    com_file_t *file = com_mm_slab_alloc(sizeof(com_file_t));
+    file->vnode      = socket_vn;
+    file->flags      = 0;
+    file->num_ref    = 1;
+    file->off        = 0;
 
     // Convert OSKC_* flags into O_* flags
     if (SOCK_NONBLOCK & type) {
@@ -71,5 +70,6 @@ COM_SYS_SYSCALL(com_sys_syscall_socket) {
         file->flags |= O_CLOEXEC;
     }
 
+    com_sys_proc_install_fd(curr_proc, fd, file, 0);
     return COM_SYS_SYSCALL_OK(fd);
 }

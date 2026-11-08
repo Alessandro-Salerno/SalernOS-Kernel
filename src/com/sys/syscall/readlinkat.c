@@ -54,58 +54,33 @@ COM_SYS_SYSCALL(com_sys_syscall_readlinkat) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
-
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
+    com_vnode_t *dir = NULL;
+    int          err = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
     com_vnode_t *target = NULL;
-    int          err    = com_fs_vfs_lookup(&target,
-                                            path,
-                                            pathlen,
-                                            curr_proc->root,
-                                            dir,
-                                            false);
-
+    err = com_fs_vfs_lookup(&target, path, pathlen, curr_proc->root, dir, 0);
+    COM_FS_VFS_VNODE_RELEASE(dir);
     if (0 != err) {
-        ret = COM_SYS_SYSCALL_ERR(err);
-        goto end;
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
-    if (E_COM_VNODE_TYPE_LINK != target->type) {
-        ret = COM_SYS_SYSCALL_ERR(EINVAL);
-        goto end;
-    }
-
-    const char *link    = NULL;
-    size_t      linklen = 0;
-    err                 = com_fs_vfs_readlink(&link, &linklen, target);
-
-    if (err) {
-        ret = COM_SYS_SYSCALL_ERR(err);
-        goto end;
-    }
-
-    size_t user_linklen = KMIN(linklen, buflen);
-    err                 = kmemcpy_to_user(buf, link, user_linklen);
-    if (0 != err) {
-        ret = COM_SYS_SYSCALL_ERR(err);
-        goto end;
-    }
-
-    ret = COM_SYS_SYSCALL_OK(user_linklen);
-
-end:
-    COM_FS_FILE_RELEASE(dir_file);
+    // The path is not needed anymore, and symbolic links are shorter than
+    // CONFIG_PATH_MAX (see com_fs_vfs_create)
+    size_t linklen = 0;
+    err            = com_fs_vfs_readlink(&linklen, path, sizeof(path), target);
     COM_FS_VFS_VNODE_RELEASE(target);
-    return ret;
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+
+    size_t user_linklen = KMIN(KMIN(linklen, sizeof(path)), buflen);
+    err                 = kmemcpy_to_user(buf, path, user_linklen);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+
+    return COM_SYS_SYSCALL_OK(user_linklen);
 }

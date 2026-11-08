@@ -51,43 +51,41 @@ COM_SYS_SYSCALL(com_sys_syscall_unlinkat) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
-
-    com_vnode_t *dir       = NULL;
-    com_file_t  *dir_file  = NULL;
-    com_vnode_t *to_unlink = NULL;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
+    com_vnode_t *dir = NULL;
+    int          err = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
-    int vfs_err = com_fs_vfs_lookup(&to_unlink,
-                                    path,
-                                    pathlen,
-                                    curr_proc->root,
-                                    dir,
-                                    false);
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
-        goto end;
+    com_vnode_t *parent = NULL;
+    const char  *name;
+    size_t       namelen;
+    bool         must_dir;
+    err = com_fs_vfs_lookup_parent(&parent,
+                                   &name,
+                                   &namelen,
+                                   &must_dir,
+                                   path,
+                                   pathlen,
+                                   curr_proc->root,
+                                   dir);
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
-    vfs_err = com_fs_vfs_unlink(to_unlink, flags);
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
-        goto end;
+    int vfs_flags = 0;
+    if (AT_REMOVEDIR & flags) {
+        vfs_flags |= COM_FS_VFS_REMOVE_DIR;
+    }
+    if (must_dir) {
+        vfs_flags |= COM_FS_VFS_MUST_DIR;
     }
 
-    ret = COM_SYS_SYSCALL_OK(0);
-
-end:
-    COM_FS_FILE_RELEASE(dir_file);
-    // Need to release after lookup
-    COM_FS_VFS_VNODE_RELEASE(to_unlink);
-    return ret;
+    err = com_fs_vfs_unlink(parent, name, namelen, vfs_flags);
+    COM_FS_VFS_VNODE_RELEASE(parent);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+    return COM_SYS_SYSCALL_OK(0);
 }

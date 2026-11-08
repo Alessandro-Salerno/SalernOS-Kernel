@@ -36,20 +36,26 @@ COM_SYS_SYSCALL(com_sys_syscall_truncate) {
     int   fd   = COM_SYS_SYSCALL_ARG(int, 1);
     off_t size = COM_SYS_SYSCALL_ARG(off_t, 2);
 
-    com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
-    com_proc_t       *curr = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t       *file = com_sys_proc_get_file(curr, fd);
+    if (size < 0) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
 
+    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
+    com_file_t *file = com_sys_proc_get_file(curr, fd);
     if (NULL == file) {
         return COM_SYS_SYSCALL_ERR(EBADF);
     }
 
-    int vfs_ret = com_fs_vfs_truncate(file->vnode, size);
-
-    if (vfs_ret < 0) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_ret);
+    // POSIX.1-2017, ftruncate(): EINVAL if the file is not open for writing
+    int accmode = O_ACCMODE & file->flags;
+    int err     = EINVAL;
+    if (O_WRONLY == accmode || O_RDWR == accmode) {
+        err = com_fs_vfs_truncate(file->vnode, size);
     }
 
     COM_FS_FILE_RELEASE(file);
-    return ret;
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+    return COM_SYS_SYSCALL_OK(0);
 }

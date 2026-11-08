@@ -350,16 +350,10 @@ static int tty_seekable(void *devdata) {
     return ESPIPE;
 }
 
-static int tty_close(void *devdata) {
-    (void)devdata;
-    KASSERT(false);
-}
-
 static int tty_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 0;
     out->st_mode    = 0622; // apparently makes xterm happy
-    out->st_mode |= S_IFCHR;
     return 0;
 }
 
@@ -393,17 +387,27 @@ static int tty_poll(short *revents, void *devdata, short events) {
     return 0;
 }
 
-static com_dev_ops_t TextTtyDevOps = {.read      = tty_read,
+static com_dev_ops_t TextTtyDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
+                                      .read      = tty_read,
                                       .write     = tty_write,
                                       .ioctl     = tty_ioctl,
                                       .isatty    = tty_isatty,
                                       .seekable  = tty_seekable,
-                                      .close     = tty_close,
                                       .stat      = tty_stat,
                                       .poll_head = tty_poll_head,
                                       .poll      = tty_poll};
 
 // TEXT TTY BACKEND INTERFACE
+
+static bool is_ctty(com_proc_t *proc, com_vnode_t *tty_vn) {
+    if (NULL == proc->proc_group || NULL == proc->proc_group->session) {
+        return false;
+    }
+
+    // The tty may change concurrently, see TIOCSCTTY
+    com_proc_session_t *session = proc->proc_group->session;
+    return tty_vn == __atomic_load_n(&session->tty, __ATOMIC_RELAXED);
+}
 
 int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
                                   com_vnode_t            *tty_vn,
@@ -416,6 +420,13 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
         struct winsize ws = {.ws_row = tty_backend->rows,
                              .ws_col = tty_backend->cols};
         return kmemcpy_to_user(buf, &ws, sizeof(ws));
+    }
+
+    if (FIONREAD == op) {
+        ksync_acquire(&tty_backend->slave_rb.condvar);
+        int avail = KRINGBUFFER_AVAIL_READ(&tty_backend->slave_rb);
+        ksync_release(&tty_backend->slave_rb.condvar);
+        return kmemcpy_to_user(buf, &avail, sizeof(avail));
     }
 
     if (TCGETS == op) {
@@ -434,9 +445,7 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
     }
 
     if (TIOCGPGRP == op) {
-        if (NULL == curr_proc->proc_group ||
-            NULL == curr_proc->proc_group->session ||
-            tty_vn != curr_proc->proc_group->session->tty) {
+        if (!is_ctty(curr_proc, tty_vn)) {
             return ENOTTY;
         }
 
@@ -453,15 +462,20 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
             return ENOTTY; // TODO: probably wrog errno
         }
 
-        curr_proc->proc_group->session->tty = tty_vn;
-        tty_backend->fg_pgid                = curr_proc->proc_group->pgid;
+        // The session owns a reference to its controlling terminal
+        com_proc_session_t *session = curr_proc->proc_group->session;
+        COM_FS_VFS_VNODE_HOLD(tty_vn);
+        kspinlock_acquire(&session->pg_lock);
+        com_vnode_t *old = session->tty;
+        __atomic_store_n(&session->tty, tty_vn, __ATOMIC_RELAXED);
+        kspinlock_release(&session->pg_lock);
+        COM_FS_VFS_VNODE_RELEASE(old);
+        tty_backend->fg_pgid = curr_proc->proc_group->pgid;
         return 0;
     }
 
     if (TIOCSPGRP == op) {
-        if (NULL == curr_proc->proc_group ||
-            NULL == curr_proc->proc_group->session ||
-            tty_vn != curr_proc->proc_group->session->tty) {
+        if (!is_ctty(curr_proc, tty_vn)) {
             return ENOTTY;
         }
 
@@ -488,45 +502,45 @@ static int backend_echo(size_t                 *bytes_written,
         bytes_written = &utmp;
     }
 
-    if ((OPOST | ONLCR) & tty_backend->termios.c_oflag) {
-        size_t count = 0;
-        int    e     = 0;
-
-        while (buflen > 0) {
-            char *first_nl = kmemchr(buf, '\n', buflen);
-            if (NULL == first_nl) {
-                goto no_newline;
-            }
-
-            char  *echo_buf = (void *)buf;
-            size_t bw       = 0;
-            size_t echo_len = first_nl - buf;
-
-            e = tty_backend->echo(&bw,
-                                  echo_buf,
-                                  echo_len,
-                                  blocking,
-                                  passthrough);
-            count += bw + 1;
-            if (0 != e) {
-                break;
-            }
-
-            e = tty_backend->echo(&bw, "\r\n", 2, blocking, passthrough);
-            if (0 != e) {
-                break;
-            }
-
-            buf += echo_len + 1;
-            buflen -= echo_len + 1;
-        }
-
-        *bytes_written = count;
-        return e;
+    tcflag_t oflag = tty_backend->termios.c_oflag;
+    if (!(OPOST & oflag) || !(ONLCR & oflag)) {
+        return tty_backend->echo(bytes_written,
+                                 buf,
+                                 buflen,
+                                 blocking,
+                                 passthrough);
     }
 
-no_newline:
-    return tty_backend->echo(bytes_written, buf, buflen, blocking, passthrough);
+    // A newline only counts as written once all of its \r\n is
+    size_t count = 0;
+    int    e     = 0;
+    while (count < buflen) {
+        const char *line = buf + count;
+        const char *nl   = kmemchr(line, '\n', buflen - count);
+        size_t      len  = NULL != nl ? (size_t)(nl - line) : buflen - count;
+        size_t      bw   = 0;
+
+        if (0 != len) {
+            e = tty_backend->echo(&bw, line, len, blocking, passthrough);
+            count += bw;
+            if (0 != e || bw < len) {
+                break;
+            }
+        }
+        if (NULL == nl) {
+            break;
+        }
+
+        bw = 0;
+        e  = tty_backend->echo(&bw, "\r\n", 2, blocking, passthrough);
+        if (0 != e || bw < 2) {
+            break;
+        }
+        count++;
+    }
+
+    *bytes_written = count;
+    return e;
 }
 
 // The backends may hold spinlocks, so they only ever see kernel memory
@@ -903,7 +917,6 @@ int com_io_tty_init_text(com_vnode_t **out,
         goto end;
     }
 
-    tty_dev->type   = E_COM_VNODE_TYPE_CHARDEV;
     tty_data->vnode = tty_dev;
     KDEBUG("tty vn=%X");
 
@@ -931,19 +944,28 @@ static int devtty_open(com_vnode_t **out, void *devdata) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_vnode_t *ctty = curr_proc->proc_group->session->tty;
-
+    com_proc_session_t *session = curr_proc->proc_group->session;
+    kspinlock_acquire(&session->pg_lock);
+    com_vnode_t *ctty = session->tty;
     if (NULL != ctty) {
         COM_FS_VFS_VNODE_HOLD(ctty);
-        *out = ctty;
-        return 0;
+    }
+    kspinlock_release(&session->pg_lock);
+
+    // An open of the controlling terminal, so it gets its own close
+    *out = NULL;
+    if (NULL == ctty) {
+        return ENXIO;
     }
 
-    *out = NULL;
-    return ENXIO;
+    int ret = com_fs_vfs_open(out, ctty);
+    COM_FS_VFS_VNODE_RELEASE(ctty);
+    return ret;
 }
 
-static com_dev_ops_t TtyCloneDevOps = {.open = devtty_open, .stat = tty_stat};
+static com_dev_ops_t TtyCloneDevOps = {.type = E_COM_VNODE_TYPE_CHARDEV,
+                                       .open = devtty_open,
+                                       .stat = tty_stat};
 
 int com_io_tty_devtty_init(com_vnode_t **devtty) {
     KLOG("initializing /dev/tty clone device");

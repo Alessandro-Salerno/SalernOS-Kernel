@@ -115,6 +115,10 @@ COM_SYS_SYSCALL(com_sys_syscall_mmap) {
     int    fd    = COM_SYS_SYSCALL_ARG(int, 5);
     off_t  off   = COM_SYS_SYSCALL_ARG(off_t, 6);
 
+    if (0 == size || (-1 != fd && (off < 0 || 0 != off % ARCH_PAGE_SIZE))) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
     if ((MAP_FIXED & flags) && !ARCH_MMU_RANGE_IS_USER(hint, size)) {
         return COM_SYS_SYSCALL_ERR(ENOMEM);
     }

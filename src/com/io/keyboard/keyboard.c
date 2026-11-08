@@ -85,14 +85,12 @@ static int keyboard_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 512;
     out->st_mode    = 0666;
-    out->st_mode |= S_IFCHR;
-    out->st_dev   = (10 << 8);
-    out->st_rdev  = (10 << 8);
-    out->st_nlink = 1;
+    out->st_rdev    = (10 << 8);
     return 0;
 }
 
-static com_dev_ops_t KeyboardDevOps = {.read      = keyboard_read,
+static com_dev_ops_t KeyboardDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
+                                       .read      = keyboard_read,
                                        .poll_head = keyboard_poll_head,
                                        .poll      = keyboard_poll,
                                        .stat      = keyboard_stat};

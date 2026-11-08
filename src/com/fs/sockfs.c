@@ -24,7 +24,7 @@ static com_vnode_ops_t SockfsNodeOps = {.readv     = com_fs_sockfs_readv,
                                         .ioctl     = com_fs_sockfs_ioctl,
                                         .poll_head = com_fs_sockfs_poll_head,
                                         .poll      = com_fs_sockfs_poll,
-                                        .close     = com_fs_sockfs_close,
+                                        .inactive  = com_fs_sockfs_inactive,
                                         .seekable  = com_fs_sockfs_seekable};
 
 int com_fs_sockfs_readv(kioviter_t  *ioviter,
@@ -79,13 +79,11 @@ int com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events) {
     return COM_IPC_SOCKET_POLL(revents, sockfs_vn->socket, events);
 }
 
-int com_fs_sockfs_close(com_vnode_t *node) {
+// Socket vnodes are only referenced by their files and operations in progress
+void com_fs_sockfs_inactive(com_vnode_t *node) {
     com_socket_vnode_t *sockfs_vn = (void *)node;
-    int                 ret       = COM_IPC_SOCKET_DESTROY(sockfs_vn->socket);
-    if (0 == ret) {
-        com_mm_slab_free(sockfs_vn, sizeof(com_socket_vnode_t));
-    }
-    return ret;
+    KASSERT_CALL(0, ==, COM_IPC_SOCKET_DESTROY(sockfs_vn->socket));
+    com_mm_slab_free(sockfs_vn, sizeof(com_socket_vnode_t));
 }
 
 int com_fs_sockfs_seekable(com_vnode_t *node) {
@@ -95,14 +93,13 @@ int com_fs_sockfs_seekable(com_vnode_t *node) {
 
 // OTHER FUNCTIONS
 
-// NOTE: This seems repeated logic with com_fs_vfs_alloc_vnode, but this can
-// also be called directly, whereas vnode_alloc is called by file system
-// implementations and the socket vnode created there is overriden with the file
-// system's ops etc.
 com_vnode_t *com_fs_sockfs_new(void) {
-    com_vnode_t *sockfs_vn = com_mm_slab_alloc(sizeof(com_socket_vnode_t));
-    sockfs_vn->ops         = &SockfsNodeOps;
-    sockfs_vn->num_ref     = 1;
-    sockfs_vn->type        = E_COM_VNODE_TYPE_SOCKET;
-    return sockfs_vn;
+    com_socket_vnode_t *sockfs_vn = com_mm_slab_alloc(
+        sizeof(com_socket_vnode_t));
+    com_fs_vfs_vnode_init(&sockfs_vn->vnode,
+                          NULL,
+                          E_COM_VNODE_TYPE_SOCKET,
+                          &SockfsNodeOps,
+                          NULL);
+    return &sockfs_vn->vnode;
 }

@@ -72,7 +72,6 @@ static int dev_null_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 0;
     out->st_mode    = 0777;
-    out->st_mode |= S_IFCHR;
     return 0;
 }
 
@@ -83,7 +82,8 @@ static int dev_null_ioctl(void *devdata, uintmax_t op, void *buf) {
     return 0;
 }
 
-static com_dev_ops_t DevNullOps = {.read      = dev_null_read,
+static com_dev_ops_t DevNullOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
+                                   .read      = dev_null_read,
                                    .write     = dev_null_write,
                                    .poll_head = dev_null_poll_head,
                                    .poll      = dev_null_poll,

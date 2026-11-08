@@ -37,11 +37,11 @@ int com_fs_sockfs_writev(size_t      *bytes_written,
                          uintmax_t    off,
                          uintmax_t    flags);
 
-int com_fs_sockfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
-int com_fs_sockfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
-int com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events);
-int com_fs_sockfs_close(com_vnode_t *node);
-int com_fs_sockfs_seekable(com_vnode_t *node);
+int  com_fs_sockfs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
+int  com_fs_sockfs_poll_head(struct com_poll_head **out, com_vnode_t *node);
+int  com_fs_sockfs_poll(short *revents, com_vnode_t *node, short events);
+void com_fs_sockfs_inactive(com_vnode_t *node);
+int  com_fs_sockfs_seekable(com_vnode_t *node);
 
 // OTHER FUNCTIONS
 

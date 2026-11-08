@@ -51,39 +51,26 @@ COM_SYS_SYSCALL(com_sys_syscall_faccessat) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
+    com_vnode_t *dir = NULL;
+    int          err = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
-    com_vnode_t *file_vn = NULL;
     // POSIX says to always follow symlinks here, but Linux 5.8 apparently has
     // an faccessat2() that lets you disable this, so maybe some programs expect
     // it?
-    int vfs_err = com_fs_vfs_lookup(&file_vn,
-                                    path,
-                                    pathlen,
-                                    curr_proc->root,
-                                    dir,
-                                    true);
-
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
-        goto end;
-    }
-
+    com_vnode_t *file_vn = NULL;
+    err                  = com_fs_vfs_lookup(&file_vn,
+                                             path,
+                                             pathlen,
+                                             curr_proc->root,
+                                             dir,
+                                             COM_FS_VFS_LOOKUP_FOLLOW);
     COM_FS_VFS_VNODE_RELEASE(file_vn);
-
-end:
-    COM_FS_FILE_RELEASE(dir_file);
-    return ret;
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+    return COM_SYS_SYSCALL_OK(0);
 }

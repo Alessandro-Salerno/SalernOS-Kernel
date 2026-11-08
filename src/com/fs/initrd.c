@@ -16,6 +16,7 @@
 | along with this program.  If not, see <https://www.gnu.org/licenses/>. |
 *************************************************************************/
 
+#include <errno.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/io/log.h>
@@ -51,26 +52,53 @@ static uintmax_t oct_atoi(const char *s, size_t len) {
     return val;
 }
 
-static void create_node(com_vnode_t      **file,
+static size_t field_len(const char *field, size_t size) {
+    const char *nul = kmemchr(field, '\0', size);
+    return NULL != nul ? (size_t)(nul - field) : size;
+}
+
+// Existing directories are kept and existing files are replaced, as tar does
+static void create_node(com_vnode_t       *dir,
                         const char        *name,
                         size_t             namelen,
-                        com_vnode_t       *dir,
                         struct tar_header *hdr) {
-    if (GNUTAR_DIR == hdr->type) {
-        KASSERT_CALL(0, ==, com_fs_vfs_mkdir(file, dir, name, namelen, 0));
+    if (GNUTAR_DIR == hdr->type || GNUTAR_SYMLINK == hdr->type) {
+        com_vnode_attr_t attr = COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR);
+        if (GNUTAR_SYMLINK == hdr->type) {
+            attr.type      = E_COM_VNODE_TYPE_LINK;
+            attr.target    = hdr->linkname;
+            attr.targetlen = field_len(hdr->linkname, sizeof(hdr->linkname));
+        }
+
+        int ret = com_fs_vfs_create(NULL, dir, name, namelen, &attr);
+        KASSERT(0 == ret || EEXIST == ret);
+        (void)ret;
         return;
     }
 
-    KASSERT_CALL(0, ==, com_fs_vfs_create(file, dir, name, namelen, 0));
+    com_vnode_t *file = NULL;
+    int ret = com_fs_vfs_create(&file,
+                                dir,
+                                name,
+                                namelen,
+                                &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_FILE));
+    if (EEXIST == ret) {
+        ret = com_fs_vfs_lookup(&file, name, namelen, dir, dir, 0);
+        KASSERT(0 != ret || E_COM_VNODE_TYPE_FILE == file->type);
+        if (0 == ret) {
+            ret = com_fs_vfs_truncate(file, 0);
+        }
+    }
+    KASSERT(0 == ret);
+
     void  *contents  = (uint8_t *)hdr + 512;
     size_t file_size = oct_atoi(hdr->size, 11);
     size_t written   = 0;
-    COM_FS_VFS_VNODE_HOLD((*file));
     KASSERT_CALL(0,
                  ==,
-                 com_fs_vfs_write(&written, *file, contents, file_size, 0, 0));
+                 com_fs_vfs_write(&written, file, contents, file_size, 0, 0));
     KASSERT(file_size == written);
-    COM_FS_VFS_VNODE_RELEASE((*file));
+    COM_FS_VFS_VNODE_RELEASE(file);
 }
 
 void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
@@ -97,8 +125,9 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
         size_t file_path_len = 100;
 
         if (GNUTAR_LONG_NAME == hdr->type) {
+            // The size of the long name includes its NUL
             file_path     = (char *)((char *)tar + i + 512);
-            file_path_len = file_size;
+            file_path_len = field_len(file_path, file_size);
             i += 512;
             i += (file_size + 512) & ~511UL;
             hdr       = (void *)((uint8_t *)tar + i);
@@ -114,51 +143,22 @@ void com_fs_initrd_make(com_vnode_t *root, void *tar, size_t tarsize) {
 
         // KDEBUG("extracting file %s", file_path);
 
-        // Remove trailing /'es
-        while (0 < file_path_len && '/' == file_path[file_path_len - 1]) {
-            file_path_len--;
-        }
-
-        const char  *path_end = kmemrchr(file_path, '/', file_path_len);
-        com_vnode_t *dir      = root;
-        // offset into file_path where the ACTUAL name starts
-        size_t file_name_off = 0;
-        // length of the ACTUAL name of the file (not the path)
-        size_t file_name_len = file_path_len;
-
-        // kmemrchr returns NULL only if the character is not found, thus this
-        // can be read as: "if this is a directory"
-        if (NULL != path_end) {
-            size_t sl_len = path_end - file_path;
-            com_fs_vfs_lookup(&dir, file_path, sl_len, root, root, true);
-            KASSERT(NULL != dir);
-            file_name_off = sl_len + 1;
-            file_name_len = file_path_len - sl_len - 1;
-        }
-
-        while (file_name_len > 0 &&
-               '/' == file_path[file_name_off + file_name_len - 1]) {
-            file_name_len--;
-        }
-
-        if (GNUTAR_SYMLINK == hdr->type) {
-            com_fs_vfs_symlink(dir,
-                               file_path + file_name_off,
-                               file_name_len,
-                               hdr->linkname,
-                               kstrlen(hdr->linkname));
-        } else {
-            com_vnode_t *file = NULL;
-            create_node(&file,
-                        file_path + file_name_off,
-                        file_name_len,
-                        dir,
-                        hdr);
-        }
-
-        if (dir != root) {
-            COM_FS_VFS_VNODE_RELEASE(dir);
-        }
+        com_vnode_t *dir = NULL;
+        const char  *name;
+        size_t       namelen;
+        bool         must_dir;
+        KASSERT_CALL(0,
+                     ==,
+                     com_fs_vfs_lookup_parent(&dir,
+                                              &name,
+                                              &namelen,
+                                              &must_dir,
+                                              file_path,
+                                              file_path_len,
+                                              root,
+                                              root));
+        create_node(dir, name, namelen, hdr);
+        COM_FS_VFS_VNODE_RELEASE(dir);
 
     skip:
         i += 512;

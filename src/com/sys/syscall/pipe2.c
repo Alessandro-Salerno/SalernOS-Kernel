@@ -40,9 +40,12 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
 
     com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
     int         rfd  = com_sys_proc_next_fd(curr);
-    int         wfd  = com_sys_proc_next_fd(curr);
+    int         wfd  = -1 != rfd ? com_sys_proc_next_fd(curr) : -1;
 
-    if (-1 == rfd || -1 == wfd) {
+    if (-1 == wfd) {
+        if (-1 != rfd) {
+            com_sys_proc_unreserve_fd(curr, rfd);
+        }
         return COM_SYS_SYSCALL_ERR(EMFILE);
     }
 
@@ -62,10 +65,9 @@ COM_SYS_SYSCALL(com_sys_syscall_pipe2) {
     wf->num_ref    = 1;
     wf->off        = 0;
 
-    curr->fd[rfd].file  = rf;
-    curr->fd[wfd].file  = wf;
-    curr->fd[rfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
-    curr->fd[wfd].flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
+    uintmax_t fd_flags = (O_CLOEXEC & flags) ? FD_CLOEXEC : 0;
+    com_sys_proc_install_fd(curr, rfd, rf, fd_flags);
+    com_sys_proc_install_fd(curr, wfd, wf, fd_flags);
 
     int kfildes[2] = {rfd, wfd};
     int copy_ret   = kmemcpy_to_user(fildes, kfildes, sizeof(kfildes));

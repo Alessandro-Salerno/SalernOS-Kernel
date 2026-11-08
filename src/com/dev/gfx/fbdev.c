@@ -61,7 +61,6 @@ static int fbdev_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 0;
     out->st_mode    = 0777;
-    out->st_mode |= S_IFCHR;
     return 0;
 }
 
@@ -87,7 +86,8 @@ static int fbdev_mmap(void             **out,
     return (NULL == *out) ? ENOMEM : 0;
 }
 
-static com_dev_ops_t FbdevOps = {.ioctl = fbdev_ioctl,
+static com_dev_ops_t FbdevOps = {.type  = E_COM_VNODE_TYPE_CHARDEV,
+                                 .ioctl = fbdev_ioctl,
                                  .mmap  = fbdev_mmap,
                                  .stat  = fbdev_stat};
 

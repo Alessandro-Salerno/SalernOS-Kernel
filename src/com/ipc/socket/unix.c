@@ -37,8 +37,8 @@ struct unix_socket {
     com_socket_addr_t   binding_path;
     struct unix_socket *peer;
 
-    // Used only by server side
-    struct unix_socket_binding *srv_binding;
+    // Used only by server side. srv_vnode is bound to the socket
+    com_vnode_t *srv_vnode;
     TAILQ_HEAD(, unix_socket) srv_acceptq;
     TAILQ_HEAD(, unix_socket) srv_connections;
     com_waitlist_t srv_acceptwait;
@@ -46,12 +46,6 @@ struct unix_socket {
 
     // Used only by client side
     TAILQ_ENTRY(unix_socket) cln_connent;
-};
-
-struct unix_socket_binding {
-    struct unix_socket *server;
-    com_vnode_t        *vnode;
-    ksync_t             lock;
 };
 
 // Foward declaration, defined below
@@ -88,6 +82,7 @@ static int unix_socket_rb_check_hangup(size_t        *new_nbytes,
 static struct unix_socket *unix_socket_alloc(void) {
     struct unix_socket *sock = com_mm_slab_alloc(sizeof(struct unix_socket));
     sock->socket.ops         = &UnixSocketOps;
+    sock->socket.type        = E_COM_SOCKET_TYPE_UNIX;
     size_t rb_pages          = CONFIG_UNIX_SOCK_RB_SIZE / ARCH_PAGE_SIZE + 1;
     void  *rb_buff = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(rb_pages));
     KRINGBUFFER_INIT_CUSTOM(&sock->rb, rb_buff, CONFIG_UNIX_SOCK_RB_SIZE);
@@ -112,35 +107,42 @@ static void unix_socket_poll_callback(void *arg) {
     kspinlock_release(&sock->pollhead.lock);
 }
 
+// LOCKING: the only place a socket lock is held before a binding lock. connect
+// takes them in the other order, but only once the binding exists
 static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
     struct unix_socket *unix_socket = (void *)socket;
     com_proc_t         *curr_proc   = ARCH_CPU_GET_THREAD()->proc;
+    com_vnode_t        *cwd         = com_sys_proc_get_cwd(curr_proc);
+    com_vnode_t        *socket_vn   = NULL;
     int                 ret         = 0;
     ksync_acquire(&unix_socket->socket.lock);
 
-    struct unix_socket_binding *binding = com_mm_slab_alloc(
-        sizeof(struct unix_socket_binding));
+    if (E_COM_SOCKET_STATE_UNBOUND != unix_socket->socket.state) {
+        ret = EINVAL;
+        goto end;
+    }
 
-    com_vnode_t *socket_vn = NULL;
-    ret                    = com_fs_vfs_create_any(&socket_vn,
-                                                   addr->local.path,
-                                                   addr->local.pathlen,
-                                                   curr_proc->root,
-                                                   atomic_load(&curr_proc->cwd),
-                                                   0,
-                                                   true,
-                                                   true,
-                                                   com_fs_vfs_mksocket);
+    ret = com_fs_vfs_create_path(&socket_vn,
+                                 addr->local.path,
+                                 addr->local.pathlen,
+                                 curr_proc->root,
+                                 cwd,
+                                 &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_SOCKET),
+                                 COM_FS_VFS_CREATE_EXCL);
+    if (EEXIST == ret) {
+        ret = EADDRINUSE;
+    }
     if (0 != ret) {
         goto end;
     }
 
-    binding->server                         = unix_socket;
-    binding->vnode                          = socket_vn;
-    socket_vn->binding                      = binding;
-    unix_socket->srv_binding                = binding;
+    ret = com_fs_vfs_bind(socket_vn, unix_socket);
+    if (0 != ret) {
+        goto end;
+    }
+
+    unix_socket->srv_vnode                  = socket_vn;
     unix_socket->binding_path.local.pathlen = addr->local.pathlen;
-    KSYNC_INIT_MUTEX(&binding->lock);
     kmemcpy(unix_socket->binding_path.local.path,
             addr->local.path,
             addr->local.pathlen);
@@ -148,6 +150,10 @@ static int unix_socket_bind(com_socket_t *socket, com_socket_addr_t *addr) {
 
 end:
     ksync_release(&unix_socket->socket.lock);
+
+    // The binding owns its own reference
+    COM_FS_VFS_VNODE_RELEASE(socket_vn);
+    COM_FS_VFS_VNODE_RELEASE(cwd);
     return ret;
 }
 
@@ -197,6 +203,7 @@ static int unix_socket_recv(com_socket_t *socket, com_socket_desc_t *desc) {
 static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     struct unix_socket *client    = (void *)socket;
     com_proc_t         *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    com_vnode_t        *cwd       = com_sys_proc_get_cwd(curr_proc);
     com_vnode_t        *server_vn = NULL;
     int                 ret       = 0;
     ksync_acquire(&client->socket.lock);
@@ -215,8 +222,8 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
                             addr->local.path,
                             addr->local.pathlen,
                             curr_proc->root,
-                            atomic_load(&curr_proc->cwd),
-                            true);
+                            cwd,
+                            COM_FS_VFS_LOOKUP_FOLLOW);
     if (0 != ret) {
         goto end;
     }
@@ -226,17 +233,10 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
         goto end;
     }
 
-    struct unix_socket_binding *binding = server_vn->binding;
-    if (NULL == binding) {
-        ret = ECONNREFUSED;
-        goto end;
-    }
-
-    ksync_acquire(&binding->lock);
-    struct unix_socket *server = binding->server;
-    ksync_release(&binding->lock);
-
+    // destroy unbinds first, so the server lives until the binding is released
+    struct unix_socket *server = com_fs_vfs_binding_acquire(server_vn);
     if (NULL == server) {
+        com_fs_vfs_binding_release(server_vn);
         ret = ECONNREFUSED;
         goto end;
     }
@@ -245,6 +245,7 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     if (E_COM_SOCKET_STATE_LISTENING != server->socket.state) {
         ret = ECONNREFUSED;
         ksync_release(&server->socket.lock);
+        com_fs_vfs_binding_release(server_vn);
         goto end;
     }
 
@@ -267,10 +268,12 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     ksync_notify(&server->socket.lock, &server->srv_acceptwait);
     ksync_release(&server->socket.lock);
     unix_socket_poll_callback(server);
+    com_fs_vfs_binding_release(server_vn);
 
 end:
     ksync_release(&client->socket.lock);
     COM_FS_VFS_VNODE_RELEASE(server_vn);
+    COM_FS_VFS_VNODE_RELEASE(cwd);
     return ret;
 }
 
@@ -351,7 +354,7 @@ static int unix_socket_getname(com_socket_addr_t *out, com_socket_t *socket) {
     int                 ret         = 0;
     ksync_acquire(&unix_socket->socket.lock);
 
-    if (NULL == unix_socket->srv_binding) {
+    if (NULL == unix_socket->srv_vnode) {
         out->local.path[0] = 0;
         out->local.pathlen = 0;
         goto end;
@@ -419,6 +422,12 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
 static int unix_socket_destroy(com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
     struct unix_socket *peer        = unix_socket->peer;
+
+    // After this, no connect can reach the socket (see connect)
+    if (NULL != unix_socket->srv_vnode) {
+        com_fs_vfs_unbind(unix_socket->srv_vnode, unix_socket);
+        unix_socket->srv_vnode = NULL;
+    }
 
     ksync_acquire(&unix_socket->socket.lock);
     unix_socket->peer = NULL;

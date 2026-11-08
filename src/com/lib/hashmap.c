@@ -56,16 +56,31 @@ get_entry(khashmap_t *hashmap, void *key, size_t key_size, uintmax_t hash) {
     return entry;
 }
 
-int khashmap_init(khashmap_t *hashmap, size_t size) {
-    hashmap->capacity = size;
-    hashmap->entries  = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(
-        sizeof(khashmap_entry_t) * size / ARCH_PAGE_SIZE + 1));
+static size_t bucket_pages(size_t capacity) {
+    size_t size = capacity * sizeof(struct khashmap_entry_tailq);
+    return (size + ARCH_PAGE_SIZE - 1) / ARCH_PAGE_SIZE;
+}
 
-    if (NULL == hashmap->entries) {
+static void entry_free(khashmap_entry_t *entry) {
+    com_mm_slab_free(entry->key, entry->key_size);
+    com_mm_slab_free(entry, sizeof(khashmap_entry_t));
+}
+
+int khashmap_init(khashmap_t *hashmap, size_t size) {
+    size_t capacity = 1;
+    while (capacity < size) {
+        capacity *= 2;
+    }
+
+    void *phys = com_mm_pmm_alloc_many(bucket_pages(capacity));
+    if (NULL == phys) {
         return ENOMEM;
     }
 
-    for (size_t i = 0; i < size; i++) {
+    hashmap->capacity    = capacity;
+    hashmap->num_entries = 0;
+    hashmap->entries     = (void *)ARCH_PHYS_TO_HHDM(phys);
+    for (size_t i = 0; i < capacity; i++) {
         TAILQ_INIT(&hashmap->entries[i]);
     }
 
@@ -138,6 +153,7 @@ int khashmap_remove(khashmap_t *hashmap, void *key, size_t key_size) {
 
     TAILQ_REMOVE(bucket_head, entry, entries);
     hashmap->num_entries--;
+    entry_free(entry);
     return 0;
 }
 
@@ -163,8 +179,18 @@ int khashmap_default(void      **out,
     return khashmap_get(out, hashmap, key, key_size);
 }
 
-// TODO: implement hashmap destroy
 int khashmap_destroy(khashmap_t *hashmap) {
-    (void)hashmap;
+    for (size_t i = 0; i < hashmap->capacity; i++) {
+        khashmap_entry_t *entry, *next;
+        TAILQ_FOREACH_SAFE(entry, &hashmap->entries[i], entries, next) {
+            entry_free(entry);
+        }
+    }
+
+    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(hashmap->entries),
+                         bucket_pages(hashmap->capacity));
+    hashmap->entries     = NULL;
+    hashmap->capacity    = 0;
+    hashmap->num_entries = 0;
     return 0;
 }

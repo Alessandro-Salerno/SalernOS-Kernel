@@ -31,6 +31,7 @@ TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/thread.h>
 #include <lib/spinlock.h>
+#include <lib/util.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -98,9 +99,9 @@ typedef struct com_proc {
     struct com_sigaction       *sigaction[NSIG];
     struct com_waitlist         stop_waitlist;
 
-    // File system
+    // Both own a reference, cwd is protected by fd_lock
     KCACHE_FRIENDLY com_vnode_t *root;
-    _Atomic(com_vnode_t *)       cwd;
+    com_vnode_t                 *cwd;
     kspinlock_t                  fd_lock;
     int                          next_fd;
     int                          max_fd;
@@ -116,7 +117,21 @@ com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
 void        com_sys_proc_destroy(com_proc_t *proc);
 
 // File management
-int             com_sys_proc_next_fd(com_proc_t *proc);
+
+// NOTE: next_fd needs to distinguish file descriptors that are free (all zero,
+// or file == NULL) from those that have been already handed out but that have
+// no backing file yet. This can happen because operations like openat() need to
+// reserve a file descriptor before they have a vnode/file to install. The
+// transition state is currently represented by the "reserved" file descriptor
+// flag, and these functions handle it correctly
+
+int com_sys_proc_next_fd(com_proc_t *proc);
+// The caller's reference to file goes to the table
+void            com_sys_proc_install_fd(com_proc_t *proc,
+                                        int         fd,
+                                        com_file_t *file,
+                                        uintmax_t   fd_flags);
+void            com_sys_proc_unreserve_fd(com_proc_t *proc, int fd);
 com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
 com_file_t     *com_sys_proc_get_file_nolock(com_proc_t *proc, int fd);
@@ -128,10 +143,10 @@ int com_sys_proc_close_file_nolock(com_file_t **out_file,
                                    com_proc_t  *proc,
                                    int          fd);
 int com_sys_proc_close_file(com_proc_t *proc, int fd);
-int com_sys_proc_get_directory(com_file_t  **dir_file,
-                               com_vnode_t **dir,
-                               com_proc_t   *proc,
-                               int           dir_fd);
+// These return referenced vnodes, set_cwd takes its own reference
+com_vnode_t *com_sys_proc_get_cwd(com_proc_t *proc);
+void         com_sys_proc_set_cwd(com_proc_t *proc, com_vnode_t *cwd);
+int com_sys_proc_get_directory(com_vnode_t **dir, com_proc_t *proc, int dir_fd);
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
 com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
 

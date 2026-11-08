@@ -20,78 +20,18 @@
 
 #include <kernel/com/fs/vfs.h>
 
-#define COM_FS_TMPFS_ATTR_GHOST     1
-#define COM_FS_TMPFS_ATTR_NO_DIRENT (1 << 1)
+typedef struct com_fs_tmpfs_special {
+    com_vnode_ops_t *ops;
+    void *private;
+} com_fs_tmpfs_special_t;
 
-// VFS OPS
+void com_fs_tmpfs_init(void);
+int  com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint);
 
-int com_fs_tmpfs_vget(com_vnode_t **out, com_vfs_t *vfs, void *inode);
-int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint);
+int com_fs_tmpfs_new_orphan(com_vnode_t           **out,
+                            com_vfs_t              *vfs,
+                            const com_vnode_attr_t *attr);
 
-// VNODE OPS
-
-int com_fs_tmpfs_create(com_vnode_t **out,
-                        com_vnode_t  *dir,
-                        const char   *name,
-                        size_t        namelen,
-                        uintmax_t     attr,
-                        uintmax_t     fsattr);
-int com_fs_tmpfs_mkdir(com_vnode_t **out,
-                       com_vnode_t  *parent,
-                       const char   *name,
-                       size_t        namelen,
-                       uintmax_t     attr,
-                       uintmax_t     fsattr);
-int com_fs_tmpfs_lookup(com_vnode_t **out,
-                        com_vnode_t  *dir,
-                        const char   *name,
-                        size_t        len);
-int com_fs_tmpfs_read(void        *buf,
-                      size_t       buflen,
-                      size_t      *bytes_read,
-                      com_vnode_t *node,
-                      uintmax_t    off,
-                      uintmax_t    flags);
-int com_fs_tmpfs_write(size_t      *bytes_written,
-                       com_vnode_t *node,
-                       void        *buf,
-                       size_t       buflen,
-                       uintmax_t    off,
-                       uintmax_t    flags);
-int com_fs_tmpfs_symlink(com_vnode_t *dir,
-                         const char  *linkname,
-                         size_t       linknamelen,
-                         const char  *path,
-                         size_t       pathlen);
-int com_fs_tmpfs_readlink(const char **path,
-                          size_t      *pathlen,
-                          com_vnode_t *link);
-int com_fs_tmpfs_unlink(com_vnode_t *node, int flags);
-int com_fs_tmpfs_stat(struct stat *out, com_vnode_t *node);
-int com_fs_tmpfs_truncate(com_vnode_t *node, size_t size);
-int com_fs_tmpfs_readdir(void        *buf,
-                         size_t       buflen,
-                         size_t      *bytes_read,
-                         com_vnode_t *dir,
-                         uintmax_t    off);
-int com_fs_tmpfs_vnctl(com_vnode_t *node, uintmax_t op, void *buf);
-int com_fs_tmpfs_mksocket(com_vnode_t **out,
-                          com_vnode_t  *dir,
-                          const char   *name,
-                          size_t        namelen,
-                          uintmax_t     attr,
-                          uintmax_t     fsattr);
-int com_fs_tmpfs_mmap(void             **out,
-                      com_vnode_t       *node,
-                      com_vmm_context_t *vmm_context,
-                      void              *hint,
-                      size_t             size,
-                      int                vmm_flags,
-                      arch_mmu_flags_t   mmu_flags,
-                      uintmax_t          off);
-
-// OTHER FUNCTIONS
-
-void  com_fs_tmpfs_set_other(com_vnode_t *vnode, void *data);
-void *com_fs_tmpfs_get_other(com_vnode_t *vnode);
-ino_t com_fs_tmpfs_get_ino(com_vnode_t *vnode);
+void   *com_fs_tmpfs_private(com_vnode_t *vnode);
+nlink_t com_fs_tmpfs_nlink(com_vnode_t *vnode);
+void    com_fs_tmpfs_inactive(com_vnode_t *vnode);

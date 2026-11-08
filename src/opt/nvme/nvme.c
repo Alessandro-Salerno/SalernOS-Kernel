@@ -449,15 +449,14 @@ static int nvme_write(size_t   *bytes_written,
 static int nvme_stat(struct stat *out, void *devdata) {
     struct nvme_device *drive = devdata;
     out->st_blksize           = 1 << drive->blocks_shift;
-    out->st_ino               = (ino_t)devdata;
-    out->st_mode              = 0777 | S_IFBLK;
+    out->st_mode              = 0777;
     out->st_blocks            = drive->num_blocks;
-    out->st_nlink             = 1;
     out->st_size              = drive->size;
     return 0;
 }
 
-static com_dev_ops_t NVMEDevOps = {.read  = nvme_read,
+static com_dev_ops_t NVMEDevOps = {.type  = E_COM_VNODE_TYPE_BLOCKDEV,
+                                   .read  = nvme_read,
                                    .write = nvme_write,
                                    .stat  = nvme_stat};
 

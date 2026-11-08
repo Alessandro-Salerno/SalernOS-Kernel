@@ -25,7 +25,7 @@
 
 TAILQ_HEAD(khashmap_entry_tailq, khashmap_entry);
 
-#define KHASHMAP_DEFAULT_SIZE 16376
+#define KHASHMAP_DEFAULT_SIZE 16384
 
 #define KHASHMAP_INIT(hm_ptr) khashmap_init((hm_ptr), KHASHMAP_DEFAULT_SIZE)
 #define KHASHMAP_SET(hm_ptr, key, value) \
@@ -59,6 +59,7 @@ typedef struct hashamp {
     struct khashmap_entry_tailq *entries;
 } khashmap_t;
 
+// NOTE: size is rounded up to a power of 2, buckets are whole pages
 int khashmap_init(khashmap_t *hashmap, size_t size);
 int khashmap_set(khashmap_t *hashmap, void *key, size_t key_size, void *value);
 int khashmap_put(khashmap_t *hashmap, void *key, size_t key_size, void *value);

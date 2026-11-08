@@ -17,6 +17,7 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -43,10 +44,25 @@ COM_SYS_SYSCALL(com_sys_syscall_dup3) {
     com_file_t       *file        = NULL;
 
     kspinlock_acquire(&curr_proc->fd_lock);
-    com_sys_proc_close_file_nolock(&file, curr_proc, new_fd);
-    int dup_ret = com_sys_proc_duplicate_file_nolock(curr_proc, new_fd, old_fd);
-    if (dup_ret < 0) {
-        ret = COM_SYS_SYSCALL_ERR(-dup_ret);
+
+    // POSIX.1-2017, dup2(): new_fd is only closed if old_fd is valid, and
+    // nothing happens if they are equal
+    com_filedesc_t *old_desc = com_sys_proc_get_fildesc_nolock(curr_proc,
+                                                               old_fd);
+    if (NULL == old_desc || NULL == old_desc->file || new_fd < 0 ||
+        new_fd >= CONFIG_OPEN_MAX) {
+        ret = COM_SYS_SYSCALL_ERR(EBADF);
+    } else if (curr_proc->fd[new_fd].reserved) {
+        // As Linux: new_fd is being allocated by another thread
+        ret = COM_SYS_SYSCALL_ERR(EBUSY);
+    } else if (old_fd != new_fd) {
+        com_sys_proc_close_file_nolock(&file, curr_proc, new_fd);
+        int dup_ret = com_sys_proc_duplicate_file_nolock(curr_proc,
+                                                         new_fd,
+                                                         old_fd);
+        if (dup_ret < 0) {
+            ret = COM_SYS_SYSCALL_ERR(-dup_ret);
+        }
     }
 
     kspinlock_release(&curr_proc->fd_lock);

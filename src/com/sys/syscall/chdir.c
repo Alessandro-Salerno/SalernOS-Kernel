@@ -46,17 +46,17 @@ COM_SYS_SYSCALL(com_sys_syscall_chdir) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_vnode_t *old_cwd = atomic_load(&curr_proc->cwd);
+    com_vnode_t *cwd     = com_sys_proc_get_cwd(curr_proc);
     com_vnode_t *new_cwd = NULL;
-    int          lk_ret  = com_fs_vfs_lookup(&new_cwd,
+    int          err     = com_fs_vfs_lookup(&new_cwd,
                                              path,
                                              pathlen,
                                              curr_proc->root,
-                                             old_cwd,
-                                             true);
-
-    if (0 != lk_ret || NULL == new_cwd) {
-        return COM_SYS_SYSCALL_ERR(lk_ret);
+                                             cwd,
+                                             COM_FS_VFS_LOOKUP_FOLLOW);
+    COM_FS_VFS_VNODE_RELEASE(cwd);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
     if (E_COM_VNODE_TYPE_DIR != new_cwd->type) {
@@ -64,8 +64,7 @@ COM_SYS_SYSCALL(com_sys_syscall_chdir) {
         return COM_SYS_SYSCALL_ERR(ENOTDIR);
     }
 
-    atomic_store(&curr_proc->cwd, new_cwd);
-    COM_FS_VFS_VNODE_RELEASE(old_cwd);
-
+    com_sys_proc_set_cwd(curr_proc, new_cwd);
+    COM_FS_VFS_VNODE_RELEASE(new_cwd);
     return COM_SYS_SYSCALL_OK(0);
 }

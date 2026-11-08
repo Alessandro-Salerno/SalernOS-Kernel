@@ -53,34 +53,24 @@ COM_SYS_SYSCALL(com_sys_syscall_mkdirat) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
-
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
+    com_vnode_t *dir = NULL;
+    int          err = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
 
-    int vfs_err = com_fs_vfs_create_any(NULL,
-                                        path,
-                                        pathlen,
-                                        curr_proc->root,
-                                        dir,
-                                        0,
-                                        true,
-                                        false,
-                                        com_fs_vfs_mkdir);
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+    com_vnode_t *new_dir = NULL;
+    err = com_fs_vfs_create_path(&new_dir,
+                                 path,
+                                 pathlen,
+                                 curr_proc->root,
+                                 dir,
+                                 &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR),
+                                 COM_FS_VFS_CREATE_EXCL);
+    COM_FS_VFS_VNODE_RELEASE(new_dir);
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
-
-end:
-    COM_FS_FILE_RELEASE(dir_file);
-    return ret;
+    return COM_SYS_SYSCALL_OK(0);
 }

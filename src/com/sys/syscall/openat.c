@@ -26,7 +26,7 @@
 #include <lib/spinlock.h>
 #include <lib/str.h>
 #include <lib/util.h>
-#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 // SYSCALL: openat(int dir_fd, const struct syscall_str *path, int flags)
@@ -50,92 +50,102 @@ COM_SYS_SYSCALL(com_sys_syscall_openat) {
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
+    int           accmode     = O_ACCMODE & flags;
+    bool          writable    = O_WRONLY == accmode || O_RDWR == accmode;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
-
-    com_vnode_t *dir      = NULL;
-    com_file_t  *dir_file = NULL;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
-    }
-
-    int          vfs_err = 0;
+    com_vnode_t *dir     = NULL;
     com_vnode_t *file_vn = NULL;
+    com_vnode_t *open_vn = NULL;
+    int          fd      = -1;
+    int          err     = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
+    if (0 != err) {
+        goto end;
+    }
 
-    // TODO: race condition here. File could be deleted or created while we look
-    // it up
+    int vfs_flags = (O_NOFOLLOW & flags) ? 0 : COM_FS_VFS_LOOKUP_FOLLOW;
     if (O_CREAT & flags) {
-        vfs_err = com_fs_vfs_create_any(&file_vn,
-                                        path,
-                                        pathlen,
-                                        curr_proc->root,
-                                        dir,
-                                        0,
-                                        O_EXCL & flags,
-                                        !(O_NOFOLLOW & flags),
-                                        com_fs_vfs_create);
-        if (0 != vfs_err) {
-            ret = COM_SYS_SYSCALL_ERR(vfs_err);
-            goto end;
+        if (O_EXCL & flags) {
+            vfs_flags |= COM_FS_VFS_CREATE_EXCL;
         }
+        err = com_fs_vfs_create_path(&file_vn,
+                                     path,
+                                     pathlen,
+                                     curr_proc->root,
+                                     dir,
+                                     &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_FILE),
+                                     vfs_flags);
     } else {
-        vfs_err = com_fs_vfs_lookup(&file_vn,
-                                    path,
-                                    pathlen,
-                                    curr_proc->root,
-                                    dir,
-                                    !(O_NOFOLLOW & flags));
-        if (0 != vfs_err) {
-            ret = COM_SYS_SYSCALL_ERR(vfs_err);
+        err = com_fs_vfs_lookup(&file_vn,
+                                path,
+                                pathlen,
+                                curr_proc->root,
+                                dir,
+                                vfs_flags);
+    }
+    if (0 != err) {
+        goto end;
+    }
+
+    // POSIX.1-2017, open(): O_NOFOLLOW on a symbolic link fails with ELOOP, and
+    // O_DIRECTORY on anything else than a directory with ENOTDIR
+    if (E_COM_VNODE_TYPE_LINK == file_vn->type) {
+        err = ELOOP;
+        goto end;
+    }
+
+    bool is_dir = E_COM_VNODE_TYPE_DIR == file_vn->type;
+    if ((O_DIRECTORY & flags) && !is_dir) {
+        err = ENOTDIR;
+        goto end;
+    }
+
+    if (is_dir && writable) {
+        err = EISDIR;
+        goto end;
+    }
+
+    if (writable && com_fs_vfs_readonly(file_vn)) {
+        err = EROFS;
+        goto end;
+    }
+
+    if ((O_TRUNC & flags) && writable &&
+        E_COM_VNODE_TYPE_FILE == file_vn->type) {
+        err = com_fs_vfs_truncate(file_vn, 0);
+        if (0 != err) {
             goto end;
         }
     }
 
-    KASSERT(NULL != file_vn);
-
-    com_vnode_t *new_vn   = NULL;
-    int          open_ret = com_fs_vfs_open(&new_vn, file_vn);
-    if (0 != open_ret) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        ret = COM_SYS_SYSCALL_ERR(open_ret);
+    // The vnode of the open file may be a new one (e.g., /dev/ptmx)
+    err = com_fs_vfs_open(&open_vn, file_vn);
+    if (0 != err) {
         goto end;
     }
 
-    // If the open call has spawned a new vnode (as is the case, for example,
-    // for /dev/ptmx)
-    if (new_vn != file_vn && NULL != new_vn) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        file_vn = new_vn;
-    }
-
-    if ((O_DIRECTORY & flags) && E_COM_VNODE_TYPE_DIR != file_vn->type) {
-        COM_FS_VFS_VNODE_RELEASE(file_vn);
-        ret = COM_SYS_SYSCALL_ERR(ENOTDIR);
-        goto end;
-    }
-
-    int fd = com_sys_proc_next_fd(curr_proc);
+    // TODO: reserve this before creating or truncating. With a full table, open
+    // fails with EMFILE after the file was changed (POSIX.1-2017, open())
+    fd = com_sys_proc_next_fd(curr_proc);
     if (-1 == fd) {
-        ret.err = EMFILE;
+        com_fs_vfs_close(open_vn);
+        COM_FS_VFS_VNODE_RELEASE(open_vn);
+        err = EMFILE;
         goto end;
     }
 
-    curr_proc->fd[fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *file       = curr_proc->fd[fd].file;
-    file->vnode            = file_vn;
-    file->flags            = flags;
-    file->num_ref          = 1;
-    file->off              = 0;
-    ret.value              = fd;
-    KDEBUG("returning fd=%d (file=%p, vn=%p) for %s", fd, file, file_vn, path);
+    com_file_t *file = com_mm_slab_alloc(sizeof(com_file_t));
+    file->vnode      = open_vn;
+    file->flags      = flags;
+    file->num_ref    = 1;
+    file->off        = 0;
+    com_sys_proc_install_fd(curr_proc, fd, file, 0);
+    KDEBUG("returning fd=%d for %s", fd, path);
 
 end:
-    COM_FS_FILE_RELEASE(dir_file);
-    return ret;
+    COM_FS_VFS_VNODE_RELEASE(file_vn);
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+    return COM_SYS_SYSCALL_OK(fd);
 }

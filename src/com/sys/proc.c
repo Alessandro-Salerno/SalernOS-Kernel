@@ -52,18 +52,22 @@ static void proc_notify_parent(com_proc_t *proc) {
     }
 }
 
+static bool fd_free(com_proc_t *proc, int fd) {
+    return NULL == proc->fd[fd].file && !proc->fd[fd].reserved;
+}
+
 static void proc_update_fd_hint(com_proc_t *proc) {
     // Best case: there's a file after the hint
     for (; proc->next_fd < CONFIG_OPEN_MAX; proc->next_fd++) {
-        if (NULL == proc->fd[proc->next_fd].file) {
+        if (fd_free(proc, proc->next_fd)) {
             goto end;
         }
     }
 
     // Worst case: retry from the start, files might have been liberated without
     // calling close
-    for (proc->next_fd = 0; proc->next_fd < CONFIG_OPEN_MAX &&
-                            NULL != proc->fd[proc->next_fd].file;
+    for (proc->next_fd = 0;
+         proc->next_fd < CONFIG_OPEN_MAX && !fd_free(proc, proc->next_fd);
          proc->next_fd++);
 end:
     proc->max_fd = KMAX(proc->max_fd, proc->next_fd);
@@ -137,19 +141,41 @@ void com_sys_proc_destroy(com_proc_t *proc) {
 
 int com_sys_proc_next_fd(com_proc_t *proc) {
     kspinlock_acquire(&proc->fd_lock);
-    int ret = proc->next_fd;
-
-    // Update next_fd to point to the first free file descriptor
-    proc->next_fd++;
-    proc_update_fd_hint(proc);
-
-    kspinlock_release(&proc->fd_lock);
-
-    if (ret >= CONFIG_OPEN_MAX) {
-        return -1;
+    if (proc->next_fd >= CONFIG_OPEN_MAX || !fd_free(proc, proc->next_fd)) {
+        proc_update_fd_hint(proc);
     }
 
+    int ret = proc->next_fd;
+    if (ret < CONFIG_OPEN_MAX) {
+        proc->fd[ret].reserved = true;
+        proc->next_fd++;
+        proc_update_fd_hint(proc);
+    } else {
+        ret = -1;
+    }
+
+    kspinlock_release(&proc->fd_lock);
     return ret;
+}
+
+void com_sys_proc_install_fd(com_proc_t *proc,
+                             int         fd,
+                             com_file_t *file,
+                             uintmax_t   fd_flags) {
+    kspinlock_acquire(&proc->fd_lock);
+    KASSERT(proc->fd[fd].reserved && NULL == proc->fd[fd].file);
+    proc->fd[fd] = (com_filedesc_t){.file = file, .flags = fd_flags};
+    kspinlock_release(&proc->fd_lock);
+}
+
+void com_sys_proc_unreserve_fd(com_proc_t *proc, int fd) {
+    kspinlock_acquire(&proc->fd_lock);
+    KASSERT(proc->fd[fd].reserved && NULL == proc->fd[fd].file);
+    proc->fd[fd].reserved = false;
+    if (fd < proc->next_fd) {
+        proc->next_fd = fd;
+    }
+    kspinlock_release(&proc->fd_lock);
 }
 
 com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd) {
@@ -157,7 +183,7 @@ com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    if (fd > CONFIG_OPEN_MAX || fd < 0) {
+    if (fd >= CONFIG_OPEN_MAX || fd < 0) {
         return NULL;
     }
 
@@ -177,7 +203,7 @@ com_file_t *com_sys_proc_get_file_nolock(com_proc_t *proc, int fd) {
         return NULL;
     }
 
-    if (fd > CONFIG_OPEN_MAX || fd < 0) {
+    if (fd >= CONFIG_OPEN_MAX || fd < 0) {
         return NULL;
     }
 
@@ -189,15 +215,17 @@ com_file_t *com_sys_proc_get_file_nolock(com_proc_t *proc, int fd) {
 int com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
                                        int         new_fd,
                                        int         old_fd) {
-    if (old_fd < 0 || old_fd > CONFIG_OPEN_MAX || new_fd < 0 ||
-        new_fd > CONFIG_OPEN_MAX) {
+    if (old_fd < 0 || old_fd >= CONFIG_OPEN_MAX || new_fd < 0 ||
+        new_fd >= CONFIG_OPEN_MAX) {
         return -EINVAL;
     }
 
-    for (; NULL != proc->fd[new_fd].file; new_fd++) {
-        if (new_fd >= CONFIG_OPEN_MAX) {
-            return -EMFILE;
-        }
+    while (new_fd < CONFIG_OPEN_MAX && !fd_free(proc, new_fd)) {
+        new_fd++;
+    }
+
+    if (new_fd >= CONFIG_OPEN_MAX) {
+        return -EMFILE;
     }
 
     proc->fd[new_fd]       = proc->fd[old_fd];
@@ -225,7 +253,7 @@ int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd) {
 int com_sys_proc_close_file_nolock(com_file_t **out_file,
                                    com_proc_t  *proc,
                                    int          fd) {
-    if (fd < 0 || fd > CONFIG_OPEN_MAX) {
+    if (fd < 0 || fd >= CONFIG_OPEN_MAX) {
         return EBADF;
     }
 
@@ -254,26 +282,42 @@ int com_sys_proc_close_file(com_proc_t *proc, int fd) {
     return ret;
 }
 
-int com_sys_proc_get_directory(com_file_t  **dir_file,
-                               com_vnode_t **dir,
+com_vnode_t *com_sys_proc_get_cwd(com_proc_t *proc) {
+    kspinlock_acquire(&proc->fd_lock);
+    com_vnode_t *cwd = proc->cwd;
+    COM_FS_VFS_VNODE_HOLD(cwd);
+    kspinlock_release(&proc->fd_lock);
+    return cwd;
+}
+
+void com_sys_proc_set_cwd(com_proc_t *proc, com_vnode_t *cwd) {
+    COM_FS_VFS_VNODE_HOLD(cwd);
+    kspinlock_acquire(&proc->fd_lock);
+    com_vnode_t *old = proc->cwd;
+    proc->cwd        = cwd;
+    kspinlock_release(&proc->fd_lock);
+
+    // Outside the spinlock, since it may free the vnode
+    COM_FS_VFS_VNODE_RELEASE(old);
+}
+
+int com_sys_proc_get_directory(com_vnode_t **dir,
                                com_proc_t   *proc,
                                int           dir_fd) {
-    com_file_t  *tmp_dir_file = NULL;
-    com_vnode_t *tmp_dir      = NULL;
-
     if (AT_FDCWD == dir_fd) {
-        tmp_dir = atomic_load(&proc->cwd);
-    } else {
-        tmp_dir_file = com_sys_proc_get_file(proc, dir_fd);
-        if (NULL != tmp_dir_file) {
-            tmp_dir = tmp_dir_file->vnode;
-        } else {
-            return EBADF;
-        }
+        *dir = com_sys_proc_get_cwd(proc);
+        return 0;
     }
 
-    *dir_file = tmp_dir_file;
-    *dir      = tmp_dir;
+    com_file_t *file = com_sys_proc_get_file(proc, dir_fd);
+    if (NULL == file) {
+        *dir = NULL;
+        return EBADF;
+    }
+
+    *dir = file->vnode;
+    COM_FS_VFS_VNODE_HOLD(*dir);
+    COM_FS_FILE_RELEASE(file);
     return 0;
 }
 
@@ -428,10 +472,16 @@ void com_sys_proc_exit(int exit_code, int cause_sig) {
     // NOTE: we don't need to take the fd lock because we are guaranteed to be
     // the only thread left
     for (int i = 0; i < curr_proc->max_fd; i++) {
-        if (NULL != curr_proc->fd[i].file) {
-            COM_FS_FILE_RELEASE(curr_proc->fd[i].file);
-        }
+        com_file_t *file = curr_proc->fd[i].file;
+        curr_proc->fd[i] = (com_filedesc_t){0};
+        COM_FS_FILE_RELEASE(file);
     }
+
+    com_vnode_t *cwd  = curr_proc->cwd;
+    com_vnode_t *root = curr_proc->root;
+    curr_proc->cwd = curr_proc->root = NULL;
+    COM_FS_VFS_VNODE_RELEASE(cwd);
+    COM_FS_VFS_VNODE_RELEASE(root);
 
     // Publish status before notifying and never acquire authority under
     // signal_lock

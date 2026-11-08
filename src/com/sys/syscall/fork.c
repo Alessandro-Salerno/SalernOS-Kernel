@@ -48,10 +48,12 @@ COM_SYS_SYSCALL(com_sys_syscall_fork) {
     com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
         curr_proc->vmm_context);
     arch_mmu_invalidate(curr_proc->vmm_context->pagetable, NULL, 512);
-    com_proc_t *new_proc = com_sys_proc_new(new_vmm_ctx,
-                                            curr_proc->pid,
-                                            curr_proc->root,
-                                            curr_proc->cwd);
+    com_vnode_t *cwd      = com_sys_proc_get_cwd(curr_proc);
+    com_proc_t  *new_proc = com_sys_proc_new(new_vmm_ctx,
+                                             curr_proc->pid,
+                                             curr_proc->root,
+                                             cwd);
+    COM_FS_VFS_VNODE_RELEASE(cwd);
     // NOTE: process group is inherited from parent in proc_new
     com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
     ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx);

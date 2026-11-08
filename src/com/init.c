@@ -66,13 +66,15 @@ static com_vfs_t   *RootFs     = NULL;
 static com_vfs_t *init_tmpfs(com_vfs_t *rootfs) {
     com_vnode_t *tmpfs_mountpoint = NULL;
     com_vfs_t   *tmpfs            = NULL;
-    com_fs_tmpfs_mkdir(&tmpfs_mountpoint,
-                       rootfs->root,
-                       "tmp",
-                       kstrlen("tmp"),
-                       0,
-                       0);
-    com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint);
+    KASSERT_CALL(0,
+                 ==,
+                 com_fs_vfs_create(&tmpfs_mountpoint,
+                                   rootfs->root,
+                                   "tmp",
+                                   kstrlen("tmp"),
+                                   &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR)));
+    KASSERT_CALL(0, ==, com_fs_tmpfs_mount(&tmpfs, tmpfs_mountpoint));
+    COM_FS_VFS_VNODE_RELEASE(tmpfs_mountpoint);
     return tmpfs;
 }
 
@@ -91,8 +93,9 @@ void com_init_memory(void) {
 }
 
 void com_init_filesystem(void) {
+    com_fs_tmpfs_init();
     com_vfs_t *rootfs = NULL;
-    com_fs_tmpfs_mount(&rootfs, NULL);
+    KASSERT_CALL(0, ==, com_fs_tmpfs_mount(&rootfs, NULL));
 
     init_tmpfs(rootfs);
 
@@ -100,7 +103,7 @@ void com_init_filesystem(void) {
     com_fs_initrd_make(rootfs->root, initrd->address, initrd->size);
 
     com_vfs_t *devfs = NULL;
-    com_fs_devfs_init(&devfs, rootfs);
+    KASSERT_CALL(0, ==, com_fs_devfs_init(&devfs, rootfs));
 
     RootFs = rootfs;
 }
@@ -192,12 +195,10 @@ void com_init_pid1(void) {
     proc->num_running_threads = 1;
     proc->next_fd             = 3;
     proc->max_fd              = proc->next_fd;
-    com_filedesc_t stddesc;
-    stddesc.file  = stdfile;
-    stddesc.flags = 0;
-    proc->fd[0]   = stddesc;
-    proc->fd[1]   = stddesc;
-    proc->fd[2]   = stddesc;
+    com_filedesc_t stddesc    = {.file = stdfile, .flags = 0};
+    proc->fd[0]               = stddesc;
+    proc->fd[1]               = stddesc;
+    proc->fd[2]               = stddesc;
 
     com_sys_proc_new_session_nolock(proc, MainTtyDev);
 

@@ -25,6 +25,11 @@
 
 typedef kradixtree_t com_pagecache_t;
 
+#define COM_FS_PAGECACHE_LAYERS 4
+
+#define COM_FS_PAGECACHE_MAX_PAGES \
+    ((uintmax_t)1 << (KRADIXTREE_INDEX_BITS * COM_FS_PAGECACHE_LAYERS))
+
 bool             com_fs_pagecache_get(uintptr_t       *out,
                                       com_pagecache_t *root,
                                       uint64_t         index);
@@ -32,3 +37,5 @@ void             com_fs_pagecache_default(uintptr_t       *out,
                                           com_pagecache_t *root,
                                           uint64_t         index);
 com_pagecache_t *com_fs_pagecache_new(void);
+// Pages that are still mapped stay alive through their mappings
+void com_fs_pagecache_free(com_pagecache_t *root);

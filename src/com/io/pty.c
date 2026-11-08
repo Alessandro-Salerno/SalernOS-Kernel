@@ -41,6 +41,7 @@ static com_vnode_t *PtsDir     = NULL;
 // C FORWARD DELCARATION PROTOTYPES
 static void          ptm_poll_callback(void *arg);
 static com_dev_ops_t PtsDevOps;
+static com_dev_ops_t PtsNameDevOps;
 
 // GENERIC PTY FUNCTIONS
 
@@ -246,7 +247,7 @@ static int ptm_poll(short *revents, void *devdata, short events) {
     (void)events;
 
     short out = 0;
-    if (0 == pty->num_slaves) {
+    if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_RELAXED)) {
         out |= POLLHUP;
     }
     if (pty->master_rb.write.index != pty->master_rb.read.index) {
@@ -260,13 +261,21 @@ static int ptm_poll(short *revents, void *devdata, short events) {
     return 0;
 }
 
-static com_dev_ops_t PtmDevOps = {.read      = ptm_read,
+static int ptm_stat(struct stat *out, void *devdata) {
+    (void)devdata;
+    out->st_mode = 0600;
+    return 0;
+}
+
+static com_dev_ops_t PtmDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
+                                  .read      = ptm_read,
                                   .write     = ptm_write,
                                   .ioctl     = ptm_ioctl,
                                   .isatty    = ptm_isatty,
                                   .seekable  = ptm_seekable,
                                   .poll_head = ptm_poll_head,
                                   .poll      = ptm_poll,
+                                  .stat      = ptm_stat,
                                   .close     = ptm_close};
 
 // PTS FUNCTIONS
@@ -329,6 +338,8 @@ static int pts_seekable(void *devdata) {
     return ESPIPE;
 }
 
+// num_slaves counts open files, not references, so that the master sees a
+// hangup even if a session still has the slave as its controlling terminal
 static int pts_close(void *devdata) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
@@ -341,7 +352,19 @@ static int pts_close(void *devdata) {
         ptm_poll_callback(pty);
     }
 
-    com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
+    return 0;
+}
+
+static void pts_inactive(void *devdata) {
+    com_mm_slab_free(devdata, sizeof(com_pty_slave_t));
+}
+
+// Opens a slave that is already open (e.g., through /dev/tty)
+static int pts_reopen(com_vnode_t **out, void *devdata) {
+    com_pty_slave_t *pty_slave = devdata;
+    __atomic_add_fetch(&pty_slave->pty->num_slaves, 1, __ATOMIC_SEQ_CST);
+    COM_FS_VFS_VNODE_HOLD(pty_slave->vnode);
+    *out = pty_slave->vnode;
     return 0;
 }
 
@@ -349,7 +372,6 @@ static int pts_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 0;
     out->st_mode    = 0622; // apparently makes xterm happy
-    out->st_mode |= S_IFCHR;
     return 0;
 }
 
@@ -378,28 +400,27 @@ static int pts_poll(short *revents, void *devdata, short events) {
     return 0;
 }
 
+// Opens /dev/pts/N: every open gets its own slave vnode
 static int pts_open(com_vnode_t **out, void *devdata) {
     com_pty_slave_t *pty_slave = com_mm_slab_alloc(sizeof(com_pty_slave_t));
     com_pty_t       *pty       = devdata;
-    __atomic_add_fetch(&pty->num_slaves, 1, __ATOMIC_SEQ_CST);
-    pty_slave->pty = pty;
+    pty_slave->pty             = pty;
 
     int ret = com_fs_devfs_register_anonymous(&pty_slave->vnode,
                                               &PtsDevOps,
                                               pty_slave);
     if (0 != ret) {
         com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
-        __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST);
-        KASSERT(false);
-        goto end;
+        return ret;
     }
 
+    __atomic_add_fetch(&pty->num_slaves, 1, __ATOMIC_SEQ_CST);
     *out = pty_slave->vnode;
-end:
-    return ret;
+    return 0;
 }
 
-static com_dev_ops_t PtsDevOps = {.read      = pts_read,
+static com_dev_ops_t PtsDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
+                                  .read      = pts_read,
                                   .write     = pts_write,
                                   .ioctl     = pts_ioctl,
                                   .isatty    = pts_isatty,
@@ -407,8 +428,13 @@ static com_dev_ops_t PtsDevOps = {.read      = pts_read,
                                   .stat      = pts_stat,
                                   .poll_head = pts_poll_head,
                                   .poll      = pts_poll,
+                                  .open      = pts_reopen,
                                   .close     = pts_close,
-                                  .open      = pts_open};
+                                  .inactive  = pts_inactive};
+
+static com_dev_ops_t PtsNameDevOps = {.type = E_COM_VNODE_TYPE_CHARDEV,
+                                      .open = pts_open,
+                                      .stat = pts_stat};
 
 static int ptmx_open(com_vnode_t **out, void *devdata) {
     (void)devdata;
@@ -418,12 +444,11 @@ static int ptmx_open(com_vnode_t **out, void *devdata) {
     kuitoa(pty->pts_num, pts_name);
 
     // This *ONLY* creates the pts device, it does NOT open it
-    com_vnode_t *slave_vn;
-    int          ret = com_fs_devfs_register(&slave_vn,
+    int ret = com_fs_devfs_register(NULL,
                                     PtsDir,
                                     pts_name,
                                     kstrlen(pts_name),
-                                    &PtsDevOps,
+                                    &PtsNameDevOps,
                                     pty);
     if (0 != ret) {
         goto end;
@@ -446,22 +471,22 @@ static int ptmx_stat(struct stat *out, void *devdata) {
     (void)devdata;
     out->st_blksize = 0;
     out->st_mode    = 0622; // apparently makes xterm happy
-    out->st_mode |= S_IFCHR;
     return 0;
 }
 
-static com_dev_ops_t CloneDevOps = {.open = ptmx_open, .stat = ptmx_stat};
+static com_dev_ops_t CloneDevOps = {.type = E_COM_VNODE_TYPE_CHARDEV,
+                                    .open = ptmx_open,
+                                    .stat = ptmx_stat};
 
 int com_io_pty_init(void) {
     KLOG("initializing pty subsytem");
 
-    int ret = com_fs_devfs_mkdir(&PtsDir, NULL, "pts", 3, 0, 0);
+    int ret = com_fs_devfs_mkdir(&PtsDir, NULL, "pts", 3);
     if (0 != ret) {
         goto end;
     }
 
-    com_vnode_t *ptmx_dev = NULL;
-    ret = com_fs_devfs_register(&ptmx_dev, NULL, "ptmx", 4, &CloneDevOps, NULL);
+    ret = com_fs_devfs_register(NULL, NULL, "ptmx", 4, &CloneDevOps, NULL);
     if (0 != ret) {
         goto end;
     }

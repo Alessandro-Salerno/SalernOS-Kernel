@@ -48,12 +48,19 @@ COM_SYS_SYSCALL(com_sys_syscall_readdir) {
         return ret;
     }
 
-    size_t bytes_read = 0;
-    int    vfs_op     = com_fs_vfs_readdir(buf,
-                                           buflen,
-                                           &bytes_read,
-                                           file->vnode,
-                                           file->off);
+    // The offset is an opaque cookie
+    kspinlock_acquire(&file->off_lock);
+    uintmax_t off = file->off;
+    kspinlock_release(&file->off_lock);
+
+    size_t    bytes_read = 0;
+    uintmax_t next_off   = off;
+    int       vfs_op     = com_fs_vfs_readdir(buf,
+                                              buflen,
+                                              &bytes_read,
+                                              &next_off,
+                                              file->vnode,
+                                              off);
 
     if (0 != vfs_op) {
         ret.err = vfs_op;
@@ -61,9 +68,7 @@ COM_SYS_SYSCALL(com_sys_syscall_readdir) {
     }
 
     kspinlock_acquire(&file->off_lock);
-    if (0 != bytes_read) {
-        file->off++;
-    }
+    file->off = next_off;
     kspinlock_release(&file->off_lock);
 
     ret.value = bytes_read;

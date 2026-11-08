@@ -56,58 +56,38 @@ COM_SYS_SYSCALL(com_sys_syscall_fstatat) {
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
-
-    com_vnode_t *dir       = NULL;
-    com_file_t  *dir_file  = NULL;
-    bool         do_lookup = false;
-
-    int dir_ret = com_sys_proc_get_directory(&dir_file,
-                                             &dir,
-                                             curr_proc,
-                                             dir_fd);
-    if (0 != dir_ret) {
-        ret = COM_SYS_SYSCALL_ERR(dir_ret);
-        goto end;
-    }
-
-    do_lookup           = !((AT_EMPTY_PATH & flags) && 0 == pathlen);
-    int          err    = 0;
-    com_vnode_t *target = dir;
-
-    if (do_lookup) {
-        err = com_fs_vfs_lookup(&target,
-                                path,
-                                pathlen,
-                                curr_proc->root,
-                                dir,
-                                (AT_SYMLINK_FOLLOW & flags) |
-                                    !(AT_SYMLINK_NOFOLLOW & flags));
-    }
-
+    com_vnode_t *dir = NULL;
+    int          err = com_sys_proc_get_directory(&dir, curr_proc, dir_fd);
     if (0 != err) {
-        do_lookup = false;
-        ret.err   = err;
-        goto end;
+        return COM_SYS_SYSCALL_ERR(err);
+    }
+
+    com_vnode_t *target = NULL;
+    if ((AT_EMPTY_PATH & flags) && 0 == pathlen) {
+        target = dir;
+        COM_FS_VFS_VNODE_HOLD(target);
+    } else {
+        err = com_fs_vfs_lookup(
+            &target,
+            path,
+            pathlen,
+            curr_proc->root,
+            dir,
+            (AT_SYMLINK_NOFOLLOW & flags) ? 0 : COM_FS_VFS_LOOKUP_FOLLOW);
     }
 
     struct stat kstat;
-    err = com_fs_vfs_stat(&kstat, target);
+    if (0 == err) {
+        err = com_fs_vfs_stat(&kstat, target, false);
+    }
     if (0 == err) {
         err = kmemcpy_to_user(buf, &kstat, sizeof(kstat));
     }
 
-    if (err) {
-        ret.err = err;
-        goto end;
+    COM_FS_VFS_VNODE_RELEASE(target);
+    COM_FS_VFS_VNODE_RELEASE(dir);
+    if (0 != err) {
+        return COM_SYS_SYSCALL_ERR(err);
     }
-
-    ret.value = 0;
-
-end:
-    COM_FS_FILE_RELEASE(dir_file);
-    if (do_lookup) {
-        COM_FS_VFS_VNODE_RELEASE(target);
-    }
-    return ret;
+    return COM_SYS_SYSCALL_OK(0);
 }

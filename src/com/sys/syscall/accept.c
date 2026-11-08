@@ -61,6 +61,14 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
     KASSERT(NULL != server_vn->socket);
     com_socket_t *server_socket = server_vn->socket;
 
+    // Reserved first, so that an accepted connection is never dropped for
+    // lack of a descriptor
+    int new_fd = com_sys_proc_next_fd(curr_proc);
+    if (-1 == new_fd) {
+        ret = COM_SYS_SYSCALL_ERR(EMFILE);
+        goto end;
+    }
+
     com_socket_addr_t new_client_addr;
     com_socket_t     *new_client;
     int               sock_ret = COM_IPC_SOCKET_ACCEPT(&new_client,
@@ -68,13 +76,8 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
                                                        server_socket,
                                                        sockfile->flags);
     if (0 != sock_ret) {
+        com_sys_proc_unreserve_fd(curr_proc, new_fd);
         ret = COM_SYS_SYSCALL_ERR(sock_ret);
-        goto end;
-    }
-
-    int new_fd = com_sys_proc_next_fd(curr_proc);
-    if (-1 == new_fd) {
-        ret = COM_SYS_SYSCALL_ERR(EMFILE);
         goto end;
     }
 
@@ -82,12 +85,12 @@ COM_SYS_SYSCALL(com_sys_syscall_accept) {
     com_socket_vnode_t *sockfs_vn = (void *)client_vn;
     sockfs_vn->socket             = new_client;
 
-    curr_proc->fd[new_fd].file = com_mm_slab_alloc(sizeof(com_file_t));
-    com_file_t *new_file       = curr_proc->fd[new_fd].file;
-    new_file->vnode            = client_vn;
-    new_file->flags            = 0;
-    new_file->num_ref          = 1;
-    new_file->off              = 0;
+    com_file_t *new_file = com_mm_slab_alloc(sizeof(com_file_t));
+    new_file->vnode      = client_vn;
+    new_file->flags      = 0;
+    new_file->num_ref    = 1;
+    new_file->off        = 0;
+    com_sys_proc_install_fd(curr_proc, new_fd, new_file, 0);
 
     ret = COM_SYS_SYSCALL_OK(new_fd);
 

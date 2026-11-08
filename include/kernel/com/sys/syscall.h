@@ -187,6 +187,10 @@ COM_SYS_SYSCALL(com_sys_syscall_setitimer);
 COM_SYS_SYSCALL(com_sys_syscall_mkdirat);
 COM_SYS_SYSCALL(com_sys_syscall_getpeername);
 COM_SYS_SYSCALL(com_sys_syscall_munmap);
+COM_SYS_SYSCALL(com_sys_syscall_linkat);
+COM_SYS_SYSCALL(com_sys_syscall_renameat);
+COM_SYS_SYSCALL(com_sys_syscall_mount);
+COM_SYS_SYSCALL(com_sys_syscall_umount2);
 COM_SYS_SYSCALL(com_sys_syscall_sysprofile);
 
 // SYSCALL UTILITIES
