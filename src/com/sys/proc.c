@@ -321,6 +321,23 @@ int com_sys_proc_get_directory(com_vnode_t **dir,
     return 0;
 }
 
+// A count of 0 means that the last holder is on its way to com_sys_proc_hide. A
+// new reference would make the next release hide the process a second time
+static bool proc_hold_if_alive(com_proc_t *proc) {
+    size_t num_ref = __atomic_load_n(&proc->num_ref, __ATOMIC_RELAXED);
+    while (0 != num_ref) {
+        if (__atomic_compare_exchange_n(&proc->num_ref,
+                                        &num_ref,
+                                        num_ref + 1,
+                                        false,
+                                        __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     if (pid > CONFIG_PROC_MAX || pid < 1) {
         return NULL;
@@ -329,8 +346,8 @@ com_proc_t *com_sys_proc_get_by_pid(pid_t pid) {
     com_proc_t *ret = NULL;
     kspinlock_acquire(&PIDNamespaceLock);
     kradixtree_get_nolock((void *)&ret, &Processes, pid - 1);
-    if (NULL != ret) {
-        COM_SYS_PROC_HOLD(ret);
+    if (NULL != ret && !proc_hold_if_alive(ret)) {
+        ret = NULL;
     }
     kspinlock_release(&PIDNamespaceLock);
     return ret;
@@ -482,6 +499,16 @@ void com_sys_proc_exit(int exit_code, int cause_sig) {
     curr_proc->cwd = curr_proc->root = NULL;
     COM_FS_VFS_VNODE_RELEASE(cwd);
     COM_FS_VFS_VNODE_RELEASE(root);
+
+    // A session loses its controlling terminal with the controlling process
+    com_proc_session_t *session = curr_proc->proc_group->session;
+    if (NULL != session && session->sid == curr_proc->pid) {
+        kspinlock_acquire(&session->pg_lock);
+        com_vnode_t *ctty = session->tty;
+        __atomic_store_n(&session->tty, NULL, __ATOMIC_RELAXED);
+        kspinlock_release(&session->pg_lock);
+        COM_FS_VFS_VNODE_RELEASE(ctty);
+    }
 
     // Publish status before notifying and never acquire authority under
     // signal_lock

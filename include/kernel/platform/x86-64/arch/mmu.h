@@ -24,7 +24,11 @@
 #define ARCH_MMU_KERNELSPACE_START (void *)0xffff800000000000
 #define ARCH_MMU_KERNELSPACE_END   (void *)0xffffffffffffffff
 #define ARCH_MMU_USERSPACE_START   (void *)0x0000000000000000
-#define ARCH_MMU_USERSPACE_END     (void *)0x0000800000000000
+#define ARCH_MMU_USERSPACE_END     (void *)0x00007ffffffff000
+
+// We use a sort of guard page between userspace and the non-canonical hole to
+// avoid having the system panic on sysret when a system call is issued at the
+// edge
 
 #define ARCH_MMU_ADDR_IS_USER(a) ((void *)(a) < ARCH_MMU_USERSPACE_END)
 #define ARCH_MMU_RANGE_IS_USER(a, len) \

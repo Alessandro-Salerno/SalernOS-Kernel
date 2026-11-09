@@ -42,6 +42,7 @@ typedef struct com_pty {
 
     int    pts_num;
     size_t num_slaves;
+    size_t num_ref; // master vnode, /dev/pts/N, and slave vnodes
 } com_pty_t;
 
 typedef struct com_pty_slave {

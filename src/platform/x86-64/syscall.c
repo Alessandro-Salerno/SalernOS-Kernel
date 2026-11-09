@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
@@ -83,6 +85,11 @@ COM_SYS_SYSCALL(arch_syscall_set_tls) {
     COM_SYS_SYSCALL_UNUSED_START(2);
 
     uintptr_t ptr = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
+
+    // wrmsr faults on a non-canonical address
+    if (!ARCH_MMU_ADDR_IS_USER(ptr)) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
 
     ARCH_CPU_GET_THREAD()->xctx.fsbase = ptr;
     X86_64_MSR_WRITE(X86_64_MSR_FSBASE, ptr);

@@ -33,7 +33,11 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
     com_sigaction_t *act  = COM_SYS_SYSCALL_ARG(void *, 2);
     com_sigaction_t *oact = COM_SYS_SYSCALL_ARG(void *, 3);
 
-    if (sig < 1 || sig > NSIG) {
+    if (sig < 1 || sig >= NSIG) {
+        return COM_SYS_SYSCALL_ERR(EINVAL);
+    }
+
+    if (NULL != act && (SIGKILL == sig || SIGSTOP == sig)) {
         return COM_SYS_SYSCALL_ERR(EINVAL);
     }
 
@@ -41,6 +45,13 @@ COM_SYS_SYSCALL(com_sys_syscall_sigaction) {
     if (NULL != act) {
         new_act      = com_mm_slab_alloc(sizeof(com_sigaction_t));
         int copy_ret = kmemcpy_from_user(new_act, act, sizeof(*new_act));
+        // According to clankers, Linux does not error in this case. However,
+        // there's no good reason for which a userspace process would want to
+        // give us a non-user or otherwise invalid address, so we save the
+        // assembly trickery and punish these gangsters with an error instead
+        if (0 == copy_ret && !ARCH_MMU_ADDR_IS_USER(new_act->sa_action)) {
+            copy_ret = EFAULT;
+        }
         if (0 != copy_ret) {
             com_mm_slab_free(new_act, sizeof(*new_act));
             return COM_SYS_SYSCALL_ERR(copy_ret);

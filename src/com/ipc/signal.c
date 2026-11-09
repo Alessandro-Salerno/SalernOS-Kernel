@@ -28,7 +28,7 @@
 #include <stdbool.h>
 #include <vendor/tailq.h>
 
-#define IS_VALID_SIGNAL(sig) ((sig) > 0 && (sig) < 64)
+#define IS_VALID_SIGNAL(sig) ((sig) > 0 && (sig) < NSIG)
 
 // CREDIT: OpenBSD
 #define SA_KILL     0x01 /* terminates process by default */
@@ -70,16 +70,18 @@ static const int SignalProperties[] = {
     [SIGWINCH]  = SA_IGNORE,
     [SIGUSR1]   = SA_KILL,
     [SIGUSR2]   = SA_KILL,
+
+    // We don't support real-time signals, as they're a Linux feature and not
+    // required by POSIX
+    [SIGSYS + 1 ... NSIG - 1] = SA_KILL,
 };
 
-// Signal policy lives here. Scheduler callers ask only whether interruption
-// is pending and uninterruptible waits never consult this predicate
-static com_sigmask_t signal_pending(com_thread_t *thread) {
-    const com_sigmask_t kill    = 1UL << (SIGKILL - 1);
-    const com_sigmask_t stop    = 1UL << (SIGSTOP - 1);
-    const com_sigmask_t cont    = 1UL << (SIGCONT - 1);
-    com_sigmask_t       pending = thread->pending_signals &
-                            (~thread->masked_signals | kill | stop);
+static com_sigmask_t signal_deliverable(com_thread_t *thread,
+                                        com_sigmask_t signals) {
+    const com_sigmask_t kill = 1UL << (SIGKILL - 1);
+    const com_sigmask_t stop = 1UL << (SIGSTOP - 1);
+    const com_sigmask_t cont = 1UL << (SIGCONT - 1);
+    com_sigmask_t pending = signals & (~thread->masked_signals | kill | stop);
     if (thread->signal_stopped) {
         pending &= kill;
         if (E_COM_PROC_STATE_STOPPED != thread->proc->state) {
@@ -90,6 +92,12 @@ static com_sigmask_t signal_pending(com_thread_t *thread) {
         pending |= kill;
     }
     return pending;
+}
+
+static com_sigmask_t signal_pending(com_thread_t *thread) {
+    return signal_deliverable(thread,
+                              thread->pending_signals |
+                                  thread->proc->pending_signals);
 }
 
 void com_ipc_signal_kick(com_thread_t *thread) {
@@ -103,7 +111,25 @@ void com_ipc_signal_kick(com_thread_t *thread) {
     com_sys_thread_unlock(thread);
 }
 
+static bool signal_ignored(com_proc_t *proc, int sig) {
+    com_sigaction_t *sigaction = proc->sigaction[sig];
+    return (NULL != sigaction && SIG_IGN == sigaction->sa_action) ||
+           ((NULL == sigaction || SIG_DFL == sigaction->sa_action) &&
+            (SA_IGNORE & SignalProperties[sig]));
+}
+
 static void signal_publish(com_thread_t *thread, int sig) {
+    // We drop signals that are ignored and not masked here, instead of causing
+    // a spurious interrupt that then resolves to no action. This behavior is
+    // applied only when the signal is not masked to stay consistent with the
+    // requirement that later unmasks shall cause the signal to be dispatched.
+    // We also process the signal anyway if it is a SIGCONT because it needs to
+    // get to every thread in the process
+    if (SIGCONT != sig && signal_ignored(thread->proc, sig) &&
+        !COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
+        return;
+    }
+
     COM_IPC_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
     if (SIGCONT == sig && E_COM_PROC_STATE_STOPPED == thread->proc->state) {
         com_sys_proc_transition_nolock(thread->proc,
@@ -124,23 +150,32 @@ static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
         kspinlock_release(&proc->threads_lock);
         return ESRCH;
     }
+    com_sigmask_t mask = 0;
+    COM_IPC_SIGNAL_SIGMASK_SET(&mask, sig);
     bool          found = false;
     com_thread_t *thread;
+
+    // As above, we have a special case for SIGCONT which needs to be delivered
+    // to every thread. Other signals are delivered only to the first thread
+    // that has them unmasked, or are parked in the process-wide signal mask
     TAILQ_FOREACH(thread, &proc->threads, proc_threads) {
+        if (SIGCONT != sig && !(signal_deliverable(thread, mask) & mask)) {
+            continue;
+        }
         signal_publish(thread, sig);
-        com_sigmask_t pending  = signal_pending(thread);
-        bool          eligible = COM_IPC_SIGNAL_SIGMASK_ISSET(&pending, sig);
         kspinlock_release(&proc->signal_lock);
         com_ipc_signal_kick(thread);
         kspinlock_acquire(&proc->signal_lock);
-        found |= eligible;
-        if (eligible && SIGCONT != sig) {
+        found = true;
+        if (SIGCONT != sig) {
             break;
         }
     }
+
     if (!found) {
         COM_IPC_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
     }
+
     kspinlock_release(&proc->signal_lock);
     kspinlock_release(&proc->threads_lock);
     return 0;
@@ -158,7 +193,11 @@ int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
     KDEBUG("sending signal %d to pid=%d", sig, pid);
     com_proc_t *proc = com_sys_proc_get_by_pid(pid);
 
-    return send_to_proc(proc, sig, sender);
+    int ret = send_to_proc(proc, sig, sender);
+    if (NULL != proc) {
+        COM_SYS_PROC_RELEASE(proc);
+    }
+    return ret;
 }
 
 int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
@@ -225,6 +264,7 @@ restart:
     KDEBUG("tid=%d received signal %d", thread->tid, sig);
 
     COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+    COM_IPC_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
 
     com_sigaction_t *sigaction = proc->sigaction[sig];
 

@@ -311,11 +311,19 @@ int com_sys_elf64_load(com_elf_data_t    *out,
                 if (0 != ret) {
                     goto cleanup;
                 }
+                // Static binaries usually have no PT_PHDR
+                if (0 == out->phdr && phdr.off <= elf_hdr.phdrs_off &&
+                    elf_hdr.phdrs_off < phdr.off + phdr.file_sz) {
+                    out->phdr = vaddr + elf_hdr.phdrs_off - phdr.off;
+                }
                 break;
         }
     }
 
     out->entry = virt_off + elf_hdr.entry;
+    if (!ARCH_MMU_ADDR_IS_USER(out->entry)) {
+        ret = ENOEXEC;
+    }
 
 cleanup:
     COM_FS_VFS_VNODE_RELEASE(elf_file);
@@ -579,10 +587,10 @@ int com_sys_elf64_prepare_stack(uintptr_t                *out_stack_ptr,
     PUSH(0);
     PUSH(0);
 
-    KASSERT(0 != elf_data.entry);
-    KASSERT(0 != elf_data.phdr);
-    KASSERT(0 != elf_data.phent_sz);
-    KASSERT(0 != elf_data.phent_num);
+    if (0 == elf_data.entry || 0 == elf_data.phent_sz ||
+        0 == elf_data.phent_num) {
+        return ENOEXEC;
+    }
 
     PUSH(elf_data.entry);
     PUSH(AT_ENTRY);

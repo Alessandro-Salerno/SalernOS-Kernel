@@ -38,7 +38,7 @@ COM_SYS_SYSCALL(com_sys_syscall_sigpending) {
     com_sigset_t kset;
     com_ipc_signal_sigset_emptY(&kset);
     kspinlock_acquire(&curr_proc->signal_lock);
-    kset.sig[0] = curr_thread->pending_signals;
+    kset.sig[0] = curr_thread->pending_signals | curr_proc->pending_signals;
     kspinlock_release(&curr_proc->signal_lock);
     int copy_ret = kmemcpy_to_user(sigset, &kset, sizeof(kset));
     if (0 != copy_ret) {

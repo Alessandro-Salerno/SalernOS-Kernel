@@ -71,13 +71,7 @@ static int keyboard_poll_head(com_poll_head_t **out, void *devdata) {
 static int keyboard_poll(short *revents, void *devdata, short events) {
     (void)events;
     com_keyboard_t *keyboard = devdata;
-    short           out      = 0;
-
-    if (KRINGBUFFER_AVAIL_READ(&keyboard->rb) > 0) {
-        out |= POLLIN;
-    }
-
-    *revents = out;
+    *revents                 = kringbuffer_poll(&keyboard->rb) & POLLIN;
     return 0;
 }
 

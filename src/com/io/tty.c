@@ -377,13 +377,7 @@ static int tty_poll(short *revents, void *devdata, short events) {
     }
 
     com_text_tty_t *tty = &tty_data->tty.text;
-    short           out = POLLOUT;
-
-    if (tty->backend.slave_rb.write.index != tty->backend.slave_rb.read.index) {
-        out |= POLLIN;
-    }
-
-    *revents = out;
+    *revents = POLLOUT | (kringbuffer_poll(&tty->backend.slave_rb) & POLLIN);
     return 0;
 }
 
@@ -423,9 +417,7 @@ int com_io_tty_text_backend_ioctl(com_text_tty_backend_t *tty_backend,
     }
 
     if (FIONREAD == op) {
-        ksync_acquire(&tty_backend->slave_rb.condvar);
-        int avail = KRINGBUFFER_AVAIL_READ(&tty_backend->slave_rb);
-        ksync_release(&tty_backend->slave_rb.condvar);
+        int avail = kringbuffer_avail_read(&tty_backend->slave_rb);
         return kmemcpy_to_user(buf, &avail, sizeof(avail));
     }
 

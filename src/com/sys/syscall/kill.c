@@ -22,6 +22,21 @@
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 
+static bool proc_exists(pid_t pid) {
+    com_proc_t *proc = com_sys_proc_get_by_pid(pid);
+    if (NULL == proc) {
+        return false;
+    }
+
+    // A reaped process stays in the table until its threads are reclaimed
+    kspinlock_acquire(&proc->signal_lock);
+    bool reaped = E_COM_PROC_STATE_EXITED == proc->state &&
+                  proc->state_notified;
+    kspinlock_release(&proc->signal_lock);
+    COM_SYS_PROC_RELEASE(proc);
+    return !reaped;
+}
+
 // SYSCALL: kill(pid_t pid, int sig)
 COM_SYS_SYSCALL(com_sys_syscall_kill) {
     COM_SYS_SYSCALL_UNUSED_CONTEXT();
@@ -45,7 +60,13 @@ COM_SYS_SYSCALL(com_sys_syscall_kill) {
         kspinlock_release(&curr_proc->pg_lock);
     }
 
+    // sig = 0 only checks that the target exists
     if (0 == sig) {
+        bool exists = pid > 0 ? proc_exists(pid)
+                              : NULL != com_sys_proc_get_group_by_pgid(-pid);
+        if (!exists) {
+            ret.err = ESRCH;
+        }
         goto skip_send;
     }
 

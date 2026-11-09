@@ -36,6 +36,7 @@ struct unix_socket {
     kringbuffer_t       rb;
     com_socket_addr_t   binding_path;
     struct unix_socket *peer;
+    size_t              num_ref; // owner, peer pointer, and senders to this
 
     // Used only by server side. srv_vnode is bound to the socket
     com_vnode_t *srv_vnode;
@@ -93,7 +94,19 @@ static struct unix_socket *unix_socket_alloc(void) {
     COM_SYS_THREAD_WAITLIST_INIT(&sock->srv_acceptwait);
     LIST_INIT(&sock->socket.pollhead.polled_list);
     KSYNC_INIT_MUTEX(&sock->socket.lock);
+    sock->num_ref = 1;
     return sock;
+}
+
+static void unix_socket_release(struct unix_socket *sock) {
+    if (0 != __atomic_add_fetch(&sock->num_ref, -1, __ATOMIC_ACQ_REL)) {
+        return;
+    }
+
+    void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(sock->rb.buffer);
+    size_t rbuff_pages = sock->rb.buffer_size / ARCH_PAGE_SIZE + 1;
+    com_mm_pmm_free_many(phys_buff, rbuff_pages);
+    com_mm_slab_free(sock, sizeof(struct unix_socket));
 }
 
 static void unix_socket_poll_callback(void *arg) {
@@ -167,16 +180,21 @@ static int unix_socket_send(com_socket_t *socket, com_socket_desc_t *desc) {
         return ENOTCONN;
     }
 
+    // The peer may close while this is in its ring
+    struct unix_socket *peer = unix_socket->peer;
+    __atomic_add_fetch(&peer->num_ref, 1, __ATOMIC_RELAXED);
     ksync_release(&unix_socket->socket.lock);
-    return kioviter_read_to_ringbuffer(&desc->count_done,
-                                       &unix_socket->peer->rb,
-                                       KRINGBUFFER_NOATOMIC,
-                                       !(O_NONBLOCK & desc->flags),
-                                       unix_socket_poll_callback,
-                                       unix_socket->peer,
-                                       NULL,
-                                       desc->ioviter,
-                                       desc->count);
+    int ret = kioviter_read_to_ringbuffer(&desc->count_done,
+                                          &peer->rb,
+                                          KRINGBUFFER_NOATOMIC,
+                                          !(O_NONBLOCK & desc->flags),
+                                          unix_socket_poll_callback,
+                                          peer,
+                                          NULL,
+                                          desc->ioviter,
+                                          desc->count);
+    unix_socket_release(peer);
+    return ret;
 }
 
 static int unix_socket_recv(com_socket_t *socket, com_socket_desc_t *desc) {
@@ -255,11 +273,13 @@ static int unix_socket_connect(com_socket_t *socket, com_socket_addr_t *addr) {
     // However, send() and recv() don't know if the socket is a server or a
     // client
     struct unix_socket *server_peer = unix_socket_alloc();
-    server_peer->peer               = client;
-    client->peer                    = server_peer;
-    server_peer->socket.state       = E_COM_SOCKET_STATE_CONNECTED;
-    server_peer->binding_path       = server->binding_path;
-    client->socket.state            = E_COM_SOCKET_STATE_CONNECTED;
+    __atomic_add_fetch(&server_peer->num_ref, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&client->num_ref, 1, __ATOMIC_RELAXED);
+    server_peer->peer         = client;
+    client->peer              = server_peer;
+    server_peer->socket.state = E_COM_SOCKET_STATE_CONNECTED;
+    server_peer->binding_path = server->binding_path;
+    client->socket.state      = E_COM_SOCKET_STATE_CONNECTED;
     TAILQ_INSERT_TAIL(&server->srv_acceptq, server_peer, cln_connent);
 
     // The server may do accept() and be on the waitlist or may be polling and
@@ -376,7 +396,8 @@ static int unix_socket_getpeername(com_socket_addr_t *out,
     int                 ret         = 0;
     ksync_acquire(&unix_socket->socket.lock);
 
-    if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state) {
+    if (E_COM_SOCKET_STATE_CONNECTED != unix_socket->socket.state ||
+        NULL == unix_socket->peer) {
         out->local.path[0] = 0;
         out->local.pathlen = 0;
         goto end;
@@ -397,17 +418,11 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
     (void)events;
 
     struct unix_socket *unix_socket = (void *)socket;
-    short               out         = 0;
+    short               out         = kringbuffer_poll(&unix_socket->rb);
     ksync_acquire(&unix_socket->socket.lock);
 
     if (!TAILQ_EMPTY(&unix_socket->srv_acceptq)) {
         out |= POLLIN;
-    }
-    if (KRINGBUFFER_AVAIL_READ(&unix_socket->rb) > 0) {
-        out |= POLLIN;
-    }
-    if (KRINGBUFFER_AVAIL_WRITE(&unix_socket->rb) > 0) {
-        out |= POLLOUT;
     }
     if (E_COM_SOCKET_STATE_CONNECTED == unix_socket->socket.state &&
         NULL == unix_socket->peer) {
@@ -421,7 +436,6 @@ unix_socket_poll(short *revents, com_socket_t *socket, short events) {
 
 static int unix_socket_destroy(com_socket_t *socket) {
     struct unix_socket *unix_socket = (void *)socket;
-    struct unix_socket *peer        = unix_socket->peer;
 
     // After this, no connect can reach the socket (see connect)
     if (NULL != unix_socket->srv_vnode) {
@@ -429,30 +443,45 @@ static int unix_socket_destroy(com_socket_t *socket) {
         unix_socket->srv_vnode = NULL;
     }
 
+    // Normally, a socket is associated to a file descriptor, and dropping that
+    // file descriptor drops the socket. However, since these are yet to
+    // establish one, we drop them instead. Recursion is bounded because the
+    // sockets waiting to be accepted by a server should have no accept queue of
+    // their own, so this pass does not repeat recursively
+    struct unix_socket *queued, *_;
+    TAILQ_FOREACH_SAFE(queued, &unix_socket->srv_acceptq, cln_connent, _) {
+        unix_socket_destroy(&queued->socket);
+    }
+
     ksync_acquire(&unix_socket->socket.lock);
-    unix_socket->peer = NULL;
+    struct unix_socket *peer = unix_socket->peer;
+    unix_socket->peer        = NULL;
     ksync_release(&unix_socket->socket.lock);
 
-    ksync_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.read.queue);
-    ksync_notify_all(&unix_socket->rb.condvar, &unix_socket->rb.write.queue);
+    kringbuffer_wake_all(&unix_socket->rb);
 
     unix_socket_poll_callback(unix_socket);
 
+    // Both ends may close at once: clearing a peer pointer takes its reference
     if (NULL != peer) {
         ksync_acquire(&peer->socket.lock);
-        peer->peer = NULL;
+        bool cleared = unix_socket == peer->peer;
+        if (cleared) {
+            peer->peer = NULL;
+        }
         ksync_release(&peer->socket.lock);
 
-        ksync_notify_all(&peer->rb.condvar, &peer->rb.read.queue);
-        ksync_notify_all(&peer->rb.condvar, &peer->rb.write.queue);
+        if (cleared) {
+            unix_socket_release(unix_socket);
+        }
+
+        kringbuffer_wake_all(&peer->rb);
 
         unix_socket_poll_callback(&peer->socket);
+        unix_socket_release(peer);
     }
 
-    void  *phys_buff   = (void *)ARCH_HHDM_TO_PHYS(unix_socket->rb.buffer);
-    size_t rbuff_pages = unix_socket->rb.buffer_size / ARCH_PAGE_SIZE + 1;
-    com_mm_pmm_free_many(phys_buff, rbuff_pages);
-    com_mm_slab_free(unix_socket, sizeof(struct unix_socket));
+    unix_socket_release(unix_socket);
     return 0;
 }
 
@@ -460,7 +489,7 @@ static int unix_socket_ioctl(com_socket_t *socket, uintmax_t op, void *buf) {
     struct unix_socket *unix_socket = (void *)socket;
 
     if (FIONREAD == op) {
-        int avail = KRINGBUFFER_AVAIL_READ(&unix_socket->rb);
+        int avail = kringbuffer_avail_read(&unix_socket->rb);
         return kmemcpy_to_user(buf, &avail, sizeof(avail));
     }
 

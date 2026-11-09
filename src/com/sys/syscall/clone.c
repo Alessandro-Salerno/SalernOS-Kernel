@@ -17,6 +17,8 @@
 *************************************************************************/
 
 #include <arch/cpu.h>
+#include <arch/mmu.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -35,6 +37,10 @@ COM_SYS_SYSCALL(com_sys_syscall_clone) {
 
     void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
     void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
+
+    if (!ARCH_MMU_ADDR_IS_USER(new_ip)) {
+        return COM_SYS_SYSCALL_ERR(EFAULT);
+    }
 
     com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
     com_proc_t   *curr_proc   = curr_thread->proc;

@@ -146,6 +146,11 @@ int arch_context_restore_sigframe(com_sigframe_t *sframe, arch_context_t *ctx) {
     if (NULL == ufpu) {
         return EFAULT;
     }
+    // Returning to a non-canonical rip faults in ring 0
+    if (!ARCH_MMU_ADDR_IS_USER(
+            sframe->uc.uc_mcontext.gregs[X86_64_CONTEXT_REG_RIP])) {
+        return EFAULT;
+    }
     // Reserved MXCSR bits would make fxrstor fault
     struct _fpstate fpu __attribute__((aligned(16)));
     asm volatile("fxsave %0" : "=m"(fpu));

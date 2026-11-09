@@ -24,6 +24,7 @@
 #include <lib/ringbuffer.h>
 #include <lib/usercopy.h>
 #include <lib/util.h>
+#include <poll.h>
 #include <stdint.h>
 
 // CREDIT: vloxei64/ke
@@ -341,4 +342,31 @@ int kringbuffer_read(void          *dst,
                                       hu_arg);
     ksync_release(&rb->condvar);
     return ret;
+}
+
+short kringbuffer_poll(kringbuffer_t *rb) {
+    short out = 0;
+    ksync_acquire(&rb->condvar);
+    if (KRINGBUFFER_AVAIL_READ(rb) > 0) {
+        out |= POLLIN;
+    }
+    if (KRINGBUFFER_AVAIL_WRITE(rb) > 0) {
+        out |= POLLOUT;
+    }
+    ksync_release(&rb->condvar);
+    return out;
+}
+
+size_t kringbuffer_avail_read(kringbuffer_t *rb) {
+    ksync_acquire(&rb->condvar);
+    size_t avail = KRINGBUFFER_AVAIL_READ(rb);
+    ksync_release(&rb->condvar);
+    return avail;
+}
+
+void kringbuffer_wake_all(kringbuffer_t *rb) {
+    ksync_acquire(&rb->condvar);
+    com_sys_sched_notify_all(&rb->read.queue);
+    com_sys_sched_notify_all(&rb->write.queue);
+    ksync_release(&rb->condvar);
 }

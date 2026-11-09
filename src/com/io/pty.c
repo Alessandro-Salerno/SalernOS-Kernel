@@ -57,7 +57,8 @@ static int pty_rb_check_hangup(size_t        *new_nbytes,
     KASSERT(NULL != pty);
 
     if (KRINGBUFFER_OP_WRITE == op) {
-        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
+        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST) ||
+            NULL == atomic_load(&pty->master_vn)) {
             *new_nbytes = 0;
             return EIO;
         }
@@ -108,7 +109,14 @@ static com_pty_t *pty_alloc(void) {
     // poll initialization
     LIST_INIT(&pty->master_ph.polled_list);
     pty->master_ph.lock = KSPINLOCK_NEW();
+    pty->num_ref        = 1;
     return pty;
+}
+
+static void pty_release(com_pty_t *pty) {
+    if (0 == __atomic_add_fetch(&pty->num_ref, -1, __ATOMIC_ACQ_REL)) {
+        com_mm_slab_free(pty, sizeof(com_pty_t));
+    }
 }
 
 // PTM FUNCTIONS
@@ -233,7 +241,20 @@ static int ptm_seekable(void *devdata) {
 static int ptm_close(void *devdata) {
     com_pty_t *pty = devdata;
     atomic_store(&pty->master_vn, NULL);
+
+    kringbuffer_wake_all(&pty->backend.slave_rb);
+    kringbuffer_wake_all(&pty->master_rb);
+    com_io_tty_text_backend_poll_callback(&pty->backend);
+
+    // New opens fail from now on, see pts_open
+    char pts_name[24];
+    kuitoa(pty->pts_num, pts_name);
+    com_fs_vfs_unlink(PtsDir, pts_name, kstrlen(pts_name), 0);
     return 0;
+}
+
+static void ptm_inactive(void *devdata) {
+    pty_release(devdata);
 }
 
 static int ptm_poll_head(com_poll_head_t **out, void *devdata) {
@@ -246,15 +267,9 @@ static int ptm_poll(short *revents, void *devdata, short events) {
     com_pty_t *pty = devdata;
     (void)events;
 
-    short out = 0;
+    short out = kringbuffer_poll(&pty->master_rb);
     if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_RELAXED)) {
         out |= POLLHUP;
-    }
-    if (pty->master_rb.write.index != pty->master_rb.read.index) {
-        out |= POLLIN;
-    }
-    if (KRINGBUFFER_AVAIL_WRITE(&pty->master_rb) > 0) {
-        out |= POLLOUT;
     }
 
     *revents = out;
@@ -276,7 +291,8 @@ static com_dev_ops_t PtmDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
                                   .poll_head = ptm_poll_head,
                                   .poll      = ptm_poll,
                                   .stat      = ptm_stat,
-                                  .close     = ptm_close};
+                                  .close     = ptm_close,
+                                  .inactive  = ptm_inactive};
 
 // PTS FUNCTIONS
 
@@ -345,10 +361,7 @@ static int pts_close(void *devdata) {
     com_pty_t       *pty       = pty_slave->pty;
 
     if (0 == __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST)) {
-        ksync_acquire(&pty->master_rb.condvar);
-        com_sys_sched_notify_all(&pty->master_rb.read.queue);
-        com_sys_sched_notify_all(&pty->master_rb.write.queue);
-        ksync_release(&pty->master_rb.condvar);
+        kringbuffer_wake_all(&pty->master_rb);
         ptm_poll_callback(pty);
     }
 
@@ -356,7 +369,9 @@ static int pts_close(void *devdata) {
 }
 
 static void pts_inactive(void *devdata) {
-    com_mm_slab_free(devdata, sizeof(com_pty_slave_t));
+    com_pty_slave_t *pty_slave = devdata;
+    pty_release(pty_slave->pty);
+    com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
 }
 
 // Opens a slave that is already open (e.g., through /dev/tty)
@@ -387,13 +402,9 @@ static int pts_poll(short *revents, void *devdata, short events) {
     com_pty_slave_t *pty_slave = devdata;
     com_pty_t       *pty       = pty_slave->pty;
 
-    short out = 0;
-
-    if (pty->backend.slave_rb.write.index != pty->backend.slave_rb.read.index) {
-        out |= POLLIN;
-    }
-    if (KRINGBUFFER_AVAIL_WRITE(&pty->backend.slave_rb) > 0) {
-        out |= POLLOUT;
+    short out = kringbuffer_poll(&pty->backend.slave_rb);
+    if (NULL == atomic_load(&pty->master_vn)) {
+        out |= POLLHUP;
     }
 
     *revents = out;
@@ -402,8 +413,13 @@ static int pts_poll(short *revents, void *devdata, short events) {
 
 // Opens /dev/pts/N: every open gets its own slave vnode
 static int pts_open(com_vnode_t **out, void *devdata) {
+    com_pty_t *pty = devdata;
+    // A lookup may have found the node just before the master closed
+    if (NULL == atomic_load(&pty->master_vn)) {
+        return EIO;
+    }
+
     com_pty_slave_t *pty_slave = com_mm_slab_alloc(sizeof(com_pty_slave_t));
-    com_pty_t       *pty       = devdata;
     pty_slave->pty             = pty;
 
     int ret = com_fs_devfs_register_anonymous(&pty_slave->vnode,
@@ -414,9 +430,14 @@ static int pts_open(com_vnode_t **out, void *devdata) {
         return ret;
     }
 
+    __atomic_add_fetch(&pty->num_ref, 1, __ATOMIC_RELAXED);
     __atomic_add_fetch(&pty->num_slaves, 1, __ATOMIC_SEQ_CST);
     *out = pty_slave->vnode;
     return 0;
+}
+
+static void pts_name_inactive(void *devdata) {
+    pty_release(devdata);
 }
 
 static com_dev_ops_t PtsDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
@@ -432,39 +453,44 @@ static com_dev_ops_t PtsDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
                                   .close     = pts_close,
                                   .inactive  = pts_inactive};
 
-static com_dev_ops_t PtsNameDevOps = {.type = E_COM_VNODE_TYPE_CHARDEV,
-                                      .open = pts_open,
-                                      .stat = pts_stat};
+static com_dev_ops_t PtsNameDevOps = {.type     = E_COM_VNODE_TYPE_CHARDEV,
+                                      .open     = pts_open,
+                                      .stat     = pts_stat,
+                                      .inactive = pts_name_inactive};
 
 static int ptmx_open(com_vnode_t **out, void *devdata) {
     (void)devdata;
 
     com_pty_t *pty = pty_alloc();
-    char       pts_name[24];
+
+    // The master comes first because pts_open needs it
+    com_vnode_t *master_vn = NULL;
+    int ret = com_fs_devfs_register_anonymous(&master_vn, &PtmDevOps, pty);
+    if (0 != ret) {
+        pty_release(pty);
+        return ret;
+    }
+    atomic_store(&pty->master_vn, master_vn);
+
+    char pts_name[24];
     kuitoa(pty->pts_num, pts_name);
 
     // This *ONLY* creates the pts device, it does NOT open it
-    int ret = com_fs_devfs_register(NULL,
-                                    PtsDir,
-                                    pts_name,
-                                    kstrlen(pts_name),
-                                    &PtsNameDevOps,
-                                    pty);
+    __atomic_add_fetch(&pty->num_ref, 1, __ATOMIC_RELAXED);
+    ret = com_fs_devfs_register(NULL,
+                                PtsDir,
+                                pts_name,
+                                kstrlen(pts_name),
+                                &PtsNameDevOps,
+                                pty);
     if (0 != ret) {
-        goto end;
+        pty_release(pty);
+        COM_FS_VFS_VNODE_RELEASE(master_vn);
+        return ret;
     }
 
-    com_vnode_t *master_vn = NULL;
-    ret = com_fs_devfs_register_anonymous(&master_vn, &PtmDevOps, pty);
-    if (0 != ret) {
-        goto end;
-    }
-
-    atomic_store(&pty->master_vn, master_vn);
     *out = master_vn;
-
-end:
-    return ret;
+    return 0;
 }
 
 static int ptmx_stat(struct stat *out, void *devdata) {

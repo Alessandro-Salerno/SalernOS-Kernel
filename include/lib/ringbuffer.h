@@ -95,39 +95,42 @@ typedef struct kringbuffer {
     void *fallback_hu_arg;
 } kringbuffer_t;
 
-int kringbuffer_write_nolock(size_t        *bytes_written,
-                             kringbuffer_t *rb,
-                             void          *buf,
-                             size_t         buflen,
-                             size_t         atomic_size,
-                             bool           blocking,
-                             void (*callback)(void *),
-                             void *cb_arg,
-                             void *hu_arg);
-int kringbuffer_write(size_t        *bytes_written,
-                      kringbuffer_t *rb,
-                      void          *buf,
-                      size_t         buflen,
-                      size_t         atomic_size,
-                      bool           blocking,
-                      void (*callback)(void *),
-                      void *cb_arg,
-                      void *hu_arg);
-int kringbuffer_read_nolock(void          *dst,
-                            size_t        *bytes_read,
-                            kringbuffer_t *rb,
-                            size_t         nbytes,
-                            size_t         atomic_size,
-                            bool           blocking,
-                            void (*callback)(void *),
-                            void *cb_arg,
-                            void *hu_arg);
-int kringbuffer_read(void          *dst,
-                     size_t        *bytes_read,
-                     kringbuffer_t *rb,
-                     size_t         nbytes,
-                     size_t         atomic_size,
-                     bool           blocking,
-                     void (*callback)(void *),
-                     void *cb_arg,
-                     void *hu_arg);
+int    kringbuffer_write_nolock(size_t        *bytes_written,
+                                kringbuffer_t *rb,
+                                void          *buf,
+                                size_t         buflen,
+                                size_t         atomic_size,
+                                bool           blocking,
+                                void (*callback)(void *),
+                                void *cb_arg,
+                                void *hu_arg);
+int    kringbuffer_write(size_t        *bytes_written,
+                         kringbuffer_t *rb,
+                         void          *buf,
+                         size_t         buflen,
+                         size_t         atomic_size,
+                         bool           blocking,
+                         void (*callback)(void *),
+                         void *cb_arg,
+                         void *hu_arg);
+int    kringbuffer_read_nolock(void          *dst,
+                               size_t        *bytes_read,
+                               kringbuffer_t *rb,
+                               size_t         nbytes,
+                               size_t         atomic_size,
+                               bool           blocking,
+                               void (*callback)(void *),
+                               void *cb_arg,
+                               void *hu_arg);
+int    kringbuffer_read(void          *dst,
+                        size_t        *bytes_read,
+                        kringbuffer_t *rb,
+                        size_t         nbytes,
+                        size_t         atomic_size,
+                        bool           blocking,
+                        void (*callback)(void *),
+                        void *cb_arg,
+                        void *hu_arg);
+short  kringbuffer_poll(kringbuffer_t *rb);
+size_t kringbuffer_avail_read(kringbuffer_t *rb);
+void   kringbuffer_wake_all(kringbuffer_t *rb);
