@@ -1,44 +1,67 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
-#include <kernel/com/sys/panic.h>
-#include <lib/util.h>
-#include <stddef.h>
+#include <kernel/com/util.h>
 #include <vendor/printf.h>
 
-struct com_vnode;
-typedef void (*com_intf_log_t)(const char *s, size_t n);
+#if CONFIG_LOG_LOCATION == CONST_LOG_LOCATION_ALL
+#define LOG_LOCATION __FILE__, __func__, __LINE__
+#else
+#define LOG_LOCATION NULL, NULL, 0
+#endif
 
-void com_io_log_set_hook_nolock(com_intf_log_t hook);
-void com_io_log_putc_nolock(char c);
-void com_io_log_puts_nolock(const char *s);
-void com_io_log_putsn_nolock(const char *s, size_t n);
-void com_io_log_set_vnode_nolock(struct com_vnode *vnode);
-void com_io_log_set_user_hook_nolock(com_intf_log_t hook);
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_URGENT
+#define log_urgent(...) \
+    log_line("URGENT", "\033[35m", true, LOG_LOCATION, __VA_ARGS__)
+#else
+#define log_urgent(...) ((void)0)
+#endif
 
-void com_io_log_lock(void);
-void com_io_log_unlock(void);
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_INFO
+#define log(...) log_line("INFO", "\033[32m", true, LOG_LOCATION, __VA_ARGS__)
+#else
+#define log(...) ((void)0)
+#endif
 
-void com_io_log_set_hook(com_intf_log_t hook);
-void com_io_log_putc(char c);
-void com_io_log_puts(const char *s);
-void com_io_log_putsn(const char *s, size_t n);
-void com_io_log_set_vnode(struct com_vnode *vnode);
-void com_io_log_set_user_hook(com_intf_log_t hook);
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_OPTION
+#define log_opt(optname, ...) \
+    log_line(optname, "\033[94m", false, LOG_LOCATION, __VA_ARGS__)
+#else
+#define log_opt(...) ((void)0)
+#endif
+
+#if CONFIG_LOG_LEVEL >= CONST_LOG_LEVEL_DEBUG
+#define log_debug(...) log_line("DEBUG", "", true, LOG_LOCATION, __VA_ARGS__)
+#else
+#define log_debug(...) ((void)0)
+#endif
+
+struct Vnode;
+typedef void (*LogFn)(const char *s, usize n);
+
+void log_set_hook_nolock(LogFn hook);
+void log_putc_nolock(char c);
+void log_puts_nolock(const char *s);
+void log_putsn_nolock(const char *s, usize n);
+void log_set_vnode_nolock(struct Vnode *vnode);
+void log_set_user_hook_nolock(LogFn hook);
+
+void log_lock(void);
+void log_unlock(void);
+
+void log_set_hook(LogFn hook);
+void log_putc(char c);
+void log_puts(const char *s);
+void log_putsn(const char *s, usize n);
+void log_set_vnode(struct Vnode *vnode);
+void log_set_user_hook(LogFn hook);
+
+void log_header_nolock(const char *category, const char *color);
+void log_line(const char *category, const char *color, bool newline,
+              const char *file, const char *func, int line, const char *fmt,
+              ...) __attribute__((format(printf, 7, 8)));
+
+static inline void log_reset_color_nolock(void) {
+#if CONFIG_LOG_ALLOW_COLORS
+    log_puts_nolock("\033[0m");
+#endif
+}

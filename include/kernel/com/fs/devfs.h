@@ -1,71 +1,32 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/util.h>
 
-typedef struct com_dev_ops {
-    com_vnode_type_t type; // CHARDEV or BLOCKDEV
-    int (*read)(void     *buf,
-                size_t    buflen,
-                size_t   *bytes_read,
-                void     *devdata,
-                uintmax_t off,
-                uintmax_t flags);
-    int (*write)(size_t   *bytes_written,
-                 void     *devdata,
-                 void     *buf,
-                 size_t    buflen,
-                 uintmax_t off,
-                 uintmax_t flags);
-    int (*ioctl)(void *devdata, uintmax_t op, void *buf);
+typedef struct DevOps {
+    VnodeType type; // CHARDEV or BLOCKDEV
+    int (*read)(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
+                usize *out_bytes_read);
+    int (*write)(void *devdata, void *buf, usize buflen, u64 off, u64 flags,
+                 usize *out_bytes_written);
+    int (*ioctl)(void *devdata, u64 op, void *buf);
     int (*isatty)(void *devdata);
     int (*seekable)(void *devdata);
-    int (*stat)(struct stat *out, void *devdata);
-    int (*poll_head)(struct com_poll_head **out, void *devdata);
-    int (*poll)(short *revents, void *devdata, short events);
-    int (*mmap)(void             **out,
-                void              *devdata,
-                com_vmm_context_t *vmm_context,
-                void              *hint,
-                size_t             size,
-                int                vmm_flags,
-                arch_mmu_flags_t   mmu_flags,
-                uintmax_t          off);
+    int (*stat)(void *devdata, struct stat *out_stat);
+    int (*poll_head)(void *devdata, struct PollHead **out_poll_head);
+    int (*poll)(void *devdata, short events, short *out_revents);
+    int (*mmap)(void *devdata, VMMContext *vmm_context, void *hint, usize size,
+                int vmm_flags, MMUFlags mmu_flags, u64 off, void **out_addr);
 
-    int (*open)(com_vnode_t **out, void *devdata);
+    int (*open)(void *devdata, Vnode **out_vnode);
     int (*close)(void *devdata);
     void (*inactive)(void *devdata);
-} com_dev_ops_t;
+} DevOps;
 
-int   com_fs_devfs_register(com_vnode_t  **out,
-                            com_vnode_t   *dir,
-                            const char    *name,
-                            size_t         namelen,
-                            com_dev_ops_t *devops,
-                            void          *devdata);
-int   com_fs_devfs_register_anonymous(com_vnode_t  **out,
-                                      com_dev_ops_t *devops,
-                                      void          *devdata);
-int   com_fs_devfs_mkdir(com_vnode_t **out,
-                         com_vnode_t  *parent,
-                         const char   *name,
-                         size_t        namelen);
-void *com_fs_devfs_get_data(com_vnode_t *node);
-int   com_fs_devfs_init(com_vfs_t **out, com_vfs_t *rootfs);
+int devfs_register(Vnode *dir, const char *name, usize namelen, DevOps *devops,
+                   void *devdata, Vnode **out_vnode);
+int devfs_register_anonymous(DevOps *devops, void *devdata, Vnode **out_vnode);
+int devfs_mkdir(Vnode *parent, const char *name, usize namelen,
+                Vnode **out_vnode);
+void *devfs_get_data(Vnode *node);
+int devfs_init(Vfs *rootfs, Vfs **out_vfs);

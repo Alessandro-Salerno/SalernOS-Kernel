@@ -1,72 +1,53 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/x86-64/ist.h>
-#include <lib/mem.h>
 #include <printf.h>
-#include <stddef.h>
-#include <stdint.h>
 
-static uint64_t GdtTemplate[7] = {
+static u64 g_gdt_template[7] = {
     0x0000000000000000, // 0x00 null
     0x00af9b000000ffff, // 0x08 64-bit kernel code
     0x00af93000000ffff, // 0x10 64-bit kernel data
     0x00aff3000000ffff, // 0x18 64-bit user data
     0x00affb000000ffff, // 0x20 64-bit user code
-    0x0020890000000000, // 0x28 low IST
+    0x0020890000000000, // 0x28 low InterruptStackTable
     0x0000000000000000  // 0x30 high ist (null?)
 };
 
 typedef struct {
-    uint16_t size;
-    uint64_t address;
-} __attribute__((packed)) gdtr_t;
+    u16 size;
+    u64 address;
+} packed GDTRegister;
 
-void x86_64_gdt_init(void) {
-    KDEBUG("copying gdt  to cpu struct");
-    arch_cpu_t *cur_cpu = ARCH_CPU_GET();
+void gdt_init(void) {
+    log_debug("copying gdt  to cpu struct");
+    Cpu *cur_cpu = cpu_get();
 
-    cur_cpu->gdt[0] = GdtTemplate[0];
-    cur_cpu->gdt[1] = GdtTemplate[1];
-    cur_cpu->gdt[2] = GdtTemplate[2];
-    cur_cpu->gdt[3] = GdtTemplate[3];
-    cur_cpu->gdt[4] = GdtTemplate[4];
-    cur_cpu->gdt[5] = GdtTemplate[5];
-    cur_cpu->gdt[6] = GdtTemplate[6];
+    cur_cpu->gdt[0] = g_gdt_template[0];
+    cur_cpu->gdt[1] = g_gdt_template[1];
+    cur_cpu->gdt[2] = g_gdt_template[2];
+    cur_cpu->gdt[3] = g_gdt_template[3];
+    cur_cpu->gdt[4] = g_gdt_template[4];
+    cur_cpu->gdt[5] = g_gdt_template[5];
+    cur_cpu->gdt[6] = g_gdt_template[6];
 
-    KDEBUG("applying changes to gdt template");
-    uintptr_t ist_addr = (uintptr_t)&ARCH_CPU_GET()->ist;
+    log_debug("applying changes to gdt template");
+    uptr ist_addr = (uptr)&cpu_get()->ist;
 
     // No I/O permission bitmap, user code cannot access any port
-    ARCH_CPU_GET()->ist.iopb = sizeof(x86_64_ist_t);
+    cpu_get()->ist.iopb = sizeof(InterruptStackTable);
 
-    // Add IST to GDT
+    // Add InterruptStackTable to GDT
     cur_cpu->gdt[5] |= ((ist_addr & 0xff000000) << 32) |
-                       ((ist_addr & 0xff0000) << 16) |
-                       ((ist_addr & 0xffff) << 16) | sizeof(x86_64_ist_t);
+        ((ist_addr & 0xff0000) << 16) | ((ist_addr & 0xffff) << 16) |
+        sizeof(InterruptStackTable);
     cur_cpu->gdt[6] = (ist_addr >> 32) & 0xffffffff;
 
-    gdtr_t gdtr = {.size    = sizeof(GdtTemplate) - 1,
-                   .address = (uintptr_t)&ARCH_CPU_GET()->gdt};
+    GDTRegister gdtr = {.size = sizeof(g_gdt_template) - 1,
+                        .address = (uptr)&cpu_get()->gdt};
 
-    KLOG("loading gdt");
+    log("loading gdt");
     asm volatile("lgdt (%%rax)" : : "a"(&gdtr) : "memory");
     asm volatile("ltr %%ax" : : "a"(0x28));
     asm volatile("swapgs;"

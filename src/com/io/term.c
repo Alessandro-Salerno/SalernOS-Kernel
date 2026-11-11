@@ -1,262 +1,197 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
+#include <kernel/com/crt/string.h>
 #include <kernel/com/io/term.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/sched.h>
-#include <lib/spinlock.h>
-#include <lib/str.h>
+#include <kernel/com/util.h>
 #include <stdatomic.h>
 #include <vendor/tailq.h>
 
-static _Atomic(com_term_t *) FallbackTerm = NULL;
+static _Atomic(Term *) g_fallback_term = NULL;
 
-static void flush_buffer_nolock(com_term_t *term) {
-    if (0 == term->buffering.index) {
-        return;
-    }
+static void flush_buffer_nolock(Term *term) {
+    if (term->buffering.index == 0) return;
 
-    term->backend.ops->putsn(term->backend.data,
-                             term->buffering.buffer,
+    term->backend.ops->putsn(term->backend.data, term->buffering.buffer,
                              term->buffering.index);
     term->buffering.index = 0;
-    ksync_notify_all(&term->lock, &term->buffering.waiters);
+    sched_notify_all(&term->buffering.waiters);
 }
 
-static void refresh_term_nolock(com_term_t *term) {
-    if (term->buffering.enabled) {
-        flush_buffer_nolock(term);
-    }
+static void refresh_term_nolock(Term *term) {
+    if (term->buffering.enabled) flush_buffer_nolock(term);
 
     term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
 }
 
-static void flush_callout(com_callout_t *callout) {
-    com_term_t *term = callout->arg;
-    ksync_acquire(&term->lock);
+static void flush_callout(Callout *callout) {
+    Term *term = callout->arg;
+    spinlock_acq(&term->lock);
     flush_buffer_nolock(term);
     bool should_resched = term->buffering.enabled && term->enabled;
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 
-    if (should_resched) {
-        com_sys_callout_reschedule(callout, KFPS(CONFIG_TERM_FPS));
-    }
+    if (should_resched) callout_reschedule(callout, fps_to_ns(CONFIG_TERM_FPS));
 }
 
-com_term_t *com_io_term_new(com_term_backend_t backend) {
-    com_term_t *ret = com_mm_slab_alloc(sizeof(com_term_t));
-    ret->backend    = backend;
-    KSYNC_INIT_SPINLOCK(&ret->lock);
-    ret->enabled           = true;
+Term *term_new(TermBackend backend) {
+    Term *ret = slab_alloc(sizeof(Term));
+    ret->backend = backend;
+    ret->lock = SPINLOCK_NEW();
+    ret->enabled = true;
     ret->buffering.enabled = false;
-    COM_SYS_THREAD_WAITLIST_INIT(&ret->buffering.waiters);
+    waitlist_init(&ret->buffering.waiters);
 
     ret->backend.data = ret->backend.ops->init();
 
     return ret;
 }
 
-com_term_t *com_io_term_clone(com_term_t *parent) {
-    com_term_t *ret = com_mm_slab_alloc(sizeof(com_term_t));
-    KSYNC_INIT_SPINLOCK(&ret->lock);
+Term *term_clone(Term *parent) {
+    Term *ret = slab_alloc(sizeof(Term));
+    ret->lock = SPINLOCK_NEW();
     ret->buffering.enabled = false;
-    COM_SYS_THREAD_WAITLIST_INIT(&ret->buffering.waiters);
+    waitlist_init(&ret->buffering.waiters);
 
-    if (NULL != parent) {
-        ret->enabled      = parent->enabled;
-        ret->backend.ops  = parent->backend.ops;
+    if (parent != NULL) {
+        ret->enabled = parent->enabled;
+        ret->backend.ops = parent->backend.ops;
         ret->backend.data = ret->backend.ops->init();
-        ksync_acquire(&parent->lock);
+        spinlock_acq(&parent->lock);
         bool buffering = parent->buffering.enabled;
-        ksync_release(&parent->lock);
-        com_io_term_set_buffering(ret, buffering);
+        spinlock_rel(&parent->lock);
+        term_set_buffering(ret, buffering);
     }
 
     return ret;
 }
 
-void com_io_term_putc(com_term_t *term, char c) {
-    com_io_term_putsn(term, &c, 1);
-}
+void term_putc(Term *term, char c) { term_putsn(term, &c, 1); }
 
-void com_io_term_puts(com_term_t *term, const char *s) {
-    com_io_term_putsn(term, s, kstrlen(s));
-}
+void term_puts(Term *term, const char *s) { term_putsn(term, s, strlen(s)); }
 
-void com_io_term_putsn(com_term_t *term, const char *s, size_t n) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
+void term_putsn(Term *term, const char *s, usize n) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
+    if (term == NULL) return;
 
-    if (NULL == term) {
-        return;
-    }
-
-    ksync_acquire(&term->lock);
+    spinlock_acq(&term->lock);
 
     if (term->buffering.enabled) {
-        while (term->buffering.index + n >= COM_IO_TERM_BUFSZ) {
-            ksync_wait_uninterruptible(&term->lock, &term->buffering.waiters);
+        while (term->buffering.index + n >= TERM_BUFSZ) {
+            spinlock_wait(&term->lock, &term->buffering.waiters, 0, false);
         }
-        kmemcpy(&term->buffering.buffer[term->buffering.index], s, n);
+        memcpy(&term->buffering.buffer[term->buffering.index], s, n);
         term->buffering.index += n;
     } else {
         term->backend.ops->putsn(term->backend.data, s, n);
     }
 
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 }
 
-void com_io_term_get_size(com_term_t *term, size_t *rows, size_t *cols) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
+void term_get_size(Term *term, usize *out_rows, usize *out_cols) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
 
-    if (NULL == term) {
-        *rows = 0;
-        *cols = 0;
+    if (term == NULL) {
+        *out_rows = 0;
+        *out_cols = 0;
         return;
     }
 
-    term->backend.ops->get_size(term->backend.data, rows, cols);
+    term->backend.ops->get_size(term->backend.data, out_rows, out_cols);
 }
 
-void com_io_term_set_size(com_term_t *term, size_t rows, size_t cols) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
-
-    if (NULL == term) {
-        return;
-    }
+void term_set_size(Term *term, usize rows, usize cols) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
+    if (term == NULL) return;
 
     term->backend.ops->set_size(term->backend.data, rows, cols);
 }
 
-void com_io_term_flush(com_term_t *term) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
+void term_flush(Term *term) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
+    if (term == NULL) return;
 
-    if (NULL == term) {
-        return;
-    }
+    spinlock_acq(&term->lock);
 
-    ksync_acquire(&term->lock);
-
-    if (term->buffering.enabled) {
-        flush_buffer_nolock(term);
-    }
+    if (term->buffering.enabled) flush_buffer_nolock(term);
 
     term->backend.ops->flush(term->backend.data);
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 }
 
-void com_io_term_set_buffering(com_term_t *term, bool state) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
+void term_set_buffering(Term *term, bool state) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
+    if (term == NULL) return;
 
-    if (NULL == term) {
-        return;
-    }
-
-    ksync_acquire(&term->lock);
+    spinlock_acq(&term->lock);
 
     if (state == term->buffering.enabled) {
-        ksync_release(&term->lock);
+        spinlock_rel(&term->lock);
         return;
     }
 
-    if (term->buffering.enabled) {
-        flush_buffer_nolock(term);
-    }
+    if (term->buffering.enabled) flush_buffer_nolock(term);
 
     term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
     term->buffering.enabled = state;
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 
-    if (state) {
-        com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
-    }
+    if (state) callout_add(flush_callout, term, fps_to_ns(CONFIG_TERM_FPS));
 }
 
-void com_io_term_enable(com_term_t *term) {
-    if (NULL == term) {
-        return;
-    }
+void term_enable(Term *term) {
+    if (term == NULL) return;
 
-    ksync_acquire(&term->lock);
+    spinlock_acq(&term->lock);
     term->backend.ops->enable(term->backend.data);
     term->enabled = true;
 
     refresh_term_nolock(term);
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 
     if (term->buffering.enabled) {
-        com_sys_callout_add(flush_callout, term, KFPS(CONFIG_TERM_FPS));
+        callout_add(flush_callout, term, fps_to_ns(CONFIG_TERM_FPS));
     }
 }
 
-void com_io_term_disable(com_term_t *term) {
-    if (NULL == term) {
-        return;
-    }
+void term_disable(Term *term) {
+    if (term == NULL) return;
 
-    ksync_acquire(&term->lock);
+    spinlock_acq(&term->lock);
     term->enabled = false;
     term->backend.ops->disable(term->backend.data);
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 }
 
-void com_io_term_refresh(com_term_t *term) {
-    if (NULL == term) {
-        term = atomic_load(&FallbackTerm);
-    }
+void term_refresh(Term *term) {
+    if (term == NULL) term = atomic_load(&g_fallback_term);
+    if (term == NULL) return;
 
-    if (NULL == term) {
-        return;
-    }
-
-    ksync_acquire(&term->lock);
+    spinlock_acq(&term->lock);
     refresh_term_nolock(term);
-    ksync_release(&term->lock);
+    spinlock_rel(&term->lock);
 }
 
-void com_io_term_set_fallback(com_term_t *fallback_term) {
-    atomic_store(&FallbackTerm, fallback_term);
+void term_set_fallback(Term *fallback_term) {
+    atomic_store(&g_fallback_term, fallback_term);
 }
 
-void com_io_term_panic_putsn(const char *s, size_t n) {
-    static com_term_t *fallback = NULL;
+void term_panic_putsn(const char *s, usize n) {
+    static Term *fallback = NULL;
 
     // fallback is static, so we need to initialize it once
-    if (NULL == fallback) {
-        fallback = atomic_load(&FallbackTerm);
+    if (fallback == NULL) {
+        fallback = atomic_load(&g_fallback_term);
         // It was null and now it isn't, so we got it
-        if (NULL != fallback) {
+        if (fallback != NULL) {
             // We don't use the wrapper functions because those do more and we
             // don't need that in panic
             fallback->buffering.enabled = false;
-            fallback->buffering.index   = 0;
+            fallback->buffering.index = 0;
             fallback->backend.ops->enable(fallback->backend.data);
             fallback->backend.ops->flush(fallback->backend.data);
             fallback->backend.ops->panic(fallback->backend.data);
@@ -264,17 +199,16 @@ void com_io_term_panic_putsn(const char *s, size_t n) {
     }
 
     // And this is done every other time
-    if (NULL != fallback) {
+    if (fallback != NULL) {
         fallback->backend.ops->putsn(fallback->backend.data, s, n);
     }
 }
 
-void com_io_term_panic(void) {
+void term_panic(void) {
     static const char reset_sequence[] = "\033[0m\033[H\033[2J";
-    com_io_term_panic_putsn(reset_sequence, sizeof(reset_sequence));
+    term_panic_putsn(reset_sequence, sizeof(reset_sequence));
     // Best to have weird output than to have a deadlock in panic
-    com_io_log_set_user_hook_nolock(com_io_term_panic_putsn);
+    log_set_user_hook_nolock(term_panic_putsn);
 }
 
-void com_io_term_init(void) {
-}
+void term_init(void) {}

@@ -1,94 +1,71 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <fcntl.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
-#include <lib/spinlock.h>
-#include <lib/str.h>
-#include <lib/util.h>
-#include <stddef.h>
-#include <stdint.h>
 
 // SYSCALL: fork()
-COM_SYS_SYSCALL(com_sys_syscall_fork) {
-    COM_SYS_SYSCALL_UNUSED_START(1);
+SYSCALL(syscall_fork) {
+    SYSCALL_UNUSED_START(1);
 
-    arch_context_t *ctx = COM_SYS_SYSCALL_CONTEXT();
+    Context *ctx = SYSCALL_CONTEXT();
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    Thread *curr_thread = cpu_get_thread();
+    Proc *curr_proc = curr_thread->proc;
 
-    com_vmm_context_t *new_vmm_ctx = com_mm_vmm_duplicate_context(
-        curr_proc->vmm_context);
-    arch_mmu_invalidate(curr_proc->vmm_context->pagetable, NULL, 512);
-    com_vnode_t *cwd      = com_sys_proc_get_cwd(curr_proc);
-    com_proc_t  *new_proc = com_sys_proc_new(new_vmm_ctx,
-                                             curr_proc->pid,
-                                             curr_proc->root,
-                                             cwd);
-    COM_FS_VFS_VNODE_RELEASE(cwd);
+    VMMContext *new_vmm_ctx = vmm_duplicate_context(curr_proc->vmm_context);
+    mmu_invalidate(curr_proc->vmm_context->pagetable, NULL, 512);
+    Vnode *cwd = proc_get_cwd(curr_proc);
+    Proc *new_proc = proc_new(new_vmm_ctx, curr_proc->pid, curr_proc->root,
+                              cwd);
+    vfs_vnode_rel(cwd);
     // NOTE: process group is inherited from parent in proc_new
-    com_thread_t *new_thread = com_sys_thread_new(new_proc, NULL, 0, 0);
-    ARCH_CONTEXT_FORK_EXTRA(new_thread->xctx);
-    KASSERT(NULL != new_thread);
-    KASSERT(NULL != new_proc);
-    KASSERT(NULL != new_vmm_ctx);
-    KASSERT(NULL != new_vmm_ctx->pagetable);
+    Thread *new_thread = thread_new(new_proc, NULL, 0, 0);
+    CONTEXT_FORK_EXTRA(new_thread->xctx);
+    assert(new_thread != NULL);
+    assert(new_proc != NULL);
+    assert(new_vmm_ctx != NULL);
+    assert(new_vmm_ctx->pagetable != NULL);
 
-    kspinlock_acquire(&curr_proc->fd_lock);
+    spinlock_acq(&curr_proc->fd_lock);
     new_proc->next_fd = curr_proc->next_fd;
-    new_proc->max_fd  = curr_proc->max_fd;
+    new_proc->max_fd = curr_proc->max_fd;
     for (int i = 0; i < curr_proc->max_fd; i++) {
-        if (NULL != curr_proc->fd[i].file) {
+        if (curr_proc->fd[i].file != NULL) {
             new_proc->fd[i].flags = curr_proc->fd[i].flags;
-            COM_FS_FILE_HOLD(curr_proc->fd[i].file);
+            FILE_HOLD(curr_proc->fd[i].file);
             new_proc->fd[i].file = curr_proc->fd[i].file;
         }
     }
-    kspinlock_release(&curr_proc->fd_lock);
+    spinlock_rel(&curr_proc->fd_lock);
 
-    ARCH_CONTEXT_FORK(new_thread, *ctx);
+    CONTEXT_FORK(new_thread, *ctx);
     __atomic_add_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
 
-    kspinlock_acquire(&curr_proc->signal_lock);
+    spinlock_acq(&curr_proc->signal_lock);
     new_thread->masked_signals = curr_thread->masked_signals;
-    for (size_t i = 0; i < NSIG; i++) {
-        if (NULL != curr_proc->sigaction[i]) {
-            com_sigaction_t *sa    = com_mm_slab_alloc(sizeof(com_sigaction_t));
-            *sa                    = *curr_proc->sigaction[i];
+    for (usize i = 0; i < NSIG; i++) {
+        if (curr_proc->sigaction[i] != NULL) {
+            SignalAction *sa = slab_alloc(sizeof(SignalAction));
+            *sa = *curr_proc->sigaction[i];
             new_proc->sigaction[i] = sa;
         }
     }
-    kspinlock_release(&curr_proc->signal_lock);
+    spinlock_rel(&curr_proc->signal_lock);
 
-    com_sys_thread_ready(new_thread);
+    thread_ready(new_thread);
 
-    return COM_SYS_SYSCALL_OK(new_proc->pid);
+    return SYSCALL_OK(new_proc->pid);
 }

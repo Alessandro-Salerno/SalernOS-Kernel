@@ -1,115 +1,86 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <errno.h>
+#include <kernel/com/ds/ioviter.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
-#include <lib/ioviter.h>
-#include <lib/sync.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/sync/mutex.h>
+#include <kernel/com/util.h>
 #include <sys/socket.h>
 
 #define __SOCKET_OP(sock, op, ...) \
-    ((NULL != (sock)->ops->op) ? (sock)->ops->op(__VA_ARGS__) : ENOSYS)
+    (((sock)->ops->op != NULL) ? (sock)->ops->op(__VA_ARGS__) : ENOSYS)
 
-#define COM_IPC_SOCKET_BIND(sock, addr) __SOCKET_OP(sock, bind, sock, addr)
-#define COM_IPC_SOCKET_SEND(sock, desc) __SOCKET_OP(sock, send, sock, desc)
-#define COM_IPC_SOCKET_RECV(sock, desc) __SOCKET_OP(sock, recv, sock, desc)
-#define COM_IPC_SOCKET_CONNECT(sock, addr) \
-    __SOCKET_OP(sock, connect, sock, addr)
-#define COM_IPC_SOCKET_LISTEN(sock, max_conn) \
-    __SOCKET_OP(sock, listen, sock, max_conn)
-#define COM_IPC_SOCKET_ACCEPT(out_peer, out_addr, server, flags) \
-    __SOCKET_OP(server, accept, out_peer, out_addr, server, flags)
-#define COM_IPC_SOCKET_GETNAME(out, sock) __SOCKET_OP(sock, getname, out, sock)
-#define COM_IPC_SOCKET_GETPEERNAME(out, sock) \
-    __SOCKET_OP(sock, getpeername, out, sock)
-#define COM_IPC_SOCKET_POLLHEAD(out, sock) (*(out) = &(sock)->pollhead, 0)
-#define COM_IPC_SOCKET_POLL(revents, sock, events) \
-    __SOCKET_OP(sock, poll, revents, sock, events)
-#define COM_IPC_SOCKET_DESTROY(sock) __SOCKET_OP(sock, destroy, sock)
-#define COM_IPC_SOCKET_IOCTL(sock, op, buf) \
-    __SOCKET_OP(sock, ioctl, sock, op, buf)
+#define SOCKET_BIND(sock, addr)       __SOCKET_OP(sock, bind, sock, addr)
+#define SOCKET_SEND(sock, desc)       __SOCKET_OP(sock, send, sock, desc)
+#define SOCKET_RECV(sock, desc)       __SOCKET_OP(sock, recv, sock, desc)
+#define SOCKET_CONNECT(sock, addr)    __SOCKET_OP(sock, connect, sock, addr)
+#define SOCKET_LISTEN(sock, max_conn) __SOCKET_OP(sock, listen, sock, max_conn)
+#define SOCKET_ACCEPT(server, flags, out_peer, out_addr) \
+    __SOCKET_OP(server, accept, server, flags, out_peer, out_addr)
+#define SOCKET_GETNAME(sock, out)     __SOCKET_OP(sock, getname, sock, out)
+#define SOCKET_GETPEERNAME(sock, out) __SOCKET_OP(sock, getpeername, sock, out)
+#define SOCKET_POLLHEAD(sock, out)    (*(out) = &(sock)->pollhead, 0)
+#define SOCKET_POLL(sock, events, out_revents) \
+    __SOCKET_OP(sock, poll, sock, events, out_revents)
+#define SOCKET_DESTROY(sock)        __SOCKET_OP(sock, destroy, sock)
+#define SOCKET_IOCTL(sock, op, buf) __SOCKET_OP(sock, ioctl, sock, op, buf)
 
-typedef enum com_socket_type {
-    E_COM_SOCKET_TYPE_INVAL,
-    E_COM_SOCKET_TYPE_UNIX
-} com_socket_type_t;
+typedef enum SocketType {
+    SOCKET_TYPE_INVAL,
+    SOCKET_TYPE_UNIX
+} SocketType;
 
-typedef enum com_socket_state {
-    E_COM_SOCKET_STATE_UNBOUND,
-    E_COM_SOCKET_STATE_BOUND,
-    E_COM_SOCKET_STATE_CONNECTED,
-    E_COM_SOCKET_STATE_LISTENING
-} com_socket_state_t;
+typedef enum SocketState {
+    SOCKET_STATE_UNBOUND,
+    SOCKET_STATE_BOUND,
+    SOCKET_STATE_CONNECTED,
+    SOCKET_STATE_LISTENING
+} SocketState;
 
-typedef union com_socket_addr {
+typedef union SocketAddr {
     struct {
-        char   path[CONFIG_PATH_MAX];
-        size_t pathlen;
+        char path[CONFIG_PATH_MAX];
+        usize pathlen;
     } local;
-} com_socket_addr_t;
+} SocketAddr;
 
-typedef struct com_socket {
-    com_socket_type_t      type;
-    struct com_socket_ops *ops;
-    ksync_t                lock;
-    com_socket_state_t     state;
-    com_poll_head_t        pollhead;
-} com_socket_t;
+typedef struct Socket {
+    SocketType type;
+    struct SocketOps *ops;
+    Mutex lock;
+    SocketState state;
+    PollHead pollhead;
+} Socket;
 
-typedef struct com_socket_desc {
-    com_socket_addr_t *addr;
-    kioviter_t        *ioviter;
-    size_t             count;
-    uintmax_t          flags;
-    int                msgflags;
-    size_t             count_done;
-} com_socket_desc_t;
+typedef struct SocketDesc {
+    SocketAddr *addr;
+    IOVIter *ioviter;
+    usize count;
+    u64 flags;
+    int msgflags;
+    usize count_done;
+} SocketDesc;
 
-typedef struct com_socket_ops {
-    int (*bind)(com_socket_t *socket, com_socket_addr_t *addr);
-    int (*send)(com_socket_t *socket, com_socket_desc_t *desc);
-    int (*recv)(com_socket_t *socket, com_socket_desc_t *desc);
-    int (*connect)(com_socket_t *socket, com_socket_addr_t *addr);
-    int (*listen)(com_socket_t *socket, size_t max_connections);
-    int (*accept)(com_socket_t     **out_peer,
-                  com_socket_addr_t *out_addr,
-                  com_socket_t      *server,
-                  uintmax_t          flags);
-    int (*getname)(com_socket_addr_t *out, com_socket_t *socket);
-    int (*getpeername)(com_socket_addr_t *out, com_socket_t *socket);
-    int (*poll)(short *revents, com_socket_t *socket, short events);
-    int (*destroy)(com_socket_t *socket);
-    int (*ioctl)(com_socket_t *socket, uintmax_t op, void *buf);
-} com_socket_ops_t;
+typedef struct SocketOps {
+    int (*bind)(Socket *socket, SocketAddr *addr);
+    int (*send)(Socket *socket, SocketDesc *desc);
+    int (*recv)(Socket *socket, SocketDesc *desc);
+    int (*connect)(Socket *socket, SocketAddr *addr);
+    int (*listen)(Socket *socket, usize max_connections);
+    int (*accept)(Socket *server, u64 flags, Socket **out_peer,
+                  SocketAddr *out_addr);
+    int (*getname)(Socket *socket, SocketAddr *out_addr);
+    int (*getpeername)(Socket *socket, SocketAddr *out_addr);
+    int (*poll)(Socket *socket, short events, short *out_revents);
+    int (*destroy)(Socket *socket);
+    int (*ioctl)(Socket *socket, u64 op, void *buf);
+} SocketOps;
 
-com_socket_t *com_ipc_socket_new(com_socket_type_t type);
-int           com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
-                                           struct sockaddr   *abi_addr,
-                                           socklen_t          abi_addr_len);
-int           com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
-                                           struct sockaddr   *abi_addr,
-                                           com_socket_addr_t *addr,
-                                           com_socket_type_t  socktype,
-                                           socklen_t          max_abi_addr_len);
-com_socket_type_t
-com_ipc_socket_type_from_abi(int domain, int type, int protocol);
+Socket *socket_new(SocketType type);
+int socket_addr_from_abi(struct sockaddr *abi_addr, socklen_t abi_addr_len,
+                         SocketAddr *out_addr);
+int socket_abi_from_addr(struct sockaddr *abi_addr, SocketAddr *addr,
+                         SocketType socktype, socklen_t max_abi_addr_len,
+                         socklen_t *out_abi_addr_len);
+SocketType socket_type_from_abi(int domain, int type, int protocol);

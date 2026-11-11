@@ -1,59 +1,39 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/context.h>
-#include <lib/spinlock.h>
 #include <stdatomic.h>
-#include <stdint.h>
 #include <stdio.h>
 
 // SYSCALL: clone(void *new_ip, void *new_sp)
-COM_SYS_SYSCALL(com_sys_syscall_clone) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
+SYSCALL(syscall_clone) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(3);
 
-    void *new_ip = COM_SYS_SYSCALL_ARG(void *, 1);
-    void *new_sp = COM_SYS_SYSCALL_ARG(void *, 2);
+    void *new_ip = SYSCALL_ARG(void *, 1);
+    void *new_sp = SYSCALL_ARG(void *, 2);
 
-    if (!ARCH_MMU_ADDR_IS_USER(new_ip)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
+    if (!MMU_ADDR_IS_USER(new_ip)) return SYSCALL_ERR(EFAULT);
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    Thread *curr_thread = cpu_get_thread();
+    Proc *curr_proc = curr_thread->proc;
 
-    com_thread_t *new_thread = com_sys_thread_new(curr_proc, NULL, 0, NULL);
-    ARCH_CONTEXT_CLONE(new_thread, new_ip, new_sp);
-    ARCH_CONTEXT_INIT_EXTRA(new_thread->xctx);
+    Thread *new_thread = thread_new(curr_proc, NULL, 0, NULL);
+    CONTEXT_CLONE(new_thread, new_ip, new_sp);
+    CONTEXT_INIT_EXTRA(new_thread->xctx);
 
-    kspinlock_acquire(&curr_proc->signal_lock);
+    spinlock_acq(&curr_proc->signal_lock);
     new_thread->masked_signals = curr_thread->masked_signals;
-    kspinlock_release(&curr_proc->signal_lock);
+    spinlock_rel(&curr_proc->signal_lock);
 
-    com_sys_thread_ready(new_thread);
+    thread_ready(new_thread);
 
-    return COM_SYS_SYSCALL_OK(new_thread->tid);
+    return SYSCALL_OK(new_thread->tid);
 }

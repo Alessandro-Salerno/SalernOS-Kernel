@@ -33,7 +33,7 @@
     #define UACPI_PACKED(decl) _Packed decl;
 #else
     #define UACPI_ALWAYS_INLINE inline __attribute__((always_inline))
-    #define UACPI_PACKED(decl) decl __attribute__((packed));
+    #define UACPI_PACKED(decl) decl __attribute__((__packed__));
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

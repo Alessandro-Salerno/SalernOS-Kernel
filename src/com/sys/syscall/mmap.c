@@ -1,67 +1,38 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
-#include <stdint.h>
 #include <sys/mman.h>
 
-static com_syscall_ret_t file_mmap(com_proc_t      *curr_proc,
-                                   int              fd,
-                                   size_t           size,
-                                   int              vmm_flags,
-                                   arch_mmu_flags_t mmu_flags,
-                                   uintmax_t        off,
-                                   void            *hint) {
-    com_syscall_ret_t ret  = COM_SYS_SYSCALL_BASE_OK();
-    com_file_t       *file = com_sys_proc_get_file(curr_proc, fd);
-    if (NULL == file) {
-        ret = COM_SYS_SYSCALL_ERR(EBADF);
+static SyscallRet file_mmap(Proc *curr_proc, int fd, usize size, int vmm_flags,
+                            MMUFlags mmu_flags, u64 off, void *hint) {
+    SyscallRet ret = SYSCALL_BASE_OK();
+    File *file = proc_get_file(curr_proc, fd);
+    if (file == NULL) {
+        ret = SYSCALL_ERR(EBADF);
         goto end;
     }
 
     void *mmap_ret;
-    int   vfs_err = com_fs_vfs_mmap(&mmap_ret,
-                                    file->vnode,
-                                    NULL,
-                                    hint,
-                                    size,
-                                    vmm_flags | COM_MM_VMM_FLAGS_FILE,
-                                    mmu_flags,
-                                    off);
-    if (0 != vfs_err) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_err);
+    int vfs_err = vfs_mmap(file->vnode, NULL, hint, size,
+                           vmm_flags | VMM_FLAGS_FILE, mmu_flags, off,
+                           &mmap_ret);
+    if (vfs_err != 0) {
+        ret = SYSCALL_ERR(vfs_err);
         goto end;
     }
 
-    ret = COM_SYS_SYSCALL_OK(mmap_ret);
+    ret = SYSCALL_OK(mmap_ret);
 
 end:
-    COM_FS_FILE_RELEASE(file);
+    FILE_REL(file);
     return ret;
 }
 
@@ -69,81 +40,62 @@ static inline int make_vmm_flags(int flags, int prot) {
     (void)prot;
     int vmm_flags = 0;
 
-    if (!(MAP_FIXED & flags)) {
-        vmm_flags |= COM_MM_VMM_FLAGS_NOHINT;
-    }
-
-    if (MAP_ANONYMOUS & flags) {
-        vmm_flags |= COM_MM_VMM_FLAGS_ANONYMOUS;
-    }
-
-    if (MAP_SHARED & flags) {
-        vmm_flags |= COM_MM_VMM_FLAGS_SHARED;
-    } else if (MAP_PRIVATE & flags) {
-        vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
-    }
+    if (!(flags & MAP_FIXED)) vmm_flags |= VMM_FLAGS_NOHINT;
+    if (flags & MAP_ANONYMOUS) vmm_flags |= VMM_FLAGS_ANONYMOUS;
+    if (flags & MAP_SHARED) vmm_flags |= VMM_FLAGS_SHARED;
+    else if (flags & MAP_PRIVATE) vmm_flags |= VMM_FLAGS_PRIVATE;
 
     return vmm_flags;
 }
 
-static inline arch_mmu_flags_t make_mmu_flags(int flags, int prot) {
+static inline MMUFlags make_mmu_flags(int flags, int prot) {
     (void)flags;
 
-    arch_mmu_flags_t mmu_prot = ARCH_MMU_FLAGS_PRESENT | ARCH_MMU_FLAGS_USER;
-    if (PROT_WRITE & prot) {
-        mmu_prot |= ARCH_MMU_FLAGS_WRITE;
-    }
-    if (PROT_READ & prot) {
-        mmu_prot |= ARCH_MMU_FLAGS_READ;
-    }
+    MMUFlags mmu_prot = MMU_FLAGS_PRESENT | MMU_FLAGS_USER;
+    if (prot & PROT_WRITE) mmu_prot |= MMU_FLAGS_WRITE;
+    if (prot & PROT_READ) mmu_prot |= MMU_FLAGS_READ;
     /*if (!(PROT_EXEC & prot)) {
-        mmu_prot |= ARCH_MMU_FLAGS_NOEXEC;
+        mmu_prot |= MMU_FLAGS_NOEXEC;
     }*/
 
     return mmu_prot;
 }
 
-// SYSCALL: mmap(void *hint, size_t size, int flags, int prot, int fd, off_t
+// SYSCALL: mmap(void *hint, usize size, int flags, int prot, int fd, off_t
 // off)
-COM_SYS_SYSCALL(com_sys_syscall_mmap) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
+SYSCALL(syscall_mmap) {
+    SYSCALL_UNUSED_CONTEXT();
 
-    void  *hint  = COM_SYS_SYSCALL_ARG(void *, 1);
-    size_t size  = COM_SYS_SYSCALL_ARG(size_t, 2);
-    int    flags = COM_SYS_SYSCALL_ARG(int, 3);
-    int    prot  = COM_SYS_SYSCALL_ARG(int, 4);
-    int    fd    = COM_SYS_SYSCALL_ARG(int, 5);
-    off_t  off   = COM_SYS_SYSCALL_ARG(off_t, 6);
+    void *hint = SYSCALL_ARG(void *, 1);
+    usize size = SYSCALL_ARG(usize, 2);
+    int flags = SYSCALL_ARG(int, 3);
+    int prot = SYSCALL_ARG(int, 4);
+    int fd = SYSCALL_ARG(int, 5);
+    off_t off = SYSCALL_ARG(off_t, 6);
 
-    if (0 == size || (-1 != fd && (off < 0 || 0 != off % ARCH_PAGE_SIZE))) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
+    if (size == 0 || (fd != -1 && (off < 0 || off % PAGE_SIZE != 0))) {
+        return SYSCALL_ERR(EINVAL);
     }
 
-    if ((MAP_FIXED & flags) && !ARCH_MMU_RANGE_IS_USER(hint, size)) {
-        return COM_SYS_SYSCALL_ERR(ENOMEM);
+    if ((flags & MAP_FIXED) && !MMU_RANGE_IS_USER(hint, size)) {
+        return SYSCALL_ERR(ENOMEM);
     }
 
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    Proc *curr_proc = cpu_get_thread()->proc;
 
-    int              vmm_flags = make_vmm_flags(flags, prot);
-    arch_mmu_flags_t mmu_flags = make_mmu_flags(flags, prot);
+    int vmm_flags = make_vmm_flags(flags, prot);
+    MMUFlags mmu_flags = make_mmu_flags(flags, prot);
 
-    if (-1 != fd) {
-        vmm_flags |= COM_MM_VMM_FLAGS_ANONYMOUS;
+    if (fd != -1) {
+        vmm_flags |= VMM_FLAGS_ANONYMOUS;
         return file_mmap(curr_proc, fd, size, vmm_flags, mmu_flags, off, hint);
     }
 
     // Allocate anonymous pages
-    void *virt = com_mm_vmm_map(curr_proc->vmm_context,
-                                hint,
-                                NULL,
-                                size,
-                                vmm_flags | COM_MM_VMM_FLAGS_ALLOCATE,
-                                mmu_flags);
+    void *virt = vmm_map(curr_proc->vmm_context, hint, NULL, size,
+                         vmm_flags | VMM_FLAGS_ALLOCATE, mmu_flags);
 
-    if (NULL == virt) {
-        return COM_SYS_SYSCALL_ERR(ENOMEM);
-    }
+    if (virt == NULL) return SYSCALL_ERR(ENOMEM);
 
-    return COM_SYS_SYSCALL_OK(virt);
+    return SYSCALL_OK(virt);
 }

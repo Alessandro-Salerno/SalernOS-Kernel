@@ -1,21 +1,3 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <kernel/com/io/keyboard.h>
 
 // TAKEN: Mathewnd/Astral
@@ -39,19 +21,17 @@ static const char G_LAYOUT_EN_US_MAP_SHIFTED[] = {
     0,    0,      '<', 0,    0,   0,   0,   0,   0,   0,   0,   0,   '\r', 0,
     '/',  0,      0,   '\r', 0,   0,   0,   0,   0,   0,   0,   0,   0,    0};
 
-com_kbd_action_t com_io_keyboard_layout_en_us(com_kbd_packet_t *pkt) {
-    com_keyboard_t *keyboard = pkt->keyboard;
+KbdAction keyboard_layout_en_us(KbdPacket *pkt) {
+    Keyboard *keyboard = pkt->keyboard;
 
-    if (pkt->keycode >= 0x80) {
-        return E_COM_KBD_ACTION_DISCARD;
-    }
+    if (pkt->keycode >= 0x80) return KBD_ACTION_DISCARD;
 
-    bool shift = COM_IO_KEYBOARD_MOD_SHIFT & keyboard->state.mod;
+    bool shift = keyboard->state.mod & KEYBOARD_MOD_SHIFT;
     if (shift ^ keyboard->state.caps_lock) {
         pkt->c = G_LAYOUT_EN_US_MAP_SHIFTED[pkt->keycode];
     } else {
         pkt->c = G_LAYOUT_EN_US_MAP[pkt->keycode];
     }
 
-    return E_COM_KBD_ACTION_SEND;
+    return KBD_ACTION_SEND;
 }

@@ -1,86 +1,62 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/info.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
-#include <lib/mem.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/sync/spinlock.h>
+#include <kernel/com/util.h>
 
-#define NUM_SLABS (ARCH_PAGE_SIZE / 16)
+#define NUM_SLABS (PAGE_SIZE / 16)
 
 typedef struct {
-    uintptr_t next;
-} slab_t;
+    uptr next;
+} Slab;
 
-static slab_t      Slabs[NUM_SLABS] = {0};
-static kspinlock_t Lock             = KSPINLOCK_NEW();
+static Slab g_slabs[NUM_SLABS] = {0};
+static Spinlock g_lock = SPINLOCK_NEW();
 
-static void init(slab_t *s, size_t entry_size) {
-    entry_size          = (entry_size + 15) & ~15UL;
-    void *new_page      = com_mm_pmm_alloc_zero();
-    s->next             = ARCH_PHYS_TO_HHDM(new_page);
-    size_t     max      = ARCH_PAGE_SIZE / entry_size - 1;
-    uintptr_t *list_arr = (uintptr_t *)s->next;
-    size_t     off      = entry_size / sizeof(uintptr_t);
+static void init(Slab *s, usize entry_size) {
+    entry_size = (entry_size + 15) & ~15UL;
+    void *new_page = pmm_allocz();
+    s->next = PHYS_TO_HHDM(new_page);
+    usize max = PAGE_SIZE / entry_size - 1;
+    uptr *list_arr = (uptr *)s->next;
+    usize off = entry_size / sizeof(uptr);
 
-    for (size_t i = 0; i < max; i++) {
-        list_arr[i * off] = (uintptr_t)&list_arr[(i + 1) * off];
+    for (usize i = 0; i < max; i++) {
+        list_arr[i * off] = (uptr)&list_arr[(i + 1) * off];
     }
 
-    list_arr[max * off] = (uintptr_t)NULL;
+    list_arr[max * off] = (uptr)NULL;
 }
 
-void *com_mm_slab_alloc(size_t size) {
-    size_t i = (size + 15) / 16;
-    KASSERT(i < NUM_SLABS);
-    slab_t *s = &Slabs[i];
+void *slab_alloc(usize size) {
+    usize i = (size + 15) / 16;
+    assert(i < NUM_SLABS);
+    Slab *s = &g_slabs[i];
 
-    kspinlock_acquire(&Lock);
-    if (0 == s->next) {
-        init(s, size);
-    }
-    uintptr_t *old_next = (uintptr_t *)s->next;
-    s->next             = *old_next;
-    kspinlock_release(&Lock);
+    spinlock_acq(&g_lock);
+    if (s->next == 0) init(s, size);
+    uptr *old_next = (uptr *)s->next;
+    s->next = *old_next;
+    spinlock_rel(&g_lock);
 
     *old_next = 0;
     return old_next;
 }
 
-void com_mm_slab_free(void *ptr, size_t size) {
-    if (NULL == ptr) {
-        return;
-    }
+void slab_free(void *ptr, usize size) {
+    if (ptr == NULL) return;
 
-    size_t i = (size + 15) / 16;
-    KASSERT(i < NUM_SLABS);
-    slab_t *s = &Slabs[i];
+    usize i = (size + 15) / 16;
+    assert(i < NUM_SLABS);
+    Slab *s = &g_slabs[i];
 
-    uintptr_t *new_head = ptr;
-    kmemset(new_head, size, 0);
-    kspinlock_acquire(&Lock);
+    uptr *new_head = ptr;
+    memset(new_head, 0, size);
+    spinlock_acq(&g_lock);
     *new_head = s->next;
-    s->next   = (uintptr_t)new_head;
-    kspinlock_release(&Lock);
+    s->next = (uptr)new_head;
+    spinlock_rel(&g_lock);
 
     // TODO: free slab page if needed
 }

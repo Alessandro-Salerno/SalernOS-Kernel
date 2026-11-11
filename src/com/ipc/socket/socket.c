@@ -1,35 +1,15 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
+#include <kernel/com/crt/string.h>
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/ipc/socket/unix.h>
-#include <lib/mem.h>
-#include <lib/str.h>
-#include <lib/util.h>
-#include <stddef.h>
+#include <kernel/com/util.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
-com_socket_t *com_ipc_socket_new(com_socket_type_t type) {
+Socket *socket_new(SocketType type) {
     switch (type) {
-        case E_COM_SOCKET_TYPE_UNIX: {
-            com_socket_t *sun = com_ipc_socket_unix_new();
-            sun->type         = type;
+        case SOCKET_TYPE_UNIX: {
+            Socket *sun = socket_unix_new();
+            sun->type = type;
             return sun;
         }
         default:
@@ -39,22 +19,23 @@ com_socket_t *com_ipc_socket_new(com_socket_type_t type) {
     return NULL;
 }
 
-int com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
-                                 struct sockaddr   *abi_addr,
-                                 socklen_t          abi_addr_len) {
+int socket_addr_from_abi(struct sockaddr *abi_addr, socklen_t abi_addr_len,
+                         SocketAddr *out_addr) {
     switch (abi_addr->sa_family) {
         case AF_UNIX: {
             struct sockaddr_un *unaddr = (void *)abi_addr;
-            size_t max_len             = abi_addr_len -
-                                         offsetof(struct sockaddr_un, sun_path);
+            usize max_len = abi_addr_len -
+                offsetof(struct sockaddr_un, sun_path);
             if (abi_addr_len < offsetof(struct sockaddr_un, sun_path) ||
                 max_len > sizeof(unaddr->sun_path)) {
                 return EINVAL;
             }
-            char *nul          = kmemchr(unaddr->sun_path, 0, max_len);
-            out->local.pathlen = NULL != nul ? (size_t)(nul - unaddr->sun_path)
-                                             : max_len;
-            kmemcpy(out->local.path, unaddr->sun_path, out->local.pathlen);
+            char *nul = memchr(unaddr->sun_path, 0, max_len);
+            out_addr->local.pathlen = nul != NULL
+                ? (usize)(nul - unaddr->sun_path)
+                : max_len;
+            memcpy(out_addr->local.path, unaddr->sun_path,
+                   out_addr->local.pathlen);
             return 0;
         }
 
@@ -65,47 +46,42 @@ int com_ipc_socket_addr_from_abi(com_socket_addr_t *out,
     return EAFNOSUPPORT;
 }
 
-int com_ipc_socket_abi_from_addr(socklen_t         *abi_addr_len,
-                                 struct sockaddr   *abi_addr,
-                                 com_socket_addr_t *addr,
-                                 com_socket_type_t  socktype,
-                                 socklen_t          max_abi_addr_len) {
+int socket_abi_from_addr(struct sockaddr *abi_addr, SocketAddr *addr,
+                         SocketType socktype, socklen_t max_abi_addr_len,
+                         socklen_t *out_abi_addr_len) {
     switch (socktype) {
-        case E_COM_SOCKET_TYPE_UNIX: {
+        case SOCKET_TYPE_UNIX: {
             (void)max_abi_addr_len;
             struct sockaddr_un *unaddr = (void *)abi_addr;
-            unaddr->sun_family         = AF_UNIX;
-            size_t copy_size           = KMIN(addr->local.pathlen,
-                                              sizeof(unaddr->sun_path) - 1);
-            kmemcpy(unaddr->sun_path, addr->local.path, copy_size);
+            unaddr->sun_family = AF_UNIX;
+            usize copy_size = min(addr->local.pathlen,
+                                  sizeof(unaddr->sun_path) - 1);
+            memcpy(unaddr->sun_path, addr->local.path, copy_size);
             unaddr->sun_path[copy_size] = 0;
             // Unnamed sockets only have the family, the others include the NUL
-            *abi_addr_len = offsetof(struct sockaddr_un, sun_path);
-            if (0 != copy_size) {
-                *abi_addr_len += copy_size + 1;
-            }
+            *out_abi_addr_len = offsetof(struct sockaddr_un, sun_path);
+            if (copy_size != 0) *out_abi_addr_len += copy_size + 1;
             return 0;
         }
 
         default:
-            KASSERT(false);
+            assert(false);
             break;
     }
 
     return EAFNOSUPPORT;
 }
 
-com_socket_type_t
-com_ipc_socket_type_from_abi(int domain, int type, int protocol) {
+SocketType socket_type_from_abi(int domain, int type, int protocol) {
     (void)type;
     (void)protocol;
 
     switch (domain) {
         case AF_UNIX:
-            return E_COM_SOCKET_TYPE_UNIX;
+            return SOCKET_TYPE_UNIX;
         default:
             break;
     }
 
-    return E_COM_SOCKET_TYPE_INVAL;
+    return SOCKET_TYPE_INVAL;
 }

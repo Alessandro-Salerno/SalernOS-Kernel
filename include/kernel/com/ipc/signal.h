@@ -1,98 +1,74 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <arch/context.h>
+#include <kernel/com/util.h>
 #include <signal.h>
-#include <stdint.h>
 #include <sys/types.h>
 
 // NOTE: These must be used in a thread-safe manner, i.e. while holding the
 // process'es signal_lock, since they're no longer atomic
-#define COM_IPC_SIGNAL_SIGMASK_INIT(maskptr) *(maskptr) = 0UL;
-#define COM_IPC_SIGNAL_SIGMASK_SET(maskptr, sig) \
-    (*(maskptr) |= 1UL << ((sig) - 1))
-#define COM_IPC_SIGNAL_SIGMASK_UNSET(maskptr, sig) \
-    (*(maskptr) &= ~(1UL << ((sig) - 1)))
-#define COM_IPC_SIGNAL_SIGMASK_ISSET(maskptr, sig) \
-    (*(maskptr) & (1UL << ((sig) - 1)))
 
-#define COM_IPC_SIGNAL_NONE (-1)
+#define SIGNAL_NONE (-1)
 
 typedef struct {
     unsigned long sig[1024 / (8 * sizeof(long))];
-} com_sigset_t;
+} SignalSet;
 
 // Sigmask is essentially an entry into the sig array above
 // The struct above is kept for compatibility with Linux (and mlibc currently),
 // but there's no need for all those signals.
 // So, to save some space in proc and thread structs, we use sigmask and only
 // ever access sigset_t.sig[0]
-typedef unsigned long com_sigmask_t;
+typedef unsigned long SigMask;
 
-typedef struct com_sigaction {
+static inline void signal_sigmask_init(SigMask *mask) { *mask = 0; }
+static inline void signal_sigmask_set(SigMask *mask, int sig) {
+    *mask |= 1UL << (sig - 1);
+}
+static inline void signal_sigmask_unset(SigMask *mask, int sig) {
+    *mask &= ~(1UL << (sig - 1));
+}
+static inline bool signal_sigmask_isset(const SigMask *mask, int sig) {
+    return *mask & (1UL << (sig - 1));
+}
+
+typedef struct SignalAction {
     void (*sa_action)(int);
     // void (*sa_action)(int, siginfo_t *, void *);
     unsigned long sa_flags;
     void (*sa_restorer)(void);
-    com_sigset_t sa_mask;
-} com_sigaction_t;
+    SignalSet sa_mask;
+} SignalAction;
 
-typedef struct com_ucontext {
-    unsigned long        uc_flags;
-    struct com_ucontext *uc_link;
-    stack_t              uc_stack;
-    mcontext_t           uc_mcontext;
-    com_sigset_t         uc_sigmask;
-} com_ucontext_t;
+typedef struct SignalUContext {
+    unsigned long uc_flags;
+    struct SignalUContext *uc_link;
+    stack_t uc_stack;
+    mcontext_t uc_mcontext;
+    SignalSet uc_sigmask;
+} SignalUContext;
 
-typedef struct com_sigframe {
-    siginfo_t      info;
-    com_ucontext_t uc;
-} com_sigframe_t;
+typedef struct SigFrame {
+    siginfo_t info;
+    SignalUContext uc;
+} SigFrame;
 
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/thread.h>
 
-void com_ipc_signal_sigset_emptY(com_sigset_t *set);
-int  com_ipc_signal_send_to_proc(pid_t pid, int sig, struct com_proc *sender);
-int  com_ipc_signal_send_to_proc_group(pid_t            pgid,
-                                       int              sig,
-                                       struct com_proc *sender);
+void signal_sigset_empty(SignalSet *set);
+int signal_send_to_proc(pid_t pid, int sig, struct Proc *sender);
+int signal_send_to_proc_group(pid_t pgid, int sig, struct Proc *sender);
 // Publish under signal_lock, then call kick after dropping it. The caller
 // keeps the thread alive across both operations
-void com_ipc_signal_kick(struct com_thread *thread);
-int  com_ipc_signal_send_to_thread_nolock(struct com_thread *thread,
-                                          int                sig,
-                                          struct com_proc   *sender);
-int  com_ipc_signal_send_to_thread(struct com_thread *thread,
-                                   int                sig,
-                                   struct com_proc   *sender);
-void com_ipc_signal_dispatch(arch_context_t *ctx, struct com_thread *thread);
-int  com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,
-                                    int            how,
-                                    com_sigset_t  *set,
-                                    com_sigset_t  *oset);
-int  com_ipc_signal_set_mask(com_sigmask_t *mask,
-                             int            how,
-                             com_sigset_t  *set,
-                             com_sigset_t  *oset,
-                             kspinlock_t   *signal_lock);
-int  com_ipc_signal_check_nolock(void);
-int  com_ipc_signal_check(void);
+void signal_kick(struct Thread *thread);
+int signal_send_to_thread_nolock(struct Thread *thread, int sig,
+                                 struct Proc *sender);
+int signal_send_to_thread(struct Thread *thread, int sig, struct Proc *sender);
+void signal_dispatch(Context *ctx, struct Thread *thread);
+int signal_set_mask_nolock(SigMask *mask, int how, SignalSet *set,
+                           SignalSet *oset);
+int signal_set_mask(SigMask *mask, int how, SignalSet *set, SignalSet *oset,
+                    Spinlock *signal_lock);
+int signal_check_nolock(void);
+int signal_check(void);

@@ -1,77 +1,50 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <arch/context.h>
 #include <arch/mmu.h>
-#include <lib/spinlock.h>
-#include <stddef.h>
+#include <kernel/com/sync/spinlock.h>
+#include <kernel/com/util.h>
 
-#define COM_MM_VMM_FLAGS_NONE      0
-#define COM_MM_VMM_FLAGS_ANONYMOUS 1
-#define COM_MM_VMM_FLAGS_NOHINT    2
-#define COM_MM_VMM_FLAGS_PHYSICAL  4
-#define COM_MM_VMM_FLAGS_FILE      8
-#define COM_MM_VMM_FLAGS_EXACT     16
-#define COM_MM_VMM_FLAGS_SHARED    32
-#define COM_MM_VMM_FLAGS_REPLACE   64
-#define COM_MM_VMM_FLAGS_ALLOCATE  128
-#define COM_MM_VMM_FLAGS_PRIVATE   256
+#define VMM_FLAGS_NONE      0
+#define VMM_FLAGS_ANONYMOUS 1
+#define VMM_FLAGS_NOHINT    2
+#define VMM_FLAGS_PHYSICAL  4
+#define VMM_FLAGS_FILE      8
+#define VMM_FLAGS_EXACT     16
+#define VMM_FLAGS_SHARED    32
+#define VMM_FLAGS_REPLACE   64
+#define VMM_FLAGS_ALLOCATE  128
+#define VMM_FLAGS_PRIVATE   256
 
-#define COM_MM_VMM_FAULT_ATTR_COW 1 // COW enabled on the address
-#define COM_MM_VMM_FAULT_ATTR_MAP 2 // Map on page fault
+#define VMM_FAULT_ATTR_COW 1 // COW enabled on the address
+#define VMM_FAULT_ATTR_MAP 2 // Map on page fault
 
-#define COM_MM_VMM_PREFAULT_SUPPORTED_ATTR (COM_MM_VMM_FAULT_ATTR_MAP)
+#define VMM_PREFAULT_SUPPORTED_ATTR (VMM_FAULT_ATTR_MAP)
 
 // Doing this now, but using one big range regardless
-typedef enum com_vmm_range_type {
-    E_COM_VMM_RANGE_TYPE_ANONYMOUS,
-    E_COM_VMM_RANGE_TYPE_SHARED,
-    E_COM_VMM_RANGE_TYPE_FILE
-} com_vmm_range_type_t;
+typedef enum VMMRangeType {
+    VMM_RANGE_TYPE_ANONYMOUS,
+    VMM_RANGE_TYPE_SHARED,
+    VMM_RANGE_TYPE_FILE
+} VMMRangeType;
 
-typedef struct com_vmm_context {
-    arch_mmu_pagetable_t *pagetable;
-    size_t                anon_pages;
-    kspinlock_t           lock;
-} com_vmm_context_t;
+typedef struct VMMContext {
+    MMUPageTable *pagetable;
+    usize anon_pages;
+    Spinlock lock;
+} VMMContext;
 
-void               com_mm_vmm_init(void);
-void               com_mm_vmm_init_reaper(void);
-com_vmm_context_t *com_mm_vmm_new_context(arch_mmu_pagetable_t *pagetable);
-void               com_mm_vmm_destroy_context(com_vmm_context_t *context);
-com_vmm_context_t *com_mm_vmm_duplicate_context(com_vmm_context_t *context);
-void              *com_mm_vmm_map(com_vmm_context_t *context,
-                                  void              *virt,
-                                  void              *phys,
-                                  size_t             len,
-                                  int                vmm_flags,
-                                  arch_mmu_flags_t   mmu_flags);
-void *com_mm_vmm_get_physical(com_vmm_context_t *context, void *virt_addr);
-void  com_mm_vmm_switch(com_vmm_context_t *context);
-void  com_mm_vmm_unmap(com_vmm_context_t *context, void *virt, size_t len);
-void  com_mm_vmm_handle_fault(void            *fault_virt,
-                              void            *fault_phys,
-                              arch_context_t  *fault_ctx,
-                              arch_mmu_flags_t mmu_flags_hint,
-                              int              attr,
-                              size_t           num_pages_hint);
-void *com_mm_vmm_prealloc_range(com_vmm_context_t   *context,
-                                com_vmm_range_type_t rangetype,
-                                size_t               len);
+void vmm_init(void);
+void vmm_init_reaper(void);
+VMMContext *vmm_new_context(MMUPageTable *pagetable);
+void vmm_destroy_context(VMMContext *context);
+VMMContext *vmm_duplicate_context(VMMContext *context);
+void *vmm_map(VMMContext *context, void *virt, void *phys, usize len,
+              int vmm_flags, MMUFlags mmu_flags);
+void *vmm_get_physical(VMMContext *context, void *virt_addr);
+void vmm_switch(VMMContext *context);
+void vmm_unmap(VMMContext *context, void *virt, usize len);
+void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,
+                      MMUFlags mmu_flags_hint, int attr, usize num_pages_hint);
+void *vmm_prealloc_range(VMMContext *context, VMMRangeType rangetype,
+                         usize len);

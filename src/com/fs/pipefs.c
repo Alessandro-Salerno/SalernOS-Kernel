@@ -1,189 +1,157 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <kernel/com/crt/usercopy.h>
+#include <kernel/com/ds/ioviter.h>
 #include <kernel/com/fs/pipefs.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sync/mutex.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/ioviter.h>
-#include <lib/sync.h>
-#include <lib/usercopy.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 #include <poll.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <sys/ioctl.h>
 #include <vendor/tailq.h>
 
-#define PIPE_BUF_SZ ARCH_PAGE_SIZE
+#define PIPE_BUF_SZ PAGE_SIZE
 
-struct pipefs_node {
-    uint8_t        *buf;
-    size_t          read;
-    size_t          write;
-    ksync_t         condvar;
-    com_waitlist_t  readers;
-    com_waitlist_t  writers;
-    com_vnode_t    *read_end;
-    com_vnode_t    *write_end;
-    com_poll_head_t pollhead;
+struct PipeFSNode {
+    u8 *buf;
+    usize read;
+    usize write;
+    Mutex condvar;
+    Waitlist readers;
+    Waitlist writers;
+    Vnode *read_end;
+    Vnode *write_end;
+    PollHead pollhead;
 };
 
-static int pipefs_ioctl(com_vnode_t *node, uintmax_t op, void *buf);
+static int pipefs_ioctl(Vnode *node, u64 op, void *buf);
 
-static com_vnode_ops_t PipefsNodeOps = {.readv     = com_fs_pipefs_readv,
-                                        .writev    = com_fs_pipefs_writev,
-                                        .poll      = com_fs_pipefs_poll,
-                                        .poll_head = com_fs_pipefs_poll_head,
-                                        .inactive  = com_fs_pipefs_inactive,
-                                        .stat      = com_fs_pipefs_stat,
-                                        .seekable  = com_fs_pipefs_seekable,
-                                        .ioctl     = pipefs_ioctl};
+static VnodeOps g_pipefs_node_ops = {.readv = pipefs_readv,
+                                     .writev = pipefs_writev,
+                                     .poll = pipefs_poll,
+                                     .poll_head = pipefs_poll_head,
+                                     .inactive = pipefs_inactive,
+                                     .stat = pipefs_stat,
+                                     .seekable = pipefs_seekable,
+                                     .ioctl = pipefs_ioctl};
 
-static void pipefs_poll_notify(struct pipefs_node *pipe) {
-    kspinlock_acquire(&pipe->pollhead.lock);
-    com_polled_t *polled;
+static void pipefs_poll_notify(struct PipeFSNode *pipe) {
+    spinlock_acq(&pipe->pollhead.lock);
+    Polled *polled;
     LIST_FOREACH(polled, &pipe->pollhead.polled_list, polled_list) {
-        com_fs_poll_notify(polled->poller);
+        poll_notify(polled->poller);
     }
-    kspinlock_release(&pipe->pollhead.lock);
+    spinlock_rel(&pipe->pollhead.lock);
 }
 
-static int pipefs_ioctl(com_vnode_t *node, uintmax_t op, void *buf) {
-    if (FIONREAD != op) {
-        return ENOSYS;
-    }
+static int pipefs_ioctl(Vnode *node, u64 op, void *buf) {
+    if (op != FIONREAD) return ENOSYS;
 
-    struct pipefs_node *pipe = node->extra;
-    ksync_acquire(&pipe->condvar);
+    struct PipeFSNode *pipe = node->extra;
+    mutex_acq(&pipe->condvar);
     int avail = pipe->write - pipe->read;
-    ksync_release(&pipe->condvar);
-    return kmemcpy_to_user(buf, &avail, sizeof(avail));
+    mutex_rel(&pipe->condvar);
+    return memcpy_to_user(buf, &avail, sizeof(avail));
 }
 
-int com_fs_pipefs_readv(kioviter_t  *ioviter,
-                        size_t      *bytes_read,
-                        com_vnode_t *node,
-                        uintmax_t    off,
-                        uintmax_t    flags) {
+int pipefs_readv(IOVIter *ioviter, Vnode *node, u64 off, u64 flags,
+                 usize *out_bytes_read) {
     (void)off;
 
-    struct pipefs_node *pipe       = node->extra;
-    size_t              buflen     = KIOVITER_REMAINING(ioviter);
-    size_t              read_count = 0;
-    int                 ret        = 0;
-    ksync_acquire(&pipe->condvar);
+    struct PipeFSNode *pipe = node->extra;
+    usize buflen = IOVITER_REMAINING(ioviter);
+    usize read_count = 0;
+    int ret = 0;
+    mutex_acq(&pipe->condvar);
 
-    if (0 == buflen) {
-        goto end;
-    }
+    if (buflen == 0) goto end;
 
-    while (pipe->write == pipe->read && NULL != pipe->write_end) {
-        if (O_NONBLOCK & flags) {
+    while (pipe->write == pipe->read && pipe->write_end != NULL) {
+        if (flags & O_NONBLOCK) {
             ret = EAGAIN;
             goto end;
         }
-        ksync_wait(&pipe->condvar, &pipe->readers);
-        if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+        mutex_wait(&pipe->condvar, &pipe->readers, 0, true);
+        if (signal_check() != SIGNAL_NONE) {
             ret = EINTR;
             goto end;
         }
     }
 
-    read_count = KMIN(buflen, pipe->write - pipe->read);
-    if (0 == read_count) {
-        goto end;
-    }
-    size_t modidx = pipe->read % PIPE_BUF_SZ;
-    size_t first  = KMIN(read_count, PIPE_BUF_SZ - modidx);
-    size_t done   = 0;
-    ret           = kioviter_write(&done, ioviter, pipe->buf + modidx, first);
-    if (0 == ret && done == first && read_count > first) {
-        size_t second = 0;
-        ret = kioviter_write(&second, ioviter, pipe->buf, read_count - first);
+    read_count = min(buflen, pipe->write - pipe->read);
+    if (read_count == 0) goto end;
+    usize modidx = pipe->read % PIPE_BUF_SZ;
+    usize first = min(read_count, PIPE_BUF_SZ - modidx);
+    usize done = 0;
+    ret = ioviter_write(ioviter, pipe->buf + modidx, first, &done);
+    if (ret == 0 && done == first && read_count > first) {
+        usize second = 0;
+        ret = ioviter_write(ioviter, pipe->buf, read_count - first, &second);
         done += second;
     }
     read_count = done;
     pipe->read += read_count;
-    ksync_notify_all(&pipe->condvar, &pipe->writers);
+    sched_notify_all(&pipe->writers);
     pipefs_poll_notify(pipe);
 
 end:
-    ksync_release(&pipe->condvar);
-    *bytes_read = read_count;
+    mutex_rel(&pipe->condvar);
+    *out_bytes_read = read_count;
     return read_count > 0 ? 0 : ret;
 }
 
-int com_fs_pipefs_writev(size_t      *bytes_written,
-                         com_vnode_t *node,
-                         kioviter_t  *ioviter,
-                         uintmax_t    off,
-                         uintmax_t    flags) {
+int pipefs_writev(Vnode *node, IOVIter *ioviter, u64 off, u64 flags,
+                  usize *out_bytes_written) {
     (void)off;
 
-    struct pipefs_node *pipe        = node->extra;
-    size_t              buflen      = KIOVITER_REMAINING(ioviter);
-    size_t              req_space   = buflen > PIPE_BUF_SZ ? 1 : buflen;
-    size_t              write_count = 0;
-    int                 ret         = 0;
-    ksync_acquire(&pipe->condvar);
+    struct PipeFSNode *pipe = node->extra;
+    usize buflen = IOVITER_REMAINING(ioviter);
+    usize req_space = buflen > PIPE_BUF_SZ ? 1 : buflen;
+    usize write_count = 0;
+    int ret = 0;
+    mutex_acq(&pipe->condvar);
 
-    for (size_t left = buflen; left > 0;) {
-        size_t av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
-        while (NULL != pipe->read_end && av_space < req_space) {
-            if (O_NONBLOCK & flags) {
+    for (usize left = buflen; left > 0;) {
+        usize av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
+        while (pipe->read_end != NULL && av_space < req_space) {
+            if (flags & O_NONBLOCK) {
                 ret = EAGAIN;
                 goto end;
             }
-            ksync_wait(&pipe->condvar, &pipe->writers);
-            if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
+            mutex_wait(&pipe->condvar, &pipe->writers, 0, true);
+            if (signal_check() != SIGNAL_NONE) {
                 ret = EINTR;
                 goto end;
             }
             av_space = PIPE_BUF_SZ - (pipe->write - pipe->read);
         }
-        if (NULL == pipe->read_end) {
+        if (pipe->read_end == NULL) {
             ret = EPIPE;
             goto end;
         }
 
-        size_t writesz = KMIN(left, av_space);
-        size_t modidx  = pipe->write % PIPE_BUF_SZ;
-        size_t first   = KMIN(writesz, PIPE_BUF_SZ - modidx);
-        size_t done    = 0;
-        ret = kioviter_read(pipe->buf + modidx, first, &done, ioviter);
-        if (0 == ret && done == first && writesz > first) {
-            size_t second = 0;
-            ret = kioviter_read(pipe->buf, writesz - first, &second, ioviter);
+        usize writesz = min(left, av_space);
+        usize modidx = pipe->write % PIPE_BUF_SZ;
+        usize first = min(writesz, PIPE_BUF_SZ - modidx);
+        usize done = 0;
+        ret = ioviter_read(pipe->buf + modidx, first, ioviter, &done);
+        if (ret == 0 && done == first && writesz > first) {
+            usize second = 0;
+            ret = ioviter_read(pipe->buf, writesz - first, ioviter, &second);
             done += second;
         }
         pipe->write += done;
         left -= done;
         write_count += done;
-        ksync_notify_all(&pipe->condvar, &pipe->readers);
+        sched_notify_all(&pipe->readers);
         pipefs_poll_notify(pipe);
         if (done < writesz) {
             ret = EFAULT;
@@ -192,101 +160,93 @@ int com_fs_pipefs_writev(size_t      *bytes_written,
     }
 
 end:
-    ksync_release(&pipe->condvar);
-    *bytes_written = write_count;
-    if (EPIPE == ret) {
-        com_thread_t *thread = ARCH_CPU_GET_THREAD();
-        com_ipc_signal_send_to_thread(thread, SIGPIPE, thread->proc);
+    mutex_rel(&pipe->condvar);
+    *out_bytes_written = write_count;
+    if (ret == EPIPE) {
+        Thread *thread = cpu_get_thread();
+        signal_send_to_thread(thread, SIGPIPE, thread->proc);
     }
     return write_count > 0 ? 0 : ret;
 }
 
-int com_fs_pipefs_poll(short *revents, com_vnode_t *node, short events) {
-    struct pipefs_node *pipe = node->extra;
-    short               out  = 0;
-    ksync_acquire(&pipe->condvar);
+int pipefs_poll(Vnode *node, short events, short *out_revents) {
+    struct PipeFSNode *pipe = node->extra;
+    short out = 0;
+    mutex_acq(&pipe->condvar);
     if (node == pipe->read_end) {
-        if (pipe->write != pipe->read) {
-            out |= events & POLLIN;
-        }
-        if (NULL == pipe->write_end) {
-            out |= POLLHUP;
-        }
+        if (pipe->write != pipe->read) out |= events & POLLIN;
+        if (pipe->write_end == NULL) out |= POLLHUP;
     } else {
-        if (pipe->write - pipe->read < PIPE_BUF_SZ) {
-            out |= events & POLLOUT;
-        }
-        if (NULL == pipe->read_end) {
-            out |= POLLERR;
-        }
+        if (pipe->write - pipe->read < PIPE_BUF_SZ) out |= events & POLLOUT;
+        if (pipe->read_end == NULL) out |= POLLERR;
     }
-    ksync_release(&pipe->condvar);
-    *revents = out;
+    mutex_rel(&pipe->condvar);
+    *out_revents = out;
     return 0;
 }
 
-int com_fs_pipefs_poll_head(com_poll_head_t **out, com_vnode_t *node) {
-    struct pipefs_node *pipe = node->extra;
-    *out                     = &pipe->pollhead;
+int pipefs_poll_head(Vnode *node, PollHead **out_poll_head) {
+    struct PipeFSNode *pipe = node->extra;
+    *out_poll_head = &pipe->pollhead;
     return 0;
 }
 
 // Pipe vnodes are only referenced by their files and operations in progress
-void com_fs_pipefs_inactive(com_vnode_t *vnode) {
-    struct pipefs_node *pipe = vnode->extra;
-    ksync_acquire(&pipe->condvar);
+void pipefs_inactive(Vnode *vnode) {
+    struct PipeFSNode *pipe = vnode->extra;
+    mutex_acq(&pipe->condvar);
     if (vnode == pipe->read_end) {
         pipe->read_end = NULL;
-        ksync_notify_all(&pipe->condvar, &pipe->writers);
+        sched_notify_all(&pipe->writers);
     } else {
         pipe->write_end = NULL;
-        ksync_notify_all(&pipe->condvar, &pipe->readers);
+        sched_notify_all(&pipe->readers);
     }
     pipefs_poll_notify(pipe);
-    bool last = NULL == pipe->read_end && NULL == pipe->write_end;
-    ksync_release(&pipe->condvar);
+    bool last = pipe->read_end == NULL && pipe->write_end == NULL;
+    mutex_rel(&pipe->condvar);
 
     // Active I/O and poll registrations keep their endpoint referenced
     if (last) {
-        com_mm_pmm_free((void *)ARCH_HHDM_TO_PHYS(pipe->buf));
-        com_mm_slab_free(pipe, sizeof(struct pipefs_node));
+        pmm_free((void *)HHDM_TO_PHYS(pipe->buf));
+        slab_free(pipe, sizeof(struct PipeFSNode));
     }
-    com_mm_slab_free(vnode, sizeof(com_vnode_t));
+    slab_free(vnode, sizeof(Vnode));
 }
 
-int com_fs_pipefs_stat(struct stat *out, com_vnode_t *node) {
+int pipefs_stat(Vnode *node, struct stat *out_stat) {
     (void)node;
-    out->st_mode    = 0600;
-    out->st_nlink   = 1;
-    out->st_blksize = PIPE_BUF_SZ;
+    out_stat->st_mode = 0600;
+    out_stat->st_nlink = 1;
+    out_stat->st_blksize = PIPE_BUF_SZ;
     return 0;
 }
 
-int com_fs_pipefs_seekable(com_vnode_t *node) {
+int pipefs_seekable(Vnode *node) {
     (void)node;
     return ESPIPE;
 }
 
-void com_fs_pipefs_new(com_vnode_t **read, com_vnode_t **write) {
-    struct pipefs_node *pipe = com_mm_slab_alloc(sizeof(struct pipefs_node));
-    KSYNC_INIT_MUTEX(&pipe->condvar);
-    pipe->pollhead.lock = KSPINLOCK_NEW();
+void pipefs_new(Vnode **out_read, Vnode **out_write) {
+    struct PipeFSNode *pipe = slab_alloc(sizeof(struct PipeFSNode));
+    mutex_init(&pipe->condvar);
+    pipe->pollhead.lock = SPINLOCK_NEW();
     LIST_INIT(&pipe->pollhead.polled_list);
-    COM_SYS_THREAD_WAITLIST_INIT(&pipe->readers);
-    COM_SYS_THREAD_WAITLIST_INIT(&pipe->writers);
-    pipe->read  = 0;
+    waitlist_init(&pipe->readers);
+    waitlist_init(&pipe->writers);
+    pipe->read = 0;
     pipe->write = 0;
-    pipe->buf   = (uint8_t *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc());
+    pipe->buf = (u8 *)PHYS_TO_HHDM(pmm_alloc());
 
-    com_vnode_t *r = com_mm_slab_alloc(sizeof(com_vnode_t));
-    com_fs_vfs_vnode_init(r, NULL, E_COM_VNODE_TYPE_FIFO, &PipefsNodeOps, pipe);
+    Vnode *r = slab_alloc(sizeof(Vnode));
+    vfs_vnode_init(r, NULL, VNODE_TYPE_FIFO, &g_pipefs_node_ops, pipe);
     pipe->read_end = r;
 
-    com_vnode_t *w = com_mm_slab_alloc(sizeof(com_vnode_t));
-    com_fs_vfs_vnode_init(w, NULL, E_COM_VNODE_TYPE_FIFO, &PipefsNodeOps, pipe);
-    w->ino          = r->ino;
+    Vnode *w = slab_alloc(sizeof(Vnode));
+    vfs_vnode_init(w, NULL, VNODE_TYPE_FIFO, &g_pipefs_node_ops, pipe);
+    w->ino = r->ino;
     pipe->write_end = w;
 
-    *read  = r;
-    *write = w;
+    *out_read = r;
+    *out_write = w;
 }

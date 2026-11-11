@@ -1,12 +1,11 @@
 #pragma once
 
-#include <assert.h>
 #include <stdint.h>
 
 #define ASSERT_SIZE(t, v) \
     _Static_assert(sizeof(t) == (v), "unexpected size mismatch")
 
-#define PACKED(decl) decl __attribute__((packed));
+#define PACKED(decl) decl __attribute__((__packed__));
 
 /*
  * -----------------------------------------------------

@@ -1,70 +1,46 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <errno.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 
 // SYSCALL: setpgid(pid_t pid, pid_t pgid)
-COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
+SYSCALL(syscall_setpgid) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(3);
 
-    pid_t pid  = COM_SYS_SYSCALL_ARG(pid_t, 1);
-    pid_t pgid = COM_SYS_SYSCALL_ARG(pid_t, 2);
+    pid_t pid = SYSCALL_ARG(pid_t, 1);
+    pid_t pgid = SYSCALL_ARG(pid_t, 2);
 
-    if (pgid < 0 || pid < 0) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
+    if (pgid < 0 || pid < 0) return SYSCALL_ERR(EINVAL);
 
-    com_syscall_ret_t ret       = COM_SYS_SYSCALL_BASE_ERR();
-    com_proc_t       *curr_proc = ARCH_CPU_GET_THREAD()->proc;
+    SyscallRet ret = SYSCALL_BASE_ERR();
+    Proc *curr_proc = cpu_get_thread()->proc;
 
-    com_proc_t *proc = curr_proc;
-    if (0 != pid && pid != curr_proc->pid) {
-        proc = com_sys_proc_get_by_pid(pid);
-        if (NULL == proc) {
-            return COM_SYS_SYSCALL_ERR(ESRCH);
-        }
+    Proc *proc = curr_proc;
+    if (pid != 0 && pid != curr_proc->pid) {
+        proc = proc_get_by_pid(pid);
+        if (proc == NULL) return SYSCALL_ERR(ESRCH);
         if (proc->parent_pid != curr_proc->pid) {
-            COM_SYS_PROC_RELEASE(proc);
-            return COM_SYS_SYSCALL_ERR(ESRCH);
+            proc_rel(proc);
+            return SYSCALL_ERR(ESRCH);
         }
     }
 
-    kspinlock_acquire(&curr_proc->pg_lock);
-    com_proc_session_t *session = curr_proc->proc_group->session;
-    kspinlock_release(&curr_proc->pg_lock);
-    kspinlock_acquire(&proc->pg_lock);
-    KASSERT(NULL != proc->proc_group);
+    spinlock_acq(&curr_proc->pg_lock);
+    ProcSession *session = curr_proc->proc_group->session;
+    spinlock_rel(&curr_proc->pg_lock);
+    spinlock_acq(&proc->pg_lock);
+    assert(proc->proc_group != NULL);
 
-    if (0 == pgid) {
-        pgid = proc->pid;
-    }
+    if (pgid == 0) pgid = proc->pid;
 
     if (proc != curr_proc && proc->did_execve) {
         ret.err = EACCES;
         goto end;
     }
 
-    KASSERT(NULL != proc->proc_group->session);
+    assert(proc->proc_group->session != NULL);
     if (proc->proc_group->session != session || proc->pid == session->sid) {
         ret.err = EPERM;
         goto end;
@@ -79,25 +55,23 @@ COM_SYS_SYSCALL(com_sys_syscall_setpgid) {
     // if the lock is acquired only inside the function. This is because we know
     // (hopefully) that a process group may only be created by setpgid and
     // setsid, which first need to acquire the locks above (proc->pg_lock)
-    com_proc_group_t *group = com_sys_proc_get_group_by_pgid(pgid);
-    if (NULL == group) {
+    ProcGroup *group = proc_get_group_by_pgid(pgid);
+    if (group == NULL) {
         if (pgid != proc->pid) {
             ret.err = EPERM;
             goto end;
         }
-        group = com_sys_proc_new_group(proc, NULL);
+        group = proc_new_group(proc, NULL);
     } else if (group->session != session) {
         ret.err = EPERM;
         goto end;
     }
-    com_sys_proc_join_group_nolock(proc, group);
+    proc_join_group_nolock(proc, group);
 
     ret.value = 0;
 
 end:
-    kspinlock_release(&proc->pg_lock);
-    if (proc != curr_proc) {
-        COM_SYS_PROC_RELEASE(proc);
-    }
+    spinlock_rel(&proc->pg_lock);
+    if (proc != curr_proc) proc_rel(proc);
     return ret;
 }

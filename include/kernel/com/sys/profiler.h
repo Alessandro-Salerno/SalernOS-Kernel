@@ -1,99 +1,73 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-typedef enum com_profile_func {
-    E_COM_PROFILE_FUNC_KMEMSET = 0,
-    E_COM_PROFILE_FUNC_KMEMCPY,
-    E_COM_PROFILE_FUNC_KMEMMOVE,
-    E_COM_PROFILE_FUNC_KMEMCMP,
-    E_COM_PROFILE_FUNC_KMEMCHR,
-    E_COM_PROFILE_FUNC_KMEMRCHR,
-    E_COM_PROFILE_FUNC_KSPINLOCK_ACQUIRE,
-    E_COM_PROFILE_FUNC_KMUTEX_ACQUIRE,
-    E_COM_PROFILE_FUNC_PMM_ALLOC,
-    E_COM_PROFILE_FUNC_PMM_FREE,
-    E_COM_PROFILE_FUNC_SCHED_YIELD,
-    E_COM_PROFILE_FUNC_ELF_LOAD,
-    E_COM_PROFILE_FUNC_VMM_HANDLE_FAULT,
+typedef enum ProfileFunc {
+    PROFILE_FUNC_MEMSET = 0,
+    PROFILE_FUNC_MEMCPY,
+    PROFILE_FUNC_MEMMOVE,
+    PROFILE_FUNC_MEMCMP,
+    PROFILE_FUNC_MEMCHR,
+    PROFILE_FUNC_MEMRCHR,
+    PROFILE_FUNC_SPINLOCK_ACQ,
+    PROFILE_FUNC_MUTEX_ACQ,
+    PROFILE_FUNC_PMM_ALLOC,
+    PROFILE_FUNC_PMM_FREE,
+    PROFILE_FUNC_SCHED_YIELD,
+    PROFILE_FUNC_ELF_LOAD,
+    PROFILE_FUNC_VMM_HANDLE_FAULT,
 
-    E_COM_PROFILE_FUNC__MAX
-} com_profile_func_t;
+    PROFILE_FUNC__MAX
+} ProfileFunc;
 
-typedef struct com_profile_func_data {
-    uintmax_t real_time;
-    uintmax_t cpu_time;
-    size_t    num_calls;
-} com_profile_func_data_t;
+typedef struct ProfileFuncData {
+    u64 real_time;
+    u64 cpu_time;
+    usize num_calls;
+} ProfileFuncData;
 
-typedef struct com_syswide_profile {
-    com_profile_func_data_t functions[E_COM_PROFILE_FUNC__MAX];
-    com_profile_func_data_t syscalls[CONFIG_SYSCALL_MAX];
-} com_syswide_profile_t;
+typedef struct SysWideProfile {
+    ProfileFuncData functions[PROFILE_FUNC__MAX];
+    ProfileFuncData syscalls[CONFIG_SYSCALL_MAX];
+} SysWideProfile;
 
-typedef struct com_profiler_data {
+typedef struct ProfilerData {
     union {
-        com_profile_func_t function_id;
-        size_t             syscall_number;
+        ProfileFunc function_id;
+        usize syscall_number;
     };
-    uintmax_t real_start;
-    uintmax_t thread_slept_start;
-} com_profiler_data_t;
+    u64 real_start;
+    u64 thread_slept_start;
+} ProfilerData;
 
-void                   com_sys_profiler_init(void);
-com_syswide_profile_t *com_sys_profiler_get_syswide(void);
-const char *com_sys_profiler_resolve_name(com_profile_func_t function_id);
+void profiler_init(void);
+SysWideProfile *profiler_get_syswide(void);
+const char *profiler_resolve_name(ProfileFunc function_id);
 
 // This is quite unconventional but it helps reduce code clutter
 
 #if CONFIG_USE_PROFILER
 
-com_profiler_data_t
-com_sys_profiler_start_function(com_profile_func_t function_id);
-void com_sys_profiler_end_function(com_profiler_data_t *data);
+ProfilerData profiler_start_function(ProfileFunc function_id);
+void profiler_end_function(ProfilerData *data);
 
-com_profiler_data_t com_sys_profiler_start_syscall(size_t syscall_number);
-void                com_sys_profiler_end_syscall(com_profiler_data_t *data);
+ProfilerData profiler_start_syscall(usize syscall_number);
+void profiler_end_syscall(ProfilerData *data);
 
 #else
 
-static inline com_profiler_data_t
-com_sys_profiler_start_function(com_profile_func_t function_id) {
+static inline ProfilerData profiler_start_function(ProfileFunc function_id) {
     (void)function_id;
-    return (com_profiler_data_t){0};
+    return (ProfilerData){0};
 }
 
-static inline void com_sys_profiler_end_function(com_profiler_data_t *data) {
-    (void)data;
-}
+static inline void profiler_end_function(ProfilerData *data) { (void)data; }
 
-static inline com_profiler_data_t
-com_sys_profiler_start_syscall(size_t syscall_number) {
+static inline ProfilerData profiler_start_syscall(usize syscall_number) {
     (void)syscall_number;
-    return (com_profiler_data_t){0};
+    return (ProfilerData){0};
 }
 
-static inline void com_sys_profiler_end_syscall(com_profiler_data_t *data) {
-    (void)data;
-}
+static inline void profiler_end_syscall(ProfilerData *data) { (void)data; }
 
 #endif

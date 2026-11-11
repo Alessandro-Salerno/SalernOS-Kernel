@@ -1,35 +1,16 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/info.h>
 #include <dirent.h>
 #include <errno.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
+#include <kernel/com/ds/hashmap.h>
 #include <kernel/com/fs/pagecache.h>
 #include <kernel/com/fs/tmpfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
-#include <lib/hashmap.h>
-#include <lib/mem.h>
-#include <lib/rwlock.h>
-#include <lib/usercopy.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/sync/rwlock.h>
+#include <kernel/com/util.h>
 #include <sys/stat.h>
 #include <vendor/tailq.h>
 
@@ -37,112 +18,110 @@
 // only freed once it has no links. Entries get increasing readdir cookies from
 // 2 (0 and 1 are "." and "..") and are kept in that order.
 //
-// LOCKING: directories are protected by their VFS lock, file data by the
+// LOCKING: directories are protected by their Vfs lock, file data by the
 // file's own lock. num_links and num_subdirs are atomic, since stat reads them
 // without the directory lock and a node may be linked in independent
 // directories
 
-#define TMPFS_BUCKETS  (ARCH_PAGE_SIZE / sizeof(struct khashmap_entry_tailq))
-#define TMPFS_MAX_SIZE (COM_FS_PAGECACHE_MAX_PAGES * ARCH_PAGE_SIZE)
+#define TMPFS_BUCKETS  (PAGE_SIZE / sizeof(struct HashmapEntryTailQ))
+#define TMPFS_MAX_SIZE (PAGECACHE_MAX_PAGES * PAGE_SIZE)
 
 #define TMPFS_COOKIE_DOT    0
 #define TMPFS_COOKIE_DOTDOT 1
 #define TMPFS_COOKIE_FIRST  2
 
-struct tmpfs_node;
+struct TmpFSNode;
 
-struct tmpfs_dirent {
-    TAILQ_ENTRY(tmpfs_dirent) order_link;
-    struct tmpfs_node *node; // owns a reference
-    uintmax_t          cookie;
-    size_t             namelen;
-    char               name[];
+struct TmpFSDirEnt {
+    TAILQ_ENTRY(TmpFSDirEnt) order_link;
+    struct TmpFSNode *node; // owns a reference
+    u64 cookie;
+    usize namelen;
+    char name[];
 };
 
-TAILQ_HEAD(tmpfs_dirent_list, tmpfs_dirent);
+TAILQ_HEAD(TmpFSDirEntList, TmpFSDirEnt);
 
-struct tmpfs_dir {
-    khashmap_t names; // name -> entry, no buckets until the first entry
-    size_t     num_entries;
-    size_t     num_subdirs;
-    uintmax_t  next_cookie;
-    struct tmpfs_dirent_list order;
-    struct tmpfs_node       *parent; // NULL for the root and dead directories
+struct TmpFSDir {
+    Hashmap names; // name -> entry, no buckets until the first entry
+    usize num_entries;
+    usize num_subdirs;
+    u64 next_cookie;
+    struct TmpFSDirEntList order;
+    struct TmpFSNode *parent; // NULL for the root and dead directories
 
     // Where the last readdir stopped, so that reading a whole directory is
     // linear. Atomic in readdir, since readers share the lock and write it
-    struct tmpfs_dirent *hint;
+    struct TmpFSDirEnt *hint;
 };
 
 // Bytes past size are garbage in pages that exist, so growing the file shall
 // zero them first
-struct tmpfs_file {
-    krwlock_t        lock;
-    size_t           size;
-    size_t           num_pages; // no page at an index >= num_pages exists
-    com_pagecache_t *pages;
+struct TmpFSFile {
+    RWLock lock;
+    usize size;
+    usize num_pages; // no page at an index >= num_pages exists
+    PageCache *pages;
 };
 
-struct tmpfs_node {
-    com_vnode_t vnode; // first member
-    size_t      num_links;
+struct TmpFSNode {
+    Vnode vnode; // first member
+    usize num_links;
 
     union {
-        struct tmpfs_dir  dir;
-        struct tmpfs_file file;
+        struct TmpFSDir dir;
+        struct TmpFSFile file;
         struct {
-            char  *target;
-            size_t len;
+            char *target;
+            usize len;
         } link;
         void *private; // special nodes
     };
 };
 
-static com_vnode_ops_t TmpfsNodeOps;
-static com_fs_type_t   TmpfsType;
+static VnodeOps g_tmpfs_node_ops;
+static FSType g_tmpfs_type;
 
-static inline struct tmpfs_node *tnode_of(com_vnode_t *vnode) {
-    return (struct tmpfs_node *)vnode;
+static inline struct TmpFSNode *tnode_of(Vnode *vnode) {
+    return (struct TmpFSNode *)vnode;
 }
 
-static inline bool name_is_dotdot(const char *name, size_t namelen) {
-    return 2 == namelen && 0 == kmemcmp(name, "..", 2);
+static inline bool name_is_dotdot(const char *name, usize namelen) {
+    return namelen == 2 && memcmp(name, "..", 2) == 0;
 }
 
 // DIRECTORIES
 
-static inline bool dir_names_allocated(struct tmpfs_dir *dir) {
-    return 0 != dir->names.capacity;
+static inline bool dir_names_allocated(struct TmpFSDir *dir) {
+    return dir->names.capacity != 0;
 }
 
-static inline bool dir_is_empty(struct tmpfs_dir *dir) {
-    return 0 == dir->num_entries;
+static inline bool dir_is_empty(struct TmpFSDir *dir) {
+    return dir->num_entries == 0;
 }
 
-static inline uintmax_t dirent_next_off(struct tmpfs_dirent *entry) {
+static inline u64 dirent_next_off(struct TmpFSDirEnt *entry) {
     return entry->cookie + 1;
 }
 
-static struct tmpfs_dirent *
-dir_find(struct tmpfs_dir *dir, const char *name, size_t namelen) {
-    struct tmpfs_dirent *entry = NULL;
+static struct TmpFSDirEnt *dir_find(struct TmpFSDir *dir, const char *name,
+                                    usize namelen) {
+    struct TmpFSDirEnt *entry = NULL;
     if (dir_names_allocated(dir)) {
-        khashmap_get((void **)&entry, &dir->names, (void *)name, namelen);
+        hashmap_get(&dir->names, (void *)name, namelen, (void **)&entry);
     }
     return entry;
 }
 
-static int dir_insert(struct tmpfs_dir *dir, struct tmpfs_dirent *entry) {
+static int dir_insert(struct TmpFSDir *dir, struct TmpFSDirEnt *entry) {
     int ret = 0;
     if (!dir_names_allocated(dir)) {
-        ret = khashmap_init(&dir->names, TMPFS_BUCKETS);
+        ret = hashmap_init(&dir->names, TMPFS_BUCKETS);
     }
-    if (0 == ret) {
-        ret = khashmap_put(&dir->names, entry->name, entry->namelen, entry);
+    if (ret == 0) {
+        ret = hashmap_put(&dir->names, entry->name, entry->namelen, entry);
     }
-    if (0 != ret) {
-        return ret;
-    }
+    if (ret != 0) return ret;
 
     entry->cookie = dir->next_cookie++;
     TAILQ_INSERT_TAIL(&dir->order, entry, order_link);
@@ -150,161 +129,143 @@ static int dir_insert(struct tmpfs_dir *dir, struct tmpfs_dirent *entry) {
     return 0;
 }
 
-static void dir_remove(struct tmpfs_dir *dir, struct tmpfs_dirent *entry) {
-    KASSERT_CALL(0,
-                 ==,
-                 khashmap_remove(&dir->names, entry->name, entry->namelen));
+static void dir_remove(struct TmpFSDir *dir, struct TmpFSDirEnt *entry) {
+    verify(hashmap_remove(&dir->names, entry->name, entry->namelen) == 0);
     TAILQ_REMOVE(&dir->order, entry, order_link);
     dir->num_entries--;
-    if (entry == dir->hint) {
-        dir->hint = NULL;
-    }
+    if (entry == dir->hint) dir->hint = NULL;
 }
 
-static struct tmpfs_dirent *
-dirent_alloc(const char *name, size_t namelen, struct tmpfs_node *node) {
-    struct tmpfs_dirent *entry = com_mm_slab_alloc(sizeof(struct tmpfs_dirent) +
-                                                   namelen);
-    if (NULL == entry) {
-        return NULL;
-    }
+static struct TmpFSDirEnt *dirent_alloc(const char *name, usize namelen,
+                                        struct TmpFSNode *node) {
+    struct TmpFSDirEnt *entry = slab_alloc(sizeof(struct TmpFSDirEnt) +
+                                           namelen);
+    if (entry == NULL) return NULL;
 
-    entry->node    = node;
+    entry->node = node;
     entry->namelen = namelen;
-    kmemcpy(entry->name, name, namelen);
+    memcpy(entry->name, name, namelen);
     return entry;
 }
 
-static void dirent_free(struct tmpfs_dirent *entry) {
-    com_mm_slab_free(entry, sizeof(struct tmpfs_dirent) + entry->namelen);
+static void dirent_free(struct TmpFSDirEnt *entry) {
+    slab_free(entry, sizeof(struct TmpFSDirEnt) + entry->namelen);
 }
 
 // The entry's reference to node is up to the caller
-static int dir_add(struct tmpfs_dir  *dir,
-                   const char        *name,
-                   size_t             namelen,
-                   struct tmpfs_node *node) {
-    struct tmpfs_dirent *entry = dirent_alloc(name, namelen, node);
-    if (NULL == entry) {
-        return ENOMEM;
-    }
+static int dir_add(struct TmpFSDir *dir, const char *name, usize namelen,
+                   struct TmpFSNode *node) {
+    struct TmpFSDirEnt *entry = dirent_alloc(name, namelen, node);
+    if (entry == NULL) return ENOMEM;
 
     int ret = dir_insert(dir, entry);
-    if (0 != ret) {
-        dirent_free(entry);
-    }
+    if (ret != 0) dirent_free(entry);
     return ret;
 }
 
 // Removes entry and drops its reference to its node
-static void dir_unlink(struct tmpfs_node *dir, struct tmpfs_dirent *entry) {
-    struct tmpfs_node *node = entry->node;
+static void dir_unlink(struct TmpFSNode *dir, struct TmpFSDirEnt *entry) {
+    struct TmpFSNode *node = entry->node;
     dir_remove(&dir->dir, entry);
     dirent_free(entry);
     __atomic_sub_fetch(&node->num_links, 1, __ATOMIC_RELAXED);
-    if (E_COM_VNODE_TYPE_DIR == node->vnode.type) {
+    if (node->vnode.type == VNODE_TYPE_DIR) {
         node->dir.parent = NULL;
         __atomic_sub_fetch(&dir->dir.num_subdirs, 1, __ATOMIC_RELAXED);
     }
 
-    COM_FS_VFS_VNODE_RELEASE_INTERNAL(&node->vnode);
+    vfs_vnode_rel_internal(&node->vnode);
 }
 
 // NODES
 
 // The new node has no links and one external reference
-static int node_alloc(struct tmpfs_node     **out,
-                      com_vfs_t              *vfs,
-                      const com_vnode_attr_t *attr) {
-    const com_fs_tmpfs_special_t *special = attr->fsdata;
-    *out                                  = NULL;
+static int node_alloc(Vfs *vfs, const VnodeAttr *attr,
+                      struct TmpFSNode **out_tmpfs_node) {
+    const TmpFSSpecial *special = attr->fsdata;
+    *out_tmpfs_node = NULL;
 
     switch (attr->type) {
-        case E_COM_VNODE_TYPE_FILE:
-        case E_COM_VNODE_TYPE_DIR:
-        case E_COM_VNODE_TYPE_LINK:
-        case E_COM_VNODE_TYPE_SOCKET:
+        case VNODE_TYPE_FILE:
+        case VNODE_TYPE_DIR:
+        case VNODE_TYPE_LINK:
+        case VNODE_TYPE_SOCKET:
             break;
-        case E_COM_VNODE_TYPE_CHARDEV:
-        case E_COM_VNODE_TYPE_BLOCKDEV:
+        case VNODE_TYPE_CHARDEV:
+        case VNODE_TYPE_BLOCKDEV:
             // Devices only exist as special nodes
-            if (NULL == special) {
-                return EPERM;
-            }
+            if (special == NULL) return EPERM;
             break;
         default:
             return ENOSYS;
     }
 
-    struct tmpfs_node *node = com_mm_slab_alloc(sizeof(struct tmpfs_node));
-    if (NULL == node) {
-        return ENOMEM;
-    }
+    struct TmpFSNode *node = slab_alloc(sizeof(struct TmpFSNode));
+    if (node == NULL) return ENOMEM;
 
-    if (E_COM_VNODE_TYPE_FILE == attr->type) {
-        node->file.pages = com_fs_pagecache_new();
-        if (NULL == node->file.pages) {
-            com_mm_slab_free(node, sizeof(struct tmpfs_node));
+    if (attr->type == VNODE_TYPE_FILE) {
+        node->file.pages = pagecache_new();
+        if (node->file.pages == NULL) {
+            slab_free(node, sizeof(struct TmpFSNode));
             return ENOMEM;
         }
-        KRWLOCK_INIT(&node->file.lock);
-    } else if (E_COM_VNODE_TYPE_DIR == attr->type) {
+        rwlock_init(&node->file.lock);
+    } else if (attr->type == VNODE_TYPE_DIR) {
         TAILQ_INIT(&node->dir.order);
         node->dir.next_cookie = TMPFS_COOKIE_FIRST;
-    } else if (E_COM_VNODE_TYPE_LINK == attr->type) {
-        node->link.target = com_mm_slab_alloc(attr->targetlen);
-        if (NULL == node->link.target) {
-            com_mm_slab_free(node, sizeof(struct tmpfs_node));
+    } else if (attr->type == VNODE_TYPE_LINK) {
+        node->link.target = slab_alloc(attr->targetlen);
+        if (node->link.target == NULL) {
+            slab_free(node, sizeof(struct TmpFSNode));
             return ENOMEM;
         }
-        kmemcpy(node->link.target, attr->target, attr->targetlen);
+        memcpy(node->link.target, attr->target, attr->targetlen);
         node->link.len = attr->targetlen;
-    } else if (NULL != special) {
+    } else if (special != NULL) {
         node->private = special->private;
     }
 
-    com_fs_vfs_vnode_init(&node->vnode, vfs, attr->type, &TmpfsNodeOps, node);
-    *out = node;
+    vfs_vnode_init(&node->vnode, vfs, attr->type, &g_tmpfs_node_ops, node);
+    *out_tmpfs_node = node;
     return 0;
 }
 
-static void node_set_special_ops(struct tmpfs_node      *node,
-                                 const com_vnode_attr_t *attr) {
-    if (E_COM_VNODE_TYPE_CHARDEV == attr->type ||
-        E_COM_VNODE_TYPE_BLOCKDEV == attr->type) {
-        const com_fs_tmpfs_special_t *special = attr->fsdata;
-        node->vnode.ops                       = special->ops;
+static void node_set_special_ops(struct TmpFSNode *node,
+                                 const VnodeAttr *attr) {
+    if (attr->type == VNODE_TYPE_CHARDEV || attr->type == VNODE_TYPE_BLOCKDEV) {
+        const TmpFSSpecial *special = attr->fsdata;
+        node->vnode.ops = special->ops;
     }
 }
 
-static ino_t parent_ino(struct tmpfs_node *dir) {
-    return NULL != dir->dir.parent ? dir->dir.parent->vnode.ino
+static ino_t parent_ino(struct TmpFSNode *dir) {
+    return dir->dir.parent != NULL ? dir->dir.parent->vnode.ino
                                    : dir->vnode.ino;
 }
 
 // FILE DATA
 
 // LOCKING: file->lock held, in write mode if create
-static bool
-file_page(uintptr_t *page, struct tmpfs_file *file, size_t index, bool create) {
+static bool file_page(struct TmpFSFile *file, usize index, bool create,
+                      uptr *out_page) {
     if (!create) {
         return index < file->num_pages &&
-               com_fs_pagecache_get(page, file->pages, index);
+            pagecache_get(file->pages, index, out_page);
     }
 
-    com_fs_pagecache_default(page, file->pages, index);
-    file->num_pages = KMAX(file->num_pages, index + 1);
+    pagecache_default(file->pages, index, out_page);
+    file->num_pages = max(file->num_pages, index + 1);
     return true;
 }
 
 // LOCKING: file->lock held in write mode
-static void file_zero(struct tmpfs_file *file, uintmax_t from, uintmax_t to) {
-    uintmax_t last = KMIN(to, (uintmax_t)file->num_pages * ARCH_PAGE_SIZE);
-    for (uintmax_t curr = from; curr < last;) {
-        uintmax_t end = KMIN(ARCH_PAGE_ROUND(curr) + ARCH_PAGE_SIZE, last);
-        uintptr_t page;
-        if (file_page(&page, file, curr / ARCH_PAGE_SIZE, false)) {
-            kmemset((uint8_t *)page + curr % ARCH_PAGE_SIZE, end - curr, 0);
+static void file_zero(struct TmpFSFile *file, u64 from, u64 to) {
+    u64 last = min(to, (u64)file->num_pages * PAGE_SIZE);
+    for (u64 curr = from; curr < last;) {
+        u64 end = min(PAGE_ROUND(curr) + PAGE_SIZE, last);
+        uptr page;
+        if (file_page(file, curr / PAGE_SIZE, false, &page)) {
+            memset((u8 *)page + curr % PAGE_SIZE, 0, end - curr);
         }
         curr = end;
     }
@@ -312,48 +273,41 @@ static void file_zero(struct tmpfs_file *file, uintmax_t from, uintmax_t to) {
 
 // VNODE OPS
 
-static int tmpfs_lookup(com_vnode_t **out,
-                        com_vnode_t  *dir,
-                        const char   *name,
-                        size_t        namelen) {
-    struct tmpfs_node *tdir = tnode_of(dir);
+static int tmpfs_lookup(Vnode *dir, const char *name, usize namelen,
+                        Vnode **out_vnode) {
+    struct TmpFSNode *tdir = tnode_of(dir);
 
     if (name_is_dotdot(name, namelen)) {
-        KASSERT(NULL != tdir->dir.parent);
-        *out = &tdir->dir.parent->vnode;
-        COM_FS_VFS_VNODE_HOLD(*out);
+        assert(tdir->dir.parent != NULL);
+        *out_vnode = &tdir->dir.parent->vnode;
+        vfs_vnode_hold(*out_vnode);
         return 0;
     }
 
-    struct tmpfs_dirent *entry = dir_find(&tdir->dir, name, namelen);
-    if (NULL == entry) {
-        *out = NULL;
+    struct TmpFSDirEnt *entry = dir_find(&tdir->dir, name, namelen);
+    if (entry == NULL) {
+        *out_vnode = NULL;
         return ENOENT;
     }
 
     // The entry's reference is stable while dir is locked
-    *out = &entry->node->vnode;
-    COM_FS_VFS_VNODE_HOLD(*out);
+    *out_vnode = &entry->node->vnode;
+    vfs_vnode_hold(*out_vnode);
     return 0;
 }
 
-static int tmpfs_create(com_vnode_t           **out,
-                        com_vnode_t            *dir,
-                        const char             *name,
-                        size_t                  namelen,
-                        const com_vnode_attr_t *attr) {
-    struct tmpfs_node *tdir = tnode_of(dir);
-    struct tmpfs_node *node = NULL;
-    *out                    = NULL;
+static int tmpfs_create(Vnode *dir, const char *name, usize namelen,
+                        const VnodeAttr *attr, Vnode **out_vnode) {
+    struct TmpFSNode *tdir = tnode_of(dir);
+    struct TmpFSNode *node = NULL;
+    *out_vnode = NULL;
 
-    int ret = node_alloc(&node, dir->vfs, attr);
-    if (0 != ret) {
-        return ret;
-    }
+    int ret = node_alloc(dir->vfs, attr, &node);
+    if (ret != 0) return ret;
 
     ret = dir_add(&tdir->dir, name, namelen, node);
-    if (0 != ret) {
-        COM_FS_VFS_VNODE_RELEASE(&node->vnode);
+    if (ret != 0) {
+        vfs_vnode_rel(&node->vnode);
         return ret;
     }
 
@@ -361,93 +315,75 @@ static int tmpfs_create(com_vnode_t           **out,
 
     // The reference from node_alloc goes to the caller
     node->num_links = 1;
-    if (E_COM_VNODE_TYPE_DIR == attr->type) {
+    if (attr->type == VNODE_TYPE_DIR) {
         node->dir.parent = tdir;
         __atomic_add_fetch(&tdir->dir.num_subdirs, 1, __ATOMIC_RELAXED);
     }
 
-    COM_FS_VFS_VNODE_HOLD_INTERNAL(&node->vnode);
-    *out = &node->vnode;
+    vfs_vnode_hold_internal(&node->vnode);
+    *out_vnode = &node->vnode;
     return 0;
 }
 
-static int tmpfs_link(com_vnode_t *dir,
-                      const char  *name,
-                      size_t       namelen,
-                      com_vnode_t *node) {
-    struct tmpfs_node *tdir  = tnode_of(dir);
-    struct tmpfs_node *tnode = tnode_of(node);
-    size_t num_links = __atomic_load_n(&tnode->num_links, __ATOMIC_RELAXED);
+static int tmpfs_link(Vnode *dir, const char *name, usize namelen,
+                      Vnode *node) {
+    struct TmpFSNode *tdir = tnode_of(dir);
+    struct TmpFSNode *tnode = tnode_of(node);
+    usize num_links = __atomic_load_n(&tnode->num_links, __ATOMIC_RELAXED);
 
     // Only dir is locked, so an unlink in another directory may drop the last
     // link at any time. A node shall never go from 0 to 1 links
     do {
-        if (0 == num_links) {
-            return ENOENT;
-        }
-    } while (!__atomic_compare_exchange_n(&tnode->num_links,
-                                          &num_links,
-                                          num_links + 1,
-                                          false,
-                                          __ATOMIC_RELAXED,
-                                          __ATOMIC_RELAXED));
+        if (num_links == 0) return ENOENT;
+    } while (!__atomic_compare_exchange_n(&tnode->num_links, &num_links,
+                                          num_links + 1, false,
+                                          __ATOMIC_RELAXED, __ATOMIC_RELAXED));
 
     int ret = dir_add(&tdir->dir, name, namelen, tnode);
-    if (0 != ret) {
+    if (ret != 0) {
         __atomic_sub_fetch(&tnode->num_links, 1, __ATOMIC_RELAXED);
         return ret;
     }
 
-    COM_FS_VFS_VNODE_HOLD_INTERNAL(node);
+    vfs_vnode_hold_internal(node);
     return 0;
 }
 
-static int tmpfs_unlink(com_vnode_t *dir,
-                        const char  *name,
-                        size_t       namelen,
-                        com_vnode_t *node) {
-    struct tmpfs_node   *tdir  = tnode_of(dir);
-    struct tmpfs_node   *tnode = tnode_of(node);
-    struct tmpfs_dirent *entry = dir_find(&tdir->dir, name, namelen);
-    KASSERT(NULL != entry && tnode == entry->node);
+static int tmpfs_unlink(Vnode *dir, const char *name, usize namelen,
+                        Vnode *node) {
+    struct TmpFSNode *tdir = tnode_of(dir);
+    struct TmpFSNode *tnode = tnode_of(node);
+    struct TmpFSDirEnt *entry = dir_find(&tdir->dir, name, namelen);
+    assert(entry != NULL && tnode == entry->node);
 
-    if (E_COM_VNODE_TYPE_DIR == node->type && !dir_is_empty(&tnode->dir)) {
+    if (node->type == VNODE_TYPE_DIR && !dir_is_empty(&tnode->dir)) {
         return ENOTEMPTY;
     }
 
-    // The VFS holds a reference, so this does not free node
+    // The Vfs holds a reference, so this does not free node
     dir_unlink(tdir, entry);
     return 0;
 }
 
-static int tmpfs_rename(com_vnode_t *srcdir,
-                        const char  *srcname,
-                        size_t       srcnamelen,
-                        com_vnode_t *node,
-                        com_vnode_t *dstdir,
-                        const char  *dstname,
-                        size_t       dstnamelen,
-                        com_vnode_t *replaced) {
-    struct tmpfs_node   *tsrc   = tnode_of(srcdir);
-    struct tmpfs_node   *tdst   = tnode_of(dstdir);
-    struct tmpfs_node   *tnode  = tnode_of(node);
-    struct tmpfs_dirent *srcent = dir_find(&tsrc->dir, srcname, srcnamelen);
-    KASSERT(NULL != srcent && tnode == srcent->node);
-    bool is_dir = E_COM_VNODE_TYPE_DIR == node->type;
+static int tmpfs_rename(Vnode *srcdir, const char *srcname, usize srcnamelen,
+                        Vnode *node, Vnode *dstdir, const char *dstname,
+                        usize dstnamelen, Vnode *replaced) {
+    struct TmpFSNode *tsrc = tnode_of(srcdir);
+    struct TmpFSNode *tdst = tnode_of(dstdir);
+    struct TmpFSNode *tnode = tnode_of(node);
+    struct TmpFSDirEnt *srcent = dir_find(&tsrc->dir, srcname, srcnamelen);
+    assert(srcent != NULL && tnode == srcent->node);
+    bool is_dir = node->type == VNODE_TYPE_DIR;
 
     // Everything that can fail happens before the source entry is removed
-    struct tmpfs_dirent *dstent = NULL;
-    if (NULL != replaced) {
+    struct TmpFSDirEnt *dstent = NULL;
+    if (replaced != NULL) {
         dstent = dir_find(&tdst->dir, dstname, dstnamelen);
-        KASSERT(NULL != dstent && tnode_of(replaced) == dstent->node);
-        if (is_dir && !dir_is_empty(&tnode_of(replaced)->dir)) {
-            return ENOTEMPTY;
-        }
+        assert(dstent != NULL && tnode_of(replaced) == dstent->node);
+        if (is_dir && !dir_is_empty(&tnode_of(replaced)->dir)) return ENOTEMPTY;
     } else {
         int ret = dir_add(&tdst->dir, dstname, dstnamelen, tnode);
-        if (0 != ret) {
-            return ret;
-        }
+        if (ret != 0) return ret;
     }
 
     // The source entry's reference moves to the target entry. A replaced
@@ -455,17 +391,17 @@ static int tmpfs_rename(com_vnode_t *srcdir,
     dir_remove(&tsrc->dir, srcent);
     dirent_free(srcent);
 
-    if (NULL != replaced) {
-        struct tmpfs_node *trep = tnode_of(replaced);
-        dstent->node            = tnode;
+    if (replaced != NULL) {
+        struct TmpFSNode *trep = tnode_of(replaced);
+        dstent->node = tnode;
         __atomic_sub_fetch(&trep->num_links, 1, __ATOMIC_RELAXED);
         if (is_dir) {
             trep->dir.parent = NULL;
             __atomic_sub_fetch(&tdst->dir.num_subdirs, 1, __ATOMIC_RELAXED);
         }
 
-        // The VFS holds a reference to replaced
-        COM_FS_VFS_VNODE_RELEASE_INTERNAL(replaced);
+        // The Vfs holds a reference to replaced
+        vfs_vnode_rel_internal(replaced);
     }
 
     // node->lock is held if its parent changes
@@ -478,353 +414,262 @@ static int tmpfs_rename(com_vnode_t *srcdir,
     return 0;
 }
 
-static int readdir_emit(size_t       *bytes_read,
-                        void         *buf,
-                        size_t        buflen,
-                        com_dirent_t *hdr,
-                        const char   *name,
-                        size_t        namelen) {
-    size_t req_size = sizeof(com_dirent_t) + namelen + 1;
-    if (buflen < req_size) {
-        return EOVERFLOW;
-    }
+static int readdir_emit(void *buf, usize buflen, VFSDirEnt *hdr,
+                        const char *name, usize namelen,
+                        usize *out_bytes_read) {
+    usize req_size = sizeof(VFSDirEnt) + namelen + 1;
+    if (buflen < req_size) return EOVERFLOW;
 
-    hdr->reclen       = req_size;
-    com_dirent_t *ud  = buf;
-    char          nul = 0;
-    int           ret = kmemcpy_maybe_user(ud, hdr, sizeof(*hdr));
-    if (0 == ret) {
-        ret = kmemcpy_maybe_user(ud->name, name, namelen);
-    }
-    if (0 == ret) {
-        ret = kmemcpy_maybe_user(ud->name + namelen, &nul, 1);
-    }
-    if (0 == ret) {
-        *bytes_read = req_size;
-    }
+    hdr->reclen = req_size;
+    VFSDirEnt *ud = buf;
+    char nul = 0;
+    int ret = memcpy_maybe_user(ud, hdr, sizeof(*hdr));
+    if (ret == 0) ret = memcpy_maybe_user(ud->name, name, namelen);
+    if (ret == 0) ret = memcpy_maybe_user(ud->name + namelen, &nul, 1);
+    if (ret == 0) *out_bytes_read = req_size;
     return ret;
 }
 
-static unsigned char dirent_type(com_vnode_type_t type) {
+static unsigned char dirent_type(VnodeType type) {
     switch (type) {
-        case E_COM_VNODE_TYPE_FILE:
+        case VNODE_TYPE_FILE:
             return DT_REG;
-        case E_COM_VNODE_TYPE_DIR:
+        case VNODE_TYPE_DIR:
             return DT_DIR;
-        case E_COM_VNODE_TYPE_LINK:
+        case VNODE_TYPE_LINK:
             return DT_LNK;
-        case E_COM_VNODE_TYPE_CHARDEV:
+        case VNODE_TYPE_CHARDEV:
             return DT_CHR;
-        case E_COM_VNODE_TYPE_FIFO:
+        case VNODE_TYPE_FIFO:
             return DT_FIFO;
-        case E_COM_VNODE_TYPE_SOCKET:
+        case VNODE_TYPE_SOCKET:
             return DT_SOCK;
-        case E_COM_VNODE_TYPE_BLOCKDEV:
+        case VNODE_TYPE_BLOCKDEV:
             return DT_BLK;
         default:
             return DT_UNKNOWN;
     }
 }
 
-static struct tmpfs_dirent *readdir_seek(struct tmpfs_dir *dir, uintmax_t off) {
-    struct tmpfs_dirent *hint = __atomic_load_n(&dir->hint, __ATOMIC_RELAXED);
-    if (NULL != hint && dirent_next_off(hint) == off) {
+static struct TmpFSDirEnt *readdir_seek(struct TmpFSDir *dir, u64 off) {
+    struct TmpFSDirEnt *hint = __atomic_load_n(&dir->hint, __ATOMIC_RELAXED);
+    if (hint != NULL && dirent_next_off(hint) == off) {
         return TAILQ_NEXT(hint, order_link);
     }
 
-    struct tmpfs_dirent *entry;
+    struct TmpFSDirEnt *entry;
     TAILQ_FOREACH(entry, &dir->order, order_link) {
-        if (entry->cookie >= off) {
-            return entry;
-        }
+        if (entry->cookie >= off) return entry;
     }
 
     return NULL;
 }
 
-static int tmpfs_readdir(void        *buf,
-                         size_t       buflen,
-                         size_t      *bytes_read,
-                         uintmax_t   *next_off,
-                         com_vnode_t *dir,
-                         uintmax_t    off) {
-    struct tmpfs_node *tdir = tnode_of(dir);
-    com_dirent_t       hdr  = {0};
-    hdr.type                = DT_DIR;
-    *bytes_read             = 0;
+static int tmpfs_readdir(void *buf, usize buflen, Vnode *dir, u64 off,
+                         usize *out_bytes_read, u64 *out_next_off) {
+    struct TmpFSNode *tdir = tnode_of(dir);
+    VFSDirEnt hdr = {0};
+    hdr.type = DT_DIR;
+    *out_bytes_read = 0;
 
-    if (TMPFS_COOKIE_DOT == off) {
+    if (off == TMPFS_COOKIE_DOT) {
         hdr.ino = dir->ino;
-        hdr.off = *next_off = TMPFS_COOKIE_DOTDOT;
-        return readdir_emit(bytes_read, buf, buflen, &hdr, ".", 1);
+        hdr.off = *out_next_off = TMPFS_COOKIE_DOTDOT;
+        return readdir_emit(buf, buflen, &hdr, ".", 1, out_bytes_read);
     }
 
-    if (TMPFS_COOKIE_DOTDOT == off) {
+    if (off == TMPFS_COOKIE_DOTDOT) {
         hdr.ino = parent_ino(tdir);
-        hdr.off = *next_off = TMPFS_COOKIE_FIRST;
-        return readdir_emit(bytes_read, buf, buflen, &hdr, "..", 2);
+        hdr.off = *out_next_off = TMPFS_COOKIE_FIRST;
+        return readdir_emit(buf, buflen, &hdr, "..", 2, out_bytes_read);
     }
 
-    struct tmpfs_dirent *entry = readdir_seek(&tdir->dir, off);
-    if (NULL == entry) {
-        *next_off = off;
+    struct TmpFSDirEnt *entry = readdir_seek(&tdir->dir, off);
+    if (entry == NULL) {
+        *out_next_off = off;
         return 0;
     }
 
-    hdr.ino  = entry->node->vnode.ino;
+    hdr.ino = entry->node->vnode.ino;
     hdr.type = dirent_type(entry->node->vnode.type);
-    hdr.off  = dirent_next_off(entry);
-    int ret  = readdir_emit(bytes_read,
-                            buf,
-                            buflen,
-                            &hdr,
-                            entry->name,
-                            entry->namelen);
-    if (0 == ret) {
-        *next_off = hdr.off;
+    hdr.off = dirent_next_off(entry);
+    int ret = readdir_emit(buf, buflen, &hdr, entry->name, entry->namelen,
+                           out_bytes_read);
+    if (ret == 0) {
+        *out_next_off = hdr.off;
         __atomic_store_n(&tdir->dir.hint, entry, __ATOMIC_RELAXED);
     }
     return ret;
 }
 
-static int
-tmpfs_readlink(size_t *len, char *buf, size_t buflen, com_vnode_t *link) {
-    struct tmpfs_node *tlink = tnode_of(link);
-    kmemcpy(buf, tlink->link.target, KMIN(buflen, tlink->link.len));
-    *len = tlink->link.len;
+static int tmpfs_readlink(char *buf, usize buflen, Vnode *link,
+                          usize *out_len) {
+    struct TmpFSNode *tlink = tnode_of(link);
+    memcpy(buf, tlink->link.target, min(buflen, tlink->link.len));
+    *out_len = tlink->link.len;
     return 0;
 }
 
-static int check_file_io(com_vnode_t *node) {
-    if (E_COM_VNODE_TYPE_FILE == node->type) {
-        return 0;
-    }
+static int check_file_io(Vnode *node) {
+    if (node->type == VNODE_TYPE_FILE) return 0;
 
-    return E_COM_VNODE_TYPE_DIR == node->type ? EISDIR : EINVAL;
+    return node->type == VNODE_TYPE_DIR ? EISDIR : EINVAL;
 }
 
-static int tmpfs_read(void        *buf,
-                      size_t       buflen,
-                      size_t      *bytes_read,
-                      com_vnode_t *node,
-                      uintmax_t    off,
-                      uintmax_t    flags) {
+static int tmpfs_read(void *buf, usize buflen, Vnode *node, u64 off, u64 flags,
+                      usize *out_bytes_read) {
     (void)flags;
-    *bytes_read = 0;
-    int ret     = check_file_io(node);
-    if (0 != ret) {
-        return ret;
-    }
+    *out_bytes_read = 0;
+    int ret = check_file_io(node);
+    if (ret != 0) return ret;
 
-    struct tmpfs_file *file = &tnode_of(node)->file;
-    size_t             done = 0;
-    krwlock_acquire_read(&file->lock);
+    struct TmpFSFile *file = &tnode_of(node)->file;
+    usize done = 0;
+    rwlock_acq_read(&file->lock);
 
-    if (off < file->size) {
-        buflen = KMIN(buflen, file->size - off);
-    } else {
-        buflen = 0;
-    }
+    if (off < file->size) buflen = min(buflen, file->size - off);
+    else buflen = 0;
 
-    for (uintmax_t curr = off; curr < off + buflen;) {
-        uintmax_t end = KMIN(ARCH_PAGE_ROUND(curr) + ARCH_PAGE_SIZE,
-                             off + buflen);
-        uint8_t  *dst = (uint8_t *)buf + (curr - off);
-        uintptr_t page;
-        if (file_page(&page, file, curr / ARCH_PAGE_SIZE, false)) {
-            ret = kmemcpy_maybe_user(dst,
-                                     (uint8_t *)page + curr % ARCH_PAGE_SIZE,
-                                     end - curr);
+    for (u64 curr = off; curr < off + buflen;) {
+        u64 end = min(PAGE_ROUND(curr) + PAGE_SIZE, off + buflen);
+        u8 *dst = (u8 *)buf + (curr - off);
+        uptr page;
+        if (file_page(file, curr / PAGE_SIZE, false, &page)) {
+            ret = memcpy_maybe_user(dst, (u8 *)page + curr % PAGE_SIZE,
+                                    end - curr);
         } else {
-            ret = kmemset_maybe_user(dst, end - curr, 0);
+            ret = memset_maybe_user(dst, 0, end - curr);
         }
-        if (0 != ret) {
-            break;
-        }
+        if (ret != 0) break;
 
         done += end - curr;
         curr = end;
     }
 
-    krwlock_release_read(&file->lock);
-    *bytes_read = done;
-    return 0 != done ? 0 : ret;
+    rwlock_rel_read(&file->lock);
+    *out_bytes_read = done;
+    return done != 0 ? 0 : ret;
 }
 
-static int tmpfs_write(size_t      *bytes_written,
-                       com_vnode_t *node,
-                       void        *buf,
-                       size_t       buflen,
-                       uintmax_t    off,
-                       uintmax_t    flags) {
+static int tmpfs_write(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
+                       usize *out_bytes_written) {
     (void)flags;
-    *bytes_written = 0;
-    int ret        = check_file_io(node);
-    if (0 != ret) {
-        return ret;
-    }
+    *out_bytes_written = 0;
+    int ret = check_file_io(node);
+    if (ret != 0) return ret;
 
-    if (0 == buflen) {
-        return 0;
-    }
+    if (buflen == 0) return 0;
+    if (off >= TMPFS_MAX_SIZE) return EFBIG;
 
-    if (off >= TMPFS_MAX_SIZE) {
-        return EFBIG;
-    }
+    buflen = min(buflen, TMPFS_MAX_SIZE - off);
+    struct TmpFSFile *file = &tnode_of(node)->file;
+    usize done = 0;
+    rwlock_acq_write(&file->lock);
 
-    buflen                  = KMIN(buflen, TMPFS_MAX_SIZE - off);
-    struct tmpfs_file *file = &tnode_of(node)->file;
-    size_t             done = 0;
-    krwlock_acquire_write(&file->lock);
+    if (off > file->size) file_zero(file, file->size, off);
 
-    if (off > file->size) {
-        file_zero(file, file->size, off);
-    }
-
-    for (uintmax_t curr = off; curr < off + buflen;) {
-        uintmax_t end = KMIN(ARCH_PAGE_ROUND(curr) + ARCH_PAGE_SIZE,
-                             off + buflen);
-        uintptr_t page;
-        file_page(&page, file, curr / ARCH_PAGE_SIZE, true);
-        ret = kmemcpy_maybe_user((uint8_t *)page + curr % ARCH_PAGE_SIZE,
-                                 (uint8_t *)buf + (curr - off),
-                                 end - curr);
-        if (0 != ret) {
-            break;
-        }
+    for (u64 curr = off; curr < off + buflen;) {
+        u64 end = min(PAGE_ROUND(curr) + PAGE_SIZE, off + buflen);
+        uptr page;
+        file_page(file, curr / PAGE_SIZE, true, &page);
+        ret = memcpy_maybe_user((u8 *)page + curr % PAGE_SIZE,
+                                (u8 *)buf + (curr - off), end - curr);
+        if (ret != 0) break;
 
         done += end - curr;
         curr = end;
     }
 
-    if (off + done > file->size) {
-        file->size = off + done;
-    }
+    if (off + done > file->size) file->size = off + done;
 
-    krwlock_release_write(&file->lock);
-    *bytes_written = done;
-    return 0 != done ? 0 : ret;
+    rwlock_rel_write(&file->lock);
+    *out_bytes_written = done;
+    return done != 0 ? 0 : ret;
 }
 
-static int tmpfs_truncate(com_vnode_t *node, size_t size) {
-    if (E_COM_VNODE_TYPE_FILE != node->type) {
-        return EINVAL;
-    }
-
-    if (size > TMPFS_MAX_SIZE) {
-        return EFBIG;
-    }
+static int tmpfs_truncate(Vnode *node, usize size) {
+    if (node->type != VNODE_TYPE_FILE) return EINVAL;
+    if (size > TMPFS_MAX_SIZE) return EFBIG;
 
     // Pages past the new size are kept, because shared mappings may still map
     // them and there is no reverse map
-    struct tmpfs_file *file = &tnode_of(node)->file;
-    krwlock_acquire_write(&file->lock);
-    if (size > file->size) {
-        file_zero(file, file->size, size);
-    }
+    struct TmpFSFile *file = &tnode_of(node)->file;
+    rwlock_acq_write(&file->lock);
+    if (size > file->size) file_zero(file, file->size, size);
     file->size = size;
-    krwlock_release_write(&file->lock);
+    rwlock_rel_write(&file->lock);
     return 0;
 }
 
-static int tmpfs_mmap(void             **out,
-                      com_vnode_t       *node,
-                      com_vmm_context_t *vmm_context,
-                      void              *hint,
-                      size_t             size,
-                      int                vmm_flags,
-                      arch_mmu_flags_t   mmu_flags,
-                      uintmax_t          off) {
-    if (E_COM_VNODE_TYPE_FILE != node->type) {
-        return ENODEV;
+static int tmpfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint,
+                      usize size, int vmm_flags, MMUFlags mmu_flags, u64 off,
+                      void **out_addr) {
+    if (node->type != VNODE_TYPE_FILE) return ENODEV;
+    if (size == 0 || off % PAGE_SIZE != 0) return EINVAL;
+    if (off >= TMPFS_MAX_SIZE || size > TMPFS_MAX_SIZE - off) return ENXIO;
+
+    struct TmpFSFile *file = &tnode_of(node)->file;
+    void *range_base = hint;
+    bool shared = vmm_flags & VMM_FLAGS_SHARED;
+
+    if (vmm_flags & VMM_FLAGS_NOHINT) {
+        vmm_flags &= ~VMM_FLAGS_NOHINT;
+        range_base = vmm_prealloc_range(vmm_context, VMM_RANGE_TYPE_FILE, size);
+        if (range_base == NULL) return ENOMEM;
     }
 
-    if (0 == size || 0 != off % ARCH_PAGE_SIZE) {
-        return EINVAL;
-    }
-
-    if (off >= TMPFS_MAX_SIZE || size > TMPFS_MAX_SIZE - off) {
-        return ENXIO;
-    }
-
-    struct tmpfs_file *file       = &tnode_of(node)->file;
-    void              *range_base = hint;
-    bool               shared     = COM_MM_VMM_FLAGS_SHARED & vmm_flags;
-
-    if (COM_MM_VMM_FLAGS_NOHINT & vmm_flags) {
-        vmm_flags &= ~COM_MM_VMM_FLAGS_NOHINT;
-        range_base = com_mm_vmm_prealloc_range(vmm_context,
-                                               E_COM_VMM_RANGE_TYPE_FILE,
-                                               size);
-        if (NULL == range_base) {
-            return ENOMEM;
-        }
-    }
-
-    if (!shared) {
-        vmm_flags |= COM_MM_VMM_FLAGS_PRIVATE;
-    }
+    if (!shared) vmm_flags |= VMM_FLAGS_PRIVATE;
 
     // Only shared mappings may populate the page tree, so private ones only
     // need the lock in read mode
-    if (shared) {
-        krwlock_acquire_write(&file->lock);
-    } else {
-        krwlock_acquire_read(&file->lock);
-    }
+    if (shared) rwlock_acq_write(&file->lock);
+    else rwlock_acq_read(&file->lock);
 
-    for (uintmax_t curr = off; curr < off + size; curr += ARCH_PAGE_SIZE) {
-        uintptr_t page;
-        bool present = file_page(&page, file, curr / ARCH_PAGE_SIZE, shared);
+    for (u64 curr = off; curr < off + size; curr += PAGE_SIZE) {
+        uptr page;
+        bool present = file_page(file, curr / PAGE_SIZE, shared, &page);
 
         void *page_phys = NULL;
         if (present) {
-            page_phys = (void *)ARCH_HHDM_TO_PHYS(page);
-            com_mm_pmm_hold(page_phys);
+            page_phys = (void *)HHDM_TO_PHYS(page);
+            pmm_hold(page_phys);
         }
 
-        com_mm_vmm_map(vmm_context,
-                       range_base + (curr - off),
-                       page_phys,
-                       ARCH_PAGE_SIZE,
-                       vmm_flags | (present ? 0 : COM_MM_VMM_FLAGS_ALLOCATE),
-                       mmu_flags);
+        vmm_map(vmm_context, range_base + (curr - off), page_phys, PAGE_SIZE,
+                vmm_flags | (present ? 0 : VMM_FLAGS_ALLOCATE), mmu_flags);
     }
 
-    if (shared) {
-        krwlock_release_write(&file->lock);
-    } else {
-        krwlock_release_read(&file->lock);
-    }
+    if (shared) rwlock_rel_write(&file->lock);
+    else rwlock_rel_read(&file->lock);
 
-    *out = (void *)((uintptr_t)range_base + (off % ARCH_PAGE_SIZE));
+    *out_addr = (void *)((uptr)range_base + (off % PAGE_SIZE));
     return 0;
 }
 
-static int tmpfs_stat(struct stat *out, com_vnode_t *node) {
-    struct tmpfs_node *tnode = tnode_of(node);
-    size_t num_links = __atomic_load_n(&tnode->num_links, __ATOMIC_RELAXED);
-    out->st_blksize  = 512;
-    out->st_mode     = 0700;
-    out->st_nlink    = num_links;
+static int tmpfs_stat(Vnode *node, struct stat *out_stat) {
+    struct TmpFSNode *tnode = tnode_of(node);
+    usize num_links = __atomic_load_n(&tnode->num_links, __ATOMIC_RELAXED);
+    out_stat->st_blksize = 512;
+    out_stat->st_mode = 0700;
+    out_stat->st_nlink = num_links;
 
     switch (node->type) {
-        case E_COM_VNODE_TYPE_FILE:
-            krwlock_acquire_read(&tnode->file.lock);
-            out->st_size = tnode->file.size;
-            krwlock_release_read(&tnode->file.lock);
-            out->st_blocks = (out->st_size + 511) / 512;
+        case VNODE_TYPE_FILE:
+            rwlock_acq_read(&tnode->file.lock);
+            out_stat->st_size = tnode->file.size;
+            rwlock_rel_read(&tnode->file.lock);
+            out_stat->st_blocks = (out_stat->st_size + 511) / 512;
             break;
-        case E_COM_VNODE_TYPE_DIR:
+        case VNODE_TYPE_DIR:
             // "." and the entry in the parent (the root is its own parent),
             // plus ".." of every subdirectory. A removed directory has none
-            if (0 != num_links || node->isroot) {
-                out->st_nlink = 2 + __atomic_load_n(&tnode->dir.num_subdirs,
-                                                    __ATOMIC_RELAXED);
+            if (num_links != 0 || node->isroot) {
+                out_stat->st_nlink = 2 +
+                    __atomic_load_n(&tnode->dir.num_subdirs, __ATOMIC_RELAXED);
             }
             break;
-        case E_COM_VNODE_TYPE_LINK:
-            out->st_size = tnode->link.len;
+        case VNODE_TYPE_LINK:
+            out_stat->st_size = tnode->link.len;
             break;
         default:
             break;
@@ -833,40 +678,37 @@ static int tmpfs_stat(struct stat *out, com_vnode_t *node) {
     return 0;
 }
 
-static com_vnode_ops_t TmpfsNodeOps = {.inactive = com_fs_tmpfs_inactive,
-                                       .lookup   = tmpfs_lookup,
-                                       .create   = tmpfs_create,
-                                       .link     = tmpfs_link,
-                                       .unlink   = tmpfs_unlink,
-                                       .rename   = tmpfs_rename,
-                                       .readdir  = tmpfs_readdir,
-                                       .readlink = tmpfs_readlink,
-                                       .read     = tmpfs_read,
-                                       .write    = tmpfs_write,
-                                       .truncate = tmpfs_truncate,
-                                       .mmap     = tmpfs_mmap,
-                                       .stat     = tmpfs_stat};
+static VnodeOps g_tmpfs_node_ops = {.inactive = tmpfs_inactive,
+                                    .lookup = tmpfs_lookup,
+                                    .create = tmpfs_create,
+                                    .link = tmpfs_link,
+                                    .unlink = tmpfs_unlink,
+                                    .rename = tmpfs_rename,
+                                    .readdir = tmpfs_readdir,
+                                    .readlink = tmpfs_readlink,
+                                    .read = tmpfs_read,
+                                    .write = tmpfs_write,
+                                    .truncate = tmpfs_truncate,
+                                    .mmap = tmpfs_mmap,
+                                    .stat = tmpfs_stat};
 
 // FILE SYSTEM OPS
 
 // Removes every entry bottom up, without recursion
-static int tmpfs_unmount(com_vfs_t *vfs) {
-    struct tmpfs_node *root = tnode_of(vfs->root);
-    struct tmpfs_node *curr = root;
+static int tmpfs_unmount(Vfs *vfs) {
+    struct TmpFSNode *root = tnode_of(vfs->root);
+    struct TmpFSNode *curr = root;
 
     for (;;) {
-        struct tmpfs_dirent *entry = TAILQ_FIRST(&curr->dir.order);
-        if (NULL == entry) {
-            if (root == curr) {
-                break;
-            }
+        struct TmpFSDirEnt *entry = TAILQ_FIRST(&curr->dir.order);
+        if (entry == NULL) {
+            if (root == curr) break;
             curr = curr->dir.parent;
             continue;
         }
 
-        struct tmpfs_node *child = entry->node;
-        if (E_COM_VNODE_TYPE_DIR == child->vnode.type &&
-            !dir_is_empty(&child->dir)) {
+        struct TmpFSNode *child = entry->node;
+        if (child->vnode.type == VNODE_TYPE_DIR && !dir_is_empty(&child->dir)) {
             curr = child;
             continue;
         }
@@ -875,95 +717,85 @@ static int tmpfs_unmount(com_vfs_t *vfs) {
     }
 
     // External references, so vfs is only freed after they are dropped
-    COM_FS_VFS_VNODE_RELEASE(&root->vnode);
-    COM_FS_VFS_VNODE_RELEASE(&root->vnode);
-    KASSERT(0 == vfs->num_ext);
-    com_mm_slab_free(vfs, sizeof(com_vfs_t));
+    vfs_vnode_rel(&root->vnode);
+    vfs_vnode_rel(&root->vnode);
+    assert(vfs->num_ext == 0);
+    slab_free(vfs, sizeof(Vfs));
     return 0;
 }
 
-static int tmpfs_mount(com_vfs_t **out, com_vnode_t *backing, uintmax_t flags) {
+static int tmpfs_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     (void)backing;
     (void)flags;
-    *out           = NULL;
-    com_vfs_t *vfs = com_mm_slab_alloc(sizeof(com_vfs_t));
-    if (NULL == vfs) {
-        return ENOMEM;
-    }
+    *out_vfs = NULL;
+    Vfs *vfs = slab_alloc(sizeof(Vfs));
+    if (vfs == NULL) return ENOMEM;
 
-    com_fs_vfs_init_vfs(vfs, &TmpfsType, NULL);
-    struct tmpfs_node *root = NULL;
-    int ret = node_alloc(&root, vfs, &COM_FS_VFS_ATTR(E_COM_VNODE_TYPE_DIR));
-    if (0 != ret) {
-        com_mm_slab_free(vfs, sizeof(com_vfs_t));
+    vfs_init_vfs(vfs, &g_tmpfs_type, NULL);
+    struct TmpFSNode *root = NULL;
+    int ret = node_alloc(vfs, &VFS_ATTR(VNODE_TYPE_DIR), &root);
+    if (ret != 0) {
+        slab_free(vfs, sizeof(Vfs));
         return ret;
     }
 
-    com_fs_vfs_set_root(vfs, &root->vnode);
-    *out = vfs;
+    vfs_set_root(vfs, &root->vnode);
+    *out_vfs = vfs;
     return 0;
 }
 
-static com_fs_type_t TmpfsType = {.name    = "tmpfs",
-                                  .mount   = tmpfs_mount,
-                                  .unmount = tmpfs_unmount};
+static FSType g_tmpfs_type = {.name = "tmpfs",
+                              .mount = tmpfs_op_mount,
+                              .unmount = tmpfs_unmount};
 
 // INTERFACE
 
-void com_fs_tmpfs_init(void) {
-    KASSERT_CALL(0, ==, com_fs_vfs_register_type(&TmpfsType));
+void tmpfs_init(void) { verify(vfs_register_type(&g_tmpfs_type) == 0); }
+
+int tmpfs_mount(Vnode *mountpoint, Vfs **out_vfs) {
+    return vfs_mount(&g_tmpfs_type, NULL, mountpoint, 0, out_vfs);
 }
 
-int com_fs_tmpfs_mount(com_vfs_t **out, com_vnode_t *mountpoint) {
-    return com_fs_vfs_mount(out, &TmpfsType, NULL, mountpoint, 0);
-}
-
-int com_fs_tmpfs_new_orphan(com_vnode_t           **out,
-                            com_vfs_t              *vfs,
-                            const com_vnode_attr_t *attr) {
-    KASSERT(&TmpfsType == vfs->type);
-    if (E_COM_VNODE_TYPE_DIR == attr->type) {
-        *out = NULL;
+int tmpfs_new_orphan(Vfs *vfs, const VnodeAttr *attr, Vnode **out_vnode) {
+    assert(&g_tmpfs_type == vfs->type);
+    if (attr->type == VNODE_TYPE_DIR) {
+        *out_vnode = NULL;
         return EINVAL;
     }
 
-    struct tmpfs_node *node = NULL;
-    int                ret  = node_alloc(&node, vfs, attr);
-    if (0 == ret) {
-        node_set_special_ops(node, attr);
-    }
-    *out = 0 == ret ? &node->vnode : NULL;
+    struct TmpFSNode *node = NULL;
+    int ret = node_alloc(vfs, attr, &node);
+    if (ret == 0) node_set_special_ops(node, attr);
+    *out_vnode = ret == 0 ? &node->vnode : NULL;
     return ret;
 }
 
-void *com_fs_tmpfs_private(com_vnode_t *vnode) {
-    return tnode_of(vnode)->private;
-}
+void *tmpfs_private(Vnode *vnode) { return tnode_of(vnode)->private; }
 
-nlink_t com_fs_tmpfs_nlink(com_vnode_t *vnode) {
+nlink_t tmpfs_nlink(Vnode *vnode) {
     return __atomic_load_n(&tnode_of(vnode)->num_links, __ATOMIC_RELAXED);
 }
 
-void com_fs_tmpfs_inactive(com_vnode_t *vnode) {
-    struct tmpfs_node *node = tnode_of(vnode);
-    KASSERT(0 == node->num_links);
+void tmpfs_inactive(Vnode *vnode) {
+    struct TmpFSNode *node = tnode_of(vnode);
+    assert(node->num_links == 0);
 
     switch (vnode->type) {
-        case E_COM_VNODE_TYPE_FILE:
-            com_fs_pagecache_free(node->file.pages);
+        case VNODE_TYPE_FILE:
+            pagecache_free(node->file.pages);
             break;
-        case E_COM_VNODE_TYPE_DIR:
-            KASSERT(dir_is_empty(&node->dir));
+        case VNODE_TYPE_DIR:
+            assert(dir_is_empty(&node->dir));
             if (dir_names_allocated(&node->dir)) {
-                khashmap_destroy(&node->dir.names);
+                hashmap_destroy(&node->dir.names);
             }
             break;
-        case E_COM_VNODE_TYPE_LINK:
-            com_mm_slab_free(node->link.target, node->link.len);
+        case VNODE_TYPE_LINK:
+            slab_free(node->link.target, node->link.len);
             break;
         default:
             break;
     }
 
-    com_mm_slab_free(node, sizeof(struct tmpfs_node));
+    slab_free(node, sizeof(struct TmpFSNode));
 }

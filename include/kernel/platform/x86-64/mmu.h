@@ -1,29 +1,11 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <kernel/com/sys/interrupt.h>
 
-#define X86_64_MMU_FLAGS_COW (1 << 9)
+#define MMU_FLAGS_COW (1 << 9)
 
-#define X86_64_MMU_IPI_INVALIDATE 0x34
+#define MMU_IPI_INVALIDATE 0x34
 
-void x86_64_mmu_init_cpu(void);
-void x86_64_mmu_fault_isr(com_isr_t *isr, arch_context_t *ctx);
-void x86_64_mmu_invalidate_isr(com_isr_t *isr, arch_context_t *ctx);
+void mmu_init_cpu(void);
+void mmu_fault_isr(InterruptHandler *isr, Context *ctx);
+void mmu_invalidate_isr(InterruptHandler *isr, Context *ctx);

@@ -1,35 +1,15 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <kernel/com/io/keyboard.h>
 #include <kernel/com/io/mouse.h>
 #include <kernel/com/io/tty.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-void com_io_console_kbd_in(com_kbd_packet_t *pkt);
-void com_io_console_mouse_in(com_mouse_packet_t *pkt);
-void com_io_console_add_tty(com_tty_t *tty);
-bool com_io_console_switch(size_t tty_idx);
-bool com_io_console_release(com_tty_t *tty, bool allow);
-bool com_io_console_is_foreground(com_tty_t *tty);
-bool com_io_console_wait_foreground(com_tty_t *tty);
-void com_io_console_init(void);
+void console_kbd_in(KbdPacket *pkt);
+void console_mouse_in(MousePacket *pkt);
+void console_add_tty(Tty *tty);
+bool console_switch(usize tty_idx);
+bool console_rel(Tty *tty, bool allow);
+bool console_is_foreground(Tty *tty);
+bool console_wait_foreground(Tty *tty);
+void console_init(void);

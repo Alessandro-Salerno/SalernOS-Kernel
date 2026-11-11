@@ -1,78 +1,55 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/spinlock.h>
+#include <kernel/com/util.h>
 
-// SYSCALL: readdir(int fd, void *buffer, size_t buflen)
-COM_SYS_SYSCALL(com_sys_syscall_readdir) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+// SYSCALL: readdir(int fd, void *buffer, usize buflen)
+SYSCALL(syscall_readdir) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    int    fd     = COM_SYS_SYSCALL_ARG(int, 1);
-    void  *buf    = COM_SYS_SYSCALL_ARG(void *, 2);
-    size_t buflen = COM_SYS_SYSCALL_ARG(size_t, 3);
+    int fd = SYSCALL_ARG(int, 1);
+    void *buf = SYSCALL_ARG(void *, 2);
+    usize buflen = SYSCALL_ARG(usize, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(buf, buflen)) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
+    if (!MMU_RANGE_IS_USER(buf, buflen)) return SYSCALL_ERR(EFAULT);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_ERR();
+    SyscallRet ret = SYSCALL_BASE_ERR();
 
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t *file      = com_sys_proc_get_file(curr_proc, fd);
+    Proc *curr_proc = cpu_get_thread()->proc;
+    File *file = proc_get_file(curr_proc, fd);
 
-    if (NULL == file) {
+    if (file == NULL) {
         ret.err = EBADF;
         return ret;
     }
 
     // The offset is an opaque cookie
-    kspinlock_acquire(&file->off_lock);
-    uintmax_t off = file->off;
-    kspinlock_release(&file->off_lock);
+    spinlock_acq(&file->off_lock);
+    u64 off = file->off;
+    spinlock_rel(&file->off_lock);
 
-    size_t    bytes_read = 0;
-    uintmax_t next_off   = off;
-    int       vfs_op     = com_fs_vfs_readdir(buf,
-                                              buflen,
-                                              &bytes_read,
-                                              &next_off,
-                                              file->vnode,
-                                              off);
+    usize bytes_read = 0;
+    u64 next_off = off;
+    int vfs_op = vfs_readdir(buf, buflen, file->vnode, off, &bytes_read,
+                             &next_off);
 
-    if (0 != vfs_op) {
+    if (vfs_op != 0) {
         ret.err = vfs_op;
         goto cleanup;
     }
 
-    kspinlock_acquire(&file->off_lock);
+    spinlock_acq(&file->off_lock);
     file->off = next_off;
-    kspinlock_release(&file->off_lock);
+    spinlock_rel(&file->off_lock);
 
     ret.value = bytes_read;
 cleanup:
-    COM_FS_FILE_RELEASE(file);
+    FILE_REL(file);
     return ret;
 }

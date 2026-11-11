@@ -1,77 +1,57 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <arch/info.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/sync.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-#define COM_IO_TERM_BUFSZ (ARCH_PAGE_SIZE / 2)
+#define TERM_BUFSZ (PAGE_SIZE / 2)
 
-typedef struct com_term         com_term_t;
-typedef struct com_term_backend com_term_backend_t;
+typedef struct Term Term;
+typedef struct TermBackend TermBackend;
 
-typedef struct com_term_backend_ops {
+typedef struct TermBackendOps {
     void *(*init)(void);
-    void (*putsn)(void *termdata, const char *s, size_t n);
-    void (*get_size)(void *termdata, size_t *rows, size_t *cols);
-    void (*set_size)(void *termdata, size_t rows, size_t cols);
+    void (*putsn)(void *termdata, const char *s, usize n);
+    void (*get_size)(void *termdata, usize *rows, usize *cols);
+    void (*set_size)(void *termdata, usize rows, usize cols);
     void (*flush)(void *termdata);
     void (*enable)(void *termdata);
     void (*disable)(void *termdata);
     void (*refresh)(void *termdata);
     void (*panic)(void *termdata);
-} com_term_backend_ops_t;
+} TermBackendOps;
 
-typedef struct com_term_backend {
-    com_term_backend_ops_t *ops;
-    void                   *data;
-} com_term_backend_t;
+typedef struct TermBackend {
+    TermBackendOps *ops;
+    void *data;
+} TermBackend;
 
-typedef struct com_term {
-    com_term_backend_t backend;
-    ksync_t            lock;
-    bool               enabled;
+typedef struct Term {
+    TermBackend backend;
+    Spinlock lock;
+    bool enabled;
     struct {
-        bool           enabled;
-        char           buffer[COM_IO_TERM_BUFSZ];
-        size_t         index;
-        com_waitlist_t waiters;
+        bool enabled;
+        char buffer[TERM_BUFSZ];
+        usize index;
+        Waitlist waiters;
     } buffering;
-} com_term_t;
+} Term;
 
-com_term_t *com_io_term_new(com_term_backend_t backend);
-com_term_t *com_io_term_clone(com_term_t *parent);
-void        com_io_term_putc(com_term_t *term, char c);
-void        com_io_term_puts(com_term_t *term, const char *s);
-void        com_io_term_putsn(com_term_t *term, const char *s, size_t n);
-void        com_io_term_get_size(com_term_t *term, size_t *rows, size_t *cols);
-void        com_io_term_set_size(com_term_t *term, size_t rows, size_t cols);
-void        com_io_term_flush(com_term_t *term);
-void        com_io_term_set_buffering(com_term_t *term, bool state);
-void        com_io_term_enable(com_term_t *term);
-void        com_io_term_disable(com_term_t *term);
-void        com_io_term_refresh(com_term_t *term);
-void        com_io_term_set_fallback(com_term_t *fallback_term);
-void        com_io_term_panic_putsn(const char *s, size_t n);
-void        com_io_term_panic(void);
-void        com_io_term_init(void);
+Term *term_new(TermBackend backend);
+Term *term_clone(Term *parent);
+void term_putc(Term *term, char c);
+void term_puts(Term *term, const char *s);
+void term_putsn(Term *term, const char *s, usize n);
+void term_get_size(Term *term, usize *out_rows, usize *out_cols);
+void term_set_size(Term *term, usize rows, usize cols);
+void term_flush(Term *term);
+void term_set_buffering(Term *term, bool state);
+void term_enable(Term *term);
+void term_disable(Term *term);
+void term_refresh(Term *term);
+void term_set_fallback(Term *fallback_term);
+void term_panic_putsn(const char *s, usize n);
+void term_panic(void);
+void term_init(void);

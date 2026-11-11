@@ -1,47 +1,28 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <arch/context.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-#define COM_SYS_INTERRUPT_FLAGS_EOI_AFTER (1 << 8)
-#define COM_SYS_INTERRUPT_FLAGS_NO_RESET  (1 << 9)
+#define INTERRUPT_FLAGS_EOI_AFTER (1 << 8)
+#define INTERRUPT_FLAGS_NO_RESET  (1 << 9)
 
-typedef struct com_isr com_isr_t;
-typedef void (*com_intf_isr_t)(com_isr_t *isr, arch_context_t *ctx);
-typedef void (*com_intf_eoi_t)(com_isr_t *isr);
+typedef struct InterruptHandler InterruptHandler;
+typedef void (*InterruptHandlerFn)(InterruptHandler *isr, Context *ctx);
+typedef void (*InterruptAckHandlerFn)(InterruptHandler *isr);
 
-typedef struct com_isr {
-    com_intf_isr_t func;
-    com_intf_eoi_t eoi;
-    uintmax_t      vec;
-    void          *extra;
-    int            flags;
-    bool           taken;
-} com_isr_t;
+typedef struct InterruptHandler {
+    InterruptHandlerFn func;
+    InterruptAckHandlerFn eoi;
+    u64 vec;
+    void *extra;
+    int flags;
+    bool taken;
+} InterruptHandler;
 
-bool       com_sys_interrupt_set(bool status);
-com_isr_t *com_sys_interrupt_register(uintmax_t      vec,
-                                      com_intf_isr_t func,
-                                      com_intf_eoi_t eoi);
-com_isr_t *com_sys_interrupt_allocate(com_intf_isr_t func, com_intf_eoi_t eoi);
-void       com_sys_interrupt_free(com_isr_t *isr);
-void       com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx);
+bool interrupt_set(bool status);
+InterruptHandler *interrupt_register(u64 vec, InterruptHandlerFn func,
+                                     InterruptAckHandlerFn eoi);
+InterruptHandler *interrupt_allocate(InterruptHandlerFn func,
+                                     InterruptAckHandlerFn eoi);
+void interrupt_free(InterruptHandler *isr);
+void interrupt_isr(u64 vec, Context *ctx);

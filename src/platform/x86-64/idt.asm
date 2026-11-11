@@ -1,24 +1,8 @@
-; SalernOS Kernel
-; Copyright (C) 2021 - 2026 Alessandro Salerno
-; 
-; This program is free software: you can redistribute it and/or modify
-; it under the terms of the GNU General Public License as published by
-; the Free Software Foundation, either version 3 of the License, or
-; (at your option) any later version.
-; 
-; This program is distributed in the hope that it will be useful,
-; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-; GNU General Public License for more details.
-; 
-; You should have received a copy of the GNU General Public License
-; along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 section .text
 
 %assign i 0
 %rep 256
-x86_64_isr_%+i:
+isr_%+i:
     cld
 ; Push a value to the stack in order to follow
 ; the guidelines of the Intel SDM on ISR stack contents
@@ -28,11 +12,11 @@ x86_64_isr_%+i:
 
   push  rbp
   mov   rbp, i
-  jmp   x86_64_isr_common
+  jmp   isr_common
 %assign i i+1
 %endrep
 
-x86_64_isr_common:
+isr_common:
   ; Check if SWAPGS should be called.
   ; Following the x86-64 architecture spec, the CS register
   ; should be found 24 bytes above the current stack pointer.
@@ -84,8 +68,8 @@ x86_64_isr_common:
   mov   rdi, rbp  ; Save interrupt vector
   mov   rsi, rsp  ; Save interrupt context
 
-  extern com_sys_interrupt_isr
-  call  com_sys_interrupt_isr
+  extern interrupt_isr
+  call  interrupt_isr
 
   ; Pop context from stack
   add   rsp, 24 ; cr2, gs, and fs are not popped
@@ -119,10 +103,10 @@ x86_64_isr_common:
   o64   iret
 
 section .rodata
-global IsrTable
-IsrTable:
+global g_isr_table
+g_isr_table:
 %assign i 0
 %rep 256
-  dq x86_64_isr_%+i
+  dq isr_%+i
 %assign i i+1
 %endrep

@@ -1,21 +1,3 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #define _GNU_SOURCE
 #include <arch/cpu.h>
 #include <arch/info.h>
@@ -23,88 +5,83 @@
 #include <fcntl.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 #include <stdatomic.h>
-#include <stdint.h>
 #include <stdio.h>
 
-static com_syscall_ret_t
-fcntl_dup(com_proc_t *curr_proc, int fd, int op, int arg1) {
-    int new_fd = com_sys_proc_duplicate_file_nolock(curr_proc, arg1, fd);
+static SyscallRet fcntl_dup(Proc *curr_proc, int fd, int op, int arg1) {
+    int new_fd = proc_duplicate_file_nolock(curr_proc, arg1, fd);
 
-    if (new_fd < 0) {
-        return COM_SYS_SYSCALL_ERR(-new_fd);
-    }
+    if (new_fd < 0) return SYSCALL_ERR(-new_fd);
 
-    if (F_DUPFD_CLOEXEC == op) {
-        com_filedesc_t *fildesc = com_sys_proc_get_fildesc_nolock(curr_proc,
-                                                                  new_fd);
+    if (op == F_DUPFD_CLOEXEC) {
+        FileDesc *fildesc = proc_get_fildesc_nolock(curr_proc, new_fd);
         fildesc->flags |= FD_CLOEXEC;
     }
 
-    return COM_SYS_SYSCALL_OK(new_fd);
+    return SYSCALL_OK(new_fd);
 }
 
 // SYSCALL: fcntl(fd, op, arg1)
-COM_SYS_SYSCALL(com_sys_syscall_fcntl) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+SYSCALL(syscall_fcntl) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    int fd   = COM_SYS_SYSCALL_ARG(int, 1);
-    int op   = COM_SYS_SYSCALL_ARG(int, 2);
-    int arg1 = COM_SYS_SYSCALL_ARG(int, 3);
+    int fd = SYSCALL_ARG(int, 1);
+    int op = SYSCALL_ARG(int, 2);
+    int arg1 = SYSCALL_ARG(int, 3);
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    Thread *curr_thread = cpu_get_thread();
+    Proc *curr_proc = curr_thread->proc;
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    SyscallRet ret = SYSCALL_BASE_OK();
 
-    kspinlock_acquire(&curr_proc->fd_lock);
-    com_filedesc_t *fildes = com_sys_proc_get_fildesc_nolock(curr_proc, fd);
-    com_file_t     *file   = com_sys_proc_get_file_nolock(curr_proc, fd);
+    spinlock_acq(&curr_proc->fd_lock);
+    FileDesc *fildes = proc_get_fildesc_nolock(curr_proc, fd);
+    File *file = proc_get_file_nolock(curr_proc, fd);
 
-    if (NULL == file || NULL == fildes) {
-        ret = COM_SYS_SYSCALL_ERR(EBADF);
+    if (file == NULL || fildes == NULL) {
+        ret = SYSCALL_ERR(EBADF);
         goto end;
     }
 
-    if (F_GETFL == op) {
+    if (op == F_GETFL) {
         ret.value = file->flags;
         goto end;
     }
 
-    if (F_GETFD == op) {
+    if (op == F_GETFD) {
         ret.value = fildes->flags;
         goto end;
     }
 
-    if (F_SETFL == op) {
+    if (op == F_SETFL) {
         file->flags = arg1;
         goto end;
     }
 
-    if (F_SETFD == op) {
+    if (op == F_SETFD) {
         fildes->flags = arg1;
         goto end;
     }
 
-    if (F_DUPFD == op || F_DUPFD_CLOEXEC == op) {
+    if (op == F_DUPFD || op == F_DUPFD_CLOEXEC) {
         ret = fcntl_dup(curr_proc, fd, op, arg1);
         goto end;
     }
 
-    if (F_GETPIPE_SZ == op) {
-        ret = COM_SYS_SYSCALL_OK(ARCH_PAGE_SIZE);
+    if (op == F_GETPIPE_SZ) {
+        ret = SYSCALL_OK(PAGE_SIZE);
         goto end;
     }
 
-    ret = COM_SYS_SYSCALL_ERR(ENOSYS);
+    ret = SYSCALL_ERR(ENOSYS);
 
 end:
-    kspinlock_release(&curr_proc->fd_lock);
-    COM_FS_FILE_RELEASE(file);
+    spinlock_rel(&curr_proc->fd_lock);
+    FILE_REL(file);
     return ret;
 }

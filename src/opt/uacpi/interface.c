@@ -1,50 +1,24 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
+#include <kernel/com/util.h>
 #include <kernel/opt/uacpi.h>
-#include <lib/util.h>
 #include <uacpi/event.h>
 #include <uacpi/uacpi.h>
 
 #include "uacpi_util.h"
 
-int opt_uacpi_init(opt_uacpi_u64_t flags) {
-    KLOG("initializing uacpi");
+int uacpi_init(UACPIUint64 flags) {
+    log("initializing uacpi");
 
     uacpi_status ret = uacpi_initialize(flags);
-    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
-        goto end;
-    }
+    if (unlikely(ret != UACPI_STATUS_OK)) goto end;
 
     int kernel_ret = arch_uacpi_early_init();
-    if (0 != kernel_ret) {
-        return kernel_ret;
-    }
+    if (kernel_ret != 0) return kernel_ret;
 
     ret = uacpi_namespace_load();
-    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
-        goto end;
-    }
+    if (unlikely(ret != UACPI_STATUS_OK)) goto end;
 
     ret = uacpi_namespace_initialize();
-    if (KUNKLIKELY(UACPI_STATUS_OK != ret)) {
-        goto end;
-    }
+    if (unlikely(ret != UACPI_STATUS_OK)) goto end;
 
     ret = uacpi_finalize_gpe_initialization();
 

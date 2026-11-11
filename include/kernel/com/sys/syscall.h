@@ -1,204 +1,158 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <arch/context.h>
 #include <arch/syscall.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-#define COM_SYS_SYSCALL(name)                                \
-    com_syscall_ret_t name(arch_context_t    *__syscall_ctx, \
-                           arch_syscall_arg_t __syscall_a1,  \
-                           arch_syscall_arg_t __syscall_a2,  \
-                           arch_syscall_arg_t __syscall_a3,  \
-                           arch_syscall_arg_t __syscall_a4,  \
-                           arch_syscall_arg_t __syscall_a5,  \
-                           arch_syscall_arg_t __syscall_a6)
-#define COM_SYS_SYSCALL_CONTEXT()        (__syscall_ctx)
-#define COM_SYS_SYSCALL_ARG(type, num)   ((type)(__syscall_a##num))
-#define COM_SYS_SYSCALL_UNUSED_CONTEXT() (void)(COM_SYS_SYSCALL_CONTEXT())
-#define COM_SYS_SYSCALL_UNUSED_START(first_unused) \
-    __COM_SYS_SYSCALL_UNUSED_##first_unused
+#define SYSCALL(name)                                                 \
+    SyscallRet name(Context *__syscall_ctx, SyscallArg __syscall_a1,  \
+                    SyscallArg __syscall_a2, SyscallArg __syscall_a3, \
+                    SyscallArg __syscall_a4, SyscallArg __syscall_a5, \
+                    SyscallArg __syscall_a6)
+#define SYSCALL_CONTEXT()                  (__syscall_ctx)
+#define SYSCALL_ARG(type, num)             ((type)(__syscall_a##num))
+#define SYSCALL_UNUSED_CONTEXT()           (void)(SYSCALL_CONTEXT())
+#define SYSCALL_UNUSED_START(first_unused) __SYSCALL_UNUSED_##first_unused
 
-#define __COM_SYS_SYSCALL_UNUSED_6 (void)(__syscall_a6)
-#define __COM_SYS_SYSCALL_UNUSED_5 \
-    __COM_SYS_SYSCALL_UNUSED_6;    \
+#define __SYSCALL_UNUSED_6 (void)(__syscall_a6)
+#define __SYSCALL_UNUSED_5 \
+    __SYSCALL_UNUSED_6;    \
     (void)(__syscall_a5)
-#define __COM_SYS_SYSCALL_UNUSED_4 \
-    __COM_SYS_SYSCALL_UNUSED_5;    \
+#define __SYSCALL_UNUSED_4 \
+    __SYSCALL_UNUSED_5;    \
     (void)(__syscall_a4)
-#define __COM_SYS_SYSCALL_UNUSED_3 \
-    __COM_SYS_SYSCALL_UNUSED_4;    \
+#define __SYSCALL_UNUSED_3 \
+    __SYSCALL_UNUSED_4;    \
     (void)(__syscall_a3)
-#define __COM_SYS_SYSCALL_UNUSED_2 \
-    __COM_SYS_SYSCALL_UNUSED_3;    \
+#define __SYSCALL_UNUSED_2 \
+    __SYSCALL_UNUSED_3;    \
     (void)(__syscall_a2)
-#define __COM_SYS_SYSCALL_UNUSED_1 \
-    __COM_SYS_SYSCALL_UNUSED_2;    \
+#define __SYSCALL_UNUSED_1 \
+    __SYSCALL_UNUSED_2;    \
     (void)(__syscall_a1)
-#define __COM_SYS_SYSCALL_UNUSED_0    \
-    COM_SYS_SYSCALL_UNUSED_CONTEXT(); \
-    __COM_SYS_SYSCALL_UNUSED_1
+#define __SYSCALL_UNUSED_0    \
+    SYSCALL_UNUSED_CONTEXT(); \
+    __SYSCALL_UNUSED_1
 
-#define COM_SYS_SYSCALL_OK(v)                                 \
-    (com_syscall_ret_t) {                                     \
-        .value = (uintmax_t)(v), .err = 0, .discarded = false \
-    }
-#define COM_SYS_SYSCALL_ERR(e)                      \
-    (com_syscall_ret_t) {                           \
-        .value = -1, .err = (e), .discarded = false \
-    }
-#define COM_SYS_SYSCALL_DISCARD() \
-    (com_syscall_ret_t) {         \
-        .discarded = true         \
-    }
+#define SYSCALL_OK(v) \
+    (SyscallRet) { .value = (u64)(v), .err = 0, .discarded = false }
+#define SYSCALL_ERR(e) \
+    (SyscallRet) { .value = -1, .err = (e), .discarded = false }
+#define SYSCALL_DISCARD() \
+    (SyscallRet) { .discarded = true }
 
-#define COM_SYS_SYSCALL_BASE_OK()  {0, 0, false};
-#define COM_SYS_SYSCALL_BASE_ERR() {-1, 0, false}
+#define SYSCALL_BASE_OK()  {0, 0, false};
+#define SYSCALL_BASE_ERR() {-1, 0, false}
 
-#define COM_SYS_SYSCALL_TYPE_INT       0
-#define COM_SYS_SYSCALL_TYPE_UINTMAX   1
-#define COM_SYS_SYSCALL_TYPE_SIZET     2
-#define COM_SYS_SYSCALL_TYPE_PTR       3
-#define COM_SYS_SYSCALL_TYPE_STR       4
-#define COM_SYS_SYSCALL_TYPE_FLAGS     5
-#define COM_SYS_SYSCALL_TYPE_LONGFLAGS 6
-#define COM_SYS_SYSCALL_TYPE_OFFT      7
-#define COM_SYS_SYSCALL_TYPE_UINT32    8
-#define COM_SYS_SYSCALL_TYPE_MODE      9
+#define SYSCALL_TYPE_INT       0
+#define SYSCALL_TYPE_UINTMAX   1
+#define SYSCALL_TYPE_SIZET     2
+#define SYSCALL_TYPE_PTR       3
+#define SYSCALL_TYPE_STR       4
+#define SYSCALL_TYPE_FLAGS     5
+#define SYSCALL_TYPE_LONGFLAGS 6
+#define SYSCALL_TYPE_OFFT      7
+#define SYSCALL_TYPE_UINT32    8
+#define SYSCALL_TYPE_MODE      9
 
 typedef struct {
-    uintmax_t value;
-    uintmax_t err;
+    u64 value;
+    u64 err;
     bool discarded; // If true, ret.value and ret.err shall not be stored in
                     // return value registers by the arch-specific system call
                     // dispatcher
-} com_syscall_ret_t;
+} SyscallRet;
 
-typedef com_syscall_ret_t (*com_intf_syscall_t)(arch_context_t    *ctx,
-                                                arch_syscall_arg_t a1,
-                                                arch_syscall_arg_t a2,
-                                                arch_syscall_arg_t a3,
-                                                arch_syscall_arg_t a4,
-                                                arch_syscall_arg_t a5,
-                                                arch_syscall_arg_t a6);
+typedef SyscallRet (*SyscallFn)(Context *ctx, SyscallArg a1, SyscallArg a2,
+                                SyscallArg a3, SyscallArg a4, SyscallArg a5,
+                                SyscallArg a6);
 
-typedef struct com_syscall_aux {
+typedef struct SyscallAux {
     const char *name;
-    size_t      num_args;
+    usize num_args;
     const char *arg_names[6];
-    int         arg_types[6];
-} com_syscall_aux_t;
+    int arg_types[6];
+} SyscallAux;
 
-typedef struct com_syscall {
-    com_intf_syscall_t handler;
-} com_syscall_t;
+typedef struct Syscall {
+    SyscallFn handler;
+} Syscall;
 
-void              com_sys_syscall_register(uintmax_t          number,
-                                           const char        *name,
-                                           com_intf_syscall_t handler,
-                                           size_t             num_args,
-                                           ...);
-com_syscall_ret_t com_sys_syscall_invoke(uintmax_t          number,
-                                         arch_context_t    *ctx,
-                                         arch_syscall_arg_t arg1,
-                                         arch_syscall_arg_t arg2,
-                                         arch_syscall_arg_t arg3,
-                                         arch_syscall_arg_t arg4,
-                                         arch_syscall_arg_t a5,
-                                         arch_syscall_arg_t a6,
-                                         uintptr_t          invoke_ip);
-void              com_sys_syscall_get_tables(com_syscall_t     **syscall_table,
-                                             com_syscall_aux_t **aux_table,
-                                             size_t             *num_syscalls);
-void              com_sys_syscall_init(void);
+void syscall_register(u64 number, const char *name, SyscallFn handler,
+                      usize num_args, ...);
+SyscallRet syscall_invoke(u64 number, Context *ctx, SyscallArg arg1,
+                          SyscallArg arg2, SyscallArg arg3, SyscallArg arg4,
+                          SyscallArg a5, SyscallArg a6, uptr invoke_ip);
+void syscall_get_tables(Syscall **out_syscall_table, SyscallAux **out_aux_table,
+                        usize *out_num_syscalls);
+void syscall_init(void);
 
 // SYSCALLS
 
-COM_SYS_SYSCALL(com_sys_syscall_kprint);
-COM_SYS_SYSCALL(com_sys_syscall_writev);
-COM_SYS_SYSCALL(com_sys_syscall_readv);
-COM_SYS_SYSCALL(com_sys_syscall_execve);
-COM_SYS_SYSCALL(com_sys_syscall_fork);
-COM_SYS_SYSCALL(com_sys_syscall_sysinfo);
-COM_SYS_SYSCALL(com_sys_syscall_waitpid);
-COM_SYS_SYSCALL(com_sys_syscall_exit);
-COM_SYS_SYSCALL(com_sys_syscall_ioctl);
-COM_SYS_SYSCALL(com_sys_syscall_openat);
-COM_SYS_SYSCALL(com_sys_syscall_mmap);
-COM_SYS_SYSCALL(com_sys_syscall_seek);
-COM_SYS_SYSCALL(com_sys_syscall_isatty);
-COM_SYS_SYSCALL(com_sys_syscall_fstatat);
-COM_SYS_SYSCALL(com_sys_syscall_truncate);
-COM_SYS_SYSCALL(com_sys_syscall_pipe2);
-COM_SYS_SYSCALL(com_sys_syscall_getpid);
-COM_SYS_SYSCALL(com_sys_syscall_clone);
-COM_SYS_SYSCALL(com_sys_syscall_exit_thread);
-COM_SYS_SYSCALL(com_sys_syscall_futex);
-COM_SYS_SYSCALL(com_sys_syscall_getppid);
-COM_SYS_SYSCALL(com_sys_syscall_getpgid);
-COM_SYS_SYSCALL(com_sys_syscall_getsid);
-COM_SYS_SYSCALL(com_sys_syscall_setpgid);
-COM_SYS_SYSCALL(com_sys_syscall_setsid);
-COM_SYS_SYSCALL(com_sys_syscall_sigprocmask);
-COM_SYS_SYSCALL(com_sys_syscall_sigpending);
-COM_SYS_SYSCALL(com_sys_syscall_sigaction);
-COM_SYS_SYSCALL(com_sys_syscall_kill);
-COM_SYS_SYSCALL(com_sys_syscall_kill_thread);
-COM_SYS_SYSCALL(com_sys_syscall_sigreturn);
-COM_SYS_SYSCALL(com_sys_syscall_dup3);
-COM_SYS_SYSCALL(com_sys_syscall_getcwd);
-COM_SYS_SYSCALL(com_sys_syscall_fcntl);
-COM_SYS_SYSCALL(com_sys_syscall_close);
-COM_SYS_SYSCALL(com_sys_syscall_readdir);
-COM_SYS_SYSCALL(com_sys_syscall_chdir);
-COM_SYS_SYSCALL(com_sys_syscall_clock_get);
-COM_SYS_SYSCALL(com_sys_syscall_faccessat);
-COM_SYS_SYSCALL(com_sys_syscall_poll);
-COM_SYS_SYSCALL(com_sys_syscall_readlinkat);
-COM_SYS_SYSCALL(com_sys_syscall_symlinkat);
-COM_SYS_SYSCALL(com_sys_syscall_unlinkat);
-COM_SYS_SYSCALL(com_sys_syscall_socket);
-COM_SYS_SYSCALL(com_sys_syscall_bind);
-COM_SYS_SYSCALL(com_sys_syscall_listen);
-COM_SYS_SYSCALL(com_sys_syscall_accept);
-COM_SYS_SYSCALL(com_sys_syscall_connect);
-COM_SYS_SYSCALL(com_sys_syscall_sendmsg);
-COM_SYS_SYSCALL(com_sys_syscall_recvmsg);
-COM_SYS_SYSCALL(com_sys_syscall_setitimer);
-COM_SYS_SYSCALL(com_sys_syscall_mkdirat);
-COM_SYS_SYSCALL(com_sys_syscall_getpeername);
-COM_SYS_SYSCALL(com_sys_syscall_munmap);
-COM_SYS_SYSCALL(com_sys_syscall_linkat);
-COM_SYS_SYSCALL(com_sys_syscall_renameat);
-COM_SYS_SYSCALL(com_sys_syscall_mount);
-COM_SYS_SYSCALL(com_sys_syscall_umount2);
-COM_SYS_SYSCALL(com_sys_syscall_sysprofile);
+SYSCALL(syscall_kprint);
+SYSCALL(syscall_writev);
+SYSCALL(syscall_readv);
+SYSCALL(syscall_execve);
+SYSCALL(syscall_fork);
+SYSCALL(syscall_sysinfo);
+SYSCALL(syscall_waitpid);
+SYSCALL(syscall_exit);
+SYSCALL(syscall_ioctl);
+SYSCALL(syscall_openat);
+SYSCALL(syscall_mmap);
+SYSCALL(syscall_seek);
+SYSCALL(syscall_isatty);
+SYSCALL(syscall_fstatat);
+SYSCALL(syscall_truncate);
+SYSCALL(syscall_pipe2);
+SYSCALL(syscall_getpid);
+SYSCALL(syscall_clone);
+SYSCALL(syscall_exit_thread);
+SYSCALL(syscall_futex);
+SYSCALL(syscall_getppid);
+SYSCALL(syscall_getpgid);
+SYSCALL(syscall_getsid);
+SYSCALL(syscall_setpgid);
+SYSCALL(syscall_setsid);
+SYSCALL(syscall_sigprocmask);
+SYSCALL(syscall_sigpending);
+SYSCALL(syscall_sigaction);
+SYSCALL(syscall_kill);
+SYSCALL(syscall_kill_thread);
+SYSCALL(syscall_sigreturn);
+SYSCALL(syscall_dup3);
+SYSCALL(syscall_getcwd);
+SYSCALL(syscall_fcntl);
+SYSCALL(syscall_close);
+SYSCALL(syscall_readdir);
+SYSCALL(syscall_chdir);
+SYSCALL(syscall_clock_get);
+SYSCALL(syscall_faccessat);
+SYSCALL(syscall_poll);
+SYSCALL(syscall_readlinkat);
+SYSCALL(syscall_symlinkat);
+SYSCALL(syscall_unlinkat);
+SYSCALL(syscall_socket);
+SYSCALL(syscall_bind);
+SYSCALL(syscall_listen);
+SYSCALL(syscall_accept);
+SYSCALL(syscall_connect);
+SYSCALL(syscall_sendmsg);
+SYSCALL(syscall_recvmsg);
+SYSCALL(syscall_setitimer);
+SYSCALL(syscall_mkdirat);
+SYSCALL(syscall_getpeername);
+SYSCALL(syscall_munmap);
+SYSCALL(syscall_linkat);
+SYSCALL(syscall_renameat);
+SYSCALL(syscall_mount);
+SYSCALL(syscall_umount2);
+SYSCALL(syscall_sysprofile);
 
 // SYSCALL UTILITIES
 
 struct syscall_str;
 
-int  com_sys_syscall_copy_str(size_t                   *len,
-                              char                     *buf,
-                              size_t                    bufsz,
-                              const struct syscall_str *ustr);
-void com_sys_syscall_futex_init(void);
+int syscall_copy_str(char *buf, usize bufsz, const struct syscall_str *ustr,
+                     usize *out_len);
+void syscall_futex_init(void);

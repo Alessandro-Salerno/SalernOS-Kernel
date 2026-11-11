@@ -1,228 +1,175 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <asm/ioctls.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
+#include <kernel/com/ds/ringbuffer.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/io/pty.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/sched.h>
-#include <lib/ringbuffer.h>
-#include <lib/str.h>
-#include <lib/usercopy.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/termios.h>
 #include <sys/ttydefaults.h>
 #include <vendor/tailq.h>
 
-static int          NextPtsNum = 0;
-static com_vnode_t *PtsDir     = NULL;
+static int g_next_pts_num = 0;
+static Vnode *g_pts_dir = NULL;
 
 // C FORWARD DELCARATION PROTOTYPES
-static void          ptm_poll_callback(void *arg);
-static com_dev_ops_t PtsDevOps;
-static com_dev_ops_t PtsNameDevOps;
+static void ptm_poll_callback(void *arg);
+static DevOps g_pts_dev_ops;
+static DevOps g_pts_name_dev_ops;
 
-// GENERIC PTY FUNCTIONS
+// GENERIC Pty FUNCTIONS
 
-static int pty_rb_check_hangup(size_t        *new_nbytes,
-                               size_t         curr_nbytes,
-                               bool          *force_return,
-                               kringbuffer_t *rb,
-                               int            op,
-                               void          *arg) {
+static int pty_rb_check_hangup(usize curr_nbytes, Ringbuffer *rb, int op,
+                               void *arg, usize *out_new_nbytes,
+                               bool *out_force_return) {
     (void)curr_nbytes;
     (void)rb;
-    com_pty_t *pty = arg;
-    KASSERT(NULL != pty);
+    Pty *pty = arg;
+    assert(pty != NULL);
 
-    if (KRINGBUFFER_OP_WRITE == op) {
-        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST) ||
-            NULL == atomic_load(&pty->master_vn)) {
-            *new_nbytes = 0;
+    if (op == RINGBUFFER_OP_WRITE) {
+        if (__atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST) == 0 ||
+            atomic_load(&pty->master_vn) == NULL) {
+            *out_new_nbytes = 0;
             return EIO;
         }
-    } else if (KRINGBUFFER_OP_READ == op) {
-        if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST)) {
-            *new_nbytes = 0;
+    } else if (op == RINGBUFFER_OP_READ) {
+        if (__atomic_load_n(&pty->num_slaves, __ATOMIC_SEQ_CST) == 0) {
+            *out_new_nbytes = 0;
             return EIO;
-        } else if (NULL == atomic_load(&pty->master_vn)) {
-            *new_nbytes   = 0;
-            *force_return = true;
+        } else if (atomic_load(&pty->master_vn) == NULL) {
+            *out_new_nbytes = 0;
+            *out_force_return = true;
         }
     }
 
     return 0;
 }
 
-static int pty_echo(size_t     *bytes_written,
-                    const char *buf,
-                    size_t      buflen,
-                    bool        blocking,
-                    void       *passthrough) {
-    KASSERT(!ARCH_MMU_RANGE_IS_USER(buf, buflen));
-    com_pty_t *pty = passthrough;
-    return kringbuffer_write(bytes_written,
-                             &pty->master_rb,
-                             (void *)buf,
-                             buflen,
-                             KRINGBUFFER_NOATOMIC,
-                             blocking,
-                             ptm_poll_callback,
-                             pty,
-                             NULL);
+static int pty_echo(const char *buf, usize buflen, bool blocking,
+                    void *passthrough, usize *out_bytes_written) {
+    assert(!MMU_RANGE_IS_USER(buf, buflen));
+    Pty *pty = passthrough;
+    return ringbuffer_write(&pty->master_rb, (void *)buf, buflen,
+                            RINGBUFFER_NOATOMIC, blocking, ptm_poll_callback,
+                            pty, NULL, out_bytes_written);
 }
 
-static com_pty_t *pty_alloc(void) {
+static Pty *pty_alloc(void) {
     // pty initialization
-    com_pty_t *pty = com_mm_slab_alloc(sizeof(com_pty_t));
-    pty->pts_num   = __atomic_fetch_add(&NextPtsNum, 1, __ATOMIC_SEQ_CST);
-    com_io_tty_init_text_backend(&pty->backend, 80, 25, pty_echo);
+    Pty *pty = slab_alloc(sizeof(Pty));
+    pty->pts_num = __atomic_fetch_add(&g_next_pts_num, 1, __ATOMIC_SEQ_CST);
+    tty_init_text_backend(&pty->backend, 80, 25, pty_echo);
 
     // ringbuffer initializations (slave is done by tty)
-    KRINGBUFFER_INIT(&pty->master_rb);
-    pty->master_rb.check_hangup           = pty_rb_check_hangup;
-    pty->master_rb.fallback_hu_arg        = pty;
-    pty->backend.slave_rb.check_hangup    = pty_rb_check_hangup;
+    ringbuffer_init(&pty->master_rb);
+    pty->master_rb.check_hangup = pty_rb_check_hangup;
+    pty->master_rb.fallback_hu_arg = pty;
+    pty->backend.slave_rb.check_hangup = pty_rb_check_hangup;
     pty->backend.slave_rb.fallback_hu_arg = pty;
 
     // poll initialization
     LIST_INIT(&pty->master_ph.polled_list);
-    pty->master_ph.lock = KSPINLOCK_NEW();
-    pty->num_ref        = 1;
+    pty->master_ph.lock = SPINLOCK_NEW();
+    pty->num_ref = 1;
     return pty;
 }
 
-static void pty_release(com_pty_t *pty) {
-    if (0 == __atomic_add_fetch(&pty->num_ref, -1, __ATOMIC_ACQ_REL)) {
-        com_mm_slab_free(pty, sizeof(com_pty_t));
+static void pty_rel(Pty *pty) {
+    if (__atomic_add_fetch(&pty->num_ref, -1, __ATOMIC_ACQ_REL) == 0) {
+        slab_free(pty, sizeof(Pty));
     }
 }
 
 // PTM FUNCTIONS
 
 static void ptm_poll_callback(void *arg) {
-    com_pty_t *pty = arg;
+    Pty *pty = arg;
 
-    kspinlock_acquire(&pty->master_ph.lock);
-    com_polled_t *polled, *_;
+    spinlock_acq(&pty->master_ph.lock);
+    Polled *polled, *_;
     LIST_FOREACH_SAFE(polled, &pty->master_ph.polled_list, polled_list, _) {
-        com_fs_poll_notify(polled->poller);
+        poll_notify(polled->poller);
     }
-    kspinlock_release(&pty->master_ph.lock);
+    spinlock_rel(&pty->master_ph.lock);
 }
 
-static int ptm_read(void     *buf,
-                    size_t    buflen,
-                    size_t   *bytes_read,
-                    void     *devdata,
-                    uintmax_t off,
-                    uintmax_t flags) {
+static int ptm_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
+                    usize *out_bytes_read) {
     (void)off;
     // master_rb is a spinlock, so never copy from it into buf. Only the first
     // chunk may block, then return whatever was already available
-    com_pty_t *pty  = devdata;
-    size_t     done = 0;
-    int        ret  = 0;
-    char       chunk[128];
+    Pty *pty = devdata;
+    usize done = 0;
+    int ret = 0;
+    char chunk[128];
     while (done < buflen) {
-        size_t n = KMIN(buflen - done, sizeof(chunk));
-        size_t r = 0;
-        ret      = kringbuffer_read(chunk,
-                               &r,
-                               &pty->master_rb,
-                               n,
-                               KRINGBUFFER_NOATOMIC,
-                               0 == done && !(O_NONBLOCK & flags),
-                               ptm_poll_callback,
-                               pty,
-                               NULL);
+        usize n = min(buflen - done, sizeof(chunk));
+        usize r = 0;
+        ret = ringbuffer_read(chunk, &pty->master_rb, n, RINGBUFFER_NOATOMIC,
+                              done == 0 && !(flags & O_NONBLOCK),
+                              ptm_poll_callback, pty, NULL, &r);
         // The chunk is lost if it cannot be delivered
-        int copy_ret = kmemcpy_maybe_user((char *)buf + done, chunk, r);
-        if (0 != copy_ret) {
+        int copy_ret = memcpy_maybe_user((char *)buf + done, chunk, r);
+        if (copy_ret != 0) {
             ret = copy_ret;
             break;
         }
         done += r;
-        if (0 != ret || r < n) {
-            break;
-        }
+        if (ret != 0 || r < n) break;
     }
-    *bytes_read = done;
-    return 0 != done ? 0 : ret;
+    *out_bytes_read = done;
+    return done != 0 ? 0 : ret;
 }
 
-static int ptm_write(size_t   *bytes_written,
-                     void     *devdata,
-                     void     *buf,
-                     size_t    buflen,
-                     uintmax_t off,
-                     uintmax_t flags) {
+static int ptm_write(void *devdata, void *buf, usize buflen, u64 off, u64 flags,
+                     usize *out_bytes_written) {
     (void)off;
     (void)flags;
-    com_pty_t *pty = devdata;
-    return com_io_tty_process_chars(bytes_written,
-                                    &pty->backend,
-                                    buf,
-                                    buflen,
-                                    true,
-                                    pty);
+    Pty *pty = devdata;
+    return tty_process_chars(&pty->backend, buf, buflen, true, pty,
+                             out_bytes_written);
 }
 
 // NOTE: this is different from ioctl on a tty or pts because ptms are not
 // properly ttys
-static int ptm_ioctl(void *devdata, uintmax_t op, void *buf) {
-    com_pty_t *pty = devdata;
+static int ptm_ioctl(void *devdata, u64 op, void *buf) {
+    Pty *pty = devdata;
 
-    if (TIOCSPTLCK == op) {
-        return 0;
-    }
+    if (op == TIOCSPTLCK) return 0;
 
-    if (TIOCGPTN == op) {
+    if (op == TIOCGPTN) {
         int num = pty->pts_num;
-        return kmemcpy_to_user(buf, &num, sizeof(num));
+        return memcpy_to_user(buf, &num, sizeof(num));
     }
 
-    if (TIOCSWINSZ == op) {
+    if (op == TIOCSWINSZ) {
         struct winsize ws;
-        int            ret = kmemcpy_from_user(&ws, buf, sizeof(ws));
-        if (0 == ret) {
+        int ret = memcpy_from_user(&ws, buf, sizeof(ws));
+        if (ret == 0) {
             pty->backend.cols = ws.ws_col;
             pty->backend.rows = ws.ws_row;
         }
         return ret;
     }
 
-    if (TIOCGWINSZ == op) {
+    if (op == TIOCGWINSZ) {
         struct winsize ws = {.ws_row = pty->backend.rows,
                              .ws_col = pty->backend.cols};
-        return kmemcpy_to_user(buf, &ws, sizeof(ws));
+        return memcpy_to_user(buf, &ws, sizeof(ws));
     }
 
-    if (TCGETS == op) {
-        return kmemcpy_to_user(buf,
-                               &pty->backend.termios,
-                               sizeof(pty->backend.termios));
+    if (op == TCGETS) {
+        return memcpy_to_user(buf, &pty->backend.termios,
+                              sizeof(pty->backend.termios));
     }
 
     return ENOSYS;
@@ -239,109 +186,87 @@ static int ptm_seekable(void *devdata) {
 }
 
 static int ptm_close(void *devdata) {
-    com_pty_t *pty = devdata;
+    Pty *pty = devdata;
     atomic_store(&pty->master_vn, NULL);
 
-    kringbuffer_wake_all(&pty->backend.slave_rb);
-    kringbuffer_wake_all(&pty->master_rb);
-    com_io_tty_text_backend_poll_callback(&pty->backend);
+    ringbuffer_wake_all(&pty->backend.slave_rb);
+    ringbuffer_wake_all(&pty->master_rb);
+    tty_text_backend_poll_callback(&pty->backend);
 
     // New opens fail from now on, see pts_open
     char pts_name[24];
-    kuitoa(pty->pts_num, pts_name);
-    com_fs_vfs_unlink(PtsDir, pts_name, kstrlen(pts_name), 0);
+    uitoa(pty->pts_num, pts_name);
+    vfs_unlink(g_pts_dir, pts_name, strlen(pts_name), 0);
     return 0;
 }
 
-static void ptm_inactive(void *devdata) {
-    pty_release(devdata);
-}
+static void ptm_inactive(void *devdata) { pty_rel(devdata); }
 
-static int ptm_poll_head(com_poll_head_t **out, void *devdata) {
-    com_pty_t *pty = devdata;
-    *out           = &pty->master_ph;
+static int ptm_poll_head(void *devdata, PollHead **out_poll_head) {
+    Pty *pty = devdata;
+    *out_poll_head = &pty->master_ph;
     return 0;
 }
 
-static int ptm_poll(short *revents, void *devdata, short events) {
-    com_pty_t *pty = devdata;
+static int ptm_poll(void *devdata, short events, short *out_revents) {
+    Pty *pty = devdata;
     (void)events;
 
-    short out = kringbuffer_poll(&pty->master_rb);
-    if (0 == __atomic_load_n(&pty->num_slaves, __ATOMIC_RELAXED)) {
+    short out = ringbuffer_poll(&pty->master_rb);
+    if (__atomic_load_n(&pty->num_slaves, __ATOMIC_RELAXED) == 0) {
         out |= POLLHUP;
     }
 
-    *revents = out;
+    *out_revents = out;
     return 0;
 }
 
-static int ptm_stat(struct stat *out, void *devdata) {
+static int ptm_stat(void *devdata, struct stat *out_stat) {
     (void)devdata;
-    out->st_mode = 0600;
+    out_stat->st_mode = 0600;
     return 0;
 }
 
-static com_dev_ops_t PtmDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
-                                  .read      = ptm_read,
-                                  .write     = ptm_write,
-                                  .ioctl     = ptm_ioctl,
-                                  .isatty    = ptm_isatty,
-                                  .seekable  = ptm_seekable,
-                                  .poll_head = ptm_poll_head,
-                                  .poll      = ptm_poll,
-                                  .stat      = ptm_stat,
-                                  .close     = ptm_close,
-                                  .inactive  = ptm_inactive};
+static DevOps g_ptm_dev_ops = {.type = VNODE_TYPE_CHARDEV,
+                               .read = ptm_read,
+                               .write = ptm_write,
+                               .ioctl = ptm_ioctl,
+                               .isatty = ptm_isatty,
+                               .seekable = ptm_seekable,
+                               .poll_head = ptm_poll_head,
+                               .poll = ptm_poll,
+                               .stat = ptm_stat,
+                               .close = ptm_close,
+                               .inactive = ptm_inactive};
 
 // PTS FUNCTIONS
 
-static int pts_read(void     *buf,
-                    size_t    buflen,
-                    size_t   *bytes_read,
-                    void     *devdata,
-                    uintmax_t off,
-                    uintmax_t flags) {
+static int pts_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
+                    usize *out_bytes_read) {
     (void)off;
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
-    return kringbuffer_read(buf,
-                            bytes_read,
-                            &pty->backend.slave_rb,
-                            buflen,
-                            KRINGBUFFER_NOATOMIC,
-                            !(O_NONBLOCK & flags),
-                            com_io_tty_text_backend_poll_callback,
-                            &pty->backend,
-                            NULL);
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
+    return ringbuffer_read(buf, &pty->backend.slave_rb, buflen,
+                           RINGBUFFER_NOATOMIC, !(flags & O_NONBLOCK),
+                           tty_text_backend_poll_callback, &pty->backend, NULL,
+                           out_bytes_read);
 }
 
-static int pts_write(size_t   *bytes_written,
-                     void     *devdata,
-                     void     *buf,
-                     size_t    buflen,
-                     uintmax_t off,
-                     uintmax_t flags) {
+static int pts_write(void *devdata, void *buf, usize buflen, u64 off, u64 flags,
+                     usize *out_bytes_written) {
     (void)off;
     (void)flags;
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
-    return com_io_tty_text_backend_echo(bytes_written,
-                                        &pty->backend,
-                                        buf,
-                                        buflen,
-                                        true,
-                                        pty);
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
+    return tty_text_backend_echo(&pty->backend, buf, buflen, true, pty,
+                                 out_bytes_written);
 }
 
-static int pts_ioctl(void *devdata, uintmax_t op, void *buf) {
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
+static int pts_ioctl(void *devdata, u64 op, void *buf) {
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
 
-    return com_io_tty_text_backend_ioctl(&pty->backend,
-                                         pty_slave->vnode,
-                                         op,
-                                         buf);
+    return tty_text_backend_ioctl(&pty->backend, pty_slave->vnode, op, buf);
 }
 
 static int pts_isatty(void *devdata) {
@@ -357,11 +282,11 @@ static int pts_seekable(void *devdata) {
 // num_slaves counts open files, not references, so that the master sees a
 // hangup even if a session still has the slave as its controlling terminal
 static int pts_close(void *devdata) {
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
 
-    if (0 == __atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST)) {
-        kringbuffer_wake_all(&pty->master_rb);
+    if (__atomic_add_fetch(&pty->num_slaves, -1, __ATOMIC_SEQ_CST) == 0) {
+        ringbuffer_wake_all(&pty->master_rb);
         ptm_poll_callback(pty);
     }
 
@@ -369,153 +294,138 @@ static int pts_close(void *devdata) {
 }
 
 static void pts_inactive(void *devdata) {
-    com_pty_slave_t *pty_slave = devdata;
-    pty_release(pty_slave->pty);
-    com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
+    PTYSlave *pty_slave = devdata;
+    pty_rel(pty_slave->pty);
+    slab_free(pty_slave, sizeof(PTYSlave));
 }
 
 // Opens a slave that is already open (e.g., through /dev/tty)
-static int pts_reopen(com_vnode_t **out, void *devdata) {
-    com_pty_slave_t *pty_slave = devdata;
+static int pts_reopen(void *devdata, Vnode **out_vnode) {
+    PTYSlave *pty_slave = devdata;
     __atomic_add_fetch(&pty_slave->pty->num_slaves, 1, __ATOMIC_SEQ_CST);
-    COM_FS_VFS_VNODE_HOLD(pty_slave->vnode);
-    *out = pty_slave->vnode;
+    vfs_vnode_hold(pty_slave->vnode);
+    *out_vnode = pty_slave->vnode;
     return 0;
 }
 
-static int pts_stat(struct stat *out, void *devdata) {
+static int pts_stat(void *devdata, struct stat *out_stat) {
     (void)devdata;
-    out->st_blksize = 0;
-    out->st_mode    = 0622; // apparently makes xterm happy
+    out_stat->st_blksize = 0;
+    out_stat->st_mode = 0622; // apparently makes xterm happy
     return 0;
 }
 
-static int pts_poll_head(com_poll_head_t **out, void *devdata) {
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
-    *out                       = &pty->backend.slave_ph;
+static int pts_poll_head(void *devdata, PollHead **out_poll_head) {
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
+    *out_poll_head = &pty->backend.slave_ph;
     return 0;
 }
 
-static int pts_poll(short *revents, void *devdata, short events) {
+static int pts_poll(void *devdata, short events, short *out_revents) {
     (void)events;
-    com_pty_slave_t *pty_slave = devdata;
-    com_pty_t       *pty       = pty_slave->pty;
+    PTYSlave *pty_slave = devdata;
+    Pty *pty = pty_slave->pty;
 
-    short out = kringbuffer_poll(&pty->backend.slave_rb);
-    if (NULL == atomic_load(&pty->master_vn)) {
-        out |= POLLHUP;
-    }
+    short out = ringbuffer_poll(&pty->backend.slave_rb);
+    if (atomic_load(&pty->master_vn) == NULL) out |= POLLHUP;
 
-    *revents = out;
+    *out_revents = out;
     return 0;
 }
 
 // Opens /dev/pts/N: every open gets its own slave vnode
-static int pts_open(com_vnode_t **out, void *devdata) {
-    com_pty_t *pty = devdata;
+static int pts_open(void *devdata, Vnode **out_vnode) {
+    Pty *pty = devdata;
     // A lookup may have found the node just before the master closed
-    if (NULL == atomic_load(&pty->master_vn)) {
-        return EIO;
-    }
+    if (atomic_load(&pty->master_vn) == NULL) return EIO;
 
-    com_pty_slave_t *pty_slave = com_mm_slab_alloc(sizeof(com_pty_slave_t));
-    pty_slave->pty             = pty;
+    PTYSlave *pty_slave = slab_alloc(sizeof(PTYSlave));
+    pty_slave->pty = pty;
 
-    int ret = com_fs_devfs_register_anonymous(&pty_slave->vnode,
-                                              &PtsDevOps,
-                                              pty_slave);
-    if (0 != ret) {
-        com_mm_slab_free(pty_slave, sizeof(com_pty_slave_t));
+    int ret = devfs_register_anonymous(&g_pts_dev_ops, pty_slave,
+                                       &pty_slave->vnode);
+    if (ret != 0) {
+        slab_free(pty_slave, sizeof(PTYSlave));
         return ret;
     }
 
     __atomic_add_fetch(&pty->num_ref, 1, __ATOMIC_RELAXED);
     __atomic_add_fetch(&pty->num_slaves, 1, __ATOMIC_SEQ_CST);
-    *out = pty_slave->vnode;
+    *out_vnode = pty_slave->vnode;
     return 0;
 }
 
-static void pts_name_inactive(void *devdata) {
-    pty_release(devdata);
-}
+static void pts_name_inactive(void *devdata) { pty_rel(devdata); }
 
-static com_dev_ops_t PtsDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
-                                  .read      = pts_read,
-                                  .write     = pts_write,
-                                  .ioctl     = pts_ioctl,
-                                  .isatty    = pts_isatty,
-                                  .seekable  = pts_seekable,
-                                  .stat      = pts_stat,
-                                  .poll_head = pts_poll_head,
-                                  .poll      = pts_poll,
-                                  .open      = pts_reopen,
-                                  .close     = pts_close,
-                                  .inactive  = pts_inactive};
+static DevOps g_pts_dev_ops = {.type = VNODE_TYPE_CHARDEV,
+                               .read = pts_read,
+                               .write = pts_write,
+                               .ioctl = pts_ioctl,
+                               .isatty = pts_isatty,
+                               .seekable = pts_seekable,
+                               .stat = pts_stat,
+                               .poll_head = pts_poll_head,
+                               .poll = pts_poll,
+                               .open = pts_reopen,
+                               .close = pts_close,
+                               .inactive = pts_inactive};
 
-static com_dev_ops_t PtsNameDevOps = {.type     = E_COM_VNODE_TYPE_CHARDEV,
-                                      .open     = pts_open,
-                                      .stat     = pts_stat,
-                                      .inactive = pts_name_inactive};
+static DevOps g_pts_name_dev_ops = {.type = VNODE_TYPE_CHARDEV,
+                                    .open = pts_open,
+                                    .stat = pts_stat,
+                                    .inactive = pts_name_inactive};
 
-static int ptmx_open(com_vnode_t **out, void *devdata) {
+static int ptmx_open(void *devdata, Vnode **out_vnode) {
     (void)devdata;
 
-    com_pty_t *pty = pty_alloc();
+    Pty *pty = pty_alloc();
 
     // The master comes first because pts_open needs it
-    com_vnode_t *master_vn = NULL;
-    int ret = com_fs_devfs_register_anonymous(&master_vn, &PtmDevOps, pty);
-    if (0 != ret) {
-        pty_release(pty);
+    Vnode *master_vn = NULL;
+    int ret = devfs_register_anonymous(&g_ptm_dev_ops, pty, &master_vn);
+    if (ret != 0) {
+        pty_rel(pty);
         return ret;
     }
     atomic_store(&pty->master_vn, master_vn);
 
     char pts_name[24];
-    kuitoa(pty->pts_num, pts_name);
+    uitoa(pty->pts_num, pts_name);
 
     // This *ONLY* creates the pts device, it does NOT open it
     __atomic_add_fetch(&pty->num_ref, 1, __ATOMIC_RELAXED);
-    ret = com_fs_devfs_register(NULL,
-                                PtsDir,
-                                pts_name,
-                                kstrlen(pts_name),
-                                &PtsNameDevOps,
-                                pty);
-    if (0 != ret) {
-        pty_release(pty);
-        COM_FS_VFS_VNODE_RELEASE(master_vn);
+    ret = devfs_register(g_pts_dir, pts_name, strlen(pts_name),
+                         &g_pts_name_dev_ops, pty, NULL);
+    if (ret != 0) {
+        pty_rel(pty);
+        vfs_vnode_rel(master_vn);
         return ret;
     }
 
-    *out = master_vn;
+    *out_vnode = master_vn;
     return 0;
 }
 
-static int ptmx_stat(struct stat *out, void *devdata) {
+static int ptmx_stat(void *devdata, struct stat *out_stat) {
     (void)devdata;
-    out->st_blksize = 0;
-    out->st_mode    = 0622; // apparently makes xterm happy
+    out_stat->st_blksize = 0;
+    out_stat->st_mode = 0622; // apparently makes xterm happy
     return 0;
 }
 
-static com_dev_ops_t CloneDevOps = {.type = E_COM_VNODE_TYPE_CHARDEV,
-                                    .open = ptmx_open,
-                                    .stat = ptmx_stat};
+static DevOps g_clone_dev_ops = {.type = VNODE_TYPE_CHARDEV,
+                                 .open = ptmx_open,
+                                 .stat = ptmx_stat};
 
-int com_io_pty_init(void) {
-    KLOG("initializing pty subsytem");
+int pty_init(void) {
+    log("initializing pty subsytem");
 
-    int ret = com_fs_devfs_mkdir(&PtsDir, NULL, "pts", 3);
-    if (0 != ret) {
-        goto end;
-    }
+    int ret = devfs_mkdir(NULL, "pts", 3, &g_pts_dir);
+    if (ret != 0) goto end;
 
-    ret = com_fs_devfs_register(NULL, NULL, "ptmx", 4, &CloneDevOps, NULL);
-    if (0 != ret) {
-        goto end;
-    }
+    ret = devfs_register(NULL, "ptmx", 4, &g_clone_dev_ops, NULL, NULL);
+    if (ret != 0) goto end;
 
 end:
     return ret;

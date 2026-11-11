@@ -1,21 +1,3 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
@@ -23,41 +5,39 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 #include <vendor/printf.h>
 
-static kspinlock_t InterruptTableLock                  = KSPINLOCK_NEW();
-static com_isr_t   InterruptTable[ARCH_NUM_INTERRUPTS] = {0};
+static Spinlock g_interrupt_table_lock = SPINLOCK_NEW();
+static InterruptHandler g_interrupt_table[NUM_INTERRUPTS] = {0};
 
-static com_isr_t *interrupt_register_nolock(uintmax_t      vec,
-                                            com_intf_isr_t func,
-                                            com_intf_eoi_t eoi) {
-    KDEBUG("registering handler at %p for vector %zu (%p)", func, vec, vec);
-    com_isr_t *isr = &InterruptTable[vec];
-    isr->func      = func;
-    isr->eoi       = eoi;
-    isr->vec       = vec;
-    isr->taken     = true;
+static InterruptHandler *interrupt_register_nolock(u64 vec,
+                                                   InterruptHandlerFn func,
+                                                   InterruptAckHandlerFn eoi) {
+    log_debug("registering handler at %p for vector %zu (%p)", func, vec, vec);
+    InterruptHandler *isr = &g_interrupt_table[vec];
+    isr->func = func;
+    isr->eoi = eoi;
+    isr->vec = vec;
+    isr->taken = true;
     return isr;
 }
 
-com_isr_t *com_sys_interrupt_register(uintmax_t      vec,
-                                      com_intf_isr_t func,
-                                      com_intf_eoi_t eoi) {
-    kspinlock_acquire(&InterruptTableLock);
-    com_isr_t *ret = interrupt_register_nolock(vec, func, eoi);
-    kspinlock_release(&InterruptTableLock);
+InterruptHandler *interrupt_register(u64 vec, InterruptHandlerFn func,
+                                     InterruptAckHandlerFn eoi) {
+    spinlock_acq(&g_interrupt_table_lock);
+    InterruptHandler *ret = interrupt_register_nolock(vec, func, eoi);
+    spinlock_rel(&g_interrupt_table_lock);
     return ret;
 }
 
-com_isr_t *com_sys_interrupt_allocate(com_intf_isr_t func, com_intf_eoi_t eoi) {
-    kspinlock_acquire(&InterruptTableLock);
-    com_isr_t *ret = NULL;
+InterruptHandler *interrupt_allocate(InterruptHandlerFn func,
+                                     InterruptAckHandlerFn eoi) {
+    spinlock_acq(&g_interrupt_table_lock);
+    InterruptHandler *ret = NULL;
 
-    for (uintmax_t i = 0; i < ARCH_NUM_INTERRUPTS; i++) {
-        com_isr_t *isr = &InterruptTable[i];
+    for (u64 i = 0; i < NUM_INTERRUPTS; i++) {
+        InterruptHandler *isr = &g_interrupt_table[i];
         if (!isr->taken) {
             interrupt_register_nolock(i, func, eoi);
             ret = isr;
@@ -65,64 +45,52 @@ com_isr_t *com_sys_interrupt_allocate(com_intf_isr_t func, com_intf_eoi_t eoi) {
         }
     }
 
-    kspinlock_release(&InterruptTableLock);
+    spinlock_rel(&g_interrupt_table_lock);
     return ret;
 }
 
-void com_sys_interrupt_free(com_isr_t *isr) {
-    kspinlock_acquire(&InterruptTableLock);
-    isr->func  = NULL;
-    isr->eoi   = NULL;
+void interrupt_free(InterruptHandler *isr) {
+    spinlock_acq(&g_interrupt_table_lock);
+    isr->func = NULL;
+    isr->eoi = NULL;
     isr->extra = NULL;
     isr->taken = false;
-    kspinlock_release(&InterruptTableLock);
+    spinlock_rel(&g_interrupt_table_lock);
 }
 
-void com_sys_interrupt_isr(uintmax_t vec, arch_context_t *ctx) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_isr_t    *isr         = &InterruptTable[vec];
-    bool          eoi_after   = COM_SYS_INTERRUPT_FLAGS_EOI_AFTER & isr->flags;
-    bool          no_reset    = COM_SYS_INTERRUPT_FLAGS_NO_RESET & isr->flags;
+void interrupt_isr(u64 vec, Context *ctx) {
+    Thread *curr_thread = cpu_get_thread();
+    InterruptHandler *isr = &g_interrupt_table[vec];
+    bool eoi_after = isr->flags & INTERRUPT_FLAGS_EOI_AFTER;
+    bool no_reset = isr->flags & INTERRUPT_FLAGS_NO_RESET;
 
-    if (NULL != curr_thread && !no_reset) {
-        curr_thread->lock_depth = 1;
-    }
+    if (curr_thread != NULL && !no_reset) curr_thread->lock_depth = 1;
 
-    if (NULL == isr) {
-        com_sys_panic(ctx, "isr not set for interrupt vector %zu", vec);
-    }
+    if (isr == NULL) panic(ctx, "isr not set for interrupt vector %zu", vec);
 
-    if (!eoi_after && NULL != isr->eoi) {
-        isr->eoi(isr);
-    }
+    if (!eoi_after && isr->eoi != NULL) isr->eoi(isr);
+    if (isr->func != NULL) isr->func(isr, ctx);
+    if (eoi_after && isr->eoi != NULL) isr->eoi(isr);
 
-    if (NULL != isr->func) {
-        isr->func(isr, ctx);
-    }
-
-    if (eoi_after && NULL != isr->eoi) {
-        isr->eoi(isr);
-    }
-
-    if (ARCH_CONTEXT_ISUSER(ctx)) {
+    if (context_is_user(ctx)) {
         // NOTE: events that interrupt a user thread are by definition thread
         // context, so this is safe
         int depth = curr_thread->lock_depth;
-        KASSERT(0 == depth || 1 == depth);
+        assert(depth == 0 || depth == 1);
         curr_thread->lock_depth = 0;
-        ARCH_CPU_ENABLE_INTERRUPTS();
-        com_ipc_signal_dispatch(ctx, curr_thread);
-        ARCH_CPU_DISABLE_INTERRUPTS();
+        cpu_enable_interrupts();
+        signal_dispatch(ctx, curr_thread);
+        cpu_disable_interrupts();
         curr_thread->lock_depth = depth;
     }
 
-    if (NULL != curr_thread && !no_reset) {
+    if (curr_thread != NULL && !no_reset) {
         // Here we reset lock_depth = 0 because if we got here, this was a fully
         // async interrupt and thus an event that can only occur in user code or
         // kernel code with lock_depth = 0
-        KASSERT(curr_thread == ARCH_CPU_GET_THREAD());
-        KASSERT(curr_thread->tid == ARCH_CPU_GET_THREAD()->tid);
-        KASSERT(1 == curr_thread->lock_depth);
+        assert(curr_thread == cpu_get_thread());
+        assert(curr_thread->tid == cpu_get_thread()->tid);
+        assert(curr_thread->lock_depth == 1);
         curr_thread->lock_depth = 0;
     }
 }

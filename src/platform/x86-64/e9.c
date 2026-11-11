@@ -1,27 +1,7 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
+#include <kernel/com/util.h>
 #include <kernel/platform/x86-64/e9.h>
 #include <kernel/platform/x86-64/io.h>
-#include <stddef.h>
 
-void x86_64_e9_putsn(const char *s, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        X86_64_IO_OUTB(0xE9, s[i]);
-    }
+void e9_putsn(const char *s, usize n) {
+    for (usize i = 0; i < n; i++) io_outb(0xE9, s[i]);
 }

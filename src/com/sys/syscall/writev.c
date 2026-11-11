@@ -1,78 +1,54 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <kernel/com/ds/ioviter.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/ioviter.h>
-#include <lib/spinlock.h>
+#include <kernel/com/util.h>
 #include <sys/uio.h>
 
 // SYSCALL: writev(int fd, struct iovec *iov, int iovcnt)
-COM_SYS_SYSCALL(com_sys_syscall_writev) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+SYSCALL(syscall_writev) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    int           fd     = COM_SYS_SYSCALL_ARG(int, 1);
-    struct iovec *iov    = COM_SYS_SYSCALL_ARG(void *, 2);
-    int           iovcnt = COM_SYS_SYSCALL_ARG(int, 3);
+    int fd = SYSCALL_ARG(int, 1);
+    struct iovec *iov = SYSCALL_ARG(void *, 2);
+    int iovcnt = SYSCALL_ARG(int, 3);
 
-    kioviter_t ioviter;
-    int        iov_ret = kioviter_init_user(&ioviter,
-                                            ARCH_CPU_GET_THREAD()->scratch,
-                                            iov,
-                                            iovcnt);
-    if (0 != iov_ret) {
-        return COM_SYS_SYSCALL_ERR(iov_ret);
-    }
+    IOVIter ioviter;
+    int iov_ret = ioviter_init_user(&ioviter, cpu_get_thread()->scratch, iov,
+                                    iovcnt);
+    if (iov_ret != 0) return SYSCALL_ERR(iov_ret);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    SyscallRet ret = SYSCALL_BASE_OK();
 
-    com_proc_t *curr = ARCH_CPU_GET_THREAD()->proc;
-    com_file_t *file = com_sys_proc_get_file(curr, fd);
+    Proc *curr = cpu_get_thread()->proc;
+    File *file = proc_get_file(curr, fd);
 
-    if (NULL == file) {
-        ret = COM_SYS_SYSCALL_ERR(EBADF);
+    if (file == NULL) {
+        ret = SYSCALL_ERR(EBADF);
         return ret;
     }
 
-    size_t bytes_written = 0;
-    int    vfs_op        = com_fs_vfs_writev(&bytes_written,
-                                             file->vnode,
-                                             &ioviter,
-                                             file->off,
-                                             file->flags);
+    usize bytes_written = 0;
+    int vfs_op = vfs_writev(file->vnode, &ioviter, file->off, file->flags,
+                            &bytes_written);
 
-    if (0 != vfs_op) {
-        ret = COM_SYS_SYSCALL_ERR(vfs_op);
+    if (vfs_op != 0) {
+        ret = SYSCALL_ERR(vfs_op);
         goto cleanup;
     }
 
-    kspinlock_acquire(&file->off_lock);
+    spinlock_acq(&file->off_lock);
     file->off += bytes_written;
-    kspinlock_release(&file->off_lock);
+    spinlock_rel(&file->off_lock);
 
-    ret = COM_SYS_SYSCALL_OK(bytes_written);
+    ret = SYSCALL_OK(bytes_written);
 cleanup:
-    COM_FS_FILE_RELEASE(file);
+    FILE_REL(file);
     return ret;
 }

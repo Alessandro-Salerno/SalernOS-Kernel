@@ -1,27 +1,9 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
 
 // SYSCALL: getpid()
-COM_SYS_SYSCALL(com_sys_syscall_getpid) {
-    COM_SYS_SYSCALL_UNUSED_START(0);
-    return COM_SYS_SYSCALL_OK(ARCH_CPU_GET_THREAD()->proc->pid);
+SYSCALL(syscall_getpid) {
+    SYSCALL_UNUSED_START(0);
+    return SYSCALL_OK(cpu_get_thread()->proc->pid);
 }

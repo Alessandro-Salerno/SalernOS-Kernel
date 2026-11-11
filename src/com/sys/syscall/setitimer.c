@@ -1,196 +1,170 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/mem.h>
-#include <lib/usercopy.h>
-#include <lib/util.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 #include <sys/time.h>
 
-struct itimer_callout_arg {
-    com_thread_t *thread;
-    bool          cancelled;
+struct ITimerCalloutArg {
+    Thread *thread;
+    bool cancelled;
 };
 
 // NOTE: we never null the entire timer with {0} because that breaks the
 // lock!
-static inline void zero_timer_struct(com_thread_timer_t *timer) {
+static inline void zero_timer_struct(ThreadTimer *timer) {
     timer->itimer_arg = NULL;
-    timer->itimerval  = (struct itimerval){0};
-    timer->ctime      = 0;
+    timer->itimerval = (struct itimerval){0};
+    timer->ctime = 0;
 }
 
-static inline uintmax_t timeval_to_ns(struct timeval t) {
-    return t.tv_sec * KNANOS_PER_SEC + t.tv_usec * 1000UL;
+static inline u64 timeval_to_ns(struct timeval t) {
+    return t.tv_sec * NANOS_PER_SEC + t.tv_usec * 1000UL;
 }
 
-static inline struct timeval timeval_from_ns(uintmax_t ns) {
-    return (struct timeval){.tv_sec  = ns / KNANOS_PER_SEC,
-                            .tv_usec = (ns % KNANOS_PER_SEC) / 1000};
+static inline struct timeval timeval_from_ns(u64 ns) {
+    return (struct timeval){.tv_sec = ns / NANOS_PER_SEC,
+                            .tv_usec = (ns % NANOS_PER_SEC) / 1000};
 }
 
 static inline bool timeval_is_canonical(struct timeval t) {
-    return t.tv_sec >= 0 && t.tv_usec >= 0 &&
-           (uintmax_t)t.tv_usec < KMICROS_PER_SEC;
+    return t.tv_sec >= 0 && t.tv_usec >= 0 && (u64)t.tv_usec < MICROS_PER_SEC;
 }
 
-static void itimer_callout(com_callout_t *callout) {
-    struct itimer_callout_arg *arg       = callout->arg;
-    com_thread_t              *thread    = arg->thread;
-    struct itimerval          *itimerval = &thread->real_timer.itimerval;
-    uintmax_t                  new_delay = 0;
-    uintmax_t                  now       = com_sys_callout_get_time();
-    kspinlock_acquire(&thread->real_timer.lock);
+static void itimer_callout(Callout *callout) {
+    struct ITimerCalloutArg *arg = callout->arg;
+    Thread *thread = arg->thread;
+    struct itimerval *itimerval = &thread->real_timer.itimerval;
+    u64 new_delay = 0;
+    u64 now = callout_get_time();
+    spinlock_acq(&thread->real_timer.lock);
 
     if (arg->cancelled ||
         __atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
         if (thread->real_timer.itimer_arg == arg) {
             zero_timer_struct(&thread->real_timer);
         }
-        kspinlock_release(&thread->real_timer.lock);
-        com_mm_slab_free(arg, sizeof(struct itimer_callout_arg));
-        com_sys_thread_release(thread);
+        spinlock_rel(&thread->real_timer.lock);
+        slab_free(arg, sizeof(struct ITimerCalloutArg));
+        thread_rel(thread);
         return;
     }
 
     // POSIX: this lets us cancel the timer after we send SIGALRM one last time
-    if (0 != timeval_to_ns(itimerval->it_interval)) {
-        itimerval->it_value      = itimerval->it_interval;
+    if (timeval_to_ns(itimerval->it_interval) != 0) {
+        itimerval->it_value = itimerval->it_interval;
         thread->real_timer.ctime = now;
-        new_delay                = timeval_to_ns(itimerval->it_value);
+        new_delay = timeval_to_ns(itimerval->it_value);
     } else {
         zero_timer_struct(&thread->real_timer);
     }
 
-    kspinlock_release(&thread->real_timer.lock);
+    spinlock_rel(&thread->real_timer.lock);
 
-    if (0 != new_delay) {
-        com_sys_callout_reschedule(callout, new_delay);
-    }
+    if (new_delay != 0) callout_reschedule(callout, new_delay);
 
-    com_ipc_signal_send_to_thread(thread, SIGALRM, thread->proc);
-    if (0 == new_delay) {
-        com_mm_slab_free(arg, sizeof(struct itimer_callout_arg));
-        com_sys_thread_release(thread);
+    signal_send_to_thread(thread, SIGALRM, thread->proc);
+    if (new_delay == 0) {
+        slab_free(arg, sizeof(struct ITimerCalloutArg));
+        thread_rel(thread);
     }
 }
 
 // SYSCALL: setitimer(int which, struct itimerval *new_val, struct itimerval
 // *old_val)
-COM_SYS_SYSCALL(com_sys_syscall_setitimer) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+SYSCALL(syscall_setitimer) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    int               which   = COM_SYS_SYSCALL_ARG(int, 1);
-    struct itimerval *new_val = COM_SYS_SYSCALL_ARG(void *, 2);
-    struct itimerval *old_val = COM_SYS_SYSCALL_ARG(void *, 3);
+    int which = SYSCALL_ARG(int, 1);
+    struct itimerval *new_val = SYSCALL_ARG(void *, 2);
+    struct itimerval *old_val = SYSCALL_ARG(void *, 3);
 
-    com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
-    com_syscall_ret_t ret         = COM_SYS_SYSCALL_OK(0);
+    Thread *curr_thread = cpu_get_thread();
+    SyscallRet ret = SYSCALL_OK(0);
 
     // TODO: support other timer types
-    KASSERT(ITIMER_REAL == which);
+    assert(which == ITIMER_REAL);
 
-    uintmax_t                  now              = com_sys_callout_get_time();
-    uintmax_t                  new_delay        = 0;
-    bool                       schedule_callout = false;
-    struct itimer_callout_arg *callout_arg      = NULL;
+    u64 now = callout_get_time();
+    u64 new_delay = 0;
+    bool schedule_callout = false;
+    struct ITimerCalloutArg *callout_arg = NULL;
 
     struct itimerval knew;
     struct itimerval kold;
 
     // We allocate here to avoid allocating under spinlocks
-    if (NULL != new_val) {
-        int copy_ret = kmemcpy_from_user(&knew, new_val, sizeof(knew));
-        if (0 != copy_ret) {
-            return COM_SYS_SYSCALL_ERR(copy_ret);
-        }
+    if (new_val != NULL) {
+        int copy_ret = memcpy_from_user(&knew, new_val, sizeof(knew));
+        if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
         if (!timeval_is_canonical(knew.it_value) ||
             !timeval_is_canonical(knew.it_interval)) {
-            return COM_SYS_SYSCALL_ERR(EINVAL);
+            return SYSCALL_ERR(EINVAL);
         }
 
         new_delay = timeval_to_ns(knew.it_value);
-        if (0 != new_delay) {
-            callout_arg = com_mm_slab_alloc(sizeof(struct itimer_callout_arg));
+        if (new_delay != 0) {
+            callout_arg = slab_alloc(sizeof(struct ITimerCalloutArg));
         }
     }
 
-    kspinlock_acquire(&curr_thread->real_timer.lock);
+    spinlock_acq(&curr_thread->real_timer.lock);
 
-    if (NULL != old_val) {
+    if (old_val != NULL) {
         // We can only be in one of these cases:
         //      1. This system call was never called before on this thread
         //      2. Otherwise, by definition, if the timer was set by a previous
         //      call, then it_value is strictly positive, since it is also
         //      updated by the callout handler above
-        uintmax_t it_value = timeval_to_ns(
+        u64 it_value = timeval_to_ns(
             curr_thread->real_timer.itimerval.it_value);
-        uintmax_t elapsed = now - curr_thread->real_timer.ctime;
-        uintmax_t rem     = 0;
+        u64 elapsed = now - curr_thread->real_timer.ctime;
+        u64 rem = 0;
         // We clamp this here because while in theory it is safe to do, in
         // practice, the real callout subsystem time may be ahead of the timer.
         // In this cae, the timer is de-facto expired, so we should say 0 and
         // not underflow
-        if (elapsed < it_value) {
-            rem = it_value - elapsed;
-        }
-        kold.it_value    = timeval_from_ns(rem);
+        if (elapsed < it_value) rem = it_value - elapsed;
+        kold.it_value = timeval_from_ns(rem);
         kold.it_interval = curr_thread->real_timer.itimerval.it_interval;
     }
 
-    if (NULL != new_val) {
-        if (NULL != curr_thread->real_timer.itimer_arg) {
-            struct itimer_callout_arg *old_arg = curr_thread->real_timer
-                                                     .itimer_arg;
-            old_arg->cancelled                 = true;
+    if (new_val != NULL) {
+        if (curr_thread->real_timer.itimer_arg != NULL) {
+            struct ITimerCalloutArg *old_arg = curr_thread->real_timer
+                                                   .itimer_arg;
+            old_arg->cancelled = true;
         }
 
-        if (0 == new_delay) {
+        if (new_delay == 0) {
             zero_timer_struct(&curr_thread->real_timer);
             goto end;
         }
 
-        callout_arg->thread                = curr_thread;
-        curr_thread->real_timer.ctime      = now;
-        curr_thread->real_timer.itimerval  = knew;
+        callout_arg->thread = curr_thread;
+        curr_thread->real_timer.ctime = now;
+        curr_thread->real_timer.itimerval = knew;
         curr_thread->real_timer.itimer_arg = callout_arg;
-        schedule_callout                   = true;
+        schedule_callout = true;
     }
 
 end:
-    kspinlock_release(&curr_thread->real_timer.lock);
+    spinlock_rel(&curr_thread->real_timer.lock);
 
     // The new timer is armed even if the old one cannot be reported
-    if (NULL != old_val && 0 != kmemcpy_to_user(old_val, &kold, sizeof(kold))) {
-        ret = COM_SYS_SYSCALL_ERR(EFAULT);
+    if (old_val != NULL && memcpy_to_user(old_val, &kold, sizeof(kold)) != 0) {
+        ret = SYSCALL_ERR(EFAULT);
     }
 
     if (schedule_callout) {
-        com_sys_thread_hold(curr_thread);
-        com_sys_callout_add(itimer_callout, callout_arg, new_delay);
+        thread_hold(curr_thread);
+        callout_add(itimer_callout, callout_arg, new_delay);
     }
 
     return ret;

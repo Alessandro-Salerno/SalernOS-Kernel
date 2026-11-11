@@ -1,4 +1,4 @@
-#include <lib/crt.h>
+#include <kernel/com/crt.h>
 #include <vendor/printf.h>
 
 // Using __VA_ARGS__ cause it's easier and the result is the same

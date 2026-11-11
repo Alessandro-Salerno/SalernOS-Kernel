@@ -1,29 +1,13 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/init.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/opt/flanterm.h>
 #include <kernel/opt/nvme.h>
 #include <kernel/opt/uacpi.h>
@@ -40,121 +24,98 @@
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
-#include <lib/str.h>
-#include <lib/util.h>
 #include <signal.h>
 #include <vendor/limine.h>
 #include <vendor/printf.h>
 #include <vendor/tailq.h>
 
-static arch_cpu_t BspCpu = {0};
+static Cpu g_bsp_cpu = {0};
 
-static const int ExceptionSignals[20] = {[0]  = SIGFPE,
-                                         [1]  = SIGTRAP,
-                                         [3]  = SIGTRAP,
-                                         [4]  = SIGSEGV,
-                                         [5]  = SIGSEGV,
-                                         [6]  = SIGILL,
-                                         [11] = SIGBUS,
-                                         [12] = SIGBUS,
-                                         [13] = SIGSEGV,
-                                         [16] = SIGFPE,
-                                         [17] = SIGBUS,
-                                         [19] = SIGFPE};
+static const int g_exception_signals[20] = {
+    [0] = SIGFPE,   [1] = SIGTRAP, [3] = SIGTRAP, [4] = SIGSEGV,
+    [5] = SIGSEGV,  [6] = SIGILL,  [11] = SIGBUS, [12] = SIGBUS,
+    [13] = SIGSEGV, [16] = SIGFPE, [17] = SIGBUS, [19] = SIGFPE};
 
-static void user_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
-    if (!ARCH_CONTEXT_ISUSER(ctx)) {
-        x86_64_idt_exception_isr(isr, ctx);
-    }
+static void user_exception_isr(InterruptHandler *isr, Context *ctx) {
+    if (!context_is_user(ctx)) idt_exception_isr(isr, ctx);
 
-    com_ipc_signal_send_to_thread(ARCH_CPU_GET_THREAD(),
-                                  ExceptionSignals[isr->vec],
-                                  NULL);
+    signal_send_to_thread(cpu_get_thread(), g_exception_signals[isr->vec],
+                          NULL);
 }
 
-static void cpu_panic(com_isr_t *isr, arch_context_t *ctx) {
+static void cpu_panic(InterruptHandler *isr, Context *ctx) {
     (void)isr;
     (void)ctx;
-    printf("halting cpu %d\n", ARCH_CPU_GET()->id);
+    printf("halting cpu %d\n", cpu_get()->id);
 
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    while (true) {
-        ARCH_CPU_HALT();
-    }
+    cpu_disable_interrupts();
+    while (true) cpu_halt();
 }
 
-void x86_64_entry(void) {
-    // BSP CPU initialization
-    x86_64_tsc_boot();
-    ARCH_CPU_SET(&BspCpu);
-    TAILQ_INIT(&BspCpu.sched_queue);
-    TAILQ_INIT(&BspCpu.callout.queue);
-    BspCpu.runqueue_lock = KSPINLOCK_NEW();
-    BspCpu.callout.lock  = KSPINLOCK_NEW();
-    com_sys_callout_set_bsp_nolock(&BspCpu.callout);
+void entry(void) {
+    // BSP Cpu initialization
+    tsc_boot();
+    cpu_set(&g_bsp_cpu);
+    TAILQ_INIT(&g_bsp_cpu.sched_queue);
+    TAILQ_INIT(&g_bsp_cpu.callout.queue);
+    g_bsp_cpu.runqueue_lock = SPINLOCK_NEW();
+    g_bsp_cpu.callout.lock = SPINLOCK_NEW();
+    callout_set_bsp_nolock(&g_bsp_cpu.callout);
 
 #if CONFIG_LOG_USE_SERIAL
-    com_io_log_set_hook_nolock(x86_64_e9_putsn);
+    log_set_hook_nolock(e9_putsn);
 #endif
 
 #if CONFIG_LOG_USE_SCREEN
-    opt_flanterm_init_bootstrap();
-    com_io_log_set_user_hook_nolock(opt_flanterm_bootstrap_putsn);
+    flanterm_init_bootstrap();
+    log_set_user_hook_nolock(flanterm_bootstrap_putsn);
 #endif
 
-    com_init_splash();
+    init_splash();
 
     // PHASE 1: memory, interrupts, and processors
-    com_init_memory();
-    x86_64_idt_stub();
-    for (uintmax_t i = 0; i < 20; i++) {
-        if (0 != ExceptionSignals[i]) {
-            com_sys_interrupt_register(i, user_exception_isr, NULL);
+    init_memory();
+    idt_stub();
+    for (u64 i = 0; i < 20; i++) {
+        if (g_exception_signals[i] != 0) {
+            interrupt_register(i, user_exception_isr, NULL);
         }
     }
-    com_sys_interrupt_register(X86_64_LAPIC_TIMER_INTERRUPT,
-                               com_sys_callout_isr,
-                               x86_64_lapic_eoi);
-    com_sys_interrupt_register(ARCH_CPU_IPI_RESCHEDULE,
-                               com_sys_sched_isr,
-                               x86_64_lapic_eoi);
-    com_sys_interrupt_register(0x0E, x86_64_mmu_fault_isr, NULL);
-    com_isr_t *sig_isr = com_sys_interrupt_register(ARCH_CPU_IPI_SIGNAL,
-                                                    NULL,
-                                                    x86_64_lapic_eoi);
-    sig_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
-    com_sys_interrupt_register(ARCH_CPU_IPI_PANIC, cpu_panic, x86_64_lapic_eoi);
-    com_isr_t *inv_isr = com_sys_interrupt_register(X86_64_MMU_IPI_INVALIDATE,
-                                                    x86_64_mmu_invalidate_isr,
-                                                    x86_64_lapic_eoi);
-    inv_isr->flags     = COM_SYS_INTERRUPT_FLAGS_NO_RESET;
-    com_sys_syscall_init();
-    com_sys_interrupt_register(0x80, x86_64_syscall_isr, NULL);
-    x86_64_lapic_bsp_init();
-    x86_64_tsc_bsp_init();
-    x86_64_smp_init();
+    interrupt_register(LAPIC_TIMER_INTERRUPT, callout_isr, lapic_eoi);
+    interrupt_register(CPU_IPI_RESCHEDULE, sched_isr, lapic_eoi);
+    interrupt_register(0x0E, mmu_fault_isr, NULL);
+    InterruptHandler *sig_isr = interrupt_register(CPU_IPI_SIGNAL, NULL,
+                                                   lapic_eoi);
+    sig_isr->flags = INTERRUPT_FLAGS_NO_RESET;
+    interrupt_register(CPU_IPI_PANIC, cpu_panic, lapic_eoi);
+    InterruptHandler *inv_isr = interrupt_register(
+        MMU_IPI_INVALIDATE, mmu_invalidate_isr, lapic_eoi);
+    inv_isr->flags = INTERRUPT_FLAGS_NO_RESET;
+    syscall_init();
+    interrupt_register(0x80, syscall_isr, NULL);
+    lapic_bsp_init();
+    tsc_bsp_init();
+    smp_init();
 
     // PHASE 3: user program interface
-    com_init_filesystem();
-    com_init_tty(opt_flanterm_new_context);
+    init_filesystem();
+    init_tty(flanterm_new_context);
 
     // Reclaim initrd modules memory
-    arch_file_t *initrd = arch_info_get_initrd();
-    KLOG("reclaiming %zu bytes from initrd", initrd->size);
-    com_mm_pmm_unreserve_many((void *)ARCH_HHDM_TO_PHYS(initrd->address),
-                              initrd->size / ARCH_PAGE_SIZE);
+    InfoFile *initrd = info_get_initrd();
+    log("reclaiming %zu bytes from initrd", initrd->size);
+    pmm_unreserven((void *)HHDM_TO_PHYS(initrd->address),
+                   initrd->size / PAGE_SIZE);
 
     // PHASE 4: devices
-    opt_uacpi_init(0);
-    x86_64_ps2_init();
-    x86_64_ps2_keyboard_init();
-    x86_64_ps2_mouse_init();
-    com_init_devices();
-    opt_nvme_init();
+    uacpi_init(0);
+    ps2_init();
+    ps2_keyboard_init();
+    ps2_mouse_init();
+    init_devices();
+    nvme_init();
 
-    com_init_pid1();
+    init_pid1();
 
-    for (;;) {
-        asm volatile("hlt");
-    }
+    for (;;) asm volatile("hlt");
 }

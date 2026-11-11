@@ -1,26 +1,11 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/cr.h>
@@ -31,148 +16,138 @@
 #include <kernel/platform/x86-64/smp.h>
 #include <kernel/platform/x86-64/syscall.h>
 #include <kernel/platform/x86-64/tsc.h>
-#include <lib/mem.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
-#include <stddef.h>
 #include <vendor/limine.h>
 #include <vendor/tailq.h>
 
 #define EFER_SYSCALLENABLE 1
-#define MAX_CPUS           (ARCH_PAGE_SIZE * 2) / sizeof(arch_cpu_t)
+#define MAX_CPUS           (PAGE_SIZE * 2) / sizeof(Cpu)
 
-__attribute__((
-    used,
+used __attribute__((
     section(".limine_response"))) static volatile struct limine_smp_request
-    SmpRequest = (struct limine_smp_request){.id       = LIMINE_SMP_REQUEST,
-                                             .revision = 0};
+    g_smp_request = (struct limine_smp_request){.id = LIMINE_SMP_REQUEST,
+                                                .revision = 0};
 
-static int     Sentinel;
-static uint8_t TemporaryStack[512 * MAX_CPUS];
+static int g_sentinel;
+static u8 g_temporary_stack[512 * MAX_CPUS];
 
-static arch_cpu_t *Cpus;
-static size_t      NumCpus;
+static Cpu *g_cpus;
+static usize g_num_cpus;
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    arch_cpu_t *cpu    = (void *)cpu_info->extra_argument;
-    cpu->runqueue_lock = KSPINLOCK_NEW();
-    ARCH_CPU_SET(cpu);
-    KDEBUG("initializing cpu %zu", cpu->id);
+    cpu_disable_interrupts();
+    Cpu *cpu = (void *)cpu_info->extra_argument;
+    cpu->runqueue_lock = SPINLOCK_NEW();
+    cpu_set(cpu);
+    log_debug("initializing cpu %zu", cpu->id);
 
-    x86_64_mmu_init_cpu();
-    x86_64_gdt_init();
-    x86_64_idt_init();
-    x86_64_idt_reload();
-    x86_64_idt_set_user_invocable(0x80);
-    ARCH_CPU_SET_INTERRUPT_STACK(cpu, &TemporaryStack[(cpu->id + 1) * 512 - 1]);
+    mmu_init_cpu();
+    gdt_init();
+    idt_init();
+    idt_reload();
+    idt_set_user_invocable(0x80);
+    cpu_set_interrupt_stack(cpu, &g_temporary_stack[(cpu->id + 1) * 512 - 1]);
 
-    KLOG("initializing sce");
-    uint64_t efer = X86_64_MSR_READ(X86_64_MSR_EFER);
+    log("initializing sce");
+    u64 efer = msr_read(MSR_EFER);
     efer |= EFER_SYSCALLENABLE;
-    X86_64_MSR_WRITE(X86_64_MSR_EFER, efer);
+    msr_write(MSR_EFER, efer);
 
-    uint64_t star = 0;
-    star |= (uint64_t)0x13 << 48;
-    star |= (uint64_t)0x08 << 32;
+    u64 star = 0;
+    star |= (u64)0x13 << 48;
+    star |= (u64)0x08 << 32;
 
-    X86_64_MSR_WRITE(X86_64_MSR_STAR, star);
-    X86_64_MSR_WRITE(X86_64_MSR_LSTAR, (uint64_t)x86_64_syscall_sce_entry);
-    X86_64_MSR_WRITE(X86_64_MSR_CSTAR,
-                     0); // no compatibility mode syscall handler
-    X86_64_MSR_WRITE(X86_64_MSR_FMASK, 0x200); // disable interrupts on syscall
+    msr_write(MSR_STAR, star);
+    msr_write(MSR_LSTAR, (u64)syscall_sce_entry);
+    msr_write(MSR_CSTAR,
+              0);                // no compatibility mode syscall handler
+    msr_write(MSR_FMASK, 0x200); // disable interrupts on syscall
 
-    KLOG("initializing sse");
-    X86_64_CR_W0((X86_64_CR_R0() & ~(1 << 2)) | (1 << 1));
-    X86_64_CR_W4(X86_64_CR_R4() | (3 << 9));
+    log("initializing sse");
+    cr_w0((cr_r0() & ~(1 << 2)) | (1 << 1));
+    cr_w4(cr_r4() | (3 << 9));
 
-    com_sys_sched_init();
+    sched_init();
     TAILQ_INIT(&cpu->sched_queue);
 
-    com_mm_vmm_switch(NULL);
+    vmm_switch(NULL);
 
     TAILQ_INIT(&cpu->callout.queue);
-    x86_64_lapic_init();
+    lapic_init();
 }
 
 static void cpu_init(struct limine_smp_info *cpu_info) {
     common_cpu_init(cpu_info);
-    x86_64_tsc_init();
+    tsc_init();
 
-    arch_cpu_t *cpu = (void *)cpu_info->extra_argument;
+    Cpu *cpu = (void *)cpu_info->extra_argument;
 
-    __atomic_store_n(&Sentinel, 1, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&g_sentinel, 1, __ATOMIC_SEQ_CST);
 
     // We avoid taking locks here to make sure we don't accidentally enable
     // interrupts
     cpu->idle_thread->cpu = cpu;
-    com_sys_thread_transition_nolock(cpu->idle_thread,
-                                     E_COM_THREAD_STATE_RUNNING);
+    thread_transition_nolock(cpu->idle_thread, THREAD_STATE_RUNNING);
     cpu->thread = cpu->idle_thread;
-    ARCH_CPU_SET_INTERRUPT_STACK(cpu, cpu->idle_thread->kernel_stack);
+    cpu_set_interrupt_stack(cpu, cpu->idle_thread->kernel_stack);
 
-    arch_context_trampoline(&cpu->idle_thread->ctx);
+    context_trampoline(&cpu->idle_thread->ctx);
 }
 
-void x86_64_smp_init(void) {
-    KLOG("initializng smp");
-    KASSERT(sizeof(arch_cpu_t) < ARCH_PAGE_SIZE);
-    struct limine_smp_response *smp = SmpRequest.response;
+void smp_init(void) {
+    log("initializng smp");
+    assert(sizeof(Cpu) < PAGE_SIZE);
+    struct limine_smp_response *smp = g_smp_request.response;
 
-    if (NULL == smp) {
-        KURGENT("unable to setup smp");
+    if (smp == NULL) {
+        log_urgent("unable to setup smp");
         return;
     }
 
-    arch_cpu_t *cpus = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(2));
-    size_t      avail_cpus = KMIN(MAX_CPUS, smp->cpu_count);
-    Cpus                   = cpus;
-    NumCpus                = avail_cpus;
-    KDEBUG("found %zu cpus, using max = %zu, initializing %zu cpus",
-           smp->cpu_count,
-           MAX_CPUS,
-           avail_cpus);
+    Cpu *cpus = (void *)PHYS_TO_HHDM(pmm_alloczn(2));
+    usize avail_cpus = min(MAX_CPUS, smp->cpu_count);
+    g_cpus = cpus;
+    g_num_cpus = avail_cpus;
+    log_debug("found %zu cpus, using max = %zu, initializing %zu cpus",
+              smp->cpu_count, MAX_CPUS, avail_cpus);
 
-    arch_cpu_t *caller_cpu = ARCH_CPU_GET();
+    Cpu *caller_cpu = cpu_get();
 
-    for (size_t i = 0; i < avail_cpus; i++) {
+    for (usize i = 0; i < avail_cpus; i++) {
         struct limine_smp_info *info = smp->cpus[i];
-        arch_cpu_t             *cpu  = &cpus[i];
-        cpu->lapic_id                = info->lapic_id;
-        cpu->id                      = i;
-        cpu->root_page_table         = caller_cpu->root_page_table;
-        info->extra_argument         = (uint64_t)cpu;
+        Cpu *cpu = &cpus[i];
+        cpu->lapic_id = info->lapic_id;
+        cpu->id = i;
+        cpu->root_page_table = caller_cpu->root_page_table;
+        info->extra_argument = (u64)cpu;
 
         if (info->lapic_id == smp->bsp_lapic_id) {
             *cpu = *caller_cpu;
             common_cpu_init(info);
-            com_sys_callout_set_bsp_nolock(&cpu->callout);
+            callout_set_bsp_nolock(&cpu->callout);
             continue;
         }
 
-        __atomic_store_n(&Sentinel, 0, __ATOMIC_SEQ_CST);
+        __atomic_store_n(&g_sentinel, 0, __ATOMIC_SEQ_CST);
         info->goto_address = cpu_init;
 
-        while (0 == __atomic_load_n(&Sentinel, __ATOMIC_SEQ_CST)) {
+        while (__atomic_load_n(&g_sentinel, __ATOMIC_SEQ_CST) == 0) {
             asm("pause");
         }
     }
 }
 
-arch_cpu_t *x86_64_smp_get_random(void) {
-    static kspinlock_t lock = KSPINLOCK_NEW();
-    static int         i    = 0;
-    kspinlock_acquire(&lock);
-    arch_cpu_t *ret = &Cpus[i % NumCpus];
-    i               = (i + 1) % NumCpus;
-    kspinlock_release(&lock);
+Cpu *smp_get_random(void) {
+    static Spinlock lock = SPINLOCK_NEW();
+    static int i = 0;
+    spinlock_acq(&lock);
+    Cpu *ret = &g_cpus[i % g_num_cpus];
+    i = (i + 1) % g_num_cpus;
+    spinlock_rel(&lock);
     return ret;
 }
 
-arch_cpu_t *x86_64_smp_get_cpu(size_t cpu) {
-    if (cpu < NumCpus) {
-        return &Cpus[cpu];
-    }
+Cpu *smp_get_cpu(usize cpu) {
+    if (cpu < g_num_cpus) return &g_cpus[cpu];
 
     return NULL;
 }

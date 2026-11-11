@@ -1,54 +1,33 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/mem.h>
-#include <lib/str.h>
-#include <lib/usercopy.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
 struct sysinfo {
-    char            cpu[64];
-    char            gpu[64];
-    char            kernel[64];
-    com_pmm_stats_t memory;
+    char cpu[64];
+    char gpu[64];
+    char kernel[64];
+    PMMStats memory;
 };
 
 // SYSCALL: sysinfo(struct sysinfo *buf)
-COM_SYS_SYSCALL(com_sys_syscall_sysinfo) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
+SYSCALL(syscall_sysinfo) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(2);
 
-    struct sysinfo *sysinfo = COM_SYS_SYSCALL_ARG(struct sysinfo *, 1);
+    struct sysinfo *sysinfo = SYSCALL_ARG(struct sysinfo *, 1);
 
     struct sysinfo ksysinfo = {0};
-    kstrcpy(ksysinfo.kernel, "SalernOS Kernel 0.2.5 (indev)");
-    com_mm_pmm_get_stats(&ksysinfo.memory);
+    strcpy(ksysinfo.kernel, "SalernOS Kernel 0.2.5 (indev)");
+    pmm_get_stats(&ksysinfo.memory);
 
-    int copy_ret = kmemcpy_to_user(sysinfo, &ksysinfo, sizeof(ksysinfo));
-    if (0 != copy_ret) {
-        return COM_SYS_SYSCALL_ERR(copy_ret);
-    }
+    int copy_ret = memcpy_to_user(sysinfo, &ksysinfo, sizeof(ksysinfo));
+    if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
 
-    return COM_SYS_SYSCALL_OK(0);
+    return SYSCALL_OK(0);
 }

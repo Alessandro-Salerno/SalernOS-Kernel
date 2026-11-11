@@ -1,65 +1,44 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
-#include <lib/spinlock.h>
-#include <lib/util.h>
-#include <stdint.h>
+#include <kernel/com/sync/spinlock.h>
+#include <kernel/com/util.h>
 
 // NOTE: before the includes, which may include this header again through
 // <kernel/com/sys/proc.h>
-struct com_vnode;
+struct Vnode;
 
-typedef struct com_file {
-    kspinlock_t       off_lock;
-    uintmax_t         off;
-    uintmax_t         flags;
-    uintmax_t         num_ref;
-    struct com_vnode *vnode;
-} com_file_t;
+typedef struct File {
+    Spinlock off_lock;
+    u64 off;
+    u64 flags;
+    u64 num_ref;
+    struct Vnode *vnode;
+} File;
 
-typedef struct com_filedesc {
-    com_file_t *file;
-    uintmax_t   flags;
-    bool        reserved; // see com_sys_proc_next_fd
-} com_filedesc_t;
+typedef struct FileDesc {
+    File *file;
+    u64 flags;
+    bool reserved; // see proc_next_fd
+} FileDesc;
 
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/slab.h>
 
-#define COM_FS_FILE_HOLD(file)                                   \
-    if (NULL != (file)) {                                        \
+#define FILE_HOLD(file)                                          \
+    if ((file) != NULL) {                                        \
         __atomic_add_fetch(&file->num_ref, 1, __ATOMIC_RELAXED); \
     }
 
-#define COM_FS_FILE_RELEASE(file)                               \
-    ({                                                          \
-        if (NULL != file && NULL != file->vnode) {              \
-            uintmax_t n = __atomic_add_fetch(&file->num_ref,    \
-                                             -1,                \
-                                             __ATOMIC_ACQ_REL); \
-            if (0 == n) {                                       \
-                KDEBUG("freeing file %p", (file));              \
-                com_fs_vfs_close(file->vnode);                  \
-                COM_FS_VFS_VNODE_RELEASE(file->vnode);          \
-                com_mm_slab_free(file, sizeof(com_file_t));     \
-                file = NULL;                                    \
-            }                                                   \
-        }                                                       \
+#define FILE_REL(file)                                                        \
+    ({                                                                        \
+        if (file != NULL && file->vnode != NULL) {                            \
+            u64 n = __atomic_add_fetch(&file->num_ref, -1, __ATOMIC_ACQ_REL); \
+            if (n == 0) {                                                     \
+                log_debug("freeing file %p", (file));                         \
+                vfs_close(file->vnode);                                       \
+                vfs_vnode_rel(file->vnode);                                   \
+                slab_free(file, sizeof(File));                                \
+                file = NULL;                                                  \
+            }                                                                 \
+        }                                                                     \
     })

@@ -1,137 +1,113 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/info.h>
 #include <errno.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/ds/hashmap.h>
+#include <kernel/com/ds/searchtree.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
+#include <kernel/com/sync/sync.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/panic.h>
 #include <kernel/com/sys/profiler.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/info.h>
-#include <lib/hashmap.h>
-#include <lib/mem.h>
-#include <lib/searchtree.h>
-#include <lib/sync.h>
-#include <lib/util.h>
-#include <stdint.h>
 #include <vendor/printf.h>
 #include <vendor/tailq.h>
 
-#define FREELIST_LOCK(freelist_head) kspinlock_acquire(&(freelist_head)->lock);
-#define FREELIST_UNLOCK(freelist_head) \
-    kspinlock_release(&(freelist_head)->lock);
+#define FREELIST_LOCK(freelist_head)   spinlock_acq(&(freelist_head)->lock);
+#define FREELIST_UNLOCK(freelist_head) spinlock_rel(&(freelist_head)->lock);
 
-#define PHYS_TO_META_INDEX(page_phys) ((uintptr_t)(page_phys) / ARCH_PAGE_SIZE)
-#define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / ARCH_PAGE_SIZE)
+#define PHYS_TO_META_INDEX(page_phys) ((uptr)(page_phys) / PAGE_SIZE)
+#define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / PAGE_SIZE)
 #define PAGE_META_ARRAY_SIZE(memsize) \
-    (PAGE_META_ARRAY_LEN(memsize) * sizeof(struct page_meta))
+    (PAGE_META_ARRAY_LEN(memsize) * sizeof(struct PageMeta))
 
-#define UPDATE_STATS(field, diff)            \
-    __atomic_add_fetch(&MemoryStats.field,   \
-                       diff *ARCH_PAGE_SIZE, \
-                       __ATOMIC_RELAXED)
-#define READ_STATS(field) __atomic_load_n(&MemoryStats.field, __ATOMIC_RELAXED)
+#define UPDATE_STATS(field, diff) \
+    __atomic_add_fetch(&g_memory_stats.field, diff *PAGE_SIZE, __ATOMIC_RELAXED)
+#define READ_STATS(field) \
+    __atomic_load_n(&g_memory_stats.field, __ATOMIC_RELAXED)
 
-TAILQ_HEAD(freelist_tailq, freelist_entry);
+TAILQ_HEAD(FreelistTailQ, FreelistEntry);
 
-struct freelist_head {
-    struct freelist_tailq head;
-    kspinlock_t           lock;
+struct FreelistHead {
+    struct FreelistTailQ head;
+    Spinlock lock;
 };
 
 // A block of one or more contigous pages that points to two more such blocks
 // (one before, one after)
-struct freelist_entry {
-    TAILQ_ENTRY(freelist_entry) tqe;
-    size_t pages;
+struct FreelistEntry {
+    TAILQ_ENTRY(FreelistEntry) tqe;
+    usize pages;
 };
 
-enum page_state {
+enum PageState {
     // NOTE: this must be zero, since all memory is zeroed on boot, and all page
     // structs in the array are assumed to report a free state
-    E_PAGE_STATE_FREE = 0,
-    E_PAGE_STATE_RESERVED,
-    E_PAGE_STATE_TAKEN
+    PAGE_STATE_FREE = 0,
+    PAGE_STATE_RESERVED,
+    PAGE_STATE_TAKEN
 };
 
-enum page_type {
-    E_PAGE_TYPE_ANONYMOUS,
-    E_PAGE_TYPE_FILE
+enum PageType {
+    PAGE_TYPE_ANONYMOUS,
+    PAGE_TYPE_FILE
 };
 
 // An entry into the global page array that holds data about the page which is
 // situated outside the page tiself. The index into the array is calculated as
 // follows:
-//      idx = page_phys_addr / ARCH_PAGE_SIZE
-struct page_meta {
-    enum page_state state;
-    size_t          num_ref;
+//      idx = page_phys_addr / PAGE_SIZE
+struct PageMeta {
+    enum PageState state;
+    usize num_ref;
 
-    enum page_type type;
+    enum PageType type;
     union {};
 };
 
-struct page_meta_array {
-    struct page_meta *buffer;
-    size_t            len;
+struct PageMetaArray {
+    struct PageMeta *buffer;
+    usize len;
     // Having a page meta array the size of physical memory is too expensive. We
     // thus have an array that goes up to the highest could-be-usable address.
     // Everything above that is an imaginary reserved entry
-    size_t           reserved_start;
-    size_t           extended_len;
-    struct page_meta fake_entry;
+    usize reserved_start;
+    usize extended_len;
+    struct PageMeta fake_entry;
 };
 
 // GLOBAL VARIABLES
 
 // List of currently available blocks. This list is ordered by block size
-static struct freelist_head MainFreeList = {0};
+static struct FreelistHead g_main_free_list = {0};
 // Array of page metadata. Initialized by the init() function to piont to a the
-// HHDM representation of a memory map entry large enough to hold it
-static struct page_meta_array PageMeta = {0};
+// HHDMInfo representation of a memory map entry large enough to hold it
+static struct PageMetaArray g_page_meta = {0};
 // Consolidated data for fast access. Should be accessed atomically after
 // initialization
-static com_pmm_stats_t MemoryStats = {0};
+static PMMStats g_memory_stats = {0};
 
 // UTILITY FUNCTIONS
 
 // Freelists are ordered, so insertion should be too
-static inline void freelist_add_ordered_nolock(struct freelist_head  *freelist,
-                                               struct freelist_entry *entry) {
+static inline void freelist_add_ordered_nolock(struct FreelistHead *freelist,
+                                               struct FreelistEntry *entry) {
     // Fast path for 1-page sized inserts. These will always go to the end
-    if (1 == entry->pages) {
-        struct freelist_entry *curr_last = TAILQ_LAST(&freelist->head,
-                                                      freelist_tailq);
+    if (entry->pages == 1) {
+        struct FreelistEntry *curr_last = TAILQ_LAST(&freelist->head,
+                                                     FreelistTailQ);
         // If the freelist is empty, we just add the entry
-        if (NULL == curr_last) {
-            goto fallback;
-        }
+        if (curr_last == NULL) goto fallback;
         // If it comes right after the last entry, we merge the two
-        if ((uintptr_t)entry ==
-            (uintptr_t)curr_last + curr_last->pages * ARCH_PAGE_SIZE) {
+        if ((uptr)entry == (uptr)curr_last + curr_last->pages * PAGE_SIZE) {
             curr_last->pages++;
             return;
         }
         // If it comes right before, we do the same
-        if ((uintptr_t)curr_last == (uintptr_t)entry + ARCH_PAGE_SIZE) {
+        if ((uptr)curr_last == (uptr)entry + PAGE_SIZE) {
             entry->pages += curr_last->pages;
             TAILQ_REMOVE(&freelist->head, curr_last, tqe);
         }
@@ -141,7 +117,7 @@ static inline void freelist_add_ordered_nolock(struct freelist_head  *freelist,
         goto fallback;
     }
 
-    struct freelist_entry *curr, *_;
+    struct FreelistEntry *curr, *_;
     TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
         if (entry->pages >= curr->pages) {
             TAILQ_INSERT_BEFORE(curr, entry, tqe);
@@ -161,19 +137,17 @@ fallback:
 // that this one is slower, so it should be called as rarely as possiblle,
 // whereas the other one might be called by some allocation code.
 // NOTE: This functions does not perform defragmentation
-static inline void freelist_add_merged_nolock(struct freelist_head  *freelist,
-                                              struct freelist_entry *entry) {
-    uintptr_t entry_first_page = (uintptr_t)entry;
-    uintptr_t entry_last_page  = entry_first_page +
-                                 (entry->pages - 1) * ARCH_PAGE_SIZE;
+static inline void freelist_add_merged_nolock(struct FreelistHead *freelist,
+                                              struct FreelistEntry *entry) {
+    uptr entry_first_page = (uptr)entry;
+    uptr entry_last_page = entry_first_page + (entry->pages - 1) * PAGE_SIZE;
 
-    struct freelist_entry *curr, *_;
+    struct FreelistEntry *curr, *_;
     TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
-        uintptr_t curr_first_page = (uintptr_t)curr;
-        uintptr_t curr_last_page  = curr_first_page +
-                                    (entry->pages - 1) * ARCH_PAGE_SIZE;
+        uptr curr_first_page = (uptr)curr;
+        uptr curr_last_page = curr_first_page + (entry->pages - 1) * PAGE_SIZE;
 
-        if (curr_first_page == entry_last_page + ARCH_PAGE_SIZE) {
+        if (curr_first_page == entry_last_page + PAGE_SIZE) {
             entry->pages += curr->pages;
             TAILQ_INSERT_BEFORE(curr, entry, tqe);
             TAILQ_REMOVE(&freelist->head, curr, tqe);
@@ -181,7 +155,7 @@ static inline void freelist_add_merged_nolock(struct freelist_head  *freelist,
             return;
         }
 
-        if (curr_last_page == entry_first_page - ARCH_PAGE_SIZE) {
+        if (curr_last_page == entry_first_page - PAGE_SIZE) {
             curr->pages += entry->pages;
             return;
         }
@@ -194,17 +168,17 @@ static inline void freelist_add_merged_nolock(struct freelist_head  *freelist,
 
 // Since the freelist is ordered, taking from the rear means taking from the
 // smaller chunks, which is good when allocating single pages
-static inline struct freelist_entry *
-freelist_pop_rear_nolock(struct freelist_head *freelist) {
-    struct freelist_entry *last = TAILQ_LAST(&MainFreeList.head,
-                                             freelist_tailq);
-    KASSERT(NULL != last);
+static inline struct FreelistEntry *
+freelist_pop_rear_nolock(struct FreelistHead *freelist) {
+    struct FreelistEntry *last = TAILQ_LAST(&g_main_free_list.head,
+                                            FreelistTailQ);
+    assert(last != NULL);
 
-    if (1 == last->pages) {
+    if (last->pages == 1) {
         TAILQ_REMOVE(&freelist->head, last, tqe);
     } else {
         last->pages--;
-        last = (void *)((uintptr_t)last + ARCH_PAGE_SIZE * last->pages);
+        last = (void *)((uptr)last + PAGE_SIZE * last->pages);
     }
 
     return last;
@@ -212,27 +186,26 @@ freelist_pop_rear_nolock(struct freelist_head *freelist) {
 
 // When allocating multiple pages, however, we take them from the front, because
 // it is more likelly that we'll find a match immediatelly
-static inline struct freelist_entry *
-freelist_pop_front_nolock(size_t               *out_alloc_size,
-                          struct freelist_head *freelist,
-                          size_t                num_pages) {
-    struct freelist_entry *ret = TAILQ_FIRST(&freelist->head);
-    KASSERT(NULL != ret);
-    size_t alloc_size = KMIN(num_pages, ret->pages);
+static inline struct FreelistEntry *
+freelist_pop_front_nolock(struct FreelistHead *freelist, usize num_pages,
+                          usize *out_alloc_size) {
+    struct FreelistEntry *ret = TAILQ_FIRST(&freelist->head);
+    assert(ret != NULL);
+    usize alloc_size = min(num_pages, ret->pages);
 
-    struct freelist_entry *entry      = ret;
-    struct freelist_entry *next_entry = TAILQ_NEXT(entry, tqe);
+    struct FreelistEntry *entry = ret;
+    struct FreelistEntry *next_entry = TAILQ_NEXT(entry, tqe);
 
     if (alloc_size == ret->pages) {
         TAILQ_REMOVE(&freelist->head, ret, tqe);
     } else {
         ret->pages -= alloc_size;
-        ret = (void *)((uintptr_t)ret + ARCH_PAGE_SIZE * ret->pages);
+        ret = (void *)((uptr)ret + PAGE_SIZE * ret->pages);
     }
 
     // Since we decrement the number of pages in this entry, it may now longer
     // be the largest
-    if (NULL != next_entry && next_entry->pages > entry->pages) {
+    if (next_entry != NULL && next_entry->pages > entry->pages) {
         TAILQ_REMOVE(&freelist->head, entry, tqe);
         freelist_add_ordered_nolock(freelist, entry);
     }
@@ -241,261 +214,236 @@ freelist_pop_front_nolock(size_t               *out_alloc_size,
     return ret;
 }
 
-static inline struct page_meta *page_meta_get(void *phys_addr) {
-    size_t index = PHYS_TO_META_INDEX(phys_addr);
-    KASSERT(index < PageMeta.extended_len);
+static inline struct PageMeta *page_meta_get(void *phys_addr) {
+    usize index = PHYS_TO_META_INDEX(phys_addr);
+    assert(index < g_page_meta.extended_len);
 
-    if (index < PageMeta.reserved_start) {
-        return &PageMeta.buffer[index];
-    }
+    if (index < g_page_meta.reserved_start) return &g_page_meta.buffer[index];
 
-    return &PageMeta.fake_entry;
+    return &g_page_meta.fake_entry;
 }
 
-static inline void
-page_meta_set(void *page_phys, struct page_meta *tocopy, size_t num_pages) {
-    uintptr_t end_addr = (uintptr_t)page_phys + num_pages * ARCH_PAGE_SIZE;
-    size_t    index1   = PHYS_TO_META_INDEX(page_phys);
-    size_t    index2   = PHYS_TO_META_INDEX(end_addr) - 1;
-    KASSERT(index1 < PageMeta.len);
-    KASSERT(index2 < PageMeta.len);
+static inline void page_meta_set(void *page_phys, struct PageMeta *tocopy,
+                                 usize num_pages) {
+    uptr end_addr = (uptr)page_phys + num_pages * PAGE_SIZE;
+    usize index1 = PHYS_TO_META_INDEX(page_phys);
+    usize index2 = PHYS_TO_META_INDEX(end_addr) - 1;
+    assert(index1 < g_page_meta.len);
+    assert(index2 < g_page_meta.len);
 
-    kmemrepcpy(page_meta_get(page_phys),
-               tocopy,
-               sizeof(struct page_meta),
-               num_pages);
+    memrepcpy(page_meta_get(page_phys), tocopy, sizeof(struct PageMeta),
+              num_pages);
 }
 
 // INTERFACE FUNCTIONS
 
-void *com_mm_pmm_alloc(void) {
-    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
-        E_COM_PROFILE_FUNC_PMM_ALLOC);
-    FREELIST_LOCK(&MainFreeList);
-    struct freelist_entry *virt_ret = freelist_pop_rear_nolock(&MainFreeList);
-    FREELIST_UNLOCK(&MainFreeList);
+void *pmm_alloc(void) {
+    ProfilerData profiler_data = profiler_start_function(
+        PROFILE_FUNC_PMM_ALLOC);
+    FREELIST_LOCK(&g_main_free_list);
+    struct FreelistEntry *virt_ret = freelist_pop_rear_nolock(
+        &g_main_free_list);
+    FREELIST_UNLOCK(&g_main_free_list);
 
-    *virt_ret                   = (struct freelist_entry){0};
-    void             *phys      = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
-    struct page_meta *page_meta = page_meta_get(phys);
+    *virt_ret = (struct FreelistEntry){0};
+    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
+    struct PageMeta *page_meta = page_meta_get(phys);
 
-    KASSERT(E_PAGE_STATE_FREE == page_meta->state);
-    KASSERT(0 == page_meta->num_ref);
+    assert(page_meta->state == PAGE_STATE_FREE);
+    assert(page_meta->num_ref == 0);
     page_meta->num_ref = 1;
-    page_meta->state   = E_PAGE_STATE_TAKEN;
-    page_meta->type    = E_PAGE_TYPE_ANONYMOUS;
+    page_meta->state = PAGE_STATE_TAKEN;
+    page_meta->type = PAGE_TYPE_ANONYMOUS;
 
-    UPDATE_STATS(used, +1);
+    UPDATE_STATS(allocated, +1);
     UPDATE_STATS(free, -1);
 
-    com_sys_profiler_end_function(&profiler_data);
+    profiler_end_function(&profiler_data);
     return phys;
 }
 
-void *com_mm_pmm_alloc_many(size_t pages) {
-    if (1 == pages) {
-        return com_mm_pmm_alloc();
-    }
+void *pmm_allocn(usize pages) {
+    if (pages == 1) return pmm_alloc();
 
-    com_profiler_data_t profiler_data = com_sys_profiler_start_function(
-        E_COM_PROFILE_FUNC_PMM_ALLOC);
-    FREELIST_LOCK(&MainFreeList);
-    size_t                 alloc_size;
-    struct freelist_entry *virt_ret = freelist_pop_front_nolock(&alloc_size,
-                                                                &MainFreeList,
-                                                                pages);
-    FREELIST_UNLOCK(&MainFreeList);
-    KASSERT(alloc_size == pages);
+    ProfilerData profiler_data = profiler_start_function(
+        PROFILE_FUNC_PMM_ALLOC);
+    FREELIST_LOCK(&g_main_free_list);
+    usize alloc_size;
+    struct FreelistEntry *virt_ret = freelist_pop_front_nolock(
+        &g_main_free_list, pages, &alloc_size);
+    FREELIST_UNLOCK(&g_main_free_list);
+    assert(alloc_size == pages);
 
-    *virt_ret  = (struct freelist_entry){0};
-    void *phys = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
+    *virt_ret = (struct FreelistEntry){0};
+    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
 
-    struct page_meta model = {.num_ref = 1,
-                              .state   = E_PAGE_STATE_TAKEN,
-                              .type    = E_PAGE_TYPE_ANONYMOUS};
+    struct PageMeta model = {.num_ref = 1,
+                             .state = PAGE_STATE_TAKEN,
+                             .type = PAGE_TYPE_ANONYMOUS};
     page_meta_set(phys, &model, pages);
 
-    UPDATE_STATS(used, +pages);
+    UPDATE_STATS(allocated, +pages);
     UPDATE_STATS(free, -pages);
 
-    com_sys_profiler_end_function(&profiler_data);
+    profiler_end_function(&profiler_data);
     return phys;
 }
 
-void *com_mm_pmm_alloc_zero(void) {
-    return com_mm_pmm_alloc();
-}
+void *pmm_allocz(void) { return pmm_alloc(); }
 
-void *com_mm_pmm_alloc_many_zero(size_t pages) {
-    return com_mm_pmm_alloc_many(pages);
-}
+void *pmm_alloczn(usize pages) { return pmm_allocn(pages); }
 
-void *com_mm_pmm_alloc_max(size_t *out_alloc_size, size_t pages) {
-    if (1 == pages) {
-        if (NULL != out_alloc_size) {
-            *out_alloc_size = 1;
-        }
-        return com_mm_pmm_alloc();
+void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
+    if (pages == 1) {
+        if (out_alloc_size != NULL) *out_alloc_size = 1;
+        return pmm_alloc();
     }
 
-    FREELIST_LOCK(&MainFreeList);
-    size_t                 alloc_size;
-    struct freelist_entry *virt_ret = freelist_pop_front_nolock(&alloc_size,
-                                                                &MainFreeList,
-                                                                pages);
-    FREELIST_UNLOCK(&MainFreeList);
+    FREELIST_LOCK(&g_main_free_list);
+    usize alloc_size;
+    struct FreelistEntry *virt_ret = freelist_pop_front_nolock(
+        &g_main_free_list, pages, &alloc_size);
+    FREELIST_UNLOCK(&g_main_free_list);
 
-    *virt_ret  = (struct freelist_entry){0};
-    void *phys = (void *)ARCH_HHDM_TO_PHYS(virt_ret);
+    *virt_ret = (struct FreelistEntry){0};
+    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
 
-    struct page_meta model = {.num_ref = 1,
-                              .state   = E_PAGE_STATE_TAKEN,
-                              .type    = E_PAGE_TYPE_ANONYMOUS};
+    struct PageMeta model = {.num_ref = 1,
+                             .state = PAGE_STATE_TAKEN,
+                             .type = PAGE_TYPE_ANONYMOUS};
     page_meta_set(phys, &model, alloc_size);
 
-    UPDATE_STATS(used, +alloc_size);
+    UPDATE_STATS(allocated, +alloc_size);
     UPDATE_STATS(free, -alloc_size);
 
-    if (NULL != out_alloc_size) {
-        *out_alloc_size = alloc_size;
-    }
+    if (out_alloc_size != NULL) *out_alloc_size = alloc_size;
 
     return phys;
 }
 
-void *com_mm_pmm_alloc_max_zero(size_t *out_alloc_size, size_t pages) {
-    return com_mm_pmm_alloc_max(out_alloc_size, pages);
+void *pmm_alloczn_max(usize pages, usize *out_alloc_size) {
+    return pmm_allocn_max(pages, out_alloc_size);
 }
 
-void com_mm_pmm_hold(void *page) {
-    struct page_meta *page_meta = page_meta_get(page);
-    KASSERT(E_PAGE_STATE_FREE != page_meta->state);
+void pmm_hold(void *page) {
+    struct PageMeta *page_meta = page_meta_get(page);
+    assert(page_meta->state != PAGE_STATE_FREE);
     __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_RELAXED);
 }
 
-bool com_mm_pmm_is_shared(void *page) {
-    struct page_meta *page_meta = page_meta_get(page);
-    KASSERT(E_PAGE_STATE_FREE != page_meta->state);
+bool pmm_is_shared(void *page) {
+    struct PageMeta *page_meta = page_meta_get(page);
+    assert(page_meta->state != PAGE_STATE_FREE);
     return __atomic_load_n(&page_meta->num_ref, __ATOMIC_ACQUIRE) > 1;
 }
 
-void com_mm_pmm_free(void *page) {
-    struct page_meta *page_meta = page_meta_get(page);
+void pmm_free(void *page) {
+    struct PageMeta *page_meta = page_meta_get(page);
 
-    if (E_PAGE_STATE_TAKEN != page_meta->state ||
-        0 != __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_ACQ_REL)) {
+    if (page_meta->state != PAGE_STATE_TAKEN ||
+        __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_ACQ_REL) != 0) {
         return;
     }
 
     // TODO: reimplement free
 }
 
-void com_mm_pmm_free_many(void *base, size_t pages) {
-    for (size_t i = 0; i < pages; i++) {
-        com_mm_pmm_free((uint8_t *)base + i * ARCH_PAGE_SIZE);
-    }
+void pmm_freen(void *base, usize pages) {
+    for (usize i = 0; i < pages; i++) pmm_free((u8 *)base + i * PAGE_SIZE);
 }
 
-void com_mm_pmm_unreserve_many(void *base, size_t pages) {
-    struct page_meta      *page_meta_base = page_meta_get(base);
-    struct freelist_entry *entry          = (void *)ARCH_PHYS_TO_HHDM(base);
-    kmemset(entry, pages * ARCH_PAGE_SIZE, 0);
-    kmemset(page_meta_base, pages * sizeof(struct page_meta), 0);
+void pmm_unreserven(void *base, usize pages) {
+    struct PageMeta *page_meta_base = page_meta_get(base);
+    struct FreelistEntry *entry = (void *)PHYS_TO_HHDM(base);
+    memset(entry, 0, pages * PAGE_SIZE);
+    memset(page_meta_base, 0, pages * sizeof(struct PageMeta));
     entry->pages = pages;
 
-    FREELIST_LOCK(&MainFreeList);
-    freelist_add_ordered_nolock(&MainFreeList, entry);
-    FREELIST_UNLOCK(&MainFreeList);
+    FREELIST_LOCK(&g_main_free_list);
+    freelist_add_ordered_nolock(&g_main_free_list, entry);
+    FREELIST_UNLOCK(&g_main_free_list);
 
     UPDATE_STATS(reserved, -pages);
     UPDATE_STATS(free, +pages);
 }
 
-void com_mm_pmm_get_stats(com_pmm_stats_t *out) {
-    *out = MemoryStats;
-}
+void pmm_get_stats(PMMStats *out_pmm_stats) { *out_pmm_stats = g_memory_stats; }
 
-void com_mm_pmm_init_threads(void) {
-    KLOG("TODO: reimplement pmm threads");
+void pmm_init_threads(void) {
+    log("TODO: reimplement pmm threads");
     // TODO reimplement pmm threads
 }
 
-void com_mm_pmm_init(void) {
-    KLOG("initializing pmm");
-    arch_memmap_t *memmap               = arch_info_get_memmap();
-    uintptr_t      highest_addr         = 0;
-    uintptr_t      highest_indexed_addr = 0;
-    TAILQ_INIT(&MainFreeList.head);
+void pmm_init(void) {
+    log("initializing pmm");
+    MemMap *memmap = info_get_memmap();
+    uptr highest_addr = 0;
+    uptr highest_indexed_addr = 0;
+    TAILQ_INIT(&g_main_free_list.head);
 
     // Setup the fake entry in the page meta array
-    PageMeta.fake_entry.type    = E_PAGE_TYPE_ANONYMOUS;
-    PageMeta.fake_entry.state   = E_PAGE_STATE_RESERVED;
-    PageMeta.fake_entry.num_ref = 1;
+    g_page_meta.fake_entry.type = PAGE_TYPE_ANONYMOUS;
+    g_page_meta.fake_entry.state = PAGE_STATE_RESERVED;
+    g_page_meta.fake_entry.num_ref = 1;
 
     // Calculate memory map & page meta array size
-    for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-        arch_memmap_entry_t *entry = memmap->entries[i];
-        MemoryStats.total += entry->length;
-        uintptr_t seg_top = entry->base + entry->length;
+    for (u64 i = 0; i < memmap->entry_count; i++) {
+        MemMapEntry *entry = memmap->entries[i];
+        g_memory_stats.total += entry->length;
+        uptr seg_top = entry->base + entry->length;
 
-        KDEBUG("segment: base=%p top=%p usable=%zu length=%zu",
-               entry->base,
-               seg_top,
-               ARCH_MEMMAP_IS_USABLE(entry),
-               entry->length);
+        log_debug("segment: base=%p top=%p usable=%zu length=%zu", entry->base,
+                  seg_top, memmap_is_usable(entry), entry->length);
 
-        highest_addr = KMAX(highest_addr, seg_top);
+        highest_addr = max(highest_addr, seg_top);
 
-        if (ARCH_MEMMAP_IS_RECLAIMABLE(entry)) {
-            highest_indexed_addr = KMAX(highest_indexed_addr, seg_top);
+        if (memmap_is_reclaimable(entry)) {
+            highest_indexed_addr = max(highest_indexed_addr, seg_top);
         }
 
-        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
-            MemoryStats.reserved += entry->length;
+        if (!memmap_is_usable(entry)) {
+            g_memory_stats.reserved += entry->length;
             continue;
         }
 
-        kmemset((void *)ARCH_PHYS_TO_HHDM(entry->base), entry->length, 0);
-        MemoryStats.usable += entry->length;
-        highest_indexed_addr = KMAX(highest_indexed_addr, seg_top);
+        memset((void *)PHYS_TO_HHDM(entry->base), 0, entry->length);
+        g_memory_stats.usable += entry->length;
+        highest_indexed_addr = max(highest_indexed_addr, seg_top);
     }
 
-    MemoryStats.total = highest_addr;
-    KDEBUG("searched all segments, found highest address at %p", highest_addr);
+    g_memory_stats.total = highest_addr;
+    log_debug("searched all segments, found highest address at %p",
+              highest_addr);
 
     // Compute the actual size of the page meta array
-    size_t page_meta_size         = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
-    size_t page_meta_pages        = (page_meta_size + ARCH_PAGE_SIZE - 1) /
-                                    ARCH_PAGE_SIZE;
-    size_t page_meta_aligned_size = page_meta_pages * ARCH_PAGE_SIZE;
-    KDEBUG("page meta array size = %zu byte(s) = %zu page(s) = %zu aligned "
-           "byte(s)",
-           page_meta_size,
-           page_meta_pages,
-           page_meta_aligned_size);
+    usize page_meta_size = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
+    usize page_meta_pages = (page_meta_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    usize page_meta_aligned_size = page_meta_pages * PAGE_SIZE;
+    log_debug("page meta array size = %zu byte(s) = %zu page(s) = %zu aligned "
+              "byte(s)",
+              page_meta_size, page_meta_pages, page_meta_aligned_size);
 
     // Find a segment that fits the array and allocate it there
-    for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-        arch_memmap_entry_t *entry = memmap->entries[i];
+    for (u64 i = 0; i < memmap->entry_count; i++) {
+        MemMapEntry *entry = memmap->entries[i];
 
-        if (!ARCH_MEMMAP_IS_USABLE(entry)) {
-            continue;
-        }
+        if (!memmap_is_usable(entry)) continue;
 
-        if (NULL == PageMeta.buffer &&
+        if (g_page_meta.buffer == NULL &&
             entry->length >= page_meta_aligned_size) {
-            PageMeta.buffer         = (void *)ARCH_PHYS_TO_HHDM(entry->base);
-            PageMeta.len            = PAGE_META_ARRAY_LEN(highest_indexed_addr);
-            PageMeta.reserved_start = PHYS_TO_META_INDEX(highest_indexed_addr);
-            PageMeta.extended_len   = PAGE_META_ARRAY_LEN(highest_addr);
-            // Already zeroed before. Remember, 0 == E_PAGE_STATE_FREE
+            g_page_meta.buffer = (void *)PHYS_TO_HHDM(entry->base);
+            g_page_meta.len = PAGE_META_ARRAY_LEN(highest_indexed_addr);
+            g_page_meta.reserved_start = PHYS_TO_META_INDEX(
+                highest_indexed_addr);
+            g_page_meta.extended_len = PAGE_META_ARRAY_LEN(highest_addr);
+            // Already zeroed before. Remember, 0 == PAGE_STATE_FREE
 
             // We now reserve the pages used for this array
-            struct page_meta model = {.num_ref = 1,
-                                      .state   = E_PAGE_STATE_RESERVED};
+            struct PageMeta model = {.num_ref = 1,
+                                     .state = PAGE_STATE_RESERVED};
             page_meta_set((void *)entry->base, &model, page_meta_pages);
-            MemoryStats.usable -= page_meta_aligned_size;
-            MemoryStats.reserved += page_meta_aligned_size;
+            g_memory_stats.usable -= page_meta_aligned_size;
+            g_memory_stats.reserved += page_meta_aligned_size;
 
             // We also add this to the freelist. This list entry of couse is
             // a little special since a part of it has been reserved. The
@@ -503,54 +451,48 @@ void com_mm_pmm_init(void) {
             // boundary to guarantee that allocations will always return
             // aligned addresses. This is only performed if there is still
             // at least one page elft
-            if (entry->length >= page_meta_aligned_size + ARCH_PAGE_SIZE) {
-                size_t remaining_length = entry->length -
-                                          page_meta_aligned_size;
-                size_t remaining_pages  = remaining_length / ARCH_PAGE_SIZE;
+            if (entry->length >= page_meta_aligned_size + PAGE_SIZE) {
+                usize remaining_length = entry->length - page_meta_aligned_size;
+                usize remaining_pages = remaining_length / PAGE_SIZE;
 
-                struct freelist_entry
-                    *list_entry   = (void *)(ARCH_PHYS_TO_HHDM(entry->base) +
-                                             page_meta_aligned_size);
+                struct FreelistEntry
+                    *list_entry = (void *)(PHYS_TO_HHDM(entry->base) +
+                                           page_meta_aligned_size);
                 list_entry->pages = remaining_pages;
-                freelist_add_ordered_nolock(&MainFreeList, list_entry);
+                freelist_add_ordered_nolock(&g_main_free_list, list_entry);
             }
 
-            KDEBUG("page meta array: base=%p, segment=%zu, length=%zu",
-                   PageMeta.buffer,
-                   i,
-                   PageMeta.len);
+            log_debug("page meta array: base=%p, segment=%zu, length=%zu",
+                      g_page_meta.buffer, i, g_page_meta.len);
             continue;
         }
 
         // If we got here, it means the entire entry is free for us!
-        struct freelist_entry *list_entry = (void *)(ARCH_PHYS_TO_HHDM(
-            entry->base));
-        list_entry->pages                 = entry->length / ARCH_PAGE_SIZE;
-        freelist_add_ordered_nolock(&MainFreeList, list_entry);
+        struct FreelistEntry *list_entry = (void *)(PHYS_TO_HHDM(entry->base));
+        list_entry->pages = entry->length / PAGE_SIZE;
+        freelist_add_ordered_nolock(&g_main_free_list, list_entry);
     }
 
-    KDEBUG("reserving remaining unusable pages");
+    log_debug("reserving remaining unusable pages");
 
     // We couldn't reserve all unusable regions before because the array
     // might not have been set yet. But we can not
-    for (uintmax_t i = 0; i < memmap->entry_count; i++) {
-        arch_memmap_entry_t *entry = memmap->entries[i];
+    for (u64 i = 0; i < memmap->entry_count; i++) {
+        MemMapEntry *entry = memmap->entries[i];
 
-        if (!ARCH_MEMMAP_IS_USABLE(entry) &&
+        if (!memmap_is_usable(entry) &&
             entry->base + entry->length < highest_indexed_addr) {
-            struct page_meta model = {.num_ref = 1,
-                                      .state   = E_PAGE_STATE_RESERVED};
-            page_meta_set((void *)entry->base,
-                          &model,
-                          (entry->length + ARCH_PAGE_SIZE - 1) /
-                              ARCH_PAGE_SIZE);
+            struct PageMeta model = {.num_ref = 1,
+                                     .state = PAGE_STATE_RESERVED};
+            page_meta_set((void *)entry->base, &model,
+                          (entry->length + PAGE_SIZE - 1) / PAGE_SIZE);
         }
     }
 
-    MemoryStats.free = MemoryStats.usable;
+    g_memory_stats.free = g_memory_stats.usable;
 
-    struct freelist_entry *e, *_;
-    TAILQ_FOREACH_SAFE(e, &MainFreeList.head, tqe, _) {
-        KDEBUG("freelist entry %p has %zu pages", e, e->pages);
+    struct FreelistEntry *e, *_;
+    TAILQ_FOREACH_SAFE(e, &g_main_free_list.head, tqe, _) {
+        log_debug("freelist entry %p has %zu pages", e, e->pages);
     }
 }

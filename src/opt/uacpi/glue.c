@@ -1,36 +1,17 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/context.h>
-#include <assert.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/mutex.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/com/util.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/opt/pci.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/mmu.h>
-#include <lib/mutex.h>
-#include <lib/util.h>
 #include <stdatomic.h>
 #include <uacpi/acpi.h>
 #include <uacpi/status.h>
@@ -40,80 +21,75 @@
 #include <uacpi/kernel_api.h>
 #include <uacpi/platform/arch_helpers.h>
 
-#define UACPI_GLUE_DEFER_TIME (KNANOS_PER_SEC / 10UL)
+#define UACPI_GLUE_DEFER_TIME (NANOS_PER_SEC / 10UL)
 
-_Static_assert(__builtin_types_compatible_p(uacpi_handle, opt_uacpi_handle_t),
-               "uacpi_handle must be the same as opt_uacpi_handle_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_size, opt_uacpi_size_t),
-               "uacpi_size must be the same as opt_uacpi_size_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_u8, opt_uacpi_u8_t),
-               "uacpi_u8 must be the same as opt_uacpi_u8_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_u16, opt_uacpi_u16_t),
-               "uacpi_u16 must be the same as opt_uacpi_u16_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_u32, opt_uacpi_u32_t),
-               "uacpi_u32 must be the same as opt_uacpi_u32_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_u64, opt_uacpi_u64_t),
-               "uacpi_u64 must be the same as opt_uacpi_u64_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_i8, opt_uacpi_i8_t),
-               "uacpi_i8 must be the same as opt_uacpi_i8_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_i16, opt_uacpi_i16_t),
-               "uacpi_i16 must be the same as opt_uacpi_i16_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_i32, opt_uacpi_i32_t),
-               "uacpi_i32 must be the same as opt_uacpi_i32_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_i64, opt_uacpi_i64_t),
-               "uacpi_i64 must be the same as opt_uacpi_i64_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_phys_addr,
-                                            opt_uacpi_phys_addr_t),
-               "uacpi_phys_addr must be the same as opt_uacpi_phys_addr_t");
-_Static_assert(__builtin_types_compatible_p(uacpi_io_addr, opt_uacpi_io_addr_t),
-               "uacpi_io_addr must be the same as opt_uacpi_phys_io_t");
+_Static_assert(__builtin_types_compatible_p(uacpi_handle, UACPIHandle),
+               "uacpi_handle must be the same as UACPIHandle");
+_Static_assert(__builtin_types_compatible_p(uacpi_size, UACPISize),
+               "uacpi_size must be the same as UACPISize");
+_Static_assert(__builtin_types_compatible_p(uacpi_u8, UACPIUint8),
+               "uacpi_u8 must be the same as UACPIUint8");
+_Static_assert(__builtin_types_compatible_p(uacpi_u16, UACPIUint16),
+               "uacpi_u16 must be the same as UACPIUint16");
+_Static_assert(__builtin_types_compatible_p(uacpi_u32, UACPIUint32),
+               "uacpi_u32 must be the same as UACPIUint32");
+_Static_assert(__builtin_types_compatible_p(uacpi_u64, UACPIUint64),
+               "uacpi_u64 must be the same as UACPIUint64");
+_Static_assert(__builtin_types_compatible_p(uacpi_i8, UACPIInt8),
+               "uacpi_i8 must be the same as UACPIInt8");
+_Static_assert(__builtin_types_compatible_p(uacpi_i16, UACPIInt16),
+               "uacpi_i16 must be the same as UACPIInt16");
+_Static_assert(__builtin_types_compatible_p(uacpi_i32, UACPIInt32),
+               "uacpi_i32 must be the same as UACPIInt32");
+_Static_assert(__builtin_types_compatible_p(uacpi_i64, UACPIInt64),
+               "uacpi_i64 must be the same as UACPIInt64");
+_Static_assert(__builtin_types_compatible_p(uacpi_phys_addr, UACPIPhysAddr),
+               "uacpi_phys_addr must be the same as UACPIPhysAddr");
+_Static_assert(__builtin_types_compatible_p(uacpi_io_addr, UACPIIOAddr),
+               "uacpi_io_addr must be the same as UACPIIOAddr");
 
-struct uacpi_glue_isr_extra {
+struct UACPIGlueISRExtra {
     uacpi_interrupt_handler handler;
-    uacpi_handle            ctx;
+    uacpi_handle ctx;
 };
 
-struct uacpi_glue_global_waitlist {
-    com_waitlist_t waitlist;
-    size_t         events_left;
+struct UACPIGlueGlobalWaitlist {
+    Waitlist waitlist;
+    usize events_left;
 };
 
-struct uacpi_glue_wrok {
+struct UACPIGlueWork {
     uacpi_work_handler handler;
-    uacpi_handle       ctx;
+    uacpi_handle ctx;
 };
 
-static struct uacpi_glue_global_waitlist InFlightInterruptWaitlist = {0};
-static struct uacpi_glue_global_waitlist ScheduledWorkWaitlist     = {0};
+static struct UACPIGlueGlobalWaitlist g_in_flight_interrupt_waitlist = {0};
+static struct UACPIGlueGlobalWaitlist g_scheduled_work_waitlist = {0};
 
-static void uacpi_glue_isr(com_isr_t *isr, arch_context_t *ctx) {
+static void uacpi_glue_isr(InterruptHandler *isr, Context *ctx) {
     (void)ctx;
-    struct uacpi_glue_isr_extra *extra = isr->extra;
+    struct UACPIGlueISRExtra *extra = isr->extra;
 
-    __atomic_add_fetch(&InFlightInterruptWaitlist.events_left,
-                       1,
+    __atomic_add_fetch(&g_in_flight_interrupt_waitlist.events_left, 1,
                        __ATOMIC_SEQ_CST);
 
     extra->handler(extra->ctx);
 
     // Decrease the number and notify waiters if needed
-    if (0 == __atomic_fetch_add(&InFlightInterruptWaitlist.events_left,
-                                -1,
-                                __ATOMIC_SEQ_CST)) {
-        com_sys_sched_notify_all(&InFlightInterruptWaitlist.waitlist);
+    if (__atomic_fetch_add(&g_in_flight_interrupt_waitlist.events_left, -1,
+                           __ATOMIC_SEQ_CST) == 0) {
+        sched_notify_all(&g_in_flight_interrupt_waitlist.waitlist);
     }
 
-    com_mm_slab_free(extra, sizeof(*extra));
+    slab_free(extra, sizeof(*extra));
 }
 
-// Returns the PHYSICAL address of the RSDP structure via *out_rsdp_address.
+// Returns the PHYSICAL address of the RSDPInfo structure via *out_rsdp_address.
 uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
-    arch_rsdp_t *rsdp = arch_info_get_rsdp();
-    if (NULL == rsdp) {
-        return UACPI_STATUS_UNIMPLEMENTED;
-    }
+    RSDPInfo *rsdp = info_get_rsdp();
+    if (rsdp == NULL) return UACPI_STATUS_UNIMPLEMENTED;
 
-    *out_rsdp_address = (uacpi_phys_addr)(ARCH_HHDM_TO_PHYS(rsdp->address));
+    *out_rsdp_address = (uacpi_phys_addr)(HHDM_TO_PHYS(rsdp->address));
     return UACPI_STATUS_OK;
 }
 
@@ -143,12 +119,9 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
  *              to uACPI.
  */
 void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
-    return com_mm_vmm_map(NULL,
-                          NULL,
-                          (void *)addr,
-                          len,
-                          COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
-                          ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE);
+    return vmm_map(NULL, NULL, (void *)addr, len,
+                   VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                   MMU_FLAGS_READ | MMU_FLAGS_WRITE);
 }
 
 /*
@@ -216,8 +189,8 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
 uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
     switch (current_init_lvl) {
         case UACPI_INIT_LEVEL_EARLY:
-            COM_SYS_THREAD_WAITLIST_INIT(&InFlightInterruptWaitlist.waitlist);
-            COM_SYS_THREAD_WAITLIST_INIT(&ScheduledWorkWaitlist.waitlist);
+            waitlist_init(&g_in_flight_interrupt_waitlist.waitlist);
+            waitlist_init(&g_scheduled_work_waitlist.waitlist);
             break;
         default:
             break;
@@ -226,8 +199,7 @@ uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
     return UACPI_STATUS_OK;
 }
 
-void uacpi_kernel_deinitialize(void) {
-}
+void uacpi_kernel_deinitialize(void) {}
 #endif
 
 /*
@@ -261,69 +233,63 @@ void uacpi_kernel_deinitialize(void) {
  * configuration space of the device.
  */
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address,
-                                          uacpi_handle     *out_handle) {
-    opt_pci_addr_t *kernel_addr = com_mm_slab_alloc(sizeof(*kernel_addr));
-    kernel_addr->segment        = address.segment;
-    kernel_addr->bus            = address.bus;
-    kernel_addr->device         = address.device;
-    kernel_addr->function       = address.function;
+                                          uacpi_handle *out_handle) {
+    PCIAddr *kernel_addr = slab_alloc(sizeof(*kernel_addr));
+    kernel_addr->segment = address.segment;
+    kernel_addr->bus = address.bus;
+    kernel_addr->device = address.device;
+    kernel_addr->function = address.function;
 
     *out_handle = (uacpi_handle)kernel_addr;
     return UACPI_STATUS_OK;
 }
 
 void uacpi_kernel_pci_device_close(uacpi_handle handle) {
-    com_mm_slab_free(handle, sizeof(opt_pci_addr_t));
+    slab_free(handle, sizeof(PCIAddr));
 }
 
 /*
  * Read & write the configuration space of a previously open PCI device.
  */
-uacpi_status uacpi_kernel_pci_read8(uacpi_handle device,
-                                    uacpi_size   offset,
-                                    uacpi_u8    *value) {
-    opt_pci_addr_t *addr = (void *)device;
-    *value               = opt_pci_read8(addr, offset);
+uacpi_status uacpi_kernel_pci_read8(uacpi_handle device, uacpi_size offset,
+                                    uacpi_u8 *value) {
+    PCIAddr *addr = (void *)device;
+    *value = pci_read8(addr, offset);
     return UACPI_STATUS_OK;
 }
 
-uacpi_status uacpi_kernel_pci_read16(uacpi_handle device,
-                                     uacpi_size   offset,
-                                     uacpi_u16   *value) {
-    opt_pci_addr_t *addr = (void *)device;
-    *value               = opt_pci_read16(addr, offset);
+uacpi_status uacpi_kernel_pci_read16(uacpi_handle device, uacpi_size offset,
+                                     uacpi_u16 *value) {
+    PCIAddr *addr = (void *)device;
+    *value = pci_read16(addr, offset);
     return UACPI_STATUS_OK;
 }
 
-uacpi_status uacpi_kernel_pci_read32(uacpi_handle device,
-                                     uacpi_size   offset,
-                                     uacpi_u32   *value) {
-    opt_pci_addr_t *addr = (void *)device;
-    *value               = opt_pci_read32(addr, offset);
+uacpi_status uacpi_kernel_pci_read32(uacpi_handle device, uacpi_size offset,
+                                     uacpi_u32 *value) {
+    PCIAddr *addr = (void *)device;
+    *value = pci_read32(addr, offset);
     return UACPI_STATUS_OK;
 }
 
-uacpi_status uacpi_kernel_pci_write8(uacpi_handle device,
-                                     uacpi_size   offset,
-                                     uacpi_u8     value) {
-    opt_pci_addr_t *addr = (void *)device;
-    opt_pci_write8(addr, offset, value);
+uacpi_status uacpi_kernel_pci_write8(uacpi_handle device, uacpi_size offset,
+                                     uacpi_u8 value) {
+    PCIAddr *addr = (void *)device;
+    pci_write8(addr, offset, value);
     return UACPI_STATUS_OK;
 }
 
-uacpi_status uacpi_kernel_pci_write16(uacpi_handle device,
-                                      uacpi_size   offset,
-                                      uacpi_u16    value) {
-    opt_pci_addr_t *addr = (void *)device;
-    opt_pci_write16(addr, offset, value);
+uacpi_status uacpi_kernel_pci_write16(uacpi_handle device, uacpi_size offset,
+                                      uacpi_u16 value) {
+    PCIAddr *addr = (void *)device;
+    pci_write16(addr, offset, value);
     return UACPI_STATUS_OK;
 }
 
-uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
-                                      uacpi_size   offset,
-                                      uacpi_u32    value) {
-    opt_pci_addr_t *addr = (void *)device;
-    opt_pci_write32(addr, offset, value);
+uacpi_status uacpi_kernel_pci_write32(uacpi_handle device, uacpi_size offset,
+                                      uacpi_u32 value) {
+    PCIAddr *addr = (void *)device;
+    pci_write32(addr, offset, value);
     return UACPI_STATUS_OK;
 }
 
@@ -334,15 +300,12 @@ uacpi_status uacpi_kernel_pci_write32(uacpi_handle device,
  * NOTE: The x86 architecture uses the in/out family of instructions
  *       to access the SystemIO address space.
  */
-uacpi_status uacpi_kernel_io_map(uacpi_io_addr base,
-                                 uacpi_size    len,
+uacpi_status uacpi_kernel_io_map(uacpi_io_addr base, uacpi_size len,
                                  uacpi_handle *out_handle) {
-    return uacpi_util_posix_to_status(arch_uacpi_io_map(out_handle, base, len));
+    return uacpi_util_posix_to_status(arch_uacpi_io_map(base, len, out_handle));
 }
 
-void uacpi_kernel_io_unmap(uacpi_handle handle) {
-    arch_uacpi_io_unmap(handle);
-}
+void uacpi_kernel_io_unmap(uacpi_handle handle) { arch_uacpi_io_unmap(handle); }
 
 /*
  * Read/Write the IO range mapped via uacpi_kernel_io_map
@@ -355,44 +318,38 @@ void uacpi_kernel_io_unmap(uacpi_handle handle) {
  * You are NOT allowed to break e.g. a 4-byte access into four 1-byte accesses.
  * Hardware ALWAYS expects accesses to be of the exact width.
  */
-uacpi_status uacpi_kernel_io_read8(uacpi_handle handle,
-                                   uacpi_size   offset,
-                                   uacpi_u8    *out_value) {
+uacpi_status uacpi_kernel_io_read8(uacpi_handle handle, uacpi_size offset,
+                                   uacpi_u8 *out_value) {
     return uacpi_util_posix_to_status(
-        arch_uacpi_io_read8(out_value, handle, offset));
+        arch_uacpi_io_read8(handle, offset, out_value));
 }
 
-uacpi_status uacpi_kernel_io_read16(uacpi_handle handle,
-                                    uacpi_size   offset,
-                                    uacpi_u16   *out_value) {
+uacpi_status uacpi_kernel_io_read16(uacpi_handle handle, uacpi_size offset,
+                                    uacpi_u16 *out_value) {
     return uacpi_util_posix_to_status(
-        arch_uacpi_io_read16(out_value, handle, offset));
+        arch_uacpi_io_read16(handle, offset, out_value));
 }
 
-uacpi_status uacpi_kernel_io_read32(uacpi_handle handle,
-                                    uacpi_size   offset,
-                                    uacpi_u32   *out_value) {
+uacpi_status uacpi_kernel_io_read32(uacpi_handle handle, uacpi_size offset,
+                                    uacpi_u32 *out_value) {
     return uacpi_util_posix_to_status(
-        arch_uacpi_io_read32(out_value, handle, offset));
+        arch_uacpi_io_read32(handle, offset, out_value));
 }
 
-uacpi_status uacpi_kernel_io_write8(uacpi_handle handle,
-                                    uacpi_size   offset,
-                                    uacpi_u8     in_value) {
+uacpi_status uacpi_kernel_io_write8(uacpi_handle handle, uacpi_size offset,
+                                    uacpi_u8 in_value) {
     return uacpi_util_posix_to_status(
         arch_uacpi_io_write8(handle, offset, in_value));
 }
 
-uacpi_status uacpi_kernel_io_write16(uacpi_handle handle,
-                                     uacpi_size   offset,
-                                     uacpi_u16    in_value) {
+uacpi_status uacpi_kernel_io_write16(uacpi_handle handle, uacpi_size offset,
+                                     uacpi_u16 in_value) {
     return uacpi_util_posix_to_status(
         arch_uacpi_io_write16(handle, offset, in_value));
 }
 
-uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
-                                     uacpi_size   offset,
-                                     uacpi_u32    in_value) {
+uacpi_status uacpi_kernel_io_write32(uacpi_handle handle, uacpi_size offset,
+                                     uacpi_u32 in_value) {
     return uacpi_util_posix_to_status(
         arch_uacpi_io_write32(handle, offset, in_value));
 }
@@ -404,15 +361,15 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle,
 void *uacpi_kernel_alloc(uacpi_size size) {
     // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
     uacpi_size alloc_size = size + 16;
-    void      *buffer     = NULL;
+    void *buffer = NULL;
 
-    if (alloc_size < ARCH_PAGE_SIZE) {
-        buffer = com_mm_slab_alloc(alloc_size);
+    if (alloc_size < PAGE_SIZE) {
+        buffer = slab_alloc(alloc_size);
         goto end;
     }
 
-    size_t num_pages = (alloc_size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    buffer = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many(num_pages));
+    usize num_pages = (alloc_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+    buffer = (void *)PHYS_TO_HHDM(pmm_allocn(num_pages));
 
 end:
     *(uacpi_size *)buffer = alloc_size;
@@ -427,15 +384,15 @@ end:
 void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
     // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
     uacpi_size alloc_size = size + 16;
-    void      *buffer     = NULL;
+    void *buffer = NULL;
 
-    if (alloc_size < ARCH_PAGE_SIZE) {
-        buffer = com_mm_slab_alloc(alloc_size);
+    if (alloc_size < PAGE_SIZE) {
+        buffer = slab_alloc(alloc_size);
         goto end;
     }
 
-    size_t num_pages = (alloc_size + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    buffer = (void *)ARCH_PHYS_TO_HHDM(com_mm_pmm_alloc_many_zero(num_pages));
+    usize num_pages = (alloc_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+    buffer = (void *)PHYS_TO_HHDM(pmm_alloczn(num_pages));
 
 end:
     *(uacpi_size *)buffer = alloc_size;
@@ -455,24 +412,21 @@ end:
  */
 #ifndef UACPI_SIZED_FREES
 void uacpi_kernel_free(void *mem) {
-    if (NULL == mem) {
-        return;
-    }
+    if (mem == NULL) return;
 
-    void      *base      = (char *)mem - 16;
+    void *base = (char *)mem - 16;
     uacpi_size size_hint = *(uacpi_size *)base;
 
-    if (size_hint < ARCH_PAGE_SIZE) {
-        com_mm_slab_free(base, size_hint);
+    if (size_hint < PAGE_SIZE) {
+        slab_free(base, size_hint);
         return;
     }
 
-    size_t num_pages = (size_hint + (ARCH_PAGE_SIZE - 1)) / ARCH_PAGE_SIZE;
-    com_mm_pmm_free_many((void *)ARCH_HHDM_TO_PHYS(base), num_pages);
+    usize num_pages = (size_hint + (PAGE_SIZE - 1)) / PAGE_SIZE;
+    pmm_freen((void *)HHDM_TO_PHYS(base), num_pages);
 }
 #else
-void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
-}
+void uacpi_kernel_free(void *mem, uacpi_size size_hint) {}
 #endif
 
 /*
@@ -480,48 +434,43 @@ void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
  * strictly monotonic.
  */
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
-    return ARCH_CPU_GET_TIME();
+    return cpu_get_time();
 }
 
 /*
  * Spin for N microseconds.
  */
 void uacpi_kernel_stall(uacpi_u8 usec) {
-    uintmax_t start      = ARCH_CPU_GET_TIME();
-    uintmax_t usec_to_ns = (uintmax_t)usec * 1000UL;
-    uintmax_t end        = start + usec_to_ns;
+    u64 start = cpu_get_time();
+    u64 usec_to_ns = (u64)usec * 1000UL;
+    u64 end = start + usec_to_ns;
 
-    while (ARCH_CPU_GET_TIME() < end) {
-        ARCH_CPU_PAUSE();
-    }
+    while (cpu_get_time() < end) cpu_pause();
 }
 
 /*
  * Sleep for N milliseconds.
  */
-void uacpi_kernel_sleep(uacpi_u64 msec) {
-}
+void uacpi_kernel_sleep(uacpi_u64 msec) {}
 
 /*
  * Create/free an opaque non-recursive kernel mutex object.
  */
 uacpi_handle uacpi_kernel_create_mutex(void) {
-    kmutex_t *mutex = com_mm_slab_alloc(sizeof(*mutex));
-    KMUTEX_INIT(mutex);
+    Mutex *mutex = slab_alloc(sizeof(*mutex));
+    mutex_init(mutex);
     return mutex;
 }
 void uacpi_kernel_free_mutex(uacpi_handle handle) {
-    com_mm_slab_free(handle, sizeof(kmutex_t));
+    slab_free(handle, sizeof(Mutex));
 }
 
 /*
  * Create/free an opaque kernel (semaphore-like) event object.
  */
-uacpi_handle uacpi_kernel_create_event(void) {
-}
+uacpi_handle uacpi_kernel_create_event(void) {}
 
-void uacpi_kernel_free_event(uacpi_handle handle) {
-}
+void uacpi_kernel_free_event(uacpi_handle handle) {}
 
 /*
  * Returns a unique identifier of the currently executing thread.
@@ -529,9 +478,9 @@ void uacpi_kernel_free_event(uacpi_handle handle) {
  * The returned thread id cannot be UACPI_THREAD_ID_NONE.
  */
 uacpi_thread_id uacpi_kernel_get_thread_id(void) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    if (NULL != curr_thread) {
-        return (uacpi_thread_id)(uintmax_t)curr_thread->tid;
+    Thread *curr_thread = cpu_get_thread();
+    if (curr_thread != NULL) {
+        return (uacpi_thread_id)(u64)curr_thread->tid;
     }
     return (uacpi_thread_id)curr_thread;
 }
@@ -553,29 +502,25 @@ uacpi_thread_id uacpi_kernel_get_thread_id(void) {
  * 3. Any other value - signifies a host internal error and is treated as such
  */
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle,
-                                        uacpi_u16    timeout) {
-    kmutex_t *mutex = (void *)handle;
+                                        uacpi_u16 timeout) {
+    Mutex *mutex = (void *)handle;
 
-    if (0 == timeout) {
-        if (kmutex_try_acquire(mutex)) {
-            return UACPI_STATUS_OK;
-        }
+    if (timeout == 0) {
+        if (mutex_try_acq(mutex)) return UACPI_STATUS_OK;
         return UACPI_STATUS_TIMEOUT;
     }
 
-    if (0xFFFF == timeout) {
-        kmutex_acquire(mutex);
+    if (timeout == 0xFFFF) {
+        mutex_acq(mutex);
         return UACPI_STATUS_OK;
     }
 
-    if (kmutex_acquire_timeout(mutex, timeout * 1000000UL)) {
-        return UACPI_STATUS_OK;
-    }
+    if (mutex_acq_timeout(mutex, timeout * 1000000UL)) return UACPI_STATUS_OK;
     return UACPI_STATUS_TIMEOUT;
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
-    kmutex_release((kmutex_t *)handle);
+    mutex_rel((Mutex *)handle);
 }
 
 /*
@@ -594,14 +539,12 @@ uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle handle, uacpi_u16 timeout) {
  *
  * This function may be used in interrupt contexts.
  */
-void uacpi_kernel_signal_event(uacpi_handle handle) {
-}
+void uacpi_kernel_signal_event(uacpi_handle handle) {}
 
 /*
  * Reset the event counter to 0.
  */
-void uacpi_kernel_reset_event(uacpi_handle handle) {
-}
+void uacpi_kernel_reset_event(uacpi_handle handle) {}
 
 /*
  * Handle a firmware request.
@@ -613,10 +556,8 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request *req) {
         case UACPI_FIRMWARE_REQUEST_TYPE_BREAKPOINT:
             break;
         case UACPI_FIRMWARE_REQUEST_TYPE_FATAL:
-            KDEBUG("acpi: fatal firmware error: type=%d code=%d arg=%d",
-                   req->fatal.type,
-                   req->fatal.code,
-                   req->fatal.arg)
+            log_debug("acpi: fatal firmware error: type=%d code=%d arg=%d",
+                      req->fatal.type, req->fatal.code, req->fatal.arg);
             break;
         default:
             return UACPI_STATUS_UNIMPLEMENTED;
@@ -632,22 +573,18 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request *req) {
  * 'out_irq_handle' is set to a kernel-implemented value that can be used to
  * refer to this handler from other API.
  */
-uacpi_status
-uacpi_kernel_install_interrupt_handler(uacpi_u32               irq,
-                                       uacpi_interrupt_handler handler,
-                                       uacpi_handle            ctx,
-                                       uacpi_handle           *out_irq_handle) {
-    com_isr_t *isr = com_sys_interrupt_allocate(uacpi_glue_isr,
-                                                arch_uacpi_irq_eoi);
-    if (NULL == isr) {
-        return UACPI_STATUS_OUT_OF_MEMORY;
-    }
+uacpi_status uacpi_kernel_install_interrupt_handler(
+    uacpi_u32 irq, uacpi_interrupt_handler handler, uacpi_handle ctx,
+    uacpi_handle *out_irq_handle) {
+    InterruptHandler *isr = interrupt_allocate(uacpi_glue_isr,
+                                               arch_uacpi_irq_eoi);
+    if (isr == NULL) return UACPI_STATUS_OUT_OF_MEMORY;
 
-    struct uacpi_glue_isr_extra *extra = com_mm_slab_alloc(sizeof(*extra));
-    extra->handler                     = handler;
-    extra->ctx                         = ctx;
-    isr->extra                         = extra;
-    *out_irq_handle                    = isr;
+    struct UACPIGlueISRExtra *extra = slab_alloc(sizeof(*extra));
+    extra->handler = handler;
+    extra->ctx = ctx;
+    isr->extra = extra;
+    *out_irq_handle = isr;
     return uacpi_util_posix_to_status(arch_uacpi_set_irq(irq, isr));
 }
 
@@ -657,10 +594,10 @@ uacpi_kernel_install_interrupt_handler(uacpi_u32               irq,
  */
 uacpi_status
 uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
-                                         uacpi_handle            irq_handle) {
+                                         uacpi_handle irq_handle) {
     (void)handler;
-    com_isr_t *isr = (void *)irq_handle;
-    com_sys_interrupt_free(isr);
+    InterruptHandler *isr = (void *)irq_handle;
+    interrupt_free(isr);
     return UACPI_STATUS_OK;
 }
 
@@ -670,15 +607,15 @@ uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
  * Unlike other types of locks, spinlocks may be used in interrupt contexts.
  */
 uacpi_handle uacpi_kernel_create_spinlock(void) {
-    kspinlock_t *spinlock = com_mm_slab_alloc(sizeof(kspinlock_t));
-    *spinlock             = KSPINLOCK_NEW();
+    Spinlock *spinlock = slab_alloc(sizeof(Spinlock));
+    *spinlock = SPINLOCK_NEW();
     return (uacpi_handle)spinlock;
 }
 
 void uacpi_kernel_free_spinlock(uacpi_handle handle) {
-    kspinlock_t *spinlock = (void *)handle;
-    KASSERT(!KSPINLOCK_IS_HELD(spinlock));
-    com_mm_slab_free(spinlock, sizeof(*spinlock));
+    Spinlock *spinlock = (void *)handle;
+    assert(!spinlock_is_held(spinlock));
+    slab_free(spinlock, sizeof(*spinlock));
 }
 
 /*
@@ -691,28 +628,28 @@ void uacpi_kernel_free_spinlock(uacpi_handle handle) {
  * Note that lock is infalliable.
  */
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle handle) {
-    kspinlock_t *spinlock = (void *)handle;
-    kspinlock_acquire(spinlock);
+    Spinlock *spinlock = (void *)handle;
+    spinlock_acq(spinlock);
     return 0; // we use critsec counter, at least for now
 }
 
-void uacpi_kernel_unlock_spinlock(uacpi_handle    handle,
+void uacpi_kernel_unlock_spinlock(uacpi_handle handle,
                                   uacpi_cpu_flags cpu_flags) {
     (void)cpu_flags;
-    kspinlock_t *spinlock = (void *)handle;
-    kspinlock_release(spinlock);
+    Spinlock *spinlock = (void *)handle;
+    spinlock_rel(spinlock);
 }
 
 /*
  * Schedules deferred work for execution.
  * Might be invoked from an interrupt context.
  */
-uacpi_status uacpi_kernel_schedule_work(uacpi_work_type    type,
+uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type,
                                         uacpi_work_handler handler,
-                                        uacpi_handle       ctx) {
-    struct uacpi_glue_wrok *work = com_mm_slab_alloc(sizeof(*work));
-    work->handler                = handler;
-    work->ctx                    = ctx;
+                                        uacpi_handle ctx) {
+    struct UACPIGlueWork *work = slab_alloc(sizeof(*work));
+    work->handler = handler;
+    work->ctx = ctx;
 
     switch (type) {
         case UACPI_WORK_GPE_EXECUTION:
@@ -734,5 +671,4 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type    type,
  *
  * Note that the waits must be done in this order specifically.
  */
-uacpi_status uacpi_kernel_wait_for_work_completion(void) {
-}
+uacpi_status uacpi_kernel_wait_for_work_completion(void) {}

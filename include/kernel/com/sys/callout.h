@@ -1,82 +1,52 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/interrupt.h>
-#include <lib/spinlock.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 #include <vendor/tailq.h>
 
-typedef struct com_callout com_callout_t;
-typedef void (*com_intf_callout_t)(com_callout_t *callout);
+typedef struct Callout Callout;
+typedef void (*CalloutFn)(Callout *callout);
 
-typedef struct com_callout {
-    uintmax_t          ns;
-    com_intf_callout_t handler;
-    void              *arg;
-    bool               reuse;
-    bool               permanent;
+typedef struct Callout {
+    u64 ns;
+    CalloutFn handler;
+    void *arg;
+    bool reuse;
+    bool permanent;
     // Snapshot callouts are permanent reusable slots. Dispatch copies arg/value
     // before releasing the queue lock and never touches the slot afterwards
-    bool      snapshot;
-    uintptr_t value;
+    bool snapshot;
+    uptr value;
 
-    kspinlock_t               entry_lock;  // only protects the following fields
-    struct com_callout_queue *cpu_callout; // NULL if not scheduled
-    TAILQ_ENTRY(com_callout) queue;
-} com_callout_t;
+    Spinlock entry_lock;              // only protects the following fields
+    struct CalloutQueue *cpu_callout; // NULL if not scheduled
+    TAILQ_ENTRY(Callout) queue;
+} Callout;
 
-TAILQ_HEAD(com_callout_tailq, com_callout);
+TAILQ_HEAD(CalloutTailQ, Callout);
 
-typedef struct com_callout_queue {
-    uintmax_t                ns;
-    uintmax_t                next_preempt;
-    struct com_callout_tailq queue;
-    kspinlock_t              lock;
-} com_callout_queue_t;
+typedef struct CalloutQueue {
+    u64 ns;
+    u64 next_preempt;
+    struct CalloutTailQ queue;
+    Spinlock lock;
+} CalloutQueue;
 
-uintmax_t com_sys_callout_get_time(void);
-void      com_sys_callout_run(void);
-void      com_sys_callout_isr(com_isr_t *isr, arch_context_t *ctx);
-void      com_sys_callout_reschedule_at(com_callout_t *callout, uintmax_t ns);
-void      com_sys_callout_reschedule(com_callout_t *callout, uintmax_t delay);
-void      com_sys_callout_add_at(com_intf_callout_t handler,
-                                 void              *arg,
-                                 uintmax_t          ns);
-void      com_sys_callout_add(com_intf_callout_t handler,
-                              void              *arg,
-                              uintmax_t          delay);
-void      com_sys_callout_add_at_bsp(com_intf_callout_t handler,
-                                     void              *arg,
-                                     uintmax_t          ns);
-void      com_sys_callout_add_bsp(com_intf_callout_t handler,
-                                  void              *arg,
-                                  uintmax_t          delay);
-void      com_sys_callout_set_bsp_nolock(com_callout_queue_t *bsp_queue);
-com_callout_t *
-com_sys_callout_new(com_intf_callout_t handler, void *arg, uintmax_t ns);
-void com_sys_callout_destroy(com_callout_t *callout);
-void com_sys_callout_enqueue(com_callout_t *callout);
-void com_sys_callout_set_and_enqueue(com_callout_t     *callout,
-                                     com_intf_callout_t handler,
-                                     uintmax_t          delay);
+u64 callout_get_time(void);
+void callout_run(void);
+void callout_isr(InterruptHandler *isr, Context *ctx);
+void callout_reschedule_at(Callout *callout, u64 ns);
+void callout_reschedule(Callout *callout, u64 delay);
+void callout_add_at(CalloutFn handler, void *arg, u64 ns);
+void callout_add(CalloutFn handler, void *arg, u64 delay);
+void callout_add_at_bsp(CalloutFn handler, void *arg, u64 ns);
+void callout_add_bsp(CalloutFn handler, void *arg, u64 delay);
+void callout_set_bsp_nolock(CalloutQueue *bsp_queue);
+Callout *callout_new(CalloutFn handler, void *arg, u64 ns);
+void callout_destroy(Callout *callout);
+void callout_enqueue(Callout *callout);
+void callout_set_and_enqueue(Callout *callout, CalloutFn handler, u64 delay);
 // Returns true only if this call removed a queued firing
 // A detached handler runs independently
-bool com_sys_callout_cancel(com_callout_t *callout);
+bool callout_cancel(Callout *callout);

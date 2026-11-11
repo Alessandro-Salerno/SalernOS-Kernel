@@ -1,31 +1,12 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/context.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/sched.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/context.h>
-#include <lib/mem.h>
-#include <lib/usercopy.h>
-#include <lib/util.h>
-#include <stdbool.h>
 #include <vendor/tailq.h>
 
 #define IS_VALID_SIGNAL(sig) ((sig) > 0 && (sig) < NSIG)
@@ -40,53 +21,50 @@
 #define SA_CANTMASK 0x40 /* non-maskable, catchable */
 
 // CREDIT: vloxei64/ke
-static const int SignalProperties[] = {
-    [SIGHUP]    = SA_KILL,
-    [SIGINT]    = SA_KILL,
-    [SIGQUIT]   = SA_KILL | SA_CORE,
-    [SIGILL]    = SA_KILL | SA_CORE,
-    [SIGTRAP]   = SA_KILL | SA_CORE,
-    [SIGABRT]   = SA_KILL | SA_CORE,
-    [SIGFPE]    = SA_KILL | SA_CORE,
-    [SIGKILL]   = SA_KILL,
-    [SIGBUS]    = SA_KILL | SA_CORE,
-    [SIGSEGV]   = SA_KILL | SA_CORE,
-    [SIGSYS]    = SA_KILL | SA_CORE,
-    [SIGPIPE]   = SA_KILL,
-    [SIGALRM]   = SA_KILL,
-    [SIGTERM]   = SA_KILL,
-    [SIGURG]    = SA_IGNORE,
-    [SIGSTOP]   = SA_STOP,
-    [SIGTSTP]   = SA_STOP | SA_TTYSTOP,
-    [SIGCONT]   = SA_IGNORE | SA_CONT,
-    [SIGCHLD]   = SA_IGNORE,
-    [SIGTTIN]   = SA_STOP | SA_TTYSTOP,
-    [SIGTTOU]   = SA_STOP | SA_TTYSTOP,
-    [SIGIO]     = SA_IGNORE,
-    [SIGXCPU]   = SA_KILL,
-    [SIGXFSZ]   = SA_KILL,
+static const int g_signal_properties[] = {
+    [SIGHUP] = SA_KILL,
+    [SIGINT] = SA_KILL,
+    [SIGQUIT] = SA_KILL | SA_CORE,
+    [SIGILL] = SA_KILL | SA_CORE,
+    [SIGTRAP] = SA_KILL | SA_CORE,
+    [SIGABRT] = SA_KILL | SA_CORE,
+    [SIGFPE] = SA_KILL | SA_CORE,
+    [SIGKILL] = SA_KILL,
+    [SIGBUS] = SA_KILL | SA_CORE,
+    [SIGSEGV] = SA_KILL | SA_CORE,
+    [SIGSYS] = SA_KILL | SA_CORE,
+    [SIGPIPE] = SA_KILL,
+    [SIGALRM] = SA_KILL,
+    [SIGTERM] = SA_KILL,
+    [SIGURG] = SA_IGNORE,
+    [SIGSTOP] = SA_STOP,
+    [SIGTSTP] = SA_STOP | SA_TTYSTOP,
+    [SIGCONT] = SA_IGNORE | SA_CONT,
+    [SIGCHLD] = SA_IGNORE,
+    [SIGTTIN] = SA_STOP | SA_TTYSTOP,
+    [SIGTTOU] = SA_STOP | SA_TTYSTOP,
+    [SIGIO] = SA_IGNORE,
+    [SIGXCPU] = SA_KILL,
+    [SIGXFSZ] = SA_KILL,
     [SIGVTALRM] = SA_KILL,
-    [SIGPROF]   = SA_KILL,
-    [SIGWINCH]  = SA_IGNORE,
-    [SIGUSR1]   = SA_KILL,
-    [SIGUSR2]   = SA_KILL,
+    [SIGPROF] = SA_KILL,
+    [SIGWINCH] = SA_IGNORE,
+    [SIGUSR1] = SA_KILL,
+    [SIGUSR2] = SA_KILL,
 
     // We don't support real-time signals, as they're a Linux feature and not
     // required by POSIX
     [SIGSYS + 1 ... NSIG - 1] = SA_KILL,
 };
 
-static com_sigmask_t signal_deliverable(com_thread_t *thread,
-                                        com_sigmask_t signals) {
-    const com_sigmask_t kill = 1UL << (SIGKILL - 1);
-    const com_sigmask_t stop = 1UL << (SIGSTOP - 1);
-    const com_sigmask_t cont = 1UL << (SIGCONT - 1);
-    com_sigmask_t pending = signals & (~thread->masked_signals | kill | stop);
+static SigMask signal_deliverable(Thread *thread, SigMask signals) {
+    const SigMask kill = 1UL << (SIGKILL - 1);
+    const SigMask stop = 1UL << (SIGSTOP - 1);
+    const SigMask cont = 1UL << (SIGCONT - 1);
+    SigMask pending = signals & (~thread->masked_signals | kill | stop);
     if (thread->signal_stopped) {
         pending &= kill;
-        if (E_COM_PROC_STATE_STOPPED != thread->proc->state) {
-            pending |= cont;
-        }
+        if (thread->proc->state != PROC_STATE_STOPPED) pending |= cont;
     }
     if (__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
         pending |= kill;
@@ -94,281 +72,236 @@ static com_sigmask_t signal_deliverable(com_thread_t *thread,
     return pending;
 }
 
-static com_sigmask_t signal_pending(com_thread_t *thread) {
-    return signal_deliverable(thread,
-                              thread->pending_signals |
-                                  thread->proc->pending_signals);
+static SigMask signal_pending(Thread *thread) {
+    return signal_deliverable(
+        thread, thread->pending_signals | thread->proc->pending_signals);
 }
 
-void com_ipc_signal_kick(com_thread_t *thread) {
-    com_sys_thread_lock(thread);
-    kspinlock_acquire(&thread->proc->signal_lock);
-    bool pending = 0 != signal_pending(thread);
-    kspinlock_release(&thread->proc->signal_lock);
-    if (pending) {
-        com_sys_sched_interrupt_nolock(thread);
-    }
-    com_sys_thread_unlock(thread);
+void signal_kick(Thread *thread) {
+    thread_lock(thread);
+    spinlock_acq(&thread->proc->signal_lock);
+    bool pending = signal_pending(thread) != 0;
+    spinlock_rel(&thread->proc->signal_lock);
+    if (pending) sched_interrupt_nolock(thread);
+    thread_unlock(thread);
 }
 
-static bool signal_ignored(com_proc_t *proc, int sig) {
-    com_sigaction_t *sigaction = proc->sigaction[sig];
-    return (NULL != sigaction && SIG_IGN == sigaction->sa_action) ||
-           ((NULL == sigaction || SIG_DFL == sigaction->sa_action) &&
-            (SA_IGNORE & SignalProperties[sig]));
+static bool signal_ignored(Proc *proc, int sig) {
+    SignalAction *sigaction = proc->sigaction[sig];
+    return (sigaction != NULL && sigaction->sa_action == SIG_IGN) ||
+        ((sigaction == NULL || sigaction->sa_action == SIG_DFL) &&
+         (g_signal_properties[sig] & SA_IGNORE));
 }
 
-static void signal_publish(com_thread_t *thread, int sig) {
+static void signal_publish(Thread *thread, int sig) {
     // We drop signals that are ignored and not masked here, instead of causing
     // a spurious interrupt that then resolves to no action. This behavior is
     // applied only when the signal is not masked to stay consistent with the
     // requirement that later unmasks shall cause the signal to be dispatched.
     // We also process the signal anyway if it is a SIGCONT because it needs to
     // get to every thread in the process
-    if (SIGCONT != sig && signal_ignored(thread->proc, sig) &&
-        !COM_IPC_SIGNAL_SIGMASK_ISSET(&thread->masked_signals, sig)) {
+    if (sig != SIGCONT && signal_ignored(thread->proc, sig) &&
+        !signal_sigmask_isset(&thread->masked_signals, sig)) {
         return;
     }
 
-    COM_IPC_SIGNAL_SIGMASK_SET(&thread->pending_signals, sig);
-    if (SIGCONT == sig && E_COM_PROC_STATE_STOPPED == thread->proc->state) {
-        com_sys_proc_transition_nolock(thread->proc,
-                                       E_COM_PROC_STATE_RUNNING,
-                                       SIGCONT);
+    signal_sigmask_set(&thread->pending_signals, sig);
+    if (sig == SIGCONT && thread->proc->state == PROC_STATE_STOPPED) {
+        proc_transition_nolock(thread->proc, PROC_STATE_RUNNING, SIGCONT);
     }
 }
 
-static int send_to_proc(com_proc_t *proc, int sig, com_proc_t *sender) {
+static int send_to_proc(Proc *proc, int sig, Proc *sender) {
     (void)sender;
-    if (NULL == proc) {
+    if (proc == NULL) return ESRCH;
+    spinlock_acq(&proc->threads_lock);
+    spinlock_acq(&proc->signal_lock);
+    if (proc->state == PROC_STATE_EXITED) {
+        spinlock_rel(&proc->signal_lock);
+        spinlock_rel(&proc->threads_lock);
         return ESRCH;
     }
-    kspinlock_acquire(&proc->threads_lock);
-    kspinlock_acquire(&proc->signal_lock);
-    if (E_COM_PROC_STATE_EXITED == proc->state) {
-        kspinlock_release(&proc->signal_lock);
-        kspinlock_release(&proc->threads_lock);
-        return ESRCH;
-    }
-    com_sigmask_t mask = 0;
-    COM_IPC_SIGNAL_SIGMASK_SET(&mask, sig);
-    bool          found = false;
-    com_thread_t *thread;
+    SigMask mask = 0;
+    signal_sigmask_set(&mask, sig);
+    bool found = false;
+    Thread *thread;
 
     // As above, we have a special case for SIGCONT which needs to be delivered
     // to every thread. Other signals are delivered only to the first thread
     // that has them unmasked, or are parked in the process-wide signal mask
     TAILQ_FOREACH(thread, &proc->threads, proc_threads) {
-        if (SIGCONT != sig && !(signal_deliverable(thread, mask) & mask)) {
+        if (sig != SIGCONT && !(signal_deliverable(thread, mask) & mask)) {
             continue;
         }
         signal_publish(thread, sig);
-        kspinlock_release(&proc->signal_lock);
-        com_ipc_signal_kick(thread);
-        kspinlock_acquire(&proc->signal_lock);
+        spinlock_rel(&proc->signal_lock);
+        signal_kick(thread);
+        spinlock_acq(&proc->signal_lock);
         found = true;
-        if (SIGCONT != sig) {
-            break;
-        }
+        if (sig != SIGCONT) break;
     }
 
-    if (!found) {
-        COM_IPC_SIGNAL_SIGMASK_SET(&proc->pending_signals, sig);
-    }
+    if (!found) signal_sigmask_set(&proc->pending_signals, sig);
 
-    kspinlock_release(&proc->signal_lock);
-    kspinlock_release(&proc->threads_lock);
+    spinlock_rel(&proc->signal_lock);
+    spinlock_rel(&proc->threads_lock);
     return 0;
 }
 
-void com_ipc_signal_sigset_emptY(com_sigset_t *set) {
-    kmemset(set, sizeof(com_sigset_t), 0);
-}
+void signal_sigset_empty(SignalSet *set) { memset(set, 0, sizeof(SignalSet)); }
 
-int com_ipc_signal_send_to_proc(pid_t pid, int sig, com_proc_t *sender) {
-    if (!IS_VALID_SIGNAL(sig)) {
-        return EINVAL;
-    }
+int signal_send_to_proc(pid_t pid, int sig, Proc *sender) {
+    if (!IS_VALID_SIGNAL(sig)) return EINVAL;
 
-    KDEBUG("sending signal %d to pid=%d", sig, pid);
-    com_proc_t *proc = com_sys_proc_get_by_pid(pid);
+    log_debug("sending signal %d to pid=%d", sig, pid);
+    Proc *proc = proc_get_by_pid(pid);
 
     int ret = send_to_proc(proc, sig, sender);
-    if (NULL != proc) {
-        COM_SYS_PROC_RELEASE(proc);
-    }
+    if (proc != NULL) proc_rel(proc);
     return ret;
 }
 
-int com_ipc_signal_send_to_proc_group(pid_t pgid, int sig, com_proc_t *sender) {
-    if (!IS_VALID_SIGNAL(sig)) {
-        return EINVAL;
-    }
+int signal_send_to_proc_group(pid_t pgid, int sig, Proc *sender) {
+    if (!IS_VALID_SIGNAL(sig)) return EINVAL;
 
-    KDEBUG("seding signal %d to pgid=%d", sig, pgid);
+    log_debug("seding signal %d to pgid=%d", sig, pgid);
 
-    com_proc_group_t *group = com_sys_proc_get_group_by_pgid(pgid);
+    ProcGroup *group = proc_get_group_by_pgid(pgid);
 
-    if (NULL == group) {
-        return ESRCH;
-    }
+    if (group == NULL) return ESRCH;
 
-    kspinlock_acquire(&group->procs_lock);
-    com_proc_t *p, *_;
+    spinlock_acq(&group->procs_lock);
+    Proc *p, *_;
     TAILQ_FOREACH_SAFE(p, &group->procs, procs, _) {
         send_to_proc(p, sig, sender);
     }
-    kspinlock_release(&group->procs_lock);
+    spinlock_rel(&group->procs_lock);
 
     return 0;
 }
 
-int com_ipc_signal_send_to_thread_nolock(struct com_thread *thread,
-                                         int                sig,
-                                         struct com_proc   *sender) {
+int signal_send_to_thread_nolock(struct Thread *thread, int sig,
+                                 struct Proc *sender) {
     (void)sender;
     signal_publish(thread, sig);
     return 0;
 }
 
-int com_ipc_signal_send_to_thread(struct com_thread *thread,
-                                  int                sig,
-                                  com_proc_t        *sender) {
-    kspinlock_acquire(&thread->proc->signal_lock);
-    int ret = com_ipc_signal_send_to_thread_nolock(thread, sig, sender);
-    kspinlock_release(&thread->proc->signal_lock);
-    com_ipc_signal_kick(thread);
-    if (SIGCONT == sig) {
-        com_sys_sched_notify_all(&thread->proc->stop_waitlist);
-    }
+int signal_send_to_thread(struct Thread *thread, int sig, Proc *sender) {
+    spinlock_acq(&thread->proc->signal_lock);
+    int ret = signal_send_to_thread_nolock(thread, sig, sender);
+    spinlock_rel(&thread->proc->signal_lock);
+    signal_kick(thread);
+    if (sig == SIGCONT) sched_notify_all(&thread->proc->stop_waitlist);
     return ret;
 }
 
-void com_ipc_signal_dispatch(arch_context_t *ctx, com_thread_t *thread) {
-    com_proc_t *proc = thread->proc;
-    KASSERT(0 == thread->lock_depth);
+void signal_dispatch(Context *ctx, Thread *thread) {
+    Proc *proc = thread->proc;
+    assert(thread->lock_depth == 0);
 
 restart:
     if (__atomic_load_n(&thread->exit_requested, __ATOMIC_ACQUIRE)) {
-        com_sys_thread_exit(thread);
+        thread_exit(thread);
         __builtin_unreachable();
     }
 
-    kspinlock_acquire(&proc->signal_lock);
-    int sig = com_ipc_signal_check_nolock();
+    spinlock_acq(&proc->signal_lock);
+    int sig = signal_check_nolock();
 
-    if (COM_IPC_SIGNAL_NONE == sig) {
-        goto end;
-    }
+    if (sig == SIGNAL_NONE) goto end;
 
-    KDEBUG("tid=%d received signal %d", thread->tid, sig);
+    log_debug("tid=%d received signal %d", thread->tid, sig);
 
-    COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
-    COM_IPC_SIGNAL_SIGMASK_UNSET(&proc->pending_signals, sig);
+    signal_sigmask_unset(&thread->pending_signals, sig);
+    signal_sigmask_unset(&proc->pending_signals, sig);
 
-    com_sigaction_t *sigaction = proc->sigaction[sig];
+    SignalAction *sigaction = proc->sigaction[sig];
 
-    if (NULL == sigaction || SIG_DFL == sigaction->sa_action) {
-        if (SA_KILL & SignalProperties[sig]) {
-            kspinlock_release(&proc->signal_lock);
+    if (sigaction == NULL || sigaction->sa_action == SIG_DFL) {
+        if (g_signal_properties[sig] & SA_KILL) {
+            spinlock_rel(&proc->signal_lock);
 
-            KDEBUG("fatal signal %d, pid=%d (%s), rip=%p, rsp=%p",
-                   sig,
-                   proc->pid,
-                   proc->executable_path,
-                   (void *)ctx->rip,
-                   (void *)ctx->rsp);
-            com_sys_proc_terminate(0, sig);
+            log_debug("fatal signal %d, pid=%d (%s), rip=%p, rsp=%p", sig,
+                      proc->pid, proc->executable_path, (void *)ctx->rip,
+                      (void *)ctx->rsp);
+            proc_terminate(0, sig);
 
             // This should never be reached
-            KDEBUG("tid=%d in pid=%d is somehow still alive",
-                   thread->tid,
-                   proc->pid);
-            KASSERT(false);
+            log_debug("tid=%d in pid=%d is somehow still alive", thread->tid,
+                      proc->pid);
+            assert(false);
             __builtin_unreachable();
-        } else if (SA_STOP & SignalProperties[sig]) {
-            com_sys_proc_stop_nolock(sig);
-            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, sig);
+        } else if (g_signal_properties[sig] & SA_STOP) {
+            proc_stop_nolock(sig);
+            signal_sigmask_unset(&thread->pending_signals, sig);
             thread->signal_stopped = true;
-            while (E_COM_PROC_STATE_STOPPED == proc->state &&
-                   SIGKILL != com_ipc_signal_check_nolock()) {
-                kspinlock_release(&proc->signal_lock);
-                com_sys_sched_wait_nodrop(&proc->stop_waitlist);
-                kspinlock_acquire(&proc->signal_lock);
+            while (proc->state == PROC_STATE_STOPPED &&
+                   signal_check_nolock() != SIGKILL) {
+                spinlock_rel(&proc->signal_lock);
+                sched_wait_nodrop(&proc->stop_waitlist);
+                spinlock_acq(&proc->signal_lock);
             }
             thread->signal_stopped = false;
-            COM_IPC_SIGNAL_SIGMASK_UNSET(&thread->pending_signals, SIGCONT);
-            kspinlock_release(&proc->signal_lock);
+            signal_sigmask_unset(&thread->pending_signals, SIGCONT);
+            spinlock_rel(&proc->signal_lock);
             goto restart;
-        } else if (SA_IGNORE & SignalProperties[sig]) {
+        } else if (g_signal_properties[sig] & SA_IGNORE) {
             goto end;
         }
     }
 
-    if (NULL == sigaction || SIG_IGN == sigaction->sa_action) {
-        goto end;
-    }
+    if (sigaction == NULL || sigaction->sa_action == SIG_IGN) goto end;
 
-    void (*handler)(int)   = sigaction->sa_action;
+    void (*handler)(int) = sigaction->sa_action;
     void (*restorer)(void) = sigaction->sa_restorer;
 
-    com_sigframe_t kframe;
-    kmemset(&kframe, sizeof(kframe), 0);
-    kframe.info.si_signo        = sig;
+    SigFrame kframe;
+    memset(&kframe, 0, sizeof(kframe));
+    kframe.info.si_signo = sig;
     kframe.uc.uc_sigmask.sig[0] = thread->masked_signals;
 
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
-    if (!(SA_NODEFER & sigaction->sa_flags)) {
-        COM_IPC_SIGNAL_SIGMASK_SET(&thread->masked_signals, sig);
+    if (!(sigaction->sa_flags & SA_NODEFER)) {
+        signal_sigmask_set(&thread->masked_signals, sig);
     }
 
-    if (SA_RESETHAND & sigaction->sa_flags) {
-        sigaction->sa_action = SIG_DFL;
-    }
+    if (sigaction->sa_flags & SA_RESETHAND) sigaction->sa_action = SIG_DFL;
 
-    kspinlock_release(&proc->signal_lock);
+    spinlock_rel(&proc->signal_lock);
 
-    KDEBUG("pid=%d has restorer at %p for signal %d", proc->pid, restorer, sig);
+    log_debug("pid=%d has restorer at %p for signal %d", proc->pid, restorer,
+              sig);
 
-    com_sigframe_t *sframe;
-    uintptr_t       stack;
-    if (0 != arch_context_alloc_sigframe(&sframe, &stack, ctx)) {
-        goto bad_frame;
-    }
-    if (0 != arch_context_setup_sigframe(&kframe, sframe, ctx) ||
-        0 != kmemcpy_to_user(sframe, &kframe, sizeof(kframe))) {
+    SigFrame *sframe;
+    uptr stack;
+    if (context_alloc_sigframe(&stack, ctx, &sframe) != 0) goto bad_frame;
+    if (context_setup_sigframe(&kframe, sframe, ctx) != 0 ||
+        memcpy_to_user(sframe, &kframe, sizeof(kframe)) != 0) {
         goto bad_frame;
     }
 
-    if (0 != arch_context_setup_sigrestore(&stack, restorer)) {
-        goto bad_frame;
-    }
-    arch_context_signal_trampoline(sframe, ctx, stack, handler, sig);
+    if (context_setup_sigrestore(&stack, restorer) != 0) goto bad_frame;
+    context_signal_trampoline(sframe, ctx, stack, handler, sig);
     return;
 
 end:
-    kspinlock_release(&proc->signal_lock);
+    spinlock_rel(&proc->signal_lock);
     return;
 
 bad_frame:
     // Not a signal: cannot be caught or blocked, so it cannot recurse
-    KDEBUG("bad signal frame, pid=%d (%s), rsp=%p",
-           proc->pid,
-           proc->executable_path,
-           (void *)ctx->rsp);
-    com_sys_proc_terminate(0, SIGSEGV);
+    log_debug("bad signal frame, pid=%d (%s), rsp=%p", proc->pid,
+              proc->executable_path, (void *)ctx->rsp);
+    proc_terminate(0, SIGSEGV);
 }
 
-int com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,
-                                   int            how,
-                                   com_sigset_t  *set,
-                                   com_sigset_t  *oset) {
-    com_sigmask_t old_mask = *mask;
+int signal_set_mask_nolock(SigMask *mask, int how, SignalSet *set,
+                           SignalSet *oset) {
+    SigMask old_mask = *mask;
 
-    if (NULL == set) {
-        goto noset;
-    }
+    if (set == NULL) goto noset;
 
     switch (how) {
         case SIG_BLOCK:
@@ -385,41 +318,34 @@ int com_ipc_signal_set_mask_nolock(com_sigmask_t *mask,
     }
 
 noset:
-    if (NULL != oset) {
-        com_ipc_signal_sigset_emptY(oset);
+    if (oset != NULL) {
+        signal_sigset_empty(oset);
         oset->sig[0] = old_mask;
     }
 
     return 0;
 }
 
-int com_ipc_signal_set_mask(com_sigmask_t *mask,
-                            int            how,
-                            com_sigset_t  *set,
-                            com_sigset_t  *oset,
-                            kspinlock_t   *signal_lock) {
-    kspinlock_acquire(signal_lock);
-    int ret = com_ipc_signal_set_mask_nolock(mask, how, set, oset);
-    kspinlock_release(signal_lock);
+int signal_set_mask(SigMask *mask, int how, SignalSet *set, SignalSet *oset,
+                    Spinlock *signal_lock) {
+    spinlock_acq(signal_lock);
+    int ret = signal_set_mask_nolock(mask, how, set, oset);
+    spinlock_rel(signal_lock);
     return ret;
 }
 
-int com_ipc_signal_check_nolock(void) {
-    com_thread_t *thread  = ARCH_CPU_GET_THREAD();
-    com_sigmask_t pending = signal_pending(thread);
-    if (COM_IPC_SIGNAL_SIGMASK_ISSET(&pending, SIGKILL)) {
-        return SIGKILL;
-    }
-    return pending ? __builtin_ffsl(pending) : COM_IPC_SIGNAL_NONE;
+int signal_check_nolock(void) {
+    Thread *thread = cpu_get_thread();
+    SigMask pending = signal_pending(thread);
+    if (signal_sigmask_isset(&pending, SIGKILL)) return SIGKILL;
+    return pending ? __builtin_ffsl(pending) : SIGNAL_NONE;
 }
 
-int com_ipc_signal_check(void) {
-    com_thread_t *thread = ARCH_CPU_GET_THREAD();
-    if (NULL == thread->proc) {
-        return COM_IPC_SIGNAL_NONE;
-    }
-    kspinlock_acquire(&thread->proc->signal_lock);
-    int ret = com_ipc_signal_check_nolock();
-    kspinlock_release(&thread->proc->signal_lock);
+int signal_check(void) {
+    Thread *thread = cpu_get_thread();
+    if (thread->proc == NULL) return SIGNAL_NONE;
+    spinlock_acq(&thread->proc->signal_lock);
+    int ret = signal_check_nolock();
+    spinlock_rel(&thread->proc->signal_lock);
     return ret;
 }

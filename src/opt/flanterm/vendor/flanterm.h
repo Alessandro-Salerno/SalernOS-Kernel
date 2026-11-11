@@ -26,7 +26,7 @@
 #ifndef FLANTERM_H
 #define FLANTERM_H 1
 
-#include <lib/crt.h>
+#include <kernel/com/crt.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -3,18 +3,13 @@ UseTab: Never
 AccessModifierOffset: '0'
 AlignConsecutiveMacros: 'true'
 AlignEscapedNewlines: Left
-AlignOperands: 'true'
+AlignOperands: 'false'
 AlignTrailingComments: 'true'
 AlignAfterOpenBracket: 'true'
-AlignConsecutiveAssignments: 'Consecutive'
+AlignConsecutiveAssignments: 'false'
 AlignConsecutiveBitFields: 'AcrossEmptyLines'
-AlignConsecutiveDeclarations: 'Consecutive'
-AlignConsecutiveShortCaseStatements:
-  Enabled: true
-  AcrossEmptyLines: true
-  AcrossComments: true
-  AlignCaseColons: false
-AllowShortFunctionsOnASingleLine: 'false'
+AlignConsecutiveDeclarations: 'false'
+AllowShortFunctionsOnASingleLine: 'true'
 AllowShortEnumsOnASingleLine: false
 IndentWidth: '4'
 SpaceBeforeParens: ControlStatements
@@ -31,10 +26,10 @@ IncludeCategories:
   - Regex:           '"[[:alnum:].\/-]+"'
     Priority:        10
     SortPriority:    10
-BinPackArguments: false
-BinPackParameters: false
-ExperimentalAutoDetectBinPacking: false
+BinPackArguments: true
+BinPackParameters: true
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false
 PenaltyBreakAssignment: 1000
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 ...

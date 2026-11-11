@@ -1,21 +1,3 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 // This file is used to ocnfigure the kernel at compile time
 
 #pragma once
@@ -29,10 +11,10 @@
 #define CONST_LOG_LEVEL_TTY 1 /* Logs the foregrund tty output */
 
 // Log levels (relative, use >= in #if)
-#define CONST_LOG_LEVEL_URGENT  2 /* Enable KURGENT */
-#define CONST_LOG_LEVEL_INFO    3 /* Enable KLOG */
-#define CONST_LOG_LEVEL_OPTION  4 /* Enable KOPTMSG */
-#define CONST_LOG_LEVEL_DEBUG   5 /* Enable KDEBUG */
+#define CONST_LOG_LEVEL_URGENT  2 /* Enable log_urgent */
+#define CONST_LOG_LEVEL_INFO    3 /* Enable log */
+#define CONST_LOG_LEVEL_OPTION  4 /* Enable log_opt */
+#define CONST_LOG_LEVEL_DEBUG   5 /* Enable log_debug */
 #define CONST_LOG_LEVEL_USER    6 /* Enable kprint syscall */
 #define CONST_LOG_LEVEL_SYSCALL 7 /* Enable system call logging */
 
@@ -45,7 +27,7 @@
 #define CONST_LOG_SYSCALL_AFTER  1 /* Log syscalls on return (for ret value) */
 
 // Assert action
-#define CONST_ASSERT_REMOVE 0 /* Remove all instances of KASSERT */
+#define CONST_ASSERT_REMOVE 0 /* Remove all instances of assert */
 #define CONST_ASSERT_EXPAND 1 /* Replace with expression (keep sideeffects) */
 #define CONST_ASSERT_SOFT   2 /* Only print warning on assertion fail */
 #define CONST_ASSERT_PANIC  3 /* Panic on assertion fail */
@@ -68,7 +50,7 @@
 #define CONFIG_LOG_SHOW_SPLASH  1
 #define CONFIG_LOG_SYSCALL_MODE CONST_LOG_SYSCALL_BEFORE
 #define CONFIG_LOG_LOCATION     CONST_LOG_LOCATION_ALL
-#define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by KASSERT */
+#define CONFIG_ASSERT_ACTION    CONST_ASSERT_PANIC /* Action taken by assert */
 
 // Max
 #define CONFIG_OPEN_MAX         96     /* Maximum number of FDs per process */
@@ -76,18 +58,18 @@
 #define CONFIG_SYSCALL_MAX      128    /* Maximum number of syscall handlers */
 #define CONFIG_SYMLINK_MAX      32
 #define CONFIG_PATH_MAX         256
-#define CONFIG_IOV_MAX 256 /* <= ARCH_PAGE_SIZE / sizeof(struct iovec) */
+#define CONFIG_IOV_MAX          256 /* <= PAGE_SIZE / sizeof(struct iovec) */
 #define CONFIG_TTY_MAX          7
 #define CONFIG_VMM_PREFAULT_MAX 512 /* max n. pages faultable at once */
 
 // Misc
-#define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC         1 /* Display kernel panic to fallback terminal */
-#define CONFIG_INIT_PATH          "/boot/init" /* Path to init executable */
-#define CONFIG_INIT_ARGV          NULL         /* Init program argv */
-#define CONFIG_INIT_ENV           NULL         /* Init program env */
-#define CONFIG_CALLOUT_MODE       CONST_CALLOUT_ONLY_BSP
-#define CONFIG_MUTEX_RETRIES      60
+#define CONFIG_TERM_FPS      60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC    1  /* Display kernel panic to fallback terminal */
+#define CONFIG_INIT_PATH     "/boot/init" /* Path to init executable */
+#define CONFIG_INIT_ARGV     NULL         /* Init program argv */
+#define CONFIG_INIT_ENV      NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE  CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_RETRIES 60
 #define CONFIG_UNIX_SOCK_RB_SIZE  (256 * 1024UL)
 #define CONFIG_VMM_ANON_START     0x100000000
 #define CONFIG_VMM_REAPER_NOTIFY  8

@@ -1,21 +1,3 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <errno.h>
 #include <kernel/com/ipc/signal.h>
@@ -23,63 +5,53 @@
 #include <kernel/com/sys/syscall.h>
 
 static bool proc_exists(pid_t pid) {
-    com_proc_t *proc = com_sys_proc_get_by_pid(pid);
-    if (NULL == proc) {
-        return false;
-    }
+    Proc *proc = proc_get_by_pid(pid);
+    if (proc == NULL) return false;
 
     // A reaped process stays in the table until its threads are reclaimed
-    kspinlock_acquire(&proc->signal_lock);
-    bool reaped = E_COM_PROC_STATE_EXITED == proc->state &&
-                  proc->state_notified;
-    kspinlock_release(&proc->signal_lock);
-    COM_SYS_PROC_RELEASE(proc);
+    spinlock_acq(&proc->signal_lock);
+    bool reaped = proc->state == PROC_STATE_EXITED && proc->state_notified;
+    spinlock_rel(&proc->signal_lock);
+    proc_rel(proc);
     return !reaped;
 }
 
 // SYSCALL: kill(pid_t pid, int sig)
-COM_SYS_SYSCALL(com_sys_syscall_kill) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(3);
+SYSCALL(syscall_kill) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(3);
 
-    pid_t pid = COM_SYS_SYSCALL_ARG(pid_t, 1);
-    int   sig = COM_SYS_SYSCALL_ARG(int, 2);
+    pid_t pid = SYSCALL_ARG(pid_t, 1);
+    int sig = SYSCALL_ARG(int, 2);
 
-    com_syscall_ret_t ret         = COM_SYS_SYSCALL_BASE_OK();
-    com_thread_t     *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t       *curr_proc   = curr_thread->proc;
+    SyscallRet ret = SYSCALL_BASE_OK();
+    Thread *curr_thread = cpu_get_thread();
+    Proc *curr_proc = curr_thread->proc;
 
-    if (-1 == pid) {
+    if (pid == -1) {
         // TODO: implement signal to all
-        return COM_SYS_SYSCALL_ERR(ENOSYS);
+        return SYSCALL_ERR(ENOSYS);
     }
 
-    if (0 == pid) {
-        kspinlock_acquire(&curr_proc->pg_lock);
+    if (pid == 0) {
+        spinlock_acq(&curr_proc->pg_lock);
         pid = -curr_proc->proc_group->pgid;
-        kspinlock_release(&curr_proc->pg_lock);
+        spinlock_rel(&curr_proc->pg_lock);
     }
 
     // sig = 0 only checks that the target exists
-    if (0 == sig) {
+    if (sig == 0) {
         bool exists = pid > 0 ? proc_exists(pid)
-                              : NULL != com_sys_proc_get_group_by_pgid(-pid);
-        if (!exists) {
-            ret.err = ESRCH;
-        }
+                              : proc_get_group_by_pgid(-pid) != NULL;
+        if (!exists) ret.err = ESRCH;
         goto skip_send;
     }
 
-    if (pid > 0) {
-        ret.err = com_ipc_signal_send_to_proc(pid, sig, curr_proc);
-    } else {
-        ret.err = com_ipc_signal_send_to_proc_group(-pid, sig, curr_proc);
-    }
+    if (pid > 0) ret.err = signal_send_to_proc(pid, sig, curr_proc);
+    else ret.err = signal_send_to_proc_group(-pid, sig, curr_proc);
 
 skip_send:
-    if (0 != ret.err) {
-        ret.value = -1;
-    }
+    if (ret.err != 0) ret.value = -1;
 
     return ret;
 }

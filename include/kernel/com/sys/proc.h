@@ -1,120 +1,90 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <vendor/tailq.h>
-struct com_proc;
-struct com_proc_group;
-TAILQ_HEAD(com_proc_tailq, com_proc);
-TAILQ_HEAD(com_proc_group_tailq, com_proc_group);
+struct Proc;
+struct ProcGroup;
+TAILQ_HEAD(ProcTailQ, Proc);
+TAILQ_HEAD(ProcGroupTailQ, ProcGroup);
 
 #include <arch/mmu.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/thread.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 #include <signal.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <sys/types.h>
 
-#define COM_SYS_PROC_HOLD(proc) \
-    __atomic_add_fetch(&(proc)->num_ref, 1, __ATOMIC_RELAXED);
-#define COM_SYS_PROC_RELEASE(proc)                                         \
-    if (0 == __atomic_add_fetch(&(proc)->num_ref, -1, __ATOMIC_ACQ_REL)) { \
-        com_sys_proc_hide(proc);                                           \
-    }
+typedef struct ProcSession {
+    pid_t sid;
+    Vnode *tty;
+    struct ProcGroupTailQ proc_groups;
+    Spinlock pg_lock;
+} ProcSession;
 
-typedef struct com_proc_session {
-    pid_t                       sid;
-    com_vnode_t                *tty;
-    struct com_proc_group_tailq proc_groups;
-    kspinlock_t                 pg_lock;
-} com_proc_session_t;
+typedef struct ProcGroup {
+    pid_t pgid;
+    ProcSession *session;
+    struct ProcTailQ procs;
+    Spinlock procs_lock;
+    TAILQ_ENTRY(ProcGroup) proc_groups;
+} ProcGroup;
 
-typedef struct com_proc_group {
-    pid_t                 pgid;
-    com_proc_session_t   *session;
-    struct com_proc_tailq procs;
-    kspinlock_t           procs_lock;
-    TAILQ_ENTRY(com_proc_group) proc_groups;
-} com_proc_group_t;
+typedef enum ProcState {
+    PROC_STATE_RUNNING = 0,
+    PROC_STATE_STOPPED,
+    PROC_STATE_EXITED
+} ProcState;
 
-typedef enum com_proc_state {
-    E_COM_PROC_STATE_RUNNING = 0,
-    E_COM_PROC_STATE_STOPPED,
-    E_COM_PROC_STATE_EXITED
-} com_proc_state_t;
-
-typedef struct com_proc {
-    pid_t              pid;
-    pid_t              parent_pid;
-    com_vmm_context_t *vmm_context;
-    size_t             num_children;
+typedef struct Proc {
+    pid_t pid;
+    pid_t parent_pid;
+    VMMContext *vmm_context;
+    usize num_children;
 
     // Threads
-    kspinlock_t             threads_lock;
-    struct com_thread_tailq threads;
-    struct com_waitlist     threads_waitlist;
-    struct com_thread      *threads_killer;
-    size_t                  num_ref;
-    size_t                  num_running_threads;
+    Spinlock threads_lock;
+    struct ThreadTailQ threads;
+    struct Waitlist threads_waitlist;
+    struct Thread *threads_killer;
+    usize num_ref;
+    usize num_running_threads;
 
     // Process groups
-    kspinlock_t       pg_lock;
-    com_proc_group_t *proc_group;
-    TAILQ_ENTRY(com_proc) procs;
+    Spinlock pg_lock;
+    ProcGroup *proc_group;
+    TAILQ_ENTRY(Proc) procs;
     bool did_execve;
 
     // Termination & signals
     // state_cause_sig is the signal that caused the current state (if any)
-    KCACHE_FRIENDLY kspinlock_t signal_lock;
-    com_sigmask_t               pending_signals;
-    com_proc_state_t            state;
-    int                         state_cause_sig;
-    bool                        state_notified; // reported to the parent
-    int                         exit_code;
-    kspinlock_t                 waitpid_lock;
-    struct com_waitlist         waitpid_waitlist;
-    struct com_sigaction       *sigaction[NSIG];
-    struct com_waitlist         stop_waitlist;
+    cache_aligned Spinlock signal_lock;
+    SigMask pending_signals;
+    ProcState state;
+    int state_cause_sig;
+    bool state_notified; // reported to the parent
+    int exit_code;
+    Spinlock waitpid_lock;
+    struct Waitlist waitpid_waitlist;
+    struct SignalAction *sigaction[NSIG];
+    struct Waitlist stop_waitlist;
 
     // Both own a reference, cwd is protected by fd_lock
-    KCACHE_FRIENDLY com_vnode_t *root;
-    com_vnode_t                 *cwd;
-    kspinlock_t                  fd_lock;
-    int                          next_fd;
-    int                          max_fd;
-    com_filedesc_t               fd[CONFIG_OPEN_MAX];
+    cache_aligned Vnode *root;
+    Vnode *cwd;
+    Spinlock fd_lock;
+    int next_fd;
+    int max_fd;
+    FileDesc fd[CONFIG_OPEN_MAX];
 
     char executable_path[CONFIG_PATH_MAX];
-} com_proc_t;
+} Proc;
 
-com_proc_t *com_sys_proc_new(com_vmm_context_t *vmm_context,
-                             pid_t              parent_pid,
-                             com_vnode_t       *root,
-                             com_vnode_t       *cwd);
-void        com_sys_proc_destroy(com_proc_t *proc);
+Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
+               Vnode *cwd);
+void proc_destroy(Proc *proc);
 
 // File management
 
@@ -125,60 +95,57 @@ void        com_sys_proc_destroy(com_proc_t *proc);
 // transition state is currently represented by the "reserved" file descriptor
 // flag, and these functions handle it correctly
 
-int com_sys_proc_next_fd(com_proc_t *proc);
+int proc_next_fd(Proc *proc);
 // The caller's reference to file goes to the table
-void            com_sys_proc_install_fd(com_proc_t *proc,
-                                        int         fd,
-                                        com_file_t *file,
-                                        uintmax_t   fd_flags);
-void            com_sys_proc_unreserve_fd(com_proc_t *proc, int fd);
-com_filedesc_t *com_sys_proc_get_fildesc_nolock(com_proc_t *proc, int fd);
-com_file_t     *com_sys_proc_get_file(com_proc_t *proc, int fd);
-com_file_t     *com_sys_proc_get_file_nolock(com_proc_t *proc, int fd);
-int             com_sys_proc_duplicate_file_nolock(com_proc_t *proc,
-                                                   int         new_fd,
-                                                   int         old_fd);
-int com_sys_proc_duplicate_file(com_proc_t *proc, int new_fd, int old_fd);
-int com_sys_proc_close_file_nolock(com_file_t **out_file,
-                                   com_proc_t  *proc,
-                                   int          fd);
-int com_sys_proc_close_file(com_proc_t *proc, int fd);
+void proc_install_fd(Proc *proc, int fd, File *file, u64 fd_flags);
+void proc_unreserve_fd(Proc *proc, int fd);
+FileDesc *proc_get_fildesc_nolock(Proc *proc, int fd);
+File *proc_get_file(Proc *proc, int fd);
+File *proc_get_file_nolock(Proc *proc, int fd);
+int proc_duplicate_file_nolock(Proc *proc, int new_fd, int old_fd);
+int proc_duplicate_file(Proc *proc, int new_fd, int old_fd);
+int proc_close_file_nolock(Proc *proc, int fd, File **out_file);
+int proc_close_file(Proc *proc, int fd);
 // These return referenced vnodes, set_cwd takes its own reference
-com_vnode_t *com_sys_proc_get_cwd(com_proc_t *proc);
-void         com_sys_proc_set_cwd(com_proc_t *proc, com_vnode_t *cwd);
-int com_sys_proc_get_directory(com_vnode_t **dir, com_proc_t *proc, int dir_fd);
-com_proc_t *com_sys_proc_get_by_pid(pid_t pid);
-com_proc_t *com_sys_proc_get_arbitrary_child(com_proc_t *proc);
+Vnode *proc_get_cwd(Proc *proc);
+void proc_set_cwd(Proc *proc, Vnode *cwd);
+int proc_get_directory(Proc *proc, int dir_fd, Vnode **out_dir);
+Proc *proc_get_by_pid(pid_t pid);
+Proc *proc_get_arbitrary_child(Proc *proc);
 
 // Threads
 // Caller holds threads_lock, excludes except when non-NULL
 // Alive means final switch-out has not been acknowledged, even after EXITED
-bool com_sys_proc_threads_alive_nolock(com_proc_t        *proc,
-                                       struct com_thread *except);
+bool proc_threads_alive_nolock(Proc *proc, struct Thread *except);
 // Caller holds threads_lock, this checks requests rather than acknowledgements
-bool com_sys_proc_all_threads_exiting_nolock(com_proc_t *proc);
-void com_sys_proc_add_thread(com_proc_t *proc, struct com_thread *thread);
-void com_sys_proc_remove_thread(com_proc_t *proc, struct com_thread *thread);
-void com_sys_proc_remove_thread_nolock(com_proc_t        *proc,
-                                       struct com_thread *thread);
+bool proc_all_threads_exiting_nolock(Proc *proc);
+void proc_add_thread(Proc *proc, struct Thread *thread);
+void proc_remove_thread(Proc *proc, struct Thread *thread);
+void proc_remove_thread_nolock(Proc *proc, struct Thread *thread);
 
 // These work exclusively on the running process
-void com_sys_proc_kill_other_threads(void);
-void com_sys_proc_kill_other_threads_nolock(void);
-void com_sys_proc_transition_nolock(com_proc_t      *proc,
-                                    com_proc_state_t state,
-                                    int              cause_sig);
-void com_sys_proc_exit(int exit_code, int cause_sig);
-void com_sys_proc_stop_nolock(int stop_signal);
-void com_sys_proc_terminate(int exit_code, int cause_sig);
+void proc_kill_other_threads(void);
+void proc_kill_other_threads_nolock(void);
+void proc_transition_nolock(Proc *proc, ProcState state, int cause_sig);
+void proc_exit(int exit_code, int cause_sig);
+void proc_stop_nolock(int stop_signal);
+void proc_terminate(int exit_code, int cause_sig);
 
-void com_sys_proc_hide(com_proc_t *proc);
+void proc_hide(Proc *proc);
 
-com_proc_group_t *com_sys_proc_new_group(com_proc_t         *leader,
-                                         com_proc_session_t *session);
-int com_sys_proc_join_group(com_proc_t *proc, com_proc_group_t *group);
-int com_sys_proc_join_group_nolock(com_proc_t *proc, com_proc_group_t *group);
-com_proc_group_t   *com_sys_proc_get_group_by_pgid(pid_t pgid);
-com_proc_session_t *com_sys_proc_new_session_nolock(com_proc_t  *leader,
-                                                    com_vnode_t *tty);
-void                com_sys_proc_init(void);
+ProcGroup *proc_new_group(Proc *leader, ProcSession *session);
+int proc_join_group(Proc *proc, ProcGroup *group);
+int proc_join_group_nolock(Proc *proc, ProcGroup *group);
+ProcGroup *proc_get_group_by_pgid(pid_t pgid);
+ProcSession *proc_new_session_nolock(Proc *leader, Vnode *tty);
+void proc_init(void);
+
+static inline void proc_hold(Proc *proc) {
+    __atomic_add_fetch(&proc->num_ref, 1, __ATOMIC_RELAXED);
+}
+
+static inline void proc_rel(Proc *proc) {
+    if (__atomic_add_fetch(&proc->num_ref, -1, __ATOMIC_ACQ_REL) == 0) {
+        proc_hide(proc);
+    }
+}

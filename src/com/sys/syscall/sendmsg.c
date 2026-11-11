@@ -1,94 +1,69 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <kernel/com/crt/usercopy.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/sockfs.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/socket/socket.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
-#include <lib/usercopy.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
 // SYSCALL: sendmsg(int sockfd, struct msghdr *msg, int flags)
-COM_SYS_SYSCALL(com_sys_syscall_sendmsg) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+SYSCALL(syscall_sendmsg) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    int            sockfd = COM_SYS_SYSCALL_ARG(int, 1);
-    struct msghdr *msg    = COM_SYS_SYSCALL_ARG(void *, 2);
-    int            flags  = COM_SYS_SYSCALL_ARG(int, 3);
+    int sockfd = SYSCALL_ARG(int, 1);
+    struct msghdr *msg = SYSCALL_ARG(void *, 2);
+    int flags = SYSCALL_ARG(int, 3);
 
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *curr_proc   = curr_thread->proc;
+    Thread *curr_thread = cpu_get_thread();
+    Proc *curr_proc = curr_thread->proc;
 
     struct msghdr kmsg;
-    int           copy_ret = kmemcpy_from_user(&kmsg, msg, sizeof(kmsg));
-    if (0 != copy_ret) {
-        return COM_SYS_SYSCALL_ERR(copy_ret);
-    }
+    int copy_ret = memcpy_from_user(&kmsg, msg, sizeof(kmsg));
+    if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
 
-    kioviter_t ioviter;
-    copy_ret = kioviter_init_user(&ioviter,
-                                  curr_thread->scratch,
-                                  kmsg.msg_iov,
-                                  kmsg.msg_iovlen);
-    if (0 != copy_ret) {
-        return COM_SYS_SYSCALL_ERR(copy_ret);
-    }
+    IOVIter ioviter;
+    copy_ret = ioviter_init_user(&ioviter, curr_thread->scratch, kmsg.msg_iov,
+                                 kmsg.msg_iovlen);
+    if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
 
-    com_syscall_ret_t ret = COM_SYS_SYSCALL_BASE_OK();
+    SyscallRet ret = SYSCALL_BASE_OK();
 
-    com_file_t *sockfile = com_sys_proc_get_file(curr_proc, sockfd);
-    if (NULL == sockfile) {
-        ret = COM_SYS_SYSCALL_ERR(EBADF);
+    File *sockfile = proc_get_file(curr_proc, sockfd);
+    if (sockfile == NULL) {
+        ret = SYSCALL_ERR(EBADF);
         goto end;
     }
 
-    if (NULL == sockfile->vnode ||
-        E_COM_VNODE_TYPE_SOCKET != sockfile->vnode->type) {
-        ret = COM_SYS_SYSCALL_ERR(ENOTSOCK);
+    if (sockfile->vnode == NULL || sockfile->vnode->type != VNODE_TYPE_SOCKET) {
+        ret = SYSCALL_ERR(ENOTSOCK);
         goto end;
     }
 
-    com_socket_vnode_t *socket_vn = (void *)sockfile->vnode;
-    KASSERT(NULL != socket_vn->socket);
-    com_socket_t *socket = socket_vn->socket;
+    SocketVnode *socket_vn = (void *)sockfile->vnode;
+    assert(socket_vn->socket != NULL);
+    Socket *socket = socket_vn->socket;
 
-    com_socket_desc_t desc = {.ioviter    = &ioviter,
-                              .count      = ioviter.total_size,
-                              .count_done = 0,
-                              .flags      = sockfile->flags,
-                              .msgflags   = flags,
-                              .addr       = NULL};
+    SocketDesc desc = {.ioviter = &ioviter,
+                       .count = ioviter.total_size,
+                       .count_done = 0,
+                       .flags = sockfile->flags,
+                       .msgflags = flags,
+                       .addr = NULL};
 
-    int sock_ret = COM_IPC_SOCKET_SEND(socket, &desc);
-    if (0 != sock_ret) {
-        ret = COM_SYS_SYSCALL_ERR(sock_ret);
+    int sock_ret = SOCKET_SEND(socket, &desc);
+    if (sock_ret != 0) {
+        ret = SYSCALL_ERR(sock_ret);
         goto end;
     }
 
-    ret = COM_SYS_SYSCALL_OK(desc.count_done);
+    ret = SYSCALL_OK(desc.count_done);
 
 end:
-    COM_FS_FILE_RELEASE(sockfile);
+    FILE_REL(sockfile);
     return ret;
 }

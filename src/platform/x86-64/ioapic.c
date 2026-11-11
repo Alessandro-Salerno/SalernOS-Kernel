@@ -1,26 +1,8 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/util.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/opt/uacpi.h>
 #include <kernel/platform/mmu.h>
-#include <lib/util.h>
 #include <vendor/acpi.h>
 
 // CREDIT: Mathewnd/Astral
@@ -35,38 +17,36 @@
 #define IOAPIC_REG_PRIORITY    2
 #define IOAPIC_REG_ENTRY       0x10
 
-struct ioapic {
+struct IOAPICDevice {
     void *addr;
-    int   base;
-    int   top;
+    int base;
+    int top;
 };
 
-static struct acpi_madt      *MADTTable;
-static struct ioapic          IOAPICArray[MAX_IOAPICS];
-static struct acpi_entry_hdr *IOAPICListStart;
-static struct acpi_entry_hdr *IOAPICListEnd;
+static struct acpi_madt *MADTTable;
+static struct IOAPICDevice g_ioapic_array[MAX_IOAPICS];
+static struct acpi_entry_hdr *g_ioapic_list_start;
+static struct acpi_entry_hdr *g_ioapic_list_end;
 
-static size_t OverrideCount;
-static size_t IOAPICCount;
+static usize g_override_count;
+static usize g_ioapic_count;
 
-static inline uint32_t ioapic_read(void *ioapic, int reg) {
-    volatile uint32_t *apic = ioapic;
-    *apic                   = reg & 0xff;
+static inline u32 ioapic_read(void *ioapic, int reg) {
+    volatile u32 *apic = ioapic;
+    *apic = reg & 0xff;
     return *(apic + 4);
 }
 
-static inline void ioapic_write(void *ioapic, int reg, uint32_t v) {
-    volatile uint32_t *apic = ioapic;
-    *apic                   = reg & 0xff;
-    *(apic + 4)             = v;
+static inline void ioapic_write(void *ioapic, int reg, u32 v) {
+    volatile u32 *apic = ioapic;
+    *apic = reg & 0xff;
+    *(apic + 4) = v;
 }
 
-static struct ioapic *ioapic_by_gsi(int gsi) {
-    for (size_t i = 0; i < IOAPICCount; ++i) {
-        struct ioapic *ioapic = &IOAPICArray[i];
-        if (gsi >= ioapic->base && gsi < ioapic->top) {
-            return ioapic;
-        }
+static struct IOAPICDevice *ioapic_by_gsi(int gsi) {
+    for (usize i = 0; i < g_ioapic_count; ++i) {
+        struct IOAPICDevice *ioapic = &g_ioapic_array[i];
+        if (gsi >= ioapic->base && gsi < ioapic->top) return ioapic;
     }
 
     return NULL;
@@ -74,18 +54,16 @@ static struct ioapic *ioapic_by_gsi(int gsi) {
 
 static inline struct acpi_entry_hdr *
 madt_getnext(struct acpi_entry_hdr *header) {
-    uintptr_t ptr = (uintptr_t)header;
+    uptr ptr = (uptr)header;
     return (struct acpi_entry_hdr *)(ptr + header->length);
 }
 
-static inline void *madt_getentry(int type, size_t n) {
-    struct acpi_entry_hdr *entry = IOAPICListStart;
+static inline void *madt_getentry(int type, usize n) {
+    struct acpi_entry_hdr *entry = g_ioapic_list_start;
 
-    while (entry < IOAPICListEnd) {
+    while (entry < g_ioapic_list_end) {
         if (entry->type == type) {
-            if (0 == n--) {
-                return entry;
-            }
+            if (n-- == 0) return entry;
         }
         entry = madt_getnext(entry);
     }
@@ -94,29 +72,20 @@ static inline void *madt_getentry(int type, size_t n) {
 }
 
 static int madt_getcount(int type) {
-    struct acpi_entry_hdr *entry = IOAPICListStart;
-    int                    count = 0;
+    struct acpi_entry_hdr *entry = g_ioapic_list_start;
+    int count = 0;
 
-    while (entry < IOAPICListEnd) {
-        if (entry->type == type) {
-            count++;
-        }
+    while (entry < g_ioapic_list_end) {
+        if (entry->type == type) count++;
         entry = madt_getnext(entry);
     }
 
     return count;
 }
 
-static void iored_write(void   *ioapic,
-                        uint8_t entry,
-                        uint8_t vector,
-                        uint8_t delivery,
-                        uint8_t destmode,
-                        uint8_t polarity,
-                        uint8_t mode,
-                        uint8_t mask,
-                        uint8_t dest) {
-    uint32_t val = vector;
+static void iored_write(void *ioapic, u8 entry, u8 vector, u8 delivery,
+                        u8 destmode, u8 polarity, u8 mode, u8 mask, u8 dest) {
+    u32 val = vector;
     val |= (delivery & 0b111) << 8;
     val |= (destmode & 1) << 11;
     val |= (polarity & 1) << 13;
@@ -124,78 +93,65 @@ static void iored_write(void   *ioapic,
     val |= (mask & 1) << 16;
 
     ioapic_write(ioapic, 0x10 + entry * 2, val);
-    ioapic_write(ioapic, 0x11 + entry * 2, (uint32_t)dest << 24);
+    ioapic_write(ioapic, 0x11 + entry * 2, (u32)dest << 24);
 }
 
-void x86_64_ioapic_set_irq(uint8_t irq,
-                           uint8_t vector,
-                           uint8_t proc,
-                           bool    masked) {
+void ioapic_set_irq(u8 irq, u8 vector, u8 proc, bool masked) {
     // default settings for ISA irqs
-    uint8_t polarity = 1; // active high
-    uint8_t trigger  = 0; // edge triggered
+    u8 polarity = 1; // active high
+    u8 trigger = 0;  // edge triggered
 
-    for (size_t i = 0; i < OverrideCount; ++i) {
+    for (usize i = 0; i < g_override_count; ++i) {
         struct acpi_madt_interrupt_source_override *override = madt_getentry(
-            ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE,
-            i);
-        KASSERT(NULL != override);
+            ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE, i);
+        assert(override != NULL);
 
         if (override->source == irq) {
             polarity = override->flags & 2 ? 1 : 0; // active low
-            trigger  = override->flags & 8 ? 1 : 0; // level triggered
-            irq      = override->gsi;
+            trigger = override->flags & 8 ? 1 : 0;  // level triggered
+            irq = override->gsi;
             break;
         }
     }
 
-    struct ioapic *ioapic = ioapic_by_gsi(irq);
-    KASSERT(NULL != ioapic);
+    struct IOAPICDevice *ioapic = ioapic_by_gsi(irq);
+    assert(ioapic != NULL);
     irq = irq - ioapic->base;
-    iored_write(ioapic->addr,
-                irq,
-                vector,
-                0,
-                0,
-                polarity,
-                trigger,
-                masked ? 1 : 0,
-                proc);
+    iored_write(ioapic->addr, irq, vector, 0, 0, polarity, trigger,
+                masked ? 1 : 0, proc);
 }
 
-void x86_64_ioapic_init(void) {
-    KLOG("initializing ioapic");
-    opt_acpi_table_t tbl;
-    int err = opt_acpi_impl_find_table_by_signature(&tbl, ACPI_MADT_SIGNATURE);
-    KASSERT(0 == err);
+void ioapic_init(void) {
+    log("initializing ioapic");
+    ACPITable tbl;
+    int err = acpi_impl_find_table_by_signature(ACPI_MADT_SIGNATURE, &tbl);
+    assert(err == 0);
 
     MADTTable = tbl.phys_addr;
-    KDEBUG("found madt table at phys=%p virt=%p", tbl.phys_addr, tbl.virt_addr);
-    IOAPICListStart = (void *)&MADTTable->entries;
-    IOAPICListEnd   = (void *)((uintptr_t)MADTTable + MADTTable->hdr.length);
+    log_debug("found madt table at phys=%p virt=%p", tbl.phys_addr,
+              tbl.virt_addr);
+    g_ioapic_list_start = (void *)&MADTTable->entries;
+    g_ioapic_list_end = (void *)((uptr)MADTTable + MADTTable->hdr.length);
 
-    OverrideCount = madt_getcount(
+    g_override_count = madt_getcount(
         ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE);
-    IOAPICCount = madt_getcount(ACPI_MADT_ENTRY_TYPE_IOAPIC);
-    KDEBUG("found %zu overrides and %zu ioapics", OverrideCount, IOAPICCount);
+    g_ioapic_count = madt_getcount(ACPI_MADT_ENTRY_TYPE_IOAPIC);
+    log_debug("found %zu overrides and %zu ioapics", g_override_count,
+              g_ioapic_count);
 
-    for (size_t i = 0; i < IOAPICCount; i++) {
+    for (usize i = 0; i < g_ioapic_count; i++) {
         struct acpi_madt_ioapic *entry = madt_getentry(
-            ACPI_MADT_ENTRY_TYPE_IOAPIC,
-            i);
-        struct ioapic *ioapic = &IOAPICArray[i];
+            ACPI_MADT_ENTRY_TYPE_IOAPIC, i);
+        struct IOAPICDevice *ioapic = &g_ioapic_array[i];
 
-        ioapic->addr = com_mm_vmm_map(
-            NULL,
-            NULL,
-            (void *)(uintptr_t)entry->address,
-            ARCH_PAGE_SIZE,
-            COM_MM_VMM_FLAGS_NOHINT | COM_MM_VMM_FLAGS_PHYSICAL,
-            ARCH_MMU_FLAGS_READ | ARCH_MMU_FLAGS_WRITE | ARCH_MMU_FLAGS_NOEXEC);
+        ioapic->addr = vmm_map(NULL, NULL, (void *)(uptr)entry->address,
+                               PAGE_SIZE, VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                               MMU_FLAGS_READ | MMU_FLAGS_WRITE |
+                                   MMU_FLAGS_NOEXEC);
 
         ioapic->base = entry->gsi_base;
-        size_t count = ioapic_read(ioapic->addr, IOAPIC_REG_ENTRY_COUNT);
-        ioapic->top  = entry->gsi_base + ((count >> 16) & 0xff) + 1;
+        usize count = ioapic_read(ioapic->addr, IOAPIC_REG_ENTRY_COUNT);
+        ioapic->top = entry->gsi_base + ((count >> 16) & 0xff) + 1;
 
         for (int j = ioapic->base; j < ioapic->top; j++) {
             iored_write(ioapic->addr, j - ioapic->base, 0xfe, 0, 0, 0, 0, 1, 0);

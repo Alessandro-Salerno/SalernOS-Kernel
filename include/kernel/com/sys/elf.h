@@ -1,67 +1,35 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sys/proc.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/context.h>
 #include <kernel/platform/info.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #include <salernos/syscall_str.h>
 
 typedef struct {
-    uintptr_t entry;
-    size_t    phdr;
-    size_t    phent_sz;
-    size_t    phent_num;
-    char      interpreter_path[64];
-    size_t    interpreter_len;
-} com_elf_data_t;
+    uptr entry;
+    usize phdr;
+    usize phent_sz;
+    usize phent_num;
+    char interpreter_path[64];
+    usize interpreter_len;
+} ELFData;
 
-int com_sys_elf64_load(com_elf_data_t    *out,
-                       const char        *exec_path,
-                       size_t             exec_path_len,
-                       com_vnode_t       *root,
-                       com_vnode_t       *cwd,
-                       uintptr_t          virt_off,
-                       com_vmm_context_t *vmm_context);
+int elf64_load(const char *exec_path, usize exec_path_len, Vnode *root,
+               Vnode *cwd, uptr virt_off, VMMContext *vmm_context,
+               ELFData *out_elf_data);
 
 // argv and envp are either kernel arrays of kernel strings or user arrays of
 // user strings
-int com_sys_elf64_prepare_stack(uintptr_t                *out_stack_ptr,
-                                com_vmm_context_t        *vmm_ctx,
-                                com_elf_data_t            elf_data,
-                                size_t                    stack_end_virt,
-                                size_t                    stack_len,
-                                const struct syscall_str *argv,
-                                size_t                    argc,
-                                const struct syscall_str *envp,
-                                size_t                    envc);
-int com_sys_elf64_prepare_proc(com_vmm_context_t       **out_vmm_context,
-                               const char               *path,
-                               size_t                    pathlen,
-                               const struct syscall_str *argv,
-                               size_t                    argc,
-                               const struct syscall_str *envp,
-                               size_t                    envc,
-                               com_proc_t               *proc,
-                               arch_context_t           *ctx);
+int elf64_prepare_stack(VMMContext *vmm_ctx, ELFData elf_data,
+                        usize stack_end_virt, usize stack_len,
+                        const struct syscall_str *argv, usize argc,
+                        const struct syscall_str *envp, usize envc,
+                        uptr *out_stack_ptr);
+int elf64_prepare_proc(const char *path, usize pathlen,
+                       const struct syscall_str *argv, usize argc,
+                       const struct syscall_str *envp, usize envc, Proc *proc,
+                       Context *ctx, VMMContext **out_vmm_context);

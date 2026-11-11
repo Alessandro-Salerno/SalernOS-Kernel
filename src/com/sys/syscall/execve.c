@@ -1,39 +1,19 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/elf.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
-#include <lib/spinlock.h>
-#include <lib/str.h>
-#include <lib/util.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #include <salernos/syscall_str.h>
 
@@ -41,57 +21,43 @@
 // somehow crashed the kernel sometimes, but now the opposite seems to happen:
 // use icewm, when passing on the main bar, it does execve for some reason and
 // has CLOEXEC on a socket, so the socket sybsystem notifies readers with
-// com_sys_sched_notify_all which also takes the sched_lock. So I need to check
+// sched_notify_all which also takes the sched_lock. So I need to check
 // which version is correct.
 
 // SYSCALL: execve(const struct syscall_str *path, const struct syscall_str
-// *argv, size_t argc, const struct syscall_str *envp, size_t envc)
-COM_SYS_SYSCALL(com_sys_syscall_execve) {
-    COM_SYS_SYSCALL_UNUSED_START(6);
+// *argv, usize argc, const struct syscall_str *envp, usize envc)
+SYSCALL(syscall_execve) {
+    SYSCALL_UNUSED_START(6);
 
-    arch_context_t           *ctx   = COM_SYS_SYSCALL_CONTEXT();
-    const struct syscall_str *upath = COM_SYS_SYSCALL_ARG(void *, 1);
-    const struct syscall_str *argv  = COM_SYS_SYSCALL_ARG(void *, 2);
-    size_t                    argc  = COM_SYS_SYSCALL_ARG(size_t, 3);
-    const struct syscall_str *envp  = COM_SYS_SYSCALL_ARG(void *, 4);
-    size_t                    envc  = COM_SYS_SYSCALL_ARG(size_t, 5);
+    Context *ctx = SYSCALL_CONTEXT();
+    const struct syscall_str *upath = SYSCALL_ARG(void *, 1);
+    const struct syscall_str *argv = SYSCALL_ARG(void *, 2);
+    usize argc = SYSCALL_ARG(usize, 3);
+    const struct syscall_str *envp = SYSCALL_ARG(void *, 4);
+    usize envc = SYSCALL_ARG(usize, 5);
 
-    char   path[CONFIG_PATH_MAX];
-    size_t pathlen;
-    int    path_ret = com_sys_syscall_copy_str(&pathlen,
-                                            path,
-                                            sizeof(path),
-                                            upath);
-    if (0 != path_ret) {
-        return COM_SYS_SYSCALL_ERR(path_ret);
-    }
+    char path[CONFIG_PATH_MAX];
+    usize pathlen;
+    int path_ret = syscall_copy_str(path, sizeof(path), upath, &pathlen);
+    if (path_ret != 0) return SYSCALL_ERR(path_ret);
 
     // The strings themselves are checked while they are copied
-    if (!ARCH_MMU_ARRAY_IS_USER(argv, argc, sizeof(*argv)) ||
-        !ARCH_MMU_ARRAY_IS_USER(envp, envc, sizeof(*envp))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    if (!MMU_ARRAY_IS_USER(argv, argc, sizeof(*argv)) ||
+        !MMU_ARRAY_IS_USER(envp, envc, sizeof(*envp))) {
+        return SYSCALL_ERR(EFAULT);
     }
 
-    com_thread_t *thread = ARCH_CPU_GET_THREAD();
-    com_proc_t   *proc   = thread->proc;
+    Thread *thread = cpu_get_thread();
+    Proc *proc = thread->proc;
 
-    com_vmm_context_t *old_vmm_ctx = proc->vmm_context;
-    com_vmm_context_t *new_vmm_ctx = NULL;
-    int                status      = com_sys_elf64_prepare_proc(&new_vmm_ctx,
-                                            path,
-                                            pathlen,
-                                            argv,
-                                            argc,
-                                            envp,
-                                            envc,
-                                            proc,
-                                            ctx);
+    VMMContext *old_vmm_ctx = proc->vmm_context;
+    VMMContext *new_vmm_ctx = NULL;
+    int status = elf64_prepare_proc(path, pathlen, argv, argc, envp, envc, proc,
+                                    ctx, &new_vmm_ctx);
 
-    if (0 != status) {
-        return COM_SYS_SYSCALL_ERR(status);
-    }
+    if (status != 0) return SYSCALL_ERR(status);
 
-    com_sys_proc_kill_other_threads();
+    proc_kill_other_threads();
 
     // NOTE: we need preemption to be disabled here because otherwise this could
     // happen:
@@ -103,13 +69,13 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     // ours (since we killed all other threads) and noone looking up this PID is
     // going to read the vmm_context field, so no need to do anything atomically
     // or introduce locks
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    com_mm_vmm_switch(new_vmm_ctx);
+    cpu_disable_interrupts();
+    vmm_switch(new_vmm_ctx);
     proc->vmm_context = new_vmm_ctx;
-    KASSERT(proc->num_ref > 0);
-    ARCH_CPU_ENABLE_INTERRUPTS();
+    assert(proc->num_ref > 0);
+    cpu_enable_interrupts();
 
-    com_mm_vmm_destroy_context(old_vmm_ctx);
+    vmm_destroy_context(old_vmm_ctx);
 
     // NOTE: we don't need to take locks here because we're guaranteed to be the
     // only running thread of this process. Thus process-local resources are
@@ -118,26 +84,26 @@ COM_SYS_SYSCALL(com_sys_syscall_execve) {
     // however, is stuck here)
 
     for (int i = 0; i < proc->max_fd; i++) {
-        if (NULL != proc->fd[i].file &&
-            ((FD_CLOEXEC & proc->fd[i].flags) ||
-             (O_CLOEXEC & proc->fd[i].file->flags))) {
-            COM_FS_FILE_RELEASE(proc->fd[i].file);
-            proc->fd[i] = (com_filedesc_t){0};
+        if (proc->fd[i].file != NULL &&
+            ((proc->fd[i].flags & FD_CLOEXEC) ||
+             (proc->fd[i].file->flags & O_CLOEXEC))) {
+            FILE_REL(proc->fd[i].file);
+            proc->fd[i] = (FileDesc){0};
         }
     }
 
-    for (size_t i = 0; i < NSIG; i++) {
-        if (NULL != proc->sigaction[i] &&
-            (SIGCHLD != i || SIG_IGN != proc->sigaction[i]->sa_action)) {
-            com_mm_slab_free(proc->sigaction[i], sizeof(com_sigaction_t));
+    for (usize i = 0; i < NSIG; i++) {
+        if (proc->sigaction[i] != NULL &&
+            (i != SIGCHLD || proc->sigaction[i]->sa_action != SIG_IGN)) {
+            slab_free(proc->sigaction[i], sizeof(SignalAction));
             proc->sigaction[i] = NULL;
         }
     }
 
-    ARCH_CONTEXT_INIT_EXTRA(thread->xctx);
-    ARCH_CONTEXT_RESTORE_EXTRA(thread->xctx);
+    CONTEXT_INIT_EXTRA(thread->xctx);
+    CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     proc->did_execve = true;
 
-    return COM_SYS_SYSCALL_OK(0);
+    return SYSCALL_OK(0);
 }

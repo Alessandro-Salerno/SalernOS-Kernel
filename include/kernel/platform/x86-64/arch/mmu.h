@@ -1,62 +1,42 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 
-#define ARCH_MMU_KERNELSPACE_START (void *)0xffff800000000000
-#define ARCH_MMU_KERNELSPACE_END   (void *)0xffffffffffffffff
-#define ARCH_MMU_USERSPACE_START   (void *)0x0000000000000000
-#define ARCH_MMU_USERSPACE_END     (void *)0x00007ffffffff000
+#define MMU_KERNELSPACE_START (void *)0xffff800000000000
+#define MMU_KERNELSPACE_END   (void *)0xffffffffffffffff
+#define MMU_USERSPACE_START   (void *)0x0000000000000000
+#define MMU_USERSPACE_END     (void *)0x00007ffffffff000
 
 // We use a sort of guard page between userspace and the non-canonical hole to
 // avoid having the system panic on sysret when a system call is issued at the
 // edge
 
-#define ARCH_MMU_ADDR_IS_USER(a) ((void *)(a) < ARCH_MMU_USERSPACE_END)
-#define ARCH_MMU_RANGE_IS_USER(a, len) \
-    (ARCH_MMU_ADDR_IS_USER(a) &&       \
-     (uintmax_t)(len) <=               \
-         (uintptr_t)ARCH_MMU_USERSPACE_END - (uintptr_t)(void *)(a))
-#define ARCH_MMU_ARRAY_IS_USER(a, n, size)                           \
-    ((uintmax_t)(n) <= (uintptr_t)ARCH_MMU_USERSPACE_END / (size) && \
-     ARCH_MMU_RANGE_IS_USER(a, (uintmax_t)(n) * (size)))
+#define MMU_ADDR_IS_USER(a) ((void *)(a) < MMU_USERSPACE_END)
+#define MMU_RANGE_IS_USER(a, len) \
+    (MMU_ADDR_IS_USER(a) &&       \
+     (u64)(len) <= (uptr)MMU_USERSPACE_END - (uptr)(void *)(a))
+#define MMU_ARRAY_IS_USER(a, n, size)                \
+    ((u64)(n) <= (uptr)MMU_USERSPACE_END / (size) && \
+     MMU_RANGE_IS_USER(a, (u64)(n) * (size)))
 
-#define ARCH_MMU_FLAGS_READ    (uint64_t)1
-#define ARCH_MMU_FLAGS_WRITE   (uint64_t)2
-#define ARCH_MMU_FLAGS_USER    (uint64_t)4
-#define ARCH_MMU_FLAGS_PRESENT (uint64_t)1
-#define ARCH_MMU_FLAGS_NOEXEC  ((uint64_t)1 << 63)
-#define ARCH_MMU_FLAGS_GLOBAL  ((uint64_t)1 << 8)
+#define MMU_FLAGS_READ    (u64)1
+#define MMU_FLAGS_WRITE   (u64)2
+#define MMU_FLAGS_USER    (u64)4
+#define MMU_FLAGS_PRESENT (u64)1
+#define MMU_FLAGS_NOEXEC  ((u64)1 << 63)
+#define MMU_FLAGS_GLOBAL  ((u64)1 << 8)
 
-#define ARCH_MMU_FLAGS_WB 0
-#define ARCH_MMU_FLAGS_WT (1 << 3)
-#define ARCH_MMU_FLAGS_UC (1 << 4)
-#define ARCH_MMU_FLAGS_WC ((1 << 7) | ARCH_MMU_FLAGS_WT)
+#define MMU_FLAGS_WB 0
+#define MMU_FLAGS_WT (1 << 3)
+#define MMU_FLAGS_UC (1 << 4)
+#define MMU_FLAGS_WC ((1 << 7) | MMU_FLAGS_WT)
 
 // Common code (arch-agnostic) should NOT assume the presence of these flags.
 // However, it may use after checking with guards. The kernel is expected to
 // provide a fallback (but currently does not)
-#define ARCH_MMU_EXTRA_FLAGS_SHARED  (1 << 10)
-#define ARCH_MMU_EXTRA_FLAGS_PRIVATE (1 << 9) // same as COW
-#define ARCH_MMU_EXTRA_FLAGS_NOCOPY  (1 << 11)
+#define MMU_EXTRA_FLAGS_SHARED  (1 << 10)
+#define MMU_EXTRA_FLAGS_PRIVATE (1 << 9) // same as COW
+#define MMU_EXTRA_FLAGS_NOCOPY  (1 << 11)
 
-typedef uint64_t arch_mmu_pagetable_t;
-typedef uint64_t arch_mmu_flags_t;
+typedef u64 MMUPageTable;
+typedef u64 MMUFlags;

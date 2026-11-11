@@ -1,25 +1,8 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <kernel/com/io/console.h>
 #include <kernel/com/io/keyboard.h>
 #include <kernel/com/io/mouse.h>
 #include <kernel/com/sys/interrupt.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/x86-64/io.h>
 #include <kernel/platform/x86-64/ioapic.h>
 #include <kernel/platform/x86-64/ps2.h>
@@ -42,16 +25,16 @@
 #define PS2_MOUSEPKT_YOVERFLOW  0x80
 #define PS2_MOUSEPKT_TIMEOUT_NS 100000000
 #define PS2_MOUSEPKT_SYNCED(byte)  \
-    (PS2_MOUSEPKT_GOOD & (byte) && \
-     0 == ((PS2_MOUSEPKT_XOVERFLOW | PS2_MOUSEPKT_YOVERFLOW) & (byte)))
+    ((byte) & PS2_MOUSEPKT_GOOD && \
+     ((byte) & (PS2_MOUSEPKT_XOVERFLOW | PS2_MOUSEPKT_YOVERFLOW)) == 0)
 #define PS2_MOUSEPKT_ENOUGH(mouse, cycle) \
-    (((mouse)->has_wheel && 4 == cycle) || (!(mouse)->has_wheel && 3 == cycle))
-#define PS2_MOUSEPKT_TO_PROTOCOL(data)                 \
-    (1 & data[0] ? COM_IO_MOUSE_LEFTBUTTON : 0) |      \
-        (2 & data[0] ? COM_IO_MOUSE_RIGHTBUTTON : 0) | \
-        (4 & data[0] ? COM_IO_MOUSE_MIDBUTTON : 0) |   \
-        (0x10 & data[3] ? COM_IO_MOUSE_BUTTON4 : 0) |  \
-        (0x20 & data[3] ? COM_IO_MOUSE_BUTTON5 : 0)
+    (((mouse)->has_wheel && cycle == 4) || (!(mouse)->has_wheel && cycle == 3))
+#define PS2_MOUSEPKT_TO_PROTOCOL(data)          \
+    (data[0] & 1 ? MOUSE_LEFTBUTTON : 0) |      \
+        (data[0] & 2 ? MOUSE_RIGHTBUTTON : 0) | \
+        (data[0] & 4 ? MOUSE_MIDBUTTON : 0) |   \
+        (data[3] & 0x10 ? MOUSE_BUTTON4 : 0) |  \
+        (data[3] & 0x20 ? MOUSE_BUTTON5 : 0)
 
 #define PS2_PORT_DATA          0x60
 #define PS2_PORT_CNTL          0x64
@@ -74,317 +57,300 @@
 #define PS2_CFG_MOUSE_EXISTS       (1 << 5)
 #define PS2_CFG_TRANSLATION_ENABLE (1 << 6)
 
-struct ps2_keyboard {
-    com_keyboard_t *keyboard;
-    bool            extended;
+struct PS2Keyboard {
+    Keyboard *keyboard;
+    bool extended;
 };
 
-struct ps2_mouse {
-    com_mouse_t *mouse;
-    bool         has_wheel;
-    uint8_t      data[5];
-    size_t       cycle;
-    uintmax_t    last_time;
+struct PS2Mouse {
+    Mouse *mouse;
+    bool has_wheel;
+    u8 data[5];
+    usize cycle;
+    u64 last_time;
 };
 
 // TAKEN: Mathewnd/Astral
-static const char G_PS2_KEYBOARD_SCANCODES[128] = {
-    COM_IO_KEYBOARD_KEY_RESERVED,
-    COM_IO_KEYBOARD_KEY_ESCAPE,
-    COM_IO_KEYBOARD_KEY_1,
-    COM_IO_KEYBOARD_KEY_2,
-    COM_IO_KEYBOARD_KEY_3,
-    COM_IO_KEYBOARD_KEY_4,
-    COM_IO_KEYBOARD_KEY_5,
-    COM_IO_KEYBOARD_KEY_6,
-    COM_IO_KEYBOARD_KEY_7,
-    COM_IO_KEYBOARD_KEY_8,
-    COM_IO_KEYBOARD_KEY_9,
-    COM_IO_KEYBOARD_KEY_0,
-    COM_IO_KEYBOARD_KEY_MINUS,
-    COM_IO_KEYBOARD_KEY_EQUAL,
-    COM_IO_KEYBOARD_KEY_BACKSPACE,
-    COM_IO_KEYBOARD_KEY_TAB,
-    COM_IO_KEYBOARD_KEY_Q,
-    COM_IO_KEYBOARD_KEY_W,
-    COM_IO_KEYBOARD_KEY_E,
-    COM_IO_KEYBOARD_KEY_R,
-    COM_IO_KEYBOARD_KEY_T,
-    COM_IO_KEYBOARD_KEY_Y,
-    COM_IO_KEYBOARD_KEY_U,
-    COM_IO_KEYBOARD_KEY_I,
-    COM_IO_KEYBOARD_KEY_O,
-    COM_IO_KEYBOARD_KEY_P,
-    COM_IO_KEYBOARD_KEY_LEFTBRACE,
-    COM_IO_KEYBOARD_KEY_RIGHTBRACE,
-    COM_IO_KEYBOARD_KEY_ENTER,
-    COM_IO_KEYBOARD_KEY_LEFTCTRL,
-    COM_IO_KEYBOARD_KEY_A,
-    COM_IO_KEYBOARD_KEY_S,
-    COM_IO_KEYBOARD_KEY_D,
-    COM_IO_KEYBOARD_KEY_F,
-    COM_IO_KEYBOARD_KEY_G,
-    COM_IO_KEYBOARD_KEY_H,
-    COM_IO_KEYBOARD_KEY_J,
-    COM_IO_KEYBOARD_KEY_K,
-    COM_IO_KEYBOARD_KEY_L,
-    COM_IO_KEYBOARD_KEY_SEMICOLON,
-    COM_IO_KEYBOARD_KEY_APOSTROPHE,
-    COM_IO_KEYBOARD_KEY_GRAVE,
-    COM_IO_KEYBOARD_KEY_LEFTSHIFT,
-    COM_IO_KEYBOARD_KEY_BACKSLASH,
-    COM_IO_KEYBOARD_KEY_Z,
-    COM_IO_KEYBOARD_KEY_X,
-    COM_IO_KEYBOARD_KEY_C,
-    COM_IO_KEYBOARD_KEY_V,
-    COM_IO_KEYBOARD_KEY_B,
-    COM_IO_KEYBOARD_KEY_N,
-    COM_IO_KEYBOARD_KEY_M,
-    COM_IO_KEYBOARD_KEY_COMMA,
-    COM_IO_KEYBOARD_KEY_DOT,
-    COM_IO_KEYBOARD_KEY_SLASH,
-    COM_IO_KEYBOARD_KEY_RIGHTSHIFT,
-    COM_IO_KEYBOARD_KEY_KEYPADASTERISK,
-    COM_IO_KEYBOARD_KEY_LEFTALT,
-    COM_IO_KEYBOARD_KEY_SPACE,
-    COM_IO_KEYBOARD_KEY_CAPSLOCK,
-    COM_IO_KEYBOARD_KEY_F1,
-    COM_IO_KEYBOARD_KEY_F2,
-    COM_IO_KEYBOARD_KEY_F3,
-    COM_IO_KEYBOARD_KEY_F4,
-    COM_IO_KEYBOARD_KEY_F5,
-    COM_IO_KEYBOARD_KEY_F6,
-    COM_IO_KEYBOARD_KEY_F7,
-    COM_IO_KEYBOARD_KEY_F8,
-    COM_IO_KEYBOARD_KEY_F9,
-    COM_IO_KEYBOARD_KEY_F10,
-    COM_IO_KEYBOARD_KEY_NUMLOCK,
-    COM_IO_KEYBOARD_KEY_SCROLLLOCK,
-    COM_IO_KEYBOARD_KEY_KEYPAD7,
-    COM_IO_KEYBOARD_KEY_KEYPAD8,
-    COM_IO_KEYBOARD_KEY_KEYPAD9,
-    COM_IO_KEYBOARD_KEY_KEYPADMINUS,
-    COM_IO_KEYBOARD_KEY_KEYPAD4,
-    COM_IO_KEYBOARD_KEY_KEYPAD5,
-    COM_IO_KEYBOARD_KEY_KEYPAD6,
-    COM_IO_KEYBOARD_KEY_KEYPADPLUS,
-    COM_IO_KEYBOARD_KEY_KEYPAD1,
-    COM_IO_KEYBOARD_KEY_KEYPAD2,
-    COM_IO_KEYBOARD_KEY_KEYPAD3,
-    COM_IO_KEYBOARD_KEY_KEYPAD0,
-    COM_IO_KEYBOARD_KEY_KEYPADDOT,
-    0,
-    0,
-    0,
-    COM_IO_KEYBOARD_KEY_F11,
-    COM_IO_KEYBOARD_KEY_F12};
+static const char G_PS2_KEYBOARD_SCANCODES[128] = {KEYBOARD_KEY_RESERVED,
+                                                   KEYBOARD_KEY_ESCAPE,
+                                                   KEYBOARD_KEY_1,
+                                                   KEYBOARD_KEY_2,
+                                                   KEYBOARD_KEY_3,
+                                                   KEYBOARD_KEY_4,
+                                                   KEYBOARD_KEY_5,
+                                                   KEYBOARD_KEY_6,
+                                                   KEYBOARD_KEY_7,
+                                                   KEYBOARD_KEY_8,
+                                                   KEYBOARD_KEY_9,
+                                                   KEYBOARD_KEY_0,
+                                                   KEYBOARD_KEY_MINUS,
+                                                   KEYBOARD_KEY_EQUAL,
+                                                   KEYBOARD_KEY_BACKSPACE,
+                                                   KEYBOARD_KEY_TAB,
+                                                   KEYBOARD_KEY_Q,
+                                                   KEYBOARD_KEY_W,
+                                                   KEYBOARD_KEY_E,
+                                                   KEYBOARD_KEY_R,
+                                                   KEYBOARD_KEY_T,
+                                                   KEYBOARD_KEY_Y,
+                                                   KEYBOARD_KEY_U,
+                                                   KEYBOARD_KEY_I,
+                                                   KEYBOARD_KEY_O,
+                                                   KEYBOARD_KEY_P,
+                                                   KEYBOARD_KEY_LEFTBRACE,
+                                                   KEYBOARD_KEY_RIGHTBRACE,
+                                                   KEYBOARD_KEY_ENTER,
+                                                   KEYBOARD_KEY_LEFTCTRL,
+                                                   KEYBOARD_KEY_A,
+                                                   KEYBOARD_KEY_S,
+                                                   KEYBOARD_KEY_D,
+                                                   KEYBOARD_KEY_F,
+                                                   KEYBOARD_KEY_G,
+                                                   KEYBOARD_KEY_H,
+                                                   KEYBOARD_KEY_J,
+                                                   KEYBOARD_KEY_K,
+                                                   KEYBOARD_KEY_L,
+                                                   KEYBOARD_KEY_SEMICOLON,
+                                                   KEYBOARD_KEY_APOSTROPHE,
+                                                   KEYBOARD_KEY_GRAVE,
+                                                   KEYBOARD_KEY_LEFTSHIFT,
+                                                   KEYBOARD_KEY_BACKSLASH,
+                                                   KEYBOARD_KEY_Z,
+                                                   KEYBOARD_KEY_X,
+                                                   KEYBOARD_KEY_C,
+                                                   KEYBOARD_KEY_V,
+                                                   KEYBOARD_KEY_B,
+                                                   KEYBOARD_KEY_N,
+                                                   KEYBOARD_KEY_M,
+                                                   KEYBOARD_KEY_COMMA,
+                                                   KEYBOARD_KEY_DOT,
+                                                   KEYBOARD_KEY_SLASH,
+                                                   KEYBOARD_KEY_RIGHTSHIFT,
+                                                   KEYBOARD_KEY_KEYPADASTERISK,
+                                                   KEYBOARD_KEY_LEFTALT,
+                                                   KEYBOARD_KEY_SPACE,
+                                                   KEYBOARD_KEY_CAPSLOCK,
+                                                   KEYBOARD_KEY_F1,
+                                                   KEYBOARD_KEY_F2,
+                                                   KEYBOARD_KEY_F3,
+                                                   KEYBOARD_KEY_F4,
+                                                   KEYBOARD_KEY_F5,
+                                                   KEYBOARD_KEY_F6,
+                                                   KEYBOARD_KEY_F7,
+                                                   KEYBOARD_KEY_F8,
+                                                   KEYBOARD_KEY_F9,
+                                                   KEYBOARD_KEY_F10,
+                                                   KEYBOARD_KEY_NUMLOCK,
+                                                   KEYBOARD_KEY_SCROLLLOCK,
+                                                   KEYBOARD_KEY_KEYPAD7,
+                                                   KEYBOARD_KEY_KEYPAD8,
+                                                   KEYBOARD_KEY_KEYPAD9,
+                                                   KEYBOARD_KEY_KEYPADMINUS,
+                                                   KEYBOARD_KEY_KEYPAD4,
+                                                   KEYBOARD_KEY_KEYPAD5,
+                                                   KEYBOARD_KEY_KEYPAD6,
+                                                   KEYBOARD_KEY_KEYPADPLUS,
+                                                   KEYBOARD_KEY_KEYPAD1,
+                                                   KEYBOARD_KEY_KEYPAD2,
+                                                   KEYBOARD_KEY_KEYPAD3,
+                                                   KEYBOARD_KEY_KEYPAD0,
+                                                   KEYBOARD_KEY_KEYPADDOT,
+                                                   0,
+                                                   0,
+                                                   0,
+                                                   KEYBOARD_KEY_F11,
+                                                   KEYBOARD_KEY_F12};
 
 static const char G_PS2_KEYBOARD_EXT_SCANCODES[128] = {
-    [0x1C] = COM_IO_KEYBOARD_KEY_KEYPADENTER,
-    [0x1D] = COM_IO_KEYBOARD_KEY_RIGHTCTRL,
-    [0x35] = COM_IO_KEYBOARD_KEY_KEYPADSLASH, // k/
-    [0x38] = COM_IO_KEYBOARD_KEY_RIGHTALT,    // altgr
-    [0x47] = COM_IO_KEYBOARD_KEY_HOME,        // home
-    [0x48] = COM_IO_KEYBOARD_KEY_UP,          // up
-    [0x49] = COM_IO_KEYBOARD_KEY_PAGEUP,      // page up
-    [0x4B] = COM_IO_KEYBOARD_KEY_LEFT,        // left
-    [0x4D] = COM_IO_KEYBOARD_KEY_RIGHT,       // right
-    [0x4F] = COM_IO_KEYBOARD_KEY_END,         // end
-    [0x50] = COM_IO_KEYBOARD_KEY_DOWN,        // down
-    [0x51] = COM_IO_KEYBOARD_KEY_PAGEDOWN,    // page down
-    [0x52] = COM_IO_KEYBOARD_KEY_INSERT,      // insert
-    [0x53] = COM_IO_KEYBOARD_KEY_DELETE       // delete
+    [0x1C] = KEYBOARD_KEY_KEYPADENTER, [0x1D] = KEYBOARD_KEY_RIGHTCTRL,
+    [0x35] = KEYBOARD_KEY_KEYPADSLASH, // k/
+    [0x38] = KEYBOARD_KEY_RIGHTALT,    // altgr
+    [0x47] = KEYBOARD_KEY_HOME,        // home
+    [0x48] = KEYBOARD_KEY_UP,          // up
+    [0x49] = KEYBOARD_KEY_PAGEUP,      // page up
+    [0x4B] = KEYBOARD_KEY_LEFT,        // left
+    [0x4D] = KEYBOARD_KEY_RIGHT,       // right
+    [0x4F] = KEYBOARD_KEY_END,         // end
+    [0x50] = KEYBOARD_KEY_DOWN,        // down
+    [0x51] = KEYBOARD_KEY_PAGEDOWN,    // page down
+    [0x52] = KEYBOARD_KEY_INSERT,      // insert
+    [0x53] = KEYBOARD_KEY_DELETE       // delete
 };
 
-static struct ps2_keyboard Ps2Keyboard = {0};
-static struct ps2_mouse    Ps2Mouse    = {0};
+static struct PS2Keyboard g_ps2_keyboard = {0};
+static struct PS2Mouse g_ps2_mouse = {0};
 
 // UTILITY CODE
 
-static void ps2_write(uint16_t port, uint8_t val) {
-    while (2 & X86_64_IO_INB(0x64)) {
-        ARCH_CPU_PAUSE();
-    }
+static void ps2_write(u16 port, u8 val) {
+    while (io_inb(0x64) & 2) cpu_pause();
 
-    X86_64_IO_OUTB(port, val);
+    io_outb(port, val);
 }
 
-static uint16_t ps2_read(uint16_t port) {
-    while (X86_64_IO_INB(0x64) & 2) asm("pause");
-    return X86_64_IO_INB(port);
+static u16 ps2_read(u16 port) {
+    while (io_inb(0x64) & 2) asm("pause");
+    return io_inb(port);
 }
 
-static void ps2_mouse_wait(uint8_t bit) {
-    for (uint32_t i = 0; i < 100000; i++) {
-        if (PS2_STATUS_OUTDATA == bit &&
-            1 == (PS2_STATUS_OUTDATA & X86_64_IO_INB(PS2_PORT_CNTL))) {
+static void ps2_mouse_wait(u8 bit) {
+    for (u32 i = 0; i < 100000; i++) {
+        if (bit == PS2_STATUS_OUTDATA &&
+            (io_inb(PS2_PORT_CNTL) & PS2_STATUS_OUTDATA) == 1) {
             return;
         }
-        if (PS2_STATUS_INDATA == bit &&
-            0 == (PS2_STATUS_INDATA & X86_64_IO_INB(PS2_PORT_CNTL))) {
+        if (bit == PS2_STATUS_INDATA &&
+            (io_inb(PS2_PORT_CNTL) & PS2_STATUS_INDATA) == 0) {
             return;
         }
     }
 }
 
-static void ps2_mouse_write(uint8_t val) {
+static void ps2_mouse_write(u8 val) {
     ps2_mouse_wait(PS2_STATUS_INDATA);
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
     ps2_mouse_wait(PS2_STATUS_INDATA);
-    X86_64_IO_OUTB(PS2_PORT_DATA, val);
+    io_outb(PS2_PORT_DATA, val);
 }
 
-static uint8_t ps2_mouse_read(void) {
+static u8 ps2_mouse_read(void) {
     ps2_mouse_wait(PS2_STATUS_OUTDATA);
-    return X86_64_IO_INB(PS2_PORT_DATA);
+    return io_inb(PS2_PORT_DATA);
 }
 
 // KEYBOARD HANDLERS
 
-static void ps2_keyboard_isr(com_isr_t *isr, arch_context_t *ctx) {
+static void ps2_keyboard_isr(InterruptHandler *isr, Context *ctx) {
     (void)isr;
     (void)ctx;
 
-    uint8_t scancode = X86_64_IO_INB(PS2_PORT_DATA);
+    u8 scancode = io_inb(PS2_PORT_DATA);
 
-    if (PS2_KEYBOARD_EXTENDED_SCANCODE == scancode) {
-        Ps2Keyboard.extended = true;
+    if (scancode == PS2_KEYBOARD_EXTENDED_SCANCODE) {
+        g_ps2_keyboard.extended = true;
         return;
     }
 
-    com_kbd_packet_t pkt = {0};
-    pkt.keyboard         = Ps2Keyboard.keyboard;
-    pkt.keystate         = COM_IO_KEYBOARD_KEYSTATE_PRESSED;
+    KbdPacket pkt = {0};
+    pkt.keyboard = g_ps2_keyboard.keyboard;
+    pkt.keystate = KEYBOARD_KEYSTATE_PRESSED;
 
-    if (PS2_KEYBOARD_KEY_RELEASED & scancode) {
-        pkt.keystate = COM_IO_KEYBOARD_KEYSTATE_RELEASED;
+    if (scancode & PS2_KEYBOARD_KEY_RELEASED) {
+        pkt.keystate = KEYBOARD_KEYSTATE_RELEASED;
         scancode &= ~PS2_KEYBOARD_KEY_RELEASED;
     }
 
     const char *keycode_lookup = G_PS2_KEYBOARD_SCANCODES;
-    if (Ps2Keyboard.extended) {
-        keycode_lookup       = G_PS2_KEYBOARD_EXT_SCANCODES;
-        Ps2Keyboard.extended = false;
+    if (g_ps2_keyboard.extended) {
+        keycode_lookup = G_PS2_KEYBOARD_EXT_SCANCODES;
+        g_ps2_keyboard.extended = false;
     }
 
     pkt.keycode = keycode_lookup[scancode];
 
-    if (0 == pkt.keycode) {
-        return;
-    }
+    if (pkt.keycode == 0) return;
 
-    com_io_console_kbd_in(&pkt);
+    console_kbd_in(&pkt);
 }
 
 // MOUSE HANDLERS
 
 // CREDIT: Mathewnd/Astral
-static void ps2_mouse_isr(com_isr_t *isr, arch_context_t *ctx) {
+static void ps2_mouse_isr(InterruptHandler *isr, Context *ctx) {
     (void)isr;
     (void)ctx;
 
-    uint8_t status = X86_64_IO_INB(PS2_PORT_CNTL);
-    if (0 == (PS2_STATUS_OUTDATA & status) ||
-        0 == (PS2_STATUS_AUXDATA & status)) {
+    u8 status = io_inb(PS2_PORT_CNTL);
+    if ((status & PS2_STATUS_OUTDATA) == 0 ||
+        (status & PS2_STATUS_AUXDATA) == 0) {
         return;
     }
 
-    uint8_t   curr_byte = X86_64_IO_INB(PS2_PORT_DATA);
-    uintmax_t now       = X86_64_TSC_GET_NS();
+    u8 curr_byte = io_inb(PS2_PORT_DATA);
+    u64 now = cpu_get_time();
 
-    if (PS2_MOUSEPKT_TIMEOUT_NS < now - Ps2Mouse.last_time) {
-        Ps2Mouse.cycle = 0;
+    if (now - g_ps2_mouse.last_time > PS2_MOUSEPKT_TIMEOUT_NS) {
+        g_ps2_mouse.cycle = 0;
     }
-    Ps2Mouse.last_time = now;
+    g_ps2_mouse.last_time = now;
 
-    if (0 == Ps2Mouse.cycle && !PS2_MOUSEPKT_SYNCED(curr_byte)) {
-        return;
-    }
+    if (g_ps2_mouse.cycle == 0 && !PS2_MOUSEPKT_SYNCED(curr_byte)) return;
 
-    Ps2Mouse.data[Ps2Mouse.cycle] = curr_byte;
-    Ps2Mouse.cycle++;
-    if (!PS2_MOUSEPKT_ENOUGH(&Ps2Mouse, Ps2Mouse.cycle)) {
-        return;
-    }
+    g_ps2_mouse.data[g_ps2_mouse.cycle] = curr_byte;
+    g_ps2_mouse.cycle++;
+    if (!PS2_MOUSEPKT_ENOUGH(&g_ps2_mouse, g_ps2_mouse.cycle)) return;
 
-    uint8_t *mouse_data = Ps2Mouse.data;
+    u8 *mouse_data = g_ps2_mouse.data;
 
-    com_mouse_packet_t pkt = {0};
-    pkt.mouse              = Ps2Mouse.mouse;
-    pkt.buttons            = PS2_MOUSEPKT_TO_PROTOCOL(mouse_data);
-    pkt.dx                 = mouse_data[1] - (0x10 & mouse_data[0] ? 0x100 : 0);
-    pkt.dy                 = mouse_data[2] - (0x20 & mouse_data[0] ? 0x100 : 0);
-    pkt.dy                 = -pkt.dy;
-    pkt.dz = (0x07 & mouse_data[3]) * (0x08 & mouse_data[3] ? -1 : 1);
+    MousePacket pkt = {0};
+    pkt.mouse = g_ps2_mouse.mouse;
+    pkt.buttons = PS2_MOUSEPKT_TO_PROTOCOL(mouse_data);
+    pkt.dx = mouse_data[1] - (mouse_data[0] & 0x10 ? 0x100 : 0);
+    pkt.dy = mouse_data[2] - (mouse_data[0] & 0x20 ? 0x100 : 0);
+    pkt.dy = -pkt.dy;
+    pkt.dz = (mouse_data[3] & 0x07) * (mouse_data[3] & 0x08 ? -1 : 1);
 
-    Ps2Mouse.cycle = 0;
-    com_io_console_mouse_in(&pkt);
+    g_ps2_mouse.cycle = 0;
+    console_mouse_in(&pkt);
 }
 
 // SETUP CODE
 
-void x86_64_ps2_init(void) {
-    KLOG("initializing ps/2 controller");
+void ps2_init(void) {
+    log("initializing ps/2 controller");
 
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_KEYBAORD);
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_DISABLE_MOUSE);
 
     // Flush input buffer
-    while (PS2_STATUS_OUTDATA & X86_64_IO_INB(PS2_PORT_CNTL)) {
-        X86_64_IO_INB(PS2_PORT_DATA);
-    }
+    while (io_inb(PS2_PORT_CNTL) & PS2_STATUS_OUTDATA) io_inb(PS2_PORT_DATA);
 
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_READ_CFG);
-    uint8_t cfg = ps2_read(PS2_PORT_DATA);
+    u8 cfg = ps2_read(PS2_PORT_DATA);
     cfg |= PS2_CFG_IRQ0_ENABLE | PS2_CFG_TRANSLATION_ENABLE;
 
     // Only enable mouse if it exists
-    if (PS2_CFG_MOUSE_EXISTS & cfg) {
-        cfg |= PS2_CFG_IRQ1_ENABLE;
-    }
+    if (cfg & PS2_CFG_MOUSE_EXISTS) cfg |= PS2_CFG_IRQ1_ENABLE;
 
     ps2_write(PS2_PORT_CNTL, PS2_CNTL_WRITE_CFG);
     ps2_write(PS2_PORT_DATA, cfg);
 
     // Re-enable devices that were disabled at the beginning (if available)
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_KEYBAORD);
-    if (PS2_CFG_MOUSE_EXISTS & cfg) {
-        X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_ENABLE_KEYBAORD);
+    if (cfg & PS2_CFG_MOUSE_EXISTS) {
+        io_outb(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
     }
 }
 
-void x86_64_ps2_keyboard_init(void) {
-    KLOG("initializing ps/2 keyboard");
-    Ps2Keyboard.keyboard = com_io_keyboard_new(NULL);
-    com_isr_t *kbd_isr   = com_sys_interrupt_allocate(ps2_keyboard_isr,
-                                                      x86_64_lapic_eoi);
-    kbd_isr->flags |= COM_SYS_INTERRUPT_FLAGS_EOI_AFTER;
-    x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_KEYBOARD,
-                          kbd_isr->vec & 0xff,
-                          ARCH_CPU_GET_HARDWARE_ID(),
-                          false);
+void ps2_keyboard_init(void) {
+    log("initializing ps/2 keyboard");
+    g_ps2_keyboard.keyboard = keyboard_new(NULL);
+    InterruptHandler *kbd_isr = interrupt_allocate(ps2_keyboard_isr, lapic_eoi);
+    kbd_isr->flags |= INTERRUPT_FLAGS_EOI_AFTER;
+    ioapic_set_irq(IOAPIC_IRQ_KEYBOARD, kbd_isr->vec & 0xff,
+                   cpu_get_hardware_id(), false);
 }
 
 // CREDIT: vloxei64/ke
-void x86_64_ps2_mouse_init(void) {
-    KLOG("initializing ps/2 mouse");
+void ps2_mouse_init(void) {
+    log("initializing ps/2 mouse");
 
     // Enable mouse device
     ps2_mouse_wait(PS2_STATUS_INDATA);
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_ENABLE_MOUSE);
     ps2_mouse_wait(PS2_STATUS_INDATA);
 
     // Read current configuration
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_READ_CFG);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_READ_CFG);
     ps2_mouse_wait(PS2_STATUS_OUTDATA);
-    uint8_t cfg = X86_64_IO_INB(PS2_PORT_DATA);
+    u8 cfg = io_inb(PS2_PORT_DATA);
 
     // Enable mouse IRQ and write new configuration
     cfg |= PS2_CFG_IRQ1_ENABLE;
     ps2_mouse_wait(PS2_STATUS_INDATA);
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_CFG);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_WRITE_CFG);
     ps2_mouse_wait(PS2_STATUS_INDATA);
-    X86_64_IO_OUTB(PS2_PORT_DATA, cfg);
+    io_outb(PS2_PORT_DATA, cfg);
 
     // No idea what is going on here
     ps2_mouse_write(PS2_MOUSECTL_PULSE6);
@@ -392,33 +358,30 @@ void x86_64_ps2_mouse_init(void) {
     ps2_mouse_write(PS2_MOUSECTL_PULSE4);
     ps2_mouse_read();
 
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
-    X86_64_IO_OUTB(PS2_PORT_DATA, PS2_MOUSECTL_SAMPLERATE);
-    uint8_t sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
-    if (PS2_MOUSECTL_PULSE10 != sample_rate) {
-        KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
-               "%X, got %X",
-               PS2_MOUSECTL_PULSE10,
-               sample_rate);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    io_outb(PS2_PORT_DATA, PS2_MOUSECTL_SAMPLERATE);
+    u8 sample_rate = io_inb(PS2_PORT_DATA);
+    if (sample_rate != PS2_MOUSECTL_PULSE10) {
+        log_debug(
+            "received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
+            "%X, got %X",
+            PS2_MOUSECTL_PULSE10, sample_rate);
     }
 
-    X86_64_IO_OUTB(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
-    X86_64_IO_OUTB(PS2_PORT_DATA, 10);
-    sample_rate = X86_64_IO_INB(PS2_PORT_DATA);
-    if (PS2_MOUSECTL_PULSE10 != sample_rate) {
-        KDEBUG("received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
-               "%X, got %X",
-               PS2_MOUSECTL_PULSE10,
-               sample_rate);
+    io_outb(PS2_PORT_CNTL, PS2_CNTL_WRITE_MOUSE);
+    io_outb(PS2_PORT_DATA, 10);
+    sample_rate = io_inb(PS2_PORT_DATA);
+    if (sample_rate != PS2_MOUSECTL_PULSE10) {
+        log_debug(
+            "received unexpcted value for PS2_MOUSECTL_SAMPLERATE: expected "
+            "%X, got %X",
+            PS2_MOUSECTL_PULSE10, sample_rate);
     }
 
-    Ps2Mouse.mouse       = com_io_mouse_new();
-    Ps2Mouse.has_wheel   = false;
-    com_isr_t *mouse_isr = com_sys_interrupt_allocate(ps2_mouse_isr,
-                                                      x86_64_lapic_eoi);
-    mouse_isr->flags |= COM_SYS_INTERRUPT_FLAGS_EOI_AFTER;
-    x86_64_ioapic_set_irq(X86_64_IOAPIC_IRQ_MOUSE,
-                          mouse_isr->vec & 0xff,
-                          ARCH_CPU_GET_HARDWARE_ID(),
-                          false);
+    g_ps2_mouse.mouse = mouse_new();
+    g_ps2_mouse.has_wheel = false;
+    InterruptHandler *mouse_isr = interrupt_allocate(ps2_mouse_isr, lapic_eoi);
+    mouse_isr->flags |= INTERRUPT_FLAGS_EOI_AFTER;
+    ioapic_set_irq(IOAPIC_IRQ_MOUSE, mouse_isr->vec & 0xff,
+                   cpu_get_hardware_id(), false);
 }

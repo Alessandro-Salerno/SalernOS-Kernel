@@ -1,98 +1,65 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/syscall.h>
 #include <kernel/platform/x86-64/msr.h>
 
-void x86_64_syscall_isr(com_isr_t *isr, arch_context_t *ctx) {
+void syscall_isr(InterruptHandler *isr, Context *ctx) {
     (void)isr;
 
-    ARCH_CPU_GET_THREAD()->lock_depth = 0;
-    ARCH_CPU_ENABLE_INTERRUPTS();
-    com_syscall_ret_t ret = com_sys_syscall_invoke(ctx->rax,
-                                                   ctx,
-                                                   ctx->rdi,
-                                                   ctx->rsi,
-                                                   ctx->rdx,
-                                                   ctx->rcx,
-                                                   0,
-                                                   0,
-                                                   ctx->rip);
+    cpu_get_thread()->lock_depth = 0;
+    cpu_enable_interrupts();
+    SyscallRet ret = syscall_invoke(ctx->rax, ctx, ctx->rdi, ctx->rsi, ctx->rdx,
+                                    ctx->rcx, 0, 0, ctx->rip);
 
     if (!ret.discarded) {
         ctx->rax = ret.value;
         ctx->rdx = ret.err;
     }
 
-    KASSERT(0 == ARCH_CPU_GET_THREAD()->lock_depth);
-    ARCH_CPU_DISABLE_INTERRUPTS();
-    ARCH_CPU_GET_THREAD()->lock_depth = 1;
+    assert(cpu_get_thread()->lock_depth == 0);
+    cpu_disable_interrupts();
+    cpu_get_thread()->lock_depth = 1;
 }
 
-void x86_64_syscall_handle_sce(arch_context_t *ctx) {
-    com_thread_t *curr_thread = ARCH_CPU_GET_THREAD();
-    curr_thread->lock_depth   = 0;
-    ARCH_CPU_ENABLE_INTERRUPTS();
-    com_syscall_ret_t ret = com_sys_syscall_invoke(ctx->rax,
-                                                   ctx,
-                                                   ctx->rdi,
-                                                   ctx->rsi,
-                                                   ctx->rdx,
-                                                   ctx->r10,
-                                                   ctx->r8,
-                                                   ctx->r9,
-                                                   ctx->rip);
+void syscall_handle_sce(Context *ctx) {
+    Thread *curr_thread = cpu_get_thread();
+    curr_thread->lock_depth = 0;
+    cpu_enable_interrupts();
+    SyscallRet ret = syscall_invoke(ctx->rax, ctx, ctx->rdi, ctx->rsi, ctx->rdx,
+                                    ctx->r10, ctx->r8, ctx->r9, ctx->rip);
 
     if (!ret.discarded) {
         ctx->rax = ret.value;
         ctx->rdx = ret.err;
     }
 
-    com_ipc_signal_dispatch(ctx, curr_thread);
+    signal_dispatch(ctx, curr_thread);
 
     // Here we set lock_depth = 1 because we want interrupts to be disabled
     // while we return from the syscall and this ensures that, regardless of
     // whether the caller makes use of spinlocks or not, interrupt won't be
     // enabled by mistake
-    KASSERT(0 == curr_thread->lock_depth);
-    ARCH_CPU_DISABLE_INTERRUPTS();
+    assert(curr_thread->lock_depth == 0);
+    cpu_disable_interrupts();
     curr_thread->lock_depth = 1;
 }
 
-COM_SYS_SYSCALL(arch_syscall_set_tls) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
+SYSCALL(syscall_set_tls) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(2);
 
-    uintptr_t ptr = COM_SYS_SYSCALL_ARG(uintptr_t, 1);
+    uptr ptr = SYSCALL_ARG(uptr, 1);
 
     // wrmsr faults on a non-canonical address
-    if (!ARCH_MMU_ADDR_IS_USER(ptr)) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
+    if (!MMU_ADDR_IS_USER(ptr)) return SYSCALL_ERR(EINVAL);
 
-    ARCH_CPU_GET_THREAD()->xctx.fsbase = ptr;
-    X86_64_MSR_WRITE(X86_64_MSR_FSBASE, ptr);
+    cpu_get_thread()->xctx.fsbase = ptr;
+    msr_write(MSR_FSBASE, ptr);
 
-    return COM_SYS_SYSCALL_OK(0);
+    return SYSCALL_OK(0);
 }

@@ -1,192 +1,173 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #pragma once
 
 #include <kernel/com/sys/interrupt.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <kernel/com/util.h>
 #include <vendor/tailq.h>
 
 #ifndef HAVE_OPT_PCI
 #error "cannot include this header without having opt/pci"
 #endif
 
-#define OPT_PCI_BAR_BASE 0x10
+#define PCI_BAR_BASE 0x10
 
 // 2 byte fields
-#define OPT_PCI_CONFIG_VENDOR      0x0
-#define OPT_PCI_CONFIG_DEVICEID    0x2
-#define OPT_PCI_CONFIG_COMMAND     0x4
-#define OPT_PCI_COMMAND_IO         0x1
-#define OPT_PCI_COMMAND_MMIO       0x2
-#define OPT_PCI_COMMAND_BUSMASTER  0x4
-#define OPT_PCI_COMMAND_IRQDISABLE 0x400
-#define OPT_PCI_CONFIG_STATUS      0x6
-#define OPT_PCI_STATUS_HASCAP      0x10
+#define PCI_CONFIG_VENDOR      0x0
+#define PCI_CONFIG_DEVICEID    0x2
+#define PCI_CONFIG_COMMAND     0x4
+#define PCI_COMMAND_IO         0x1
+#define PCI_COMMAND_MMIO       0x2
+#define PCI_COMMAND_BUSMASTER  0x4
+#define PCI_COMMAND_IRQDISABLE 0x400
+#define PCI_CONFIG_STATUS      0x6
+#define PCI_STATUS_HASCAP      0x10
 
 // 1 byte fields
-#define OPT_PCI_CONFIG_REVISION               0x8
-#define OPT_PCI_CONFIG_PROGIF                 0x9
-#define OPT_PCI_CONFIG_SUBCLASS               0xa
-#define OPT_PCI_CONFIG_CLASS                  0xb
-#define OPT_PCI_CONFIG_HEADERTYPE             0xe
-#define OPT_PCI_HEADERTYPE_MULTIFUNCTION_MASK 0x80
-#define OPT_PCI_HEADERTYPE_MASK               0x7f
-#define OPT_PCI_HEADERTYPE_STANDARD           0
-#define OPT_PCI_CONFIG_CAP                    0x34
-#define OPT_PCI_CAP_MSI                       0x5
-#define OPT_PCI_CAP_VENDORSPECIFIC            0x9
-#define OPT_PCI_CAP_MSIX                      0x11
+#define PCI_CONFIG_REVISION               0x8
+#define PCI_CONFIG_PROGIF                 0x9
+#define PCI_CONFIG_SUBCLASS               0xa
+#define PCI_CONFIG_CLASS                  0xb
+#define PCI_CONFIG_HEADERTYPE             0xe
+#define PCI_HEADERTYPE_MULTIFUNCTION_MASK 0x80
+#define PCI_HEADERTYPE_MASK               0x7f
+#define PCI_HEADERTYPE_STANDARD           0
+#define PCI_CONFIG_CAP                    0x34
+#define PCI_CAP_MSI                       0x5
+#define PCI_CAP_VENDORSPECIFIC            0x9
+#define PCI_CAP_MSIX                      0x11
 
 // PCI device classes
-#define OPT_PCI_CLASS_STORAGE 0x1
+#define PCI_CLASS_STORAGE 0x1
 
 // PCI device subclasses
-#define OPT_PCI_SUBCLASS_STORAGE_NVM 0x8
+#define PCI_SUBCLASS_STORAGE_NVM 0x8
 
-#define OPT_PCI_CAPOFF_ABSENT 0
+#define PCI_CAPOFF_ABSENT 0
 
-#define OPT_PCI_MASKMODE_SET      1
-#define OPT_PCI_MASKMODE_UNSET    2
-#define OPT_PCI_MASKMODE_OVERRIDE 3
+#define PCI_MASKMODE_SET      1
+#define PCI_MASKMODE_UNSET    2
+#define PCI_MASKMODE_OVERRIDE 3
 
-#define OPT_PCI_MSIFMT_EDGE_TRIGGER 1
-#define OPT_PCI_MSIFMT_DEASSERT     2
+#define PCI_MSIFMT_EDGE_TRIGGER 1
+#define PCI_MSIFMT_DEASSERT     2
 
-#define OPT_PCI_QUERYMASK_NONE     0
-#define OPT_PCI_QUERYMASK_CLASS    1
-#define OPT_PCI_QUERYMASK_SUBCLASS 2
-#define OPT_PCI_QUERYMASK_PROGIF   4
-#define OPT_PCI_QUERYMASK_VENDOR   8
-#define OPT_PCI_QUERYMASK_DEVICEID 16
-#define OPT_PCI_QUERYMASK_REVISION 32
+#define PCI_QUERYMASK_NONE     0
+#define PCI_QUERYMASK_CLASS    1
+#define PCI_QUERYMASK_SUBCLASS 2
+#define PCI_QUERYMASK_PROGIF   4
+#define PCI_QUERYMASK_VENDOR   8
+#define PCI_QUERYMASK_DEVICEID 16
+#define PCI_QUERYMASK_REVISION 32
 
-#define __PCI_ENUM_READ(func, e, off) func(&(e)->addr, off)
-#define OPT_PCI_ENUM_READ8(e, off)    __PCI_ENUM_READ(opt_pci_read8, e, off)
-#define OPT_PCI_ENUM_READ16(e, off)   __PCI_ENUM_READ(opt_pci_read16, e, off)
-#define OPT_PCI_ENUM_READ32(e, off)   __PCI_ENUM_READ(opt_pci_read32, e, off)
+#define PCI_ADDR_PRINTF_FMT          "%02X:%02X:%02X"
+#define PCI_ADDR_PRINTF_VALUES(addr) (addr).bus, (addr).device, (addr).function
 
-#define __PCI_ENUM_WRITE(func, e, off, v) func(&(e)->addr, off, v)
-#define OPT_PCI_ENUM_WRIET8(e, off, v) \
-    __PCI_ENUM_WRITE(opt_pci_write8, e, off, v)
-#define OPT_PCI_ENUM_WRITE16(e, off, v) \
-    __PCI_ENUM_WRITE(opt_pci_write16, e, off, v)
-#define OPT_PCI_ENUM_WRITE32(e, off, v) \
-    __PCI_ENUM_WRITE(opt_pci_write32, e, off, v)
+typedef struct PCIAddr {
+    u32 segment;
+    u32 bus;
+    u32 device;
+    u32 function;
+} PCIAddr;
 
-#define OPT_PCI_ADDR_PRINTF_FMT "%02X:%02X:%02X"
-#define OPT_PCI_ADDR_PRINTF_VALUES(addr) \
-    (addr).bus, (addr).device, (addr).function
+typedef struct PCIQuery {
+    u8 clazz;
+    u8 subclass;
+    u8 progif;
+    u16 vendor;
+    u16 deviceid;
+    u8 revision;
+} PCIQuery;
 
-typedef struct opt_pci_addr {
-    uint32_t segment;
-    uint32_t bus;
-    uint32_t device;
-    uint32_t function;
-} opt_pci_addr_t;
+typedef struct PCIOverrides {
+    u8 (*read8)(const PCIAddr *addr, usize off);
+    u16 (*read16)(const PCIAddr *addr, usize off);
+    u32 (*read32)(const PCIAddr *addr, usize off);
+    void (*write8)(const PCIAddr *addr, usize off, u8 val);
+    void (*write16)(const PCIAddr *addr, usize off, u16 val);
+    void (*write32)(const PCIAddr *addr, usize off, u32 val);
+} PCIOverrides;
 
-typedef struct opt_pci_query {
-    uint8_t  clazz;
-    uint8_t  subclass;
-    uint8_t  progif;
-    uint16_t vendor;
-    uint16_t deviceid;
-    uint8_t  revision;
-} opt_pci_query_t;
+typedef struct PCICap {
+    bool exists;
+    u8 offset;
+} PCICap;
 
-typedef struct opt_pci_overrides {
-    uint8_t (*read8)(const opt_pci_addr_t *addr, size_t off);
-    uint16_t (*read16)(const opt_pci_addr_t *addr, size_t off);
-    uint32_t (*read32)(const opt_pci_addr_t *addr, size_t off);
-    void (*write8)(const opt_pci_addr_t *addr, size_t off, uint8_t val);
-    void (*write16)(const opt_pci_addr_t *addr, size_t off, uint16_t val);
-    void (*write32)(const opt_pci_addr_t *addr, size_t off, uint32_t val);
-} opt_pci_overrides_t;
+typedef struct PCIBar {
+    uptr virtual;
+    uptr physical;
+    usize length;
+    bool mmio;
+    bool is64bits;
+    bool prefetchable;
+} PCIBar;
 
-typedef struct opt_pci_cap {
-    bool    exists;
-    uint8_t offset;
-} opt_pci_cap_t;
-
-typedef struct opt_pci_bar {
-    uintptr_t virtual;
-    uintptr_t physical;
-    size_t    length;
-    bool      mmio;
-    bool      is64bits;
-    bool      prefetchable;
-} opt_pci_bar_t;
-
-typedef struct opt_pci_enum {
-    LIST_ENTRY(opt_pci_enum) tqe_enums;
-    opt_pci_addr_t  addr;
-    opt_pci_query_t info;
-    opt_pci_cap_t   msi;
-    opt_pci_cap_t   msix;
-    opt_pci_bar_t   bar[6];
+typedef struct PCIEnum {
+    LIST_ENTRY(PCIEnum) tqe_enums;
+    PCIAddr addr;
+    PCIQuery info;
+    PCICap msi;
+    PCICap msix;
+    PCIBar bar[6];
     union {
         struct {
-            uint32_t bir;
-            uint32_t table_offset;
-            uint32_t pbir;
-            uint32_t pba_offset;
-            uint16_t num_entries;
+            u32 bir;
+            u32 table_offset;
+            u32 pbir;
+            u32 pba_offset;
+            u16 num_entries;
         } msix;
     } irq;
-} opt_pci_enum_t;
+} PCIEnum;
 
-typedef struct opt_pci_dev_driver {
-    opt_pci_query_t wildcard;
-    int             wildcard_mask;
-    int (*init_dev)(opt_pci_enum_t *e);
-} opt_pci_dev_driver_t;
+typedef struct PCIDevDriver {
+    PCIQuery wildcard;
+    int wildcard_mask;
+    int (*init_dev)(PCIEnum *e);
+} PCIDevDriver;
 
 // abstraction
-void     opt_pci_register_driver(opt_pci_dev_driver_t driver);
-uint8_t  opt_pci_read8(const opt_pci_addr_t *addr, size_t off);
-uint16_t opt_pci_read16(const opt_pci_addr_t *addr, size_t off);
-uint32_t opt_pci_read32(const opt_pci_addr_t *addr, size_t off);
-void     opt_pci_write8(const opt_pci_addr_t *addr, size_t off, uint8_t val);
-void     opt_pci_write16(const opt_pci_addr_t *addr, size_t off, uint16_t val);
-void     opt_pci_write32(const opt_pci_addr_t *addr, size_t off, uint32_t val);
+void pci_register_driver(PCIDevDriver driver);
+u8 pci_read8(const PCIAddr *addr, usize off);
+u16 pci_read16(const PCIAddr *addr, usize off);
+u32 pci_read32(const PCIAddr *addr, usize off);
+void pci_write8(const PCIAddr *addr, usize off, u8 val);
+void pci_write16(const PCIAddr *addr, usize off, u16 val);
+void pci_write32(const PCIAddr *addr, usize off, u32 val);
 
 // PCI interface
-uint8_t
-opt_pci_get_capability_offset(opt_pci_enum_t *e, uint8_t cap, int max_loop);
-void opt_pci_set_command(opt_pci_enum_t *e, uint16_t mask, int mask_mode);
-opt_pci_bar_t opt_pci_get_bar(opt_pci_enum_t *e, size_t index);
-void          opt_pci_msix_add(opt_pci_enum_t *e,
-                               uint8_t         msixvec,
-                               uintmax_t       intvec,
-                               int             flags);
-void          opt_pci_msix_set_mask(opt_pci_enum_t *e, int mask_mode);
-uint16_t      opt_pci_msix_init(opt_pci_enum_t *e);
+u8 pci_get_capability_offset(PCIEnum *e, u8 cap, int max_loop);
+void pci_set_command(PCIEnum *e, u16 mask, int mask_mode);
+PCIBar pci_get_bar(PCIEnum *e, usize index);
+void pci_msix_add(PCIEnum *e, u8 msixvec, u64 intvec, int flags);
+void pci_msix_set_mask(PCIEnum *e, int mask_mode);
+u16 pci_msix_init(PCIEnum *e);
 
 // driver interface
-int opt_pci_install_driver(opt_pci_dev_driver_t *driver);
+int pci_install_driver(PCIDevDriver *driver);
 
 // setup functions
-void opt_pci_set_overrides(opt_pci_overrides_t *overrides);
-void opt_pci_enumate(uint32_t start_bus, uint32_t end_bus);
+void pci_set_overrides(PCIOverrides *overrides);
+void pci_enumate(u32 start_bus, u32 end_bus);
 
 // platform interface functions
-uint64_t
-arch_pci_msi_format_message(uint32_t *data, uintmax_t intvec, int flags);
-void arch_pci_msi_eoi(com_isr_t *isr);
+u64 pci_msi_format_message(u32 *data, u64 intvec, int flags);
+void pci_msi_eoi(InterruptHandler *isr);
+
+static inline u8 pci_enum_read8(const PCIEnum *e, usize off) {
+    return pci_read8(&e->addr, off);
+}
+
+static inline u16 pci_enum_read16(const PCIEnum *e, usize off) {
+    return pci_read16(&e->addr, off);
+}
+
+static inline u32 pci_enum_read32(const PCIEnum *e, usize off) {
+    return pci_read32(&e->addr, off);
+}
+
+static inline void pci_enum_write16(const PCIEnum *e, usize off, u16 v) {
+    pci_write16(&e->addr, off, v);
+}
+
+static inline void pci_enum_write32(const PCIEnum *e, usize off, u32 v) {
+    pci_write32(&e->addr, off, v);
+}

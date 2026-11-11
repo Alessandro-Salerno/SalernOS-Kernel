@@ -1,179 +1,137 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <fcntl.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/io/keyboard.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sys/sched.h>
-#include <lib/str.h>
+#include <kernel/com/util.h>
 #include <poll.h>
-#include <stddef.h>
 
-#define __DEFAULT_LAYOUT(name) com_io_keyboard_layout_##name
+#define __DEFAULT_LAYOUT(name) keyboard_layout_##name
 #define _DEFAULT_LAYOUT(name)  __DEFAULT_LAYOUT(name)
 #define DEFAULT_LAYOUT         _DEFAULT_LAYOUT(CONFIG_DEFAULT_KBD_LAYOUT)
 
-static size_t NextKeyboardNum = 0;
+static usize g_next_keyboard_num = 0;
 
 static void keyboard_poll_callback(void *arg) {
-    com_keyboard_t *keyboard = arg;
+    Keyboard *keyboard = arg;
 
-    kspinlock_acquire(&keyboard->pollhead.lock);
-    com_polled_t *polled, *_;
+    spinlock_acq(&keyboard->pollhead.lock);
+    Polled *polled, *_;
     LIST_FOREACH_SAFE(polled, &keyboard->pollhead.polled_list, polled_list, _) {
-        com_fs_poll_notify(polled->poller);
+        poll_notify(polled->poller);
     }
-    kspinlock_release(&keyboard->pollhead.lock);
+    spinlock_rel(&keyboard->pollhead.lock);
 }
 
-static int keyboard_read(void     *buf,
-                         size_t    buflen,
-                         size_t   *bytes_read,
-                         void     *devdata,
-                         uintmax_t off,
-                         uintmax_t flags) {
+static int keyboard_read(void *buf, usize buflen, void *devdata, u64 off,
+                         u64 flags, usize *out_bytes_read) {
     (void)off;
-    com_keyboard_t *keyboard = devdata;
-    return kringbuffer_read(buf,
-                            bytes_read,
-                            &keyboard->rb,
-                            buflen,
-                            sizeof(com_kbd_packet_t),
-                            !(O_NONBLOCK & flags),
-                            keyboard_poll_callback,
-                            keyboard,
-                            NULL);
+    Keyboard *keyboard = devdata;
+    return ringbuffer_read(buf, &keyboard->rb, buflen, sizeof(KbdPacket),
+                           !(flags & O_NONBLOCK), keyboard_poll_callback,
+                           keyboard, NULL, out_bytes_read);
 }
 
-static int keyboard_poll_head(com_poll_head_t **out, void *devdata) {
-    com_keyboard_t *keyboard = devdata;
-    *out                     = &keyboard->pollhead;
+static int keyboard_poll_head(void *devdata, PollHead **out_poll_head) {
+    Keyboard *keyboard = devdata;
+    *out_poll_head = &keyboard->pollhead;
     return 0;
 }
 
-static int keyboard_poll(short *revents, void *devdata, short events) {
+static int keyboard_poll(void *devdata, short events, short *out_revents) {
     (void)events;
-    com_keyboard_t *keyboard = devdata;
-    *revents                 = kringbuffer_poll(&keyboard->rb) & POLLIN;
+    Keyboard *keyboard = devdata;
+    *out_revents = ringbuffer_poll(&keyboard->rb) & POLLIN;
     return 0;
 }
 
-static int keyboard_stat(struct stat *out, void *devdata) {
+static int keyboard_stat(void *devdata, struct stat *out_stat) {
     (void)devdata;
-    out->st_blksize = 512;
-    out->st_mode    = 0666;
-    out->st_rdev    = (10 << 8);
+    out_stat->st_blksize = 512;
+    out_stat->st_mode = 0666;
+    out_stat->st_rdev = (10 << 8);
     return 0;
 }
 
-static com_dev_ops_t KeyboardDevOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
-                                       .read      = keyboard_read,
-                                       .poll_head = keyboard_poll_head,
-                                       .poll      = keyboard_poll,
-                                       .stat      = keyboard_stat};
+static DevOps g_keyboard_dev_ops = {.type = VNODE_TYPE_CHARDEV,
+                                    .read = keyboard_read,
+                                    .poll_head = keyboard_poll_head,
+                                    .poll = keyboard_poll,
+                                    .stat = keyboard_stat};
 
 // Packets reach userspace, so they must not carry kernel addresses
-int com_io_keyboard_send_packet(com_keyboard_t   *keyboard,
-                                com_kbd_packet_t *pkt) {
-    com_kbd_packet_t upkt = *pkt;
-    upkt.keyboard         = NULL;
-    return kringbuffer_write(NULL,
-                             &keyboard->rb,
-                             &upkt,
-                             sizeof(com_kbd_packet_t),
-                             sizeof(com_kbd_packet_t),
-                             false,
-                             keyboard_poll_callback,
-                             keyboard,
-                             NULL);
+int keyboard_send_packet(Keyboard *keyboard, KbdPacket *pkt) {
+    KbdPacket upkt = *pkt;
+    upkt.keyboard = NULL;
+    return ringbuffer_write(&keyboard->rb, &upkt, sizeof(KbdPacket),
+                            sizeof(KbdPacket), false, keyboard_poll_callback,
+                            keyboard, NULL, NULL);
 }
 
-com_keyboard_t *com_io_keyboard_new(com_intf_kbd_layout_t layout) {
-    size_t kbd_num = __atomic_fetch_add(&NextKeyboardNum, 1, __ATOMIC_SEQ_CST);
-    KLOG("initializing keyboard in /dev/keyboard%zu", kbd_num);
+Keyboard *keyboard_new(KbdLayoutFn layout) {
+    usize kbd_num = __atomic_fetch_add(&g_next_keyboard_num, 1,
+                                       __ATOMIC_SEQ_CST);
+    log("initializing keyboard in /dev/keyboard%zu", kbd_num);
 
     // Poor man's sprintf
     char kbd_num_str[24];
-    kuitoa(kbd_num, kbd_num_str);
+    uitoa(kbd_num, kbd_num_str);
     char kbd_name[8 + 24] = {0}; // "keyboard" + number
-    kstrcpy(kbd_name, "keyboard");
-    kstrcpy(&kbd_name[8], kbd_num_str);
+    strcpy(kbd_name, "keyboard");
+    strcpy(&kbd_name[8], kbd_num_str);
 
-    com_keyboard_t *keyboard = com_mm_slab_alloc(sizeof(com_keyboard_t));
-    keyboard->layout         = DEFAULT_LAYOUT;
-    KRINGBUFFER_INIT(&keyboard->rb);
-    KSYNC_INIT_MUTEX(&keyboard->rb.condvar);
+    Keyboard *keyboard = slab_alloc(sizeof(Keyboard));
+    keyboard->layout = DEFAULT_LAYOUT;
+    ringbuffer_init(&keyboard->rb);
+    sync_init_mutex(&keyboard->rb.condvar);
     LIST_INIT(&keyboard->pollhead.polled_list);
 
-    if (NULL != layout) {
-        keyboard->layout = layout;
-    }
+    if (layout != NULL) keyboard->layout = layout;
 
-    int devfs_ret = com_fs_devfs_register(&keyboard->vnode,
-                                          NULL,
-                                          kbd_name,
-                                          kstrlen(kbd_name),
-                                          &KeyboardDevOps,
-                                          keyboard);
-    if (0 != devfs_ret) {
-        com_mm_slab_free(keyboard, sizeof(com_keyboard_t));
+    int devfs_ret = devfs_register(NULL, kbd_name, strlen(kbd_name),
+                                   &g_keyboard_dev_ops, keyboard,
+                                   &keyboard->vnode);
+    if (devfs_ret != 0) {
+        slab_free(keyboard, sizeof(Keyboard));
         return NULL;
     }
 
     return keyboard;
 }
 
-void com_io_keyboard_update_state(com_kbd_packet_t *pkt) {
-    com_keyboard_t *keyboard = pkt->keyboard;
-    bool            pressed = COM_IO_KEYBOARD_KEYSTATE_PRESSED == pkt->keystate;
-    int             mod     = 0;
+void keyboard_update_state(KbdPacket *pkt) {
+    Keyboard *keyboard = pkt->keyboard;
+    bool pressed = pkt->keystate == KEYBOARD_KEYSTATE_PRESSED;
+    int mod = 0;
 
     switch (pkt->keycode) {
-        case COM_IO_KEYBOARD_KEY_CAPSLOCK:
+        case KEYBOARD_KEY_CAPSLOCK:
             keyboard->state.caps_lock ^= pressed;
             return;
-        case COM_IO_KEYBOARD_KEY_LEFTCTRL:
-            mod = COM_IO_KEYBOARD_MOD_LCTRL;
+        case KEYBOARD_KEY_LEFTCTRL:
+            mod = KEYBOARD_MOD_LCTRL;
             break;
-        case COM_IO_KEYBOARD_KEY_RIGHTCTRL:
-            mod = COM_IO_KEYBOARD_MOD_RCTRL;
+        case KEYBOARD_KEY_RIGHTCTRL:
+            mod = KEYBOARD_MOD_RCTRL;
             break;
-        case COM_IO_KEYBOARD_KEY_LEFTSHIFT:
-            mod = COM_IO_KEYBOARD_MOD_LSHIFT;
+        case KEYBOARD_KEY_LEFTSHIFT:
+            mod = KEYBOARD_MOD_LSHIFT;
             break;
-        case COM_IO_KEYBOARD_KEY_RIGHTSHIFT:
-            mod = COM_IO_KEYBOARD_MOD_RSHIFT;
+        case KEYBOARD_KEY_RIGHTSHIFT:
+            mod = KEYBOARD_MOD_RSHIFT;
             break;
-        case COM_IO_KEYBOARD_KEY_LEFTALT:
-            mod = COM_IO_KEYBOARD_MOD_LALT;
+        case KEYBOARD_KEY_LEFTALT:
+            mod = KEYBOARD_MOD_LALT;
             break;
-        case COM_IO_KEYBOARD_KEY_RIGHTALT:
-            mod = COM_IO_KEYBOARD_MOD_RALT;
+        case KEYBOARD_KEY_RIGHTALT:
+            mod = KEYBOARD_MOD_RALT;
             break;
         default:
             return;
     }
 
-    if (pressed) {
-        keyboard->state.mod |= mod;
-    } else {
-        keyboard->state.mod &= ~mod;
-    }
+    if (pressed) keyboard->state.mod |= mod;
+    else keyboard->state.mod &= ~mod;
 }

@@ -1,101 +1,81 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/context.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/x86-64/idt.h>
-#include <stdint.h>
 
 typedef struct {
-    uint16_t size;
-    uint64_t offset;
-} __attribute__((packed)) idtr_t;
+    u16 size;
+    u64 offset;
+} packed IDTRegister;
 
 typedef struct {
-    uint16_t offset;
-    uint16_t segment;
-    uint8_t  ist;
-    uint8_t  flags;
-    uint16_t offset2;
-    uint32_t offset3;
-    uint32_t reserved;
-} __attribute__((packed)) idtentry_t;
+    u16 offset;
+    u16 segment;
+    u8 ist;
+    u8 flags;
+    u16 offset2;
+    u32 offset3;
+    u32 reserved;
+} packed IDTEntry;
 
-static idtentry_t     Idt[256];
-static idtr_t         Idtr = {.size = sizeof(Idt) - 1, .offset = (uint64_t)Idt};
-extern const uint64_t IsrTable[256];
+static IDTEntry g_idt[256];
+static IDTRegister g_idtr = {.size = sizeof(g_idt) - 1, .offset = (u64)g_idt};
+extern const u64 g_isr_table[256];
 
-static char *Exceptions[] = {"division by 0",
-                             "debug",
-                             "mmi",
-                             "breakpoint",
-                             "overflow",
-                             "bound range exceeded",
-                             "invalid opcode",
-                             "device not available",
-                             "double fault",
-                             "coprocessor segment overrun",
-                             "invalid tss",
-                             "segment not present",
-                             "stack-segment fault",
-                             "general protection fault",
-                             "page fault",
-                             "unknown",
-                             "x87 floating-point exception",
-                             "alignment check",
-                             "machine check",
-                             "simd exception"};
+static char *g_exceptions[] = {"division by 0",
+                               "debug",
+                               "mmi",
+                               "breakpoint",
+                               "overflow",
+                               "bound range exceeded",
+                               "invalid opcode",
+                               "device not available",
+                               "double fault",
+                               "coprocessor segment overrun",
+                               "invalid tss",
+                               "segment not present",
+                               "stack-segment fault",
+                               "general protection fault",
+                               "page fault",
+                               "unknown",
+                               "x87 floating-point exception",
+                               "alignment check",
+                               "machine check",
+                               "simd exception"};
 
-void x86_64_idt_exception_isr(com_isr_t *isr, arch_context_t *ctx) {
-    if (isr->vec < 19) {
-        com_sys_panic(ctx, "cpu exception (%s)", Exceptions[isr->vec]);
-    }
+void idt_exception_isr(InterruptHandler *isr, Context *ctx) {
+    if (isr->vec < 19) panic(ctx, "cpu exception (%s)", g_exceptions[isr->vec]);
 
-    com_sys_panic(ctx, "cpu exception (unknown)");
+    panic(ctx, "cpu exception (unknown)");
 }
 
-void x86_64_idt_init() {
-    KLOG("initializing idt");
+void idt_init() {
+    log("initializing idt");
 
-    for (uint64_t i = 0; i < 256; i++) {
-        Idt[i].offset  = IsrTable[i] & 0xffff;
-        Idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
-        Idt[i].ist     = 0;
-        Idt[i].flags   = 0x8E;
-        Idt[i].offset2 = (IsrTable[i] >> 16) & 0xffff;
-        Idt[i].offset3 = (IsrTable[i] >> 32) & 0xffffffff;
+    for (u64 i = 0; i < 256; i++) {
+        g_idt[i].offset = g_isr_table[i] & 0xffff;
+        g_idt[i].segment = 0x08; // 64-bit GDT selector for kernel code
+        g_idt[i].ist = 0;
+        g_idt[i].flags = 0x8E;
+        g_idt[i].offset2 = (g_isr_table[i] >> 16) & 0xffff;
+        g_idt[i].offset3 = (g_isr_table[i] >> 32) & 0xffffffff;
     }
 }
 
-void x86_64_idt_set_user_invocable(uintmax_t vec) {
-    KDEBUG("allowing user invocation of interrupt %zu", vec);
-    Idt[vec].flags = 0xEE;
+void idt_set_user_invocable(u64 vec) {
+    log_debug("allowing user invocation of interrupt %zu", vec);
+    g_idt[vec].flags = 0xEE;
 }
 
-void x86_64_idt_reload() {
-    KLOG("reloading idt");
-    asm volatile("lidt (%%rax)" : : "a"(&Idtr));
+void idt_reload() {
+    log("reloading idt");
+    asm volatile("lidt (%%rax)" : : "a"(&g_idtr));
 }
 
-void x86_64_idt_stub(void) {
-    for (uintmax_t i = 0; i < 32; i++) {
-        com_sys_interrupt_register(i, x86_64_idt_exception_isr, NULL);
+void idt_stub(void) {
+    for (u64 i = 0; i < 32; i++) {
+        interrupt_register(i, idt_exception_isr, NULL);
     }
 }

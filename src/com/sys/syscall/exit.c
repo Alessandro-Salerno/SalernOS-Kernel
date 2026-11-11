@@ -1,39 +1,20 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/sys/thread.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
-#include <lib/spinlock.h>
-#include <lib/util.h>
-#include <stdint.h>
 
 // SYSCALL: exit(int status)
-COM_SYS_SYSCALL(com_sys_syscall_exit) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(2);
+SYSCALL(syscall_exit) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(2);
 
-    int exit_status = COM_SYS_SYSCALL_ARG(int, 1);
+    int exit_status = SYSCALL_ARG(int, 1);
 
-    com_sys_proc_terminate(exit_status, COM_IPC_SIGNAL_NONE);
+    proc_terminate(exit_status, SIGNAL_NONE);
     __builtin_unreachable();
 }

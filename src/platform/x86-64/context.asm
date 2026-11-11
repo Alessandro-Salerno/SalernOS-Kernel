@@ -1,23 +1,7 @@
-; SalernOS Kernel
-; Copyright (C) 2021 - 2026 Alessandro Salerno
-; 
-; This program is free software: you can redistribute it and/or modify
-; it under the terms of the GNU General Public License as published by
-; the Free Software Foundation, either version 3 of the License, or
-; (at your option) any later version.
-; 
-; This program is distributed in the hope that it will be useful,
-; but WITHOUT ANY WARRANTY; without even the implied warranty of
-; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-; GNU General Public License for more details.
-; 
-; You should have received a copy of the GNU General Public License
-; along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 section .text
 
-global x86_64_ctx_switch
-x86_64_ctx_switch:
+global ctx_switch
+ctx_switch:
   ; rdi: hidden result pointer, rsi: to, rdx: from, rcx/r8/r9: message
   push rdi
   mov qword [rdx + 48], rbx
@@ -42,10 +26,10 @@ x86_64_ctx_switch:
   mov [rax + 16], r9
   ret
 
-global x86_64_ctx_save_and_call
-x86_64_ctx_save_and_call:
+global ctx_save_and_call
+ctx_save_and_call:
   ; rdi: fn(ctx, arg), rsi: arg
-  ; The pushed arch_context_t resumes our caller as if we had returned
+  ; The pushed context_t resumes our caller as if we had returned
   mov  rax, [rsp]
   lea  rcx, [rsp + 8]
   push qword 0x10 ; ss
@@ -83,8 +67,8 @@ x86_64_ctx_save_and_call:
   xor  eax, eax
   ret
 
-global arch_context_trampoline
-arch_context_trampoline:
+global context_trampoline
+context_trampoline:
 	; rdi is the pointer to the context struct
     cli
 	mov   rsp, rdi
@@ -118,16 +102,16 @@ arch_context_trampoline:
 	.noswapgs:
 	o64 iret
 
-global x86_64_ctx_test_trampoline
-x86_64_ctx_test_trampoline:
+global ctx_test_trampoline
+ctx_test_trampoline:
   mov rdi, rsp
-  jmp arch_context_trampoline
+  jmp context_trampoline
 
-global arch_context_fork_trampoline
-arch_context_fork_trampoline:
+global context_fork_trampoline
+context_fork_trampoline:
   ; Fresh threads have no suspended C caller. Enter its C equivalent.
   mov rdi, rax
   mov rsi, [rax + 24]
   sub rsp, 8
-  extern x86_64_ctx_first_entry
-  jmp x86_64_ctx_first_entry
+  extern ctx_first_entry
+  jmp ctx_first_entry

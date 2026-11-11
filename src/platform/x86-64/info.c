@@ -1,93 +1,69 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/info.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/io/log.h>
+#include <kernel/com/util.h>
 #include <kernel/opt/acpi.h>
 #include <kernel/platform/info.h>
-#include <lib/str.h>
-#include <stdint.h>
 #include <vendor/limine.h>
 
-__attribute__((
-    used,
+used __attribute__((
     section(".limine_requests"))) static volatile struct limine_memmap_request
-    MemoryMapRequest = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+    g_memory_map_request = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
 
-__attribute__((used, section(".limine_requests"))) static volatile struct
-    limine_kernel_address_request
-        KernelAddress = (struct limine_kernel_address_request){
-            .id       = LIMINE_KERNEL_ADDRESS_REQUEST,
-            .revision = 0};
-
-__attribute__((
-    used,
-    section(".limine_requests"))) static volatile struct limine_rsdp_request
-    RsdpRequest = (struct limine_rsdp_request){.id       = LIMINE_RSDP_REQUEST,
-                                               .revision = 0};
-
-__attribute__((
-    used,
-    section(".limine_requests"))) static volatile struct limine_module_request
-    ModuleRequest = (struct limine_module_request){.id = LIMINE_MODULE_REQUEST,
-                                                   .revision = 0};
-
-__attribute__((
-    used,
-    section(
-        ".limine_response"))) static volatile struct limine_framebuffer_request
-    FramebufferRequest = (struct limine_framebuffer_request){
-        .id       = LIMINE_FRAMEBUFFER_REQUEST,
+used __attribute__((section(
+    ".limine_requests"))) static volatile struct limine_kernel_address_request
+    g_kernel_address = (struct limine_kernel_address_request){
+        .id = LIMINE_KERNEL_ADDRESS_REQUEST,
         .revision = 0};
 
-arch_memmap_t *arch_info_get_memmap(void) {
-    KASSERT(NULL != MemoryMapRequest.response);
-    return MemoryMapRequest.response;
+used __attribute__((
+    section(".limine_requests"))) static volatile struct limine_rsdp_request
+    g_rsdp_request = (struct limine_rsdp_request){.id = LIMINE_RSDP_REQUEST,
+                                                  .revision = 0};
+
+used __attribute__((
+    section(".limine_requests"))) static volatile struct limine_module_request
+    g_module_request = (struct limine_module_request){
+        .id = LIMINE_MODULE_REQUEST,
+        .revision = 0};
+
+used __attribute__((section(
+    ".limine_response"))) static volatile struct limine_framebuffer_request
+    g_framebuffer_request = (struct limine_framebuffer_request){
+        .id = LIMINE_FRAMEBUFFER_REQUEST,
+        .revision = 0};
+
+MemMap *info_get_memmap(void) {
+    assert(g_memory_map_request.response != NULL);
+    return g_memory_map_request.response;
 }
 
-arch_kaddr_t *arch_info_get_kaddr(void) {
-    KASSERT(NULL != KernelAddress.response);
-    return KernelAddress.response;
+KAddr *info_get_kaddr(void) {
+    assert(g_kernel_address.response != NULL);
+    return g_kernel_address.response;
 }
 
-arch_rsdp_t *arch_info_get_rsdp(void) {
-    KASSERT(NULL != RsdpRequest.response);
-    return RsdpRequest.response;
+RSDPInfo *info_get_rsdp(void) {
+    assert(g_rsdp_request.response != NULL);
+    return g_rsdp_request.response;
 }
 
-arch_file_t *arch_info_get_initrd(void) {
-    KASSERT(NULL != ModuleRequest.response);
-    KASSERT(0 < ModuleRequest.response->module_count);
+InfoFile *info_get_initrd(void) {
+    assert(g_module_request.response != NULL);
+    assert(g_module_request.response->module_count > 0);
 
-    for (uintmax_t i = 0; i < ModuleRequest.response->module_count; i++) {
-        arch_file_t *mod = ModuleRequest.response->modules[i];
+    for (u64 i = 0; i < g_module_request.response->module_count; i++) {
+        InfoFile *mod = g_module_request.response->modules[i];
 
-        if (0 == kstrcmp("/initrd", mod->path)) {
-            return mod;
-        }
+        if (strcmp("/initrd", mod->path) == 0) return mod;
     }
 
-    KASSERT(!"no initrd found");
+    assert(!"no initrd found");
 }
 
-arch_framebuffer_t *arch_info_get_fb(void) {
-    KASSERT(NULL != FramebufferRequest.response);
-    KASSERT(FramebufferRequest.response->framebuffer_count > 0);
+Framebuffer *info_get_fb(void) {
+    assert(g_framebuffer_request.response != NULL);
+    assert(g_framebuffer_request.response->framebuffer_count > 0);
 
-    return FramebufferRequest.response->framebuffers[0];
+    return g_framebuffer_request.response->framebuffers[0];
 }

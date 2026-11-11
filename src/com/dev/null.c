@@ -1,111 +1,78 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/poll.h>
 #include <kernel/com/mm/slab.h>
-#include <lib/util.h>
+#include <kernel/com/util.h>
 #include <poll.h>
 
-struct devnull {
-    com_poll_head_t pollhead;
+struct DevNull {
+    PollHead pollhead;
 };
 
-static int dev_null_read(void     *buf,
-                         size_t    buflen,
-                         size_t   *bytes_read,
-                         void     *devdata,
-                         uintmax_t off,
-                         uintmax_t flags) {
+static int dev_null_read(void *buf, usize buflen, void *devdata, u64 off,
+                         u64 flags, usize *out_bytes_read) {
     (void)buf;
     (void)buflen;
     (void)devdata;
     (void)off;
     (void)flags;
-    *bytes_read = 0;
+    *out_bytes_read = 0;
     return 0;
 }
 
-static int dev_null_write(size_t   *bytes_written,
-                          void     *devdata,
-                          void     *buf,
-                          size_t    buflen,
-                          uintmax_t off,
-                          uintmax_t flags) {
+static int dev_null_write(void *devdata, void *buf, usize buflen, u64 off,
+                          u64 flags, usize *out_bytes_written) {
     (void)devdata;
     (void)buf;
     (void)off;
     (void)flags;
-    *bytes_written = buflen;
+    *out_bytes_written = buflen;
     return 0;
 }
 
-static int dev_null_poll_head(com_poll_head_t **out, void *devdata) {
-    struct devnull *devnull = devdata;
-    *out                    = &devnull->pollhead;
+static int dev_null_poll_head(void *devdata, PollHead **out_poll_head) {
+    struct DevNull *devnull = devdata;
+    *out_poll_head = &devnull->pollhead;
     return 0;
 }
 
-static int dev_null_poll(short *revents, void *devdata, short events) {
+static int dev_null_poll(void *devdata, short events, short *out_revents) {
     (void)devdata;
     (void)events;
-    *revents = POLLIN | POLLOUT | POLLPRI;
+    *out_revents = POLLIN | POLLOUT | POLLPRI;
     return 0;
 }
 
-static int dev_null_stat(struct stat *out, void *devdata) {
+static int dev_null_stat(void *devdata, struct stat *out_stat) {
     (void)devdata;
-    out->st_blksize = 0;
-    out->st_mode    = 0777;
+    out_stat->st_blksize = 0;
+    out_stat->st_mode = 0777;
     return 0;
 }
 
-static int dev_null_ioctl(void *devdata, uintmax_t op, void *buf) {
+static int dev_null_ioctl(void *devdata, u64 op, void *buf) {
     (void)devdata;
     (void)op;
     (void)buf;
     return 0;
 }
 
-static com_dev_ops_t DevNullOps = {.type      = E_COM_VNODE_TYPE_CHARDEV,
-                                   .read      = dev_null_read,
-                                   .write     = dev_null_write,
-                                   .poll_head = dev_null_poll_head,
-                                   .poll      = dev_null_poll,
-                                   .stat      = dev_null_stat,
-                                   .ioctl     = dev_null_ioctl};
+static DevOps g_dev_null_ops = {.type = VNODE_TYPE_CHARDEV,
+                                .read = dev_null_read,
+                                .write = dev_null_write,
+                                .poll_head = dev_null_poll_head,
+                                .poll = dev_null_poll,
+                                .stat = dev_null_stat,
+                                .ioctl = dev_null_ioctl};
 
-int com_dev_null_init(void) {
-    KLOG("initializing /dev/null");
+int null_init(void) {
+    log("initializing /dev/null");
 
-    struct devnull *devnull = com_mm_slab_alloc(sizeof(struct devnull));
+    struct DevNull *devnull = slab_alloc(sizeof(struct DevNull));
     LIST_INIT(&devnull->pollhead.polled_list);
 
-    int ret = com_fs_devfs_register(NULL,
-                                    NULL,
-                                    "null",
-                                    4,
-                                    &DevNullOps,
-                                    devnull);
+    int ret = devfs_register(NULL, "null", 4, &g_dev_null_ops, devnull, NULL);
 
-    if (0 != ret) {
-        com_mm_slab_free(devnull, sizeof(struct devnull));
-    }
+    if (ret != 0) slab_free(devnull, sizeof(struct DevNull));
 
     return ret;
 }

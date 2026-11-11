@@ -1,85 +1,60 @@
-/*************************************************************************
-| SalernOS Kernel                                                        |
-| Copyright (C) 2021 - 2026 Alessandro Salerno                           |
-|                                                                        |
-| This program is free software: you can redistribute it and/or modify   |
-| it under the terms of the GNU General Public License as published by   |
-| the Free Software Foundation, either version 3 of the License, or      |
-| (at your option) any later version.                                    |
-|                                                                        |
-| This program is distributed in the hope that it will be useful,        |
-| but WITHOUT ANY WARRANTY; without even the implied warranty of         |
-| MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          |
-| GNU General Public License for more details.                           |
-|                                                                        |
-| You should have received a copy of the GNU General Public License      |
-| along with this program.  If not, see <https://www.gnu.org/licenses/>. |
-*************************************************************************/
-
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <kernel/com/ds/hashmap.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sync/sync.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/syscall.h>
+#include <kernel/com/util.h>
 #include <kernel/platform/mmu.h>
-#include <lib/hashmap.h>
-#include <lib/sync.h>
-#include <lib/util.h>
 #include <limits.h>
 #include <stdatomic.h>
-#include <stdbool.h>
-#include <stdint.h>
 
 #define FUTEX_WAIT 0
 #define FUTEX_WAKE 1
 
-struct futex {
-    com_waitlist_t waiters;
+struct Futex {
+    Waitlist waiters;
 };
 
-static kmutex_t   FutexLock;
-static khashmap_t FutexMap;
+static Mutex g_futex_lock;
+static Hashmap g_futex_map;
 
-void com_sys_syscall_futex_init(void) {
-    KLOG("initializing futex");
-    KHASHMAP_INIT(&FutexMap);
-    KMUTEX_INIT(&FutexLock);
+void syscall_futex_init(void) {
+    log("initializing futex");
+    HASHMAP_INIT(&g_futex_map);
+    mutex_init(&g_futex_lock);
 }
 
-// SYSCALL: futex(uint32_t *word_ptr, int op, uint32_t val)
-COM_SYS_SYSCALL(com_sys_syscall_futex) {
-    COM_SYS_SYSCALL_UNUSED_CONTEXT();
-    COM_SYS_SYSCALL_UNUSED_START(4);
+// SYSCALL: futex(u32 *word_ptr, int op, u32 val)
+SYSCALL(syscall_futex) {
+    SYSCALL_UNUSED_CONTEXT();
+    SYSCALL_UNUSED_START(4);
 
-    uint32_t *word_ptr = COM_SYS_SYSCALL_ARG(uint32_t *, 1);
-    int       op       = COM_SYS_SYSCALL_ARG(int, 2);
-    uint32_t  value    = COM_SYS_SYSCALL_ARG(uint32_t, 3);
+    u32 *word_ptr = SYSCALL_ARG(u32 *, 1);
+    int op = SYSCALL_ARG(int, 2);
+    u32 value = SYSCALL_ARG(u32, 3);
 
-    if (!ARCH_MMU_RANGE_IS_USER(word_ptr, sizeof(*word_ptr))) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
+    if (!MMU_RANGE_IS_USER(word_ptr, sizeof(*word_ptr))) {
+        return SYSCALL_ERR(EFAULT);
     }
-    if (0 != (uintptr_t)word_ptr % sizeof(*word_ptr)) {
-        return COM_SYS_SYSCALL_ERR(EINVAL);
-    }
+    if ((uptr)word_ptr % sizeof(*word_ptr) != 0) return SYSCALL_ERR(EINVAL);
 
-    com_proc_t *curr_proc = ARCH_CPU_GET_THREAD()->proc;
-    uintptr_t phys = (uintptr_t)com_mm_vmm_get_physical(curr_proc->vmm_context,
-                                                        word_ptr);
-    if (0 == phys) {
-        return COM_SYS_SYSCALL_ERR(EFAULT);
-    }
+    Proc *curr_proc = cpu_get_thread()->proc;
+    uptr phys = (uptr)vmm_get_physical(curr_proc->vmm_context, word_ptr);
+    if (phys == 0) return SYSCALL_ERR(EFAULT);
 
-    uint32_t temp = value;
+    u32 temp = value;
 
     switch (op) {
         case FUTEX_WAIT:
-            kmutex_acquire(&FutexLock);
+            mutex_acq(&g_futex_lock);
             if (__atomic_compare_exchange_n(
                     word_ptr, // cast away const (we don't change value anyway)
                     &temp,    // expected value
@@ -88,59 +63,51 @@ COM_SYS_SYSCALL(com_sys_syscall_futex) {
                     __ATOMIC_ACQUIRE, // memory order for success
                     __ATOMIC_RELAXED  // memory order for failure
                     )) {
-                struct futex *futex;
+                struct Futex *futex;
 
-                int get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
+                int get_ret = HASHMAP_GET(&futex, &g_futex_map, &phys);
 
-                if (ENOENT == get_ret) {
-                    struct futex *default_futex = com_mm_slab_alloc(
-                        sizeof(struct futex));
-                    COM_SYS_THREAD_WAITLIST_INIT(&default_futex->waiters);
+                if (get_ret == ENOENT) {
+                    struct Futex *default_futex = slab_alloc(
+                        sizeof(struct Futex));
+                    waitlist_init(&default_futex->waiters);
 
-                    KASSERT_CALL(0,
-                                 ==,
-                                 KHASHMAP_PUT(&FutexMap, &phys, default_futex));
+                    verify(HASHMAP_PUT(&g_futex_map, &phys, default_futex) ==
+                           0);
                     futex = default_futex;
-                } else if (0 != get_ret) {
-                    kmutex_release(&FutexLock);
-                    return COM_SYS_SYSCALL_ERR(get_ret);
+                } else if (get_ret != 0) {
+                    mutex_rel(&g_futex_lock);
+                    return SYSCALL_ERR(get_ret);
                 }
 
-                kmutex_wait(&FutexLock, &futex->waiters, 0, true);
-                kmutex_release(&FutexLock);
+                mutex_wait(&g_futex_lock, &futex->waiters, 0, true);
+                mutex_rel(&g_futex_lock);
 
-                if (COM_IPC_SIGNAL_NONE != com_ipc_signal_check()) {
-                    return COM_SYS_SYSCALL_ERR(EINTR);
-                }
+                if (signal_check() != SIGNAL_NONE) return SYSCALL_ERR(EINTR);
             } else {
-                kmutex_release(&FutexLock);
-                return COM_SYS_SYSCALL_ERR(EAGAIN);
+                mutex_rel(&g_futex_lock);
+                return SYSCALL_ERR(EAGAIN);
             }
             break;
 
         case FUTEX_WAKE: {
-            struct futex *futex;
+            struct Futex *futex;
 
-            kmutex_acquire(&FutexLock);
-            int get_ret = KHASHMAP_GET(&futex, &FutexMap, &phys);
-            kmutex_release(&FutexLock);
+            mutex_acq(&g_futex_lock);
+            int get_ret = HASHMAP_GET(&futex, &g_futex_map, &phys);
+            mutex_rel(&g_futex_lock);
 
-            if (0 != get_ret) {
-                return COM_SYS_SYSCALL_OK(0);
-            }
+            if (get_ret != 0) return SYSCALL_OK(0);
 
-            if (value >= INT_MAX) {
-                com_sys_sched_notify_all(&futex->waiters);
-            } else {
-                com_sys_sched_notify_n(&futex->waiters, value);
-            }
+            if (value >= INT_MAX) sched_notify_all(&futex->waiters);
+            else sched_notify_n(&futex->waiters, value);
 
-            return COM_SYS_SYSCALL_OK(value);
+            return SYSCALL_OK(value);
         }
 
         default:
-            return COM_SYS_SYSCALL_ERR(ENOSYS);
+            return SYSCALL_ERR(ENOSYS);
     }
 
-    return COM_SYS_SYSCALL_OK(0);
+    return SYSCALL_OK(0);
 }
