@@ -24,6 +24,7 @@ static bool try_acq_internal(Mutex *mutex, usize retries) {
 }
 
 bool mutex_try_acq(Mutex *mutex) {
+    if (cpu_get_thread() == NULL) return true;
     if (!try_acq_internal(mutex, 1)) return false;
 
     mutex->locked = true;

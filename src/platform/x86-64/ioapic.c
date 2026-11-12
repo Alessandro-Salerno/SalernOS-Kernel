@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/util.h>
 #include <kernel/opt/acpi.h>
@@ -30,6 +31,7 @@ static struct acpi_entry_hdr *g_ioapic_list_end;
 
 static usize g_override_count;
 static usize g_ioapic_count;
+static Spinlock g_ioapic_lock = SPINLOCK_NEW();
 
 static inline u32 ioapic_read(void *ioapic, int reg) {
     volatile u32 *apic = ioapic;
@@ -96,9 +98,9 @@ static void iored_write(void *ioapic, u8 entry, u8 vector, u8 delivery,
     ioapic_write(ioapic, 0x11 + entry * 2, (u32)dest << 24);
 }
 
-void ioapic_set_irq(u8 irq, u8 vector, u8 proc, bool masked) {
+int ioapic_set_irq(u32 irq, u8 vector, u8 proc, bool masked) {
     // default settings for ISA irqs
-    u8 polarity = 1; // active high
+    u8 polarity = 0; // active high
     u8 trigger = 0;  // edge triggered
 
     for (usize i = 0; i < g_override_count; ++i) {
@@ -115,10 +117,32 @@ void ioapic_set_irq(u8 irq, u8 vector, u8 proc, bool masked) {
     }
 
     struct IOAPICDevice *ioapic = ioapic_by_gsi(irq);
-    assert(ioapic != NULL);
+    if (ioapic == NULL) return EINVAL;
     irq = irq - ioapic->base;
+    spinlock_acq(&g_ioapic_lock);
     iored_write(ioapic->addr, irq, vector, 0, 0, polarity, trigger,
                 masked ? 1 : 0, proc);
+    spinlock_rel(&g_ioapic_lock);
+    return 0;
+}
+
+int ioapic_mask_irq(u32 irq) {
+    for (usize i = 0; i < g_override_count; i++) {
+        struct acpi_madt_interrupt_source_override *override = madt_getentry(
+            ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE, i);
+        if (override->source == irq) {
+            irq = override->gsi;
+            break;
+        }
+    }
+    struct IOAPICDevice *ioapic = ioapic_by_gsi(irq);
+    if (ioapic == NULL) return EINVAL;
+    int reg = IOAPIC_REG_ENTRY + 2 * (irq - ioapic->base);
+    spinlock_acq(&g_ioapic_lock);
+    ioapic_write(ioapic->addr, reg,
+                 ioapic_read(ioapic->addr, reg) | (1U << 16));
+    spinlock_rel(&g_ioapic_lock);
+    return 0;
 }
 
 void ioapic_init(void) {

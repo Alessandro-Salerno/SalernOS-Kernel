@@ -39,6 +39,9 @@ int arch_uacpi_io_write16(UACPIHandle handle, UACPISize offset,
 int arch_uacpi_io_write32(UACPIHandle handle, UACPISize offset,
                           UACPIUint32 value);
 int arch_uacpi_set_irq(UACPIUint32 irq, InterruptHandler *isr);
+int arch_uacpi_mask_irq(UACPIUint32 irq);
+struct Cpu;
+struct Cpu *arch_uacpi_work_cpu(void);
 void arch_uacpi_irq_eoi(InterruptHandler *isr);
 int arch_uacpi_early_init(void);
 

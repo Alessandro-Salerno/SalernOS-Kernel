@@ -211,9 +211,9 @@ void console_init(void) {
 
     ringbuffer_init(&g_kbd_rb);
     work_init(&g_kbd_work, kbd_work);
-    workqueue_init(&g_kbd_queue);
+    workqueue_init(&g_kbd_queue, NULL);
 
     ringbuffer_init(&g_mouse_rb);
     work_init(&g_mouse_work, mouse_work);
-    workqueue_init(&g_mouse_queue);
+    workqueue_init(&g_mouse_queue, NULL);
 }

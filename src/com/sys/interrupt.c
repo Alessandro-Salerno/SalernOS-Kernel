@@ -5,6 +5,7 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/panic.h>
+#include <kernel/com/sys/sched.h>
 #include <kernel/com/util.h>
 #include <vendor/printf.h>
 
@@ -16,10 +17,18 @@ static InterruptHandler *interrupt_register_nolock(u64 vec,
                                                    InterruptAckHandlerFn eoi) {
     log_debug("registering handler at %p for vector %zu (%p)", func, vec, vec);
     InterruptHandler *isr = &g_interrupt_table[vec];
+    spinlock_acq(&isr->dispatch_lock);
+    assert(isr->active == 0);
+    waitlist_init(&isr->idle);
+    isr->active = 0;
+    isr->disabled = false;
+    isr->flags = 0;
+    isr->extra = NULL;
     isr->func = func;
     isr->eoi = eoi;
     isr->vec = vec;
     isr->taken = true;
+    spinlock_rel(&isr->dispatch_lock);
     return isr;
 }
 
@@ -50,12 +59,25 @@ InterruptHandler *interrupt_allocate(InterruptHandlerFn func,
 }
 
 void interrupt_free(InterruptHandler *isr) {
-    spinlock_acq(&g_interrupt_table_lock);
+    spinlock_acq(&isr->dispatch_lock);
+    isr->disabled = true;
+    while (isr->active != 0) {
+        spinlock_wait(&isr->dispatch_lock, &isr->idle, 0, false);
+    }
     isr->func = NULL;
-    isr->eoi = NULL;
     isr->extra = NULL;
+    spinlock_rel(&isr->dispatch_lock);
+    spinlock_acq(&g_interrupt_table_lock);
     isr->taken = false;
     spinlock_rel(&g_interrupt_table_lock);
+}
+
+void interrupt_synchronize(InterruptHandler *isr) {
+    spinlock_acq(&isr->dispatch_lock);
+    while (isr->active != 0) {
+        spinlock_wait(&isr->dispatch_lock, &isr->idle, 0, false);
+    }
+    spinlock_rel(&isr->dispatch_lock);
 }
 
 void interrupt_isr(u64 vec, Context *ctx) {
@@ -65,12 +87,30 @@ void interrupt_isr(u64 vec, Context *ctx) {
     bool no_reset = isr->flags & INTERRUPT_FLAGS_NO_RESET;
 
     if (curr_thread != NULL && !no_reset) curr_thread->lock_depth = 1;
-
     if (isr == NULL) panic(ctx, "isr not set for interrupt vector %zu", vec);
 
-    if (!eoi_after && isr->eoi != NULL) isr->eoi(isr);
-    if (isr->func != NULL) isr->func(isr, ctx);
-    if (eoi_after && isr->eoi != NULL) isr->eoi(isr);
+    // The majority of interrupt handlers are not synchronized, but some are so
+    // we do this as a fast path. Flags are read-only and we can fetch them
+    // easily outside the lock, other flags are not and we use separate fields
+    bool synchronized = isr->flags & INTERRUPT_FLAGS_SYNCHRONIZED;
+    if (synchronized) spinlock_acq(&isr->dispatch_lock);
+    bool dispatch = !synchronized || (isr->taken && !isr->disabled);
+    InterruptHandlerFn func = dispatch ? isr->func : NULL;
+    InterruptAckHandlerFn eoi = isr->eoi;
+    if (synchronized) {
+        if (dispatch) isr->active++;
+        spinlock_rel(&isr->dispatch_lock);
+    }
+
+    if (!eoi_after && eoi != NULL) eoi(isr);
+    if (func != NULL) func(isr, ctx);
+    if (eoi_after && eoi != NULL) eoi(isr);
+
+    if (synchronized && dispatch) {
+        spinlock_acq(&isr->dispatch_lock);
+        if (--isr->active == 0) sched_notify_all(&isr->idle);
+        spinlock_rel(&isr->dispatch_lock);
+    }
 
     if (context_is_user(ctx)) {
         // NOTE: events that interrupt a user thread are by definition thread

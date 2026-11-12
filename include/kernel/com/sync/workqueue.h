@@ -14,12 +14,18 @@ typedef struct Work {
 typedef struct WorkQueue {
     Spinlock lock;
     TAILQ_HEAD(, Work) works;
-    Waitlist waitlist;
+    Waitlist work_waitlist;
+    Waitlist drain_waitlist;
     struct Thread *worker;
+    usize active;
+    bool stopping;
 } WorkQueue;
 
-void workqueue_init(WorkQueue *wq);
+struct Cpu;
+void workqueue_init(WorkQueue *wq, struct Cpu *cpu);
 void workqueue_push(WorkQueue *wq, Work *work);
+void workqueue_drain(WorkQueue *wq);
+void workqueue_destroy(WorkQueue *wq);
 
 static inline void work_init(Work *work, void (*handler)(Work *work)) {
     work->handler = handler;

@@ -217,8 +217,11 @@ void thread_ready_nolock(Thread *thread) {
 }
 
 void thread_ready(Thread *thread) {
+    thread_ready_on_cpu(thread, smp_get_random());
+}
+
+void thread_ready_on_cpu(Thread *thread, Cpu *next) {
     Cpu *old = thread->last_cpu;
-    Cpu *next = smp_get_random();
     // This entry point publishes a NEW thread, still owned by its creator
     assert(__atomic_load_n(&thread->state, __ATOMIC_RELAXED) ==
            THREAD_STATE_NEW);

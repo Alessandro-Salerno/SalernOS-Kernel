@@ -1,8 +1,11 @@
 #include <arch/context.h>
+#include <kernel/com/crt/string.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sync/mutex.h>
+#include <kernel/com/sync/semaphore.h>
+#include <kernel/com/sync/workqueue.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/interrupt.h>
 #include <kernel/com/sys/sched.h>
@@ -21,7 +24,8 @@
 #include <uacpi/kernel_api.h>
 #include <uacpi/platform/arch_helpers.h>
 
-#define UACPI_GLUE_DEFER_TIME (NANOS_PER_SEC / 10UL)
+#define UACPI_ALLOC_HEADER_SIZE 16UL
+#define UACPI_SLAB_MAX          (PAGE_SIZE - 16UL)
 
 _Static_assert(__builtin_types_compatible_p(uacpi_handle, UACPIHandle),
                "uacpi_handle must be the same as UACPIHandle");
@@ -51,37 +55,32 @@ _Static_assert(__builtin_types_compatible_p(uacpi_io_addr, UACPIIOAddr),
 struct UACPIGlueISRExtra {
     uacpi_interrupt_handler handler;
     uacpi_handle ctx;
-};
-
-struct UACPIGlueGlobalWaitlist {
-    Waitlist waitlist;
-    usize events_left;
+    uacpi_u32 irq;
+    InterruptHandler *isr;
+    TAILQ_ENTRY(UACPIGlueISRExtra) interrupts_link;
 };
 
 struct UACPIGlueWork {
+    Work work;
     uacpi_work_handler handler;
     uacpi_handle ctx;
 };
 
-static struct UACPIGlueGlobalWaitlist g_in_flight_interrupt_waitlist = {0};
-static struct UACPIGlueGlobalWaitlist g_scheduled_work_waitlist = {0};
+static Mutex g_interrupts_lock;
+static TAILQ_HEAD(, UACPIGlueISRExtra) g_interrupts;
+static WorkQueue g_workqueue;
+static bool g_initialized;
 
 static void uacpi_glue_isr(InterruptHandler *isr, Context *ctx) {
     (void)ctx;
     struct UACPIGlueISRExtra *extra = isr->extra;
-
-    __atomic_add_fetch(&g_in_flight_interrupt_waitlist.events_left, 1,
-                       __ATOMIC_SEQ_CST);
-
     extra->handler(extra->ctx);
+}
 
-    // Decrease the number and notify waiters if needed
-    if (__atomic_fetch_add(&g_in_flight_interrupt_waitlist.events_left, -1,
-                           __ATOMIC_SEQ_CST) == 0) {
-        sched_notify_all(&g_in_flight_interrupt_waitlist.waitlist);
-    }
-
-    slab_free(extra, sizeof(*extra));
+static void uacpi_glue_work(Work *item) {
+    struct UACPIGlueWork *work = (void *)item;
+    work->handler(work->ctx);
+    slab_free(work, sizeof(*work));
 }
 
 // Returns the PHYSICAL address of the RSDPInfo structure via *out_rsdp_address.
@@ -119,6 +118,11 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
  *              to uACPI.
  */
 void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
+    uacpi_size offset = addr & (PAGE_SIZE - 1);
+    if (len == 0 || len > SIZE_MAX - offset - (PAGE_SIZE - 1) ||
+        addr > UINT64_MAX - (len - 1) ||
+        addr + len - 1 > UINTPTR_MAX - PHYS_TO_HHDM(0))
+        return NULL;
     return vmm_map(NULL, NULL, (void *)addr, len,
                    VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
                    MMU_FLAGS_READ | MMU_FLAGS_WRITE);
@@ -133,6 +137,7 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
  *       as well as its true length.
  */
 void uacpi_kernel_unmap(void *addr, uacpi_size len) {
+    // Physical mappings live in the shared HHDM
     (void)addr;
     (void)len;
 }
@@ -187,19 +192,32 @@ void uacpi_kernel_log(uacpi_log_level log_level, const uacpi_char *msg) {
  * UACPI_INIT_LEVEL_NAMESPACE_INITIALIZED
  */
 uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
-    switch (current_init_lvl) {
-        case UACPI_INIT_LEVEL_EARLY:
-            waitlist_init(&g_in_flight_interrupt_waitlist.waitlist);
-            waitlist_init(&g_scheduled_work_waitlist.waitlist);
-            break;
-        default:
-            break;
+    if (current_init_lvl == UACPI_INIT_LEVEL_EARLY) {
+        mutex_init(&g_interrupts_lock);
+        TAILQ_INIT(&g_interrupts);
+        // The worker outlives deinitialization and is reused
+        if (g_workqueue.worker == NULL)
+            workqueue_init(&g_workqueue, arch_uacpi_work_cpu());
+        g_initialized = true;
     }
-
     return UACPI_STATUS_OK;
 }
 
-void uacpi_kernel_deinitialize(void) {}
+void uacpi_kernel_deinitialize(void) {
+    if (!g_initialized) return;
+    while (!TAILQ_EMPTY(&g_interrupts)) {
+        struct UACPIGlueISRExtra *extra = TAILQ_FIRST(&g_interrupts);
+        uacpi_status status = uacpi_kernel_uninstall_interrupt_handler(
+            extra->handler, extra->isr);
+        if (status != UACPI_STATUS_OK) {
+            log_urgent("uacpi: unable to uninstall interrupt during teardown");
+            return;
+        }
+    }
+
+    workqueue_drain(&g_workqueue);
+    g_initialized = false;
+}
 #endif
 
 /*
@@ -234,7 +252,12 @@ void uacpi_kernel_deinitialize(void) {}
  */
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address,
                                           uacpi_handle *out_handle) {
+    if (address.device > 31 || address.function > 7) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
+
     PCIAddr *kernel_addr = slab_alloc(sizeof(*kernel_addr));
+    if (kernel_addr == NULL) return UACPI_STATUS_OUT_OF_MEMORY;
     kernel_addr->segment = address.segment;
     kernel_addr->bus = address.bus;
     kernel_addr->device = address.device;
@@ -253,6 +276,9 @@ void uacpi_kernel_pci_device_close(uacpi_handle handle) {
  */
 uacpi_status uacpi_kernel_pci_read8(uacpi_handle device, uacpi_size offset,
                                     uacpi_u8 *value) {
+    if (offset > 4096 - 1 || offset % 1 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     *value = pci_read8(addr, offset);
     return UACPI_STATUS_OK;
@@ -260,6 +286,9 @@ uacpi_status uacpi_kernel_pci_read8(uacpi_handle device, uacpi_size offset,
 
 uacpi_status uacpi_kernel_pci_read16(uacpi_handle device, uacpi_size offset,
                                      uacpi_u16 *value) {
+    if (offset > 4096 - 2 || offset % 2 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     *value = pci_read16(addr, offset);
     return UACPI_STATUS_OK;
@@ -267,6 +296,9 @@ uacpi_status uacpi_kernel_pci_read16(uacpi_handle device, uacpi_size offset,
 
 uacpi_status uacpi_kernel_pci_read32(uacpi_handle device, uacpi_size offset,
                                      uacpi_u32 *value) {
+    if (offset > 4096 - 4 || offset % 4 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     *value = pci_read32(addr, offset);
     return UACPI_STATUS_OK;
@@ -274,6 +306,9 @@ uacpi_status uacpi_kernel_pci_read32(uacpi_handle device, uacpi_size offset,
 
 uacpi_status uacpi_kernel_pci_write8(uacpi_handle device, uacpi_size offset,
                                      uacpi_u8 value) {
+    if (offset > 4096 - 1 || offset % 1 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     pci_write8(addr, offset, value);
     return UACPI_STATUS_OK;
@@ -281,6 +316,9 @@ uacpi_status uacpi_kernel_pci_write8(uacpi_handle device, uacpi_size offset,
 
 uacpi_status uacpi_kernel_pci_write16(uacpi_handle device, uacpi_size offset,
                                       uacpi_u16 value) {
+    if (offset > 4096 - 2 || offset % 2 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     pci_write16(addr, offset, value);
     return UACPI_STATUS_OK;
@@ -288,6 +326,9 @@ uacpi_status uacpi_kernel_pci_write16(uacpi_handle device, uacpi_size offset,
 
 uacpi_status uacpi_kernel_pci_write32(uacpi_handle device, uacpi_size offset,
                                       uacpi_u32 value) {
+    if (offset > 4096 - 4 || offset % 4 != 0) {
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    }
     PCIAddr *addr = (void *)device;
     pci_write32(addr, offset, value);
     return UACPI_STATUS_OK;
@@ -358,76 +399,49 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle, uacpi_size offset,
  * Allocate a block of memory of 'size' bytes.
  * The contents of the allocated memory are unspecified.
  */
-void *uacpi_kernel_alloc(uacpi_size size) {
-    // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
-    uacpi_size alloc_size = size + 16;
-    void *buffer = NULL;
-
-    if (alloc_size < PAGE_SIZE) {
-        buffer = slab_alloc(alloc_size);
-        goto end;
+static void *uacpi_glue_alloc(uacpi_size size, bool zeroed) {
+    if (size > SIZE_MAX - UACPI_ALLOC_HEADER_SIZE - (PAGE_SIZE - 1))
+        return NULL;
+    uacpi_size total = size + UACPI_ALLOC_HEADER_SIZE;
+    void *base;
+    if (total <= UACPI_SLAB_MAX) {
+        // Slab memory is always zeroed
+        base = slab_alloc(total);
+    } else {
+        usize pages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
+        void *phys = zeroed ? pmm_alloczn(pages) : pmm_allocn(pages);
+        if (phys == NULL) return NULL;
+        base = (void *)PHYS_TO_HHDM(phys);
     }
+    if (base == NULL) return NULL;
+    *(uacpi_size *)base = total;
+    return (char *)base + UACPI_ALLOC_HEADER_SIZE;
+}
 
-    usize num_pages = (alloc_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
-    buffer = (void *)PHYS_TO_HHDM(pmm_allocn(num_pages));
-
-end:
-    *(uacpi_size *)buffer = alloc_size;
-    return (char *)buffer + 16;
+void *uacpi_kernel_alloc(uacpi_size size) {
+    return uacpi_glue_alloc(size, false);
 }
 
 #ifdef UACPI_NATIVE_ALLOC_ZEROED
-/*
- * Allocate a block of memory of 'size' bytes.
- * The returned memory block is expected to be zero-filled.
- */
 void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
-    // sizeof(uacpi_size) is likely 8, but we keep slab alignemnt guarantees
-    uacpi_size alloc_size = size + 16;
-    void *buffer = NULL;
-
-    if (alloc_size < PAGE_SIZE) {
-        buffer = slab_alloc(alloc_size);
-        goto end;
-    }
-
-    usize num_pages = (alloc_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
-    buffer = (void *)PHYS_TO_HHDM(pmm_alloczn(num_pages));
-
-end:
-    *(uacpi_size *)buffer = alloc_size;
-    return (char *)buffer + 16;
+    return uacpi_glue_alloc(size, true);
 }
 #endif
 
-/*
- * Free a previously allocated memory block.
- *
- * 'mem' might be a NULL pointer. In this case, the call is assumed to be a
- * no-op.
- *
- * An optionally enabled 'size_hint' parameter contains the size of the original
- * allocation. Note that in some scenarios this incurs additional cost to
- * calculate the object size.
- */
 #ifndef UACPI_SIZED_FREES
 void uacpi_kernel_free(void *mem) {
-    if (mem == NULL) return;
-
-    void *base = (char *)mem - 16;
-    uacpi_size size_hint = *(uacpi_size *)base;
-
-    if (size_hint < PAGE_SIZE) {
-        slab_free(base, size_hint);
-        return;
-    }
-
-    usize num_pages = (size_hint + (PAGE_SIZE - 1)) / PAGE_SIZE;
-    pmm_freen((void *)HHDM_TO_PHYS(base), num_pages);
-}
 #else
-void uacpi_kernel_free(void *mem, uacpi_size size_hint) {}
+void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
+    (void)size_hint;
 #endif
+    if (mem == NULL) return;
+    void *base = (char *)mem - UACPI_ALLOC_HEADER_SIZE;
+    uacpi_size total = *(uacpi_size *)base;
+    if (total <= UACPI_SLAB_MAX) slab_free(base, total);
+    else
+        pmm_freen((void *)HHDM_TO_PHYS(base),
+                  (total + PAGE_SIZE - 1) / PAGE_SIZE);
+}
 
 /*
  * Returns the number of nanosecond ticks elapsed since boot,
@@ -443,34 +457,44 @@ uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
 void uacpi_kernel_stall(uacpi_u8 usec) {
     u64 start = cpu_get_time();
     u64 usec_to_ns = (u64)usec * 1000UL;
-    u64 end = start + usec_to_ns;
-
-    while (cpu_get_time() < end) cpu_pause();
+    while (cpu_get_time() - start < usec_to_ns) cpu_pause();
 }
 
 /*
  * Sleep for N milliseconds.
  */
-void uacpi_kernel_sleep(uacpi_u64 msec) {}
+void uacpi_kernel_sleep(uacpi_u64 msec) {
+    Semaphore delay;
+    semaphore_init(&delay, 0);
+    while (msec != 0) {
+        u64 chunk = min(msec, 1000UL);
+        // We use semaphore waits because they have built-in fallback spinning
+        semaphore_acq(&delay, chunk * 1000000UL);
+        msec -= chunk;
+    }
+}
 
 /*
  * Create/free an opaque non-recursive kernel mutex object.
  */
 uacpi_handle uacpi_kernel_create_mutex(void) {
     Mutex *mutex = slab_alloc(sizeof(*mutex));
-    mutex_init(mutex);
+    if (mutex != NULL) mutex_init(mutex);
     return mutex;
 }
 void uacpi_kernel_free_mutex(uacpi_handle handle) {
     slab_free(handle, sizeof(Mutex));
 }
 
-/*
- * Create/free an opaque kernel (semaphore-like) event object.
- */
-uacpi_handle uacpi_kernel_create_event(void) {}
+uacpi_handle uacpi_kernel_create_event(void) {
+    Semaphore *event = slab_alloc(sizeof(*event));
+    if (event != NULL) semaphore_init(event, 0);
+    return event;
+}
 
-void uacpi_kernel_free_event(uacpi_handle handle) {}
+void uacpi_kernel_free_event(uacpi_handle handle) {
+    slab_free(handle, sizeof(Semaphore));
+}
 
 /*
  * Returns a unique identifier of the currently executing thread.
@@ -478,11 +502,10 @@ void uacpi_kernel_free_event(uacpi_handle handle) {}
  * The returned thread id cannot be UACPI_THREAD_ID_NONE.
  */
 uacpi_thread_id uacpi_kernel_get_thread_id(void) {
-    Thread *curr_thread = cpu_get_thread();
-    if (curr_thread != NULL) {
-        return (uacpi_thread_id)(u64)curr_thread->tid;
-    }
-    return (uacpi_thread_id)curr_thread;
+    Thread *thread = cpu_get_thread();
+    // Tagged so it never aliases a Thread or UACPI_THREAD_ID_NONE
+    return thread != NULL ? (uacpi_thread_id)thread
+                          : (uacpi_thread_id)((uptr)cpu_get() | 1UL);
 }
 
 /*
@@ -523,28 +546,14 @@ void uacpi_kernel_release_mutex(uacpi_handle handle) {
     mutex_rel((Mutex *)handle);
 }
 
-/*
- * Try to wait for an event (counter > 0) with a millisecond timeout.
- * A timeout value of 0xFFFF implies infinite wait.
- *
- * The internal counter is decremented by 1 if wait was successful.
- *
- * A successful wait is indicated by returning UACPI_TRUE.
- */
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle handle, uacpi_u16 timeout) {
+    u64 ns = timeout == 0xffff ? UINT64_MAX : (u64)timeout * 1000000UL;
+    return semaphore_acq(handle, ns);
 }
 
-/*
- * Signal the event object by incrementing its internal counter by 1.
- *
- * This function may be used in interrupt contexts.
- */
-void uacpi_kernel_signal_event(uacpi_handle handle) {}
+void uacpi_kernel_signal_event(uacpi_handle handle) { semaphore_rel(handle); }
 
-/*
- * Reset the event counter to 0.
- */
-void uacpi_kernel_reset_event(uacpi_handle handle) {}
+void uacpi_kernel_reset_event(uacpi_handle handle) { semaphore_reset(handle); }
 
 /*
  * Handle a firmware request.
@@ -556,8 +565,8 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request *req) {
         case UACPI_FIRMWARE_REQUEST_TYPE_BREAKPOINT:
             break;
         case UACPI_FIRMWARE_REQUEST_TYPE_FATAL:
-            log_debug("acpi: fatal firmware error: type=%d code=%d arg=%d",
-                      req->fatal.type, req->fatal.code, req->fatal.arg);
+            log_urgent("acpi: fatal firmware error: type=%u code=%u arg=%lu",
+                       req->fatal.type, req->fatal.code, req->fatal.arg);
             break;
         default:
             return UACPI_STATUS_UNIMPLEMENTED;
@@ -576,29 +585,60 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request *req) {
 uacpi_status uacpi_kernel_install_interrupt_handler(
     uacpi_u32 irq, uacpi_interrupt_handler handler, uacpi_handle ctx,
     uacpi_handle *out_irq_handle) {
+    *out_irq_handle = NULL;
+    if (handler == NULL) return UACPI_STATUS_INVALID_ARGUMENT;
+    struct UACPIGlueISRExtra *extra = slab_alloc(sizeof(*extra));
+    if (extra == NULL) return UACPI_STATUS_OUT_OF_MEMORY;
     InterruptHandler *isr = interrupt_allocate(uacpi_glue_isr,
                                                arch_uacpi_irq_eoi);
-    if (isr == NULL) return UACPI_STATUS_OUT_OF_MEMORY;
+    if (isr == NULL) {
+        slab_free(extra, sizeof(*extra));
+        return UACPI_STATUS_OUT_OF_MEMORY;
+    }
 
-    struct UACPIGlueISRExtra *extra = slab_alloc(sizeof(*extra));
     extra->handler = handler;
     extra->ctx = ctx;
+    extra->irq = irq;
+    extra->isr = isr;
     isr->extra = extra;
-    *out_irq_handle = isr;
-    return uacpi_util_posix_to_status(arch_uacpi_set_irq(irq, isr));
+    isr->flags = INTERRUPT_FLAGS_EOI_AFTER | INTERRUPT_FLAGS_SYNCHRONIZED;
+
+    mutex_acq(&g_interrupts_lock);
+    int error = 0;
+    struct UACPIGlueISRExtra *entry;
+    TAILQ_FOREACH(entry, &g_interrupts, interrupts_link) {
+        if (entry->irq == irq) error = EINVAL;
+    }
+    if (error == 0) error = arch_uacpi_set_irq(irq, isr);
+    if (error == 0) {
+        TAILQ_INSERT_TAIL(&g_interrupts, extra, interrupts_link);
+        *out_irq_handle = isr;
+    }
+    mutex_rel(&g_interrupts_lock);
+
+    if (error != 0) {
+        interrupt_free(isr);
+        slab_free(extra, sizeof(*extra));
+    }
+
+    return uacpi_util_posix_to_status(error);
 }
 
-/*
- * Uninstall an interrupt handler. 'irq_handle' is the value returned via
- * 'out_irq_handle' during installation.
- */
 uacpi_status
 uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
                                          uacpi_handle irq_handle) {
-    (void)handler;
-    InterruptHandler *isr = (void *)irq_handle;
-    interrupt_free(isr);
-    return UACPI_STATUS_OK;
+    InterruptHandler *isr = irq_handle;
+    struct UACPIGlueISRExtra *extra = isr->extra;
+    if (extra->handler != handler) return UACPI_STATUS_INVALID_ARGUMENT;
+    mutex_acq(&g_interrupts_lock);
+    int error = arch_uacpi_mask_irq(extra->irq);
+    if (error == 0) {
+        interrupt_free(extra->isr);
+        TAILQ_REMOVE(&g_interrupts, extra, interrupts_link);
+        slab_free(extra, sizeof(*extra));
+    }
+    mutex_rel(&g_interrupts_lock);
+    return uacpi_util_posix_to_status(error);
 }
 
 /*
@@ -608,12 +648,13 @@ uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
  */
 uacpi_handle uacpi_kernel_create_spinlock(void) {
     Spinlock *spinlock = slab_alloc(sizeof(Spinlock));
-    *spinlock = SPINLOCK_NEW();
+    if (spinlock != NULL) *spinlock = SPINLOCK_NEW();
     return (uacpi_handle)spinlock;
 }
 
 void uacpi_kernel_free_spinlock(uacpi_handle handle) {
     Spinlock *spinlock = (void *)handle;
+    if (spinlock == NULL) return;
     assert(!spinlock_is_held(spinlock));
     slab_free(spinlock, sizeof(*spinlock));
 }
@@ -628,16 +669,14 @@ void uacpi_kernel_free_spinlock(uacpi_handle handle) {
  * Note that lock is infalliable.
  */
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle handle) {
-    Spinlock *spinlock = (void *)handle;
-    spinlock_acq(spinlock);
+    spinlock_acq(handle);
     return 0; // we use critsec counter, at least for now
 }
 
 void uacpi_kernel_unlock_spinlock(uacpi_handle handle,
                                   uacpi_cpu_flags cpu_flags) {
     (void)cpu_flags;
-    Spinlock *spinlock = (void *)handle;
-    spinlock_rel(spinlock);
+    spinlock_rel(handle);
 }
 
 /*
@@ -647,19 +686,16 @@ void uacpi_kernel_unlock_spinlock(uacpi_handle handle,
 uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type,
                                         uacpi_work_handler handler,
                                         uacpi_handle ctx) {
+    if (type != UACPI_WORK_GPE_EXECUTION && type != UACPI_WORK_NOTIFICATION) {
+        return UACPI_STATUS_UNIMPLEMENTED;
+    }
+    if (!g_initialized || handler == NULL) return UACPI_STATUS_INVALID_ARGUMENT;
     struct UACPIGlueWork *work = slab_alloc(sizeof(*work));
+    if (work == NULL) return UACPI_STATUS_OUT_OF_MEMORY;
+    work_init(&work->work, uacpi_glue_work);
     work->handler = handler;
     work->ctx = ctx;
-
-    switch (type) {
-        case UACPI_WORK_GPE_EXECUTION:
-            break;
-        case UACPI_WORK_NOTIFICATION:
-            break;
-        default:
-            return UACPI_STATUS_UNIMPLEMENTED;
-    }
-
+    workqueue_push(&g_workqueue, &work->work);
     return UACPI_STATUS_OK;
 }
 
@@ -671,4 +707,14 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type,
  *
  * Note that the waits must be done in this order specifically.
  */
-uacpi_status uacpi_kernel_wait_for_work_completion(void) {}
+uacpi_status uacpi_kernel_wait_for_work_completion(void) {
+    if (!g_initialized) return UACPI_STATUS_OK;
+    mutex_acq(&g_interrupts_lock);
+    struct UACPIGlueISRExtra *extra;
+    TAILQ_FOREACH(extra, &g_interrupts, interrupts_link) {
+        interrupt_synchronize(extra->isr);
+    }
+    mutex_rel(&g_interrupts_lock);
+    workqueue_drain(&g_workqueue);
+    return UACPI_STATUS_OK;
+}

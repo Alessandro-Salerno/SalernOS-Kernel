@@ -87,3 +87,4 @@ void thread_exit_nolock(Thread *thread);
 void thread_destroy(Thread *thread);
 void thread_ready_nolock(Thread *thread);
 void thread_ready(Thread *thread);
+void thread_ready_on_cpu(Thread *thread, struct Cpu *cpu);
