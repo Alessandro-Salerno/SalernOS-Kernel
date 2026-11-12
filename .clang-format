@@ -1,4 +1,6 @@
 BasedOnStyle: LLVM
+AttributeMacros:
+  - noreturn
 UseTab: Never
 AccessModifierOffset: '0'
 AlignConsecutiveMacros: 'true'
