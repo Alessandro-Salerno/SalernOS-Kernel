@@ -60,16 +60,17 @@
 #define CONFIG_PATH_MAX         256
 #define CONFIG_IOV_MAX          256 /* <= PAGE_SIZE / sizeof(struct iovec) */
 #define CONFIG_TTY_MAX          7
+#define CONFIG_CPU_MAX          512
 #define CONFIG_VMM_PREFAULT_MAX 512 /* max n. pages faultable at once */
 
 // Misc
-#define CONFIG_TERM_FPS      60 /* FPS of buffered terminals */
-#define CONFIG_TERM_PANIC    1  /* Display kernel panic to fallback terminal */
-#define CONFIG_INIT_PATH     "/boot/init" /* Path to init executable */
-#define CONFIG_INIT_ARGV     NULL         /* Init program argv */
-#define CONFIG_INIT_ENV      NULL         /* Init program env */
-#define CONFIG_CALLOUT_MODE  CONST_CALLOUT_ONLY_BSP
-#define CONFIG_MUTEX_RETRIES 60
+#define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
+#define CONFIG_TERM_PANIC         1 /* Display kernel panic to fallback terminal */
+#define CONFIG_INIT_PATH          "/boot/init" /* Path to init executable */
+#define CONFIG_INIT_ARGV          NULL         /* Init program argv */
+#define CONFIG_INIT_ENV           NULL         /* Init program env */
+#define CONFIG_CALLOUT_MODE       CONST_CALLOUT_ONLY_BSP
+#define CONFIG_MUTEX_RETRIES      60
 #define CONFIG_UNIX_SOCK_RB_SIZE  (256 * 1024UL)
 #define CONFIG_VMM_ANON_START     0x100000000
 #define CONFIG_VMM_REAPER_NOTIFY  8

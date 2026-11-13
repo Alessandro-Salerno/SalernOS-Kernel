@@ -20,7 +20,6 @@
 #include <vendor/tailq.h>
 
 #define EFER_SYSCALLENABLE 1
-#define MAX_CPUS           (PAGE_SIZE * 2) / sizeof(Cpu)
 
 used __attribute__((
     section(".limine_response"))) static volatile struct limine_smp_request
@@ -28,9 +27,8 @@ used __attribute__((
                                                 .revision = 0};
 
 static int g_sentinel;
-static u8 g_temporary_stack[512 * MAX_CPUS];
 
-static Cpu *g_cpus;
+static Cpu g_cpus[CONFIG_CPU_MAX];
 static usize g_num_cpus;
 
 static void common_cpu_init(struct limine_smp_info *cpu_info) {
@@ -45,7 +43,8 @@ static void common_cpu_init(struct limine_smp_info *cpu_info) {
     idt_init();
     idt_reload();
     idt_set_user_invocable(0x80);
-    cpu_set_interrupt_stack(cpu, &g_temporary_stack[(cpu->id + 1) * 512 - 1]);
+    // cpu_set_interrupt_stack(cpu, &g_temporary_stack[(cpu->id + 1) * 512 -
+    // 1]);
 
     log("initializing sce");
     u64 efer = msr_read(MSR_EFER);
@@ -103,18 +102,16 @@ void smp_init(void) {
         return;
     }
 
-    Cpu *cpus = (void *)PHYS_TO_HHDM(pmm_alloczn(2));
-    usize avail_cpus = min(MAX_CPUS, smp->cpu_count);
-    g_cpus = cpus;
+    usize avail_cpus = min((u64)CONFIG_CPU_MAX, smp->cpu_count);
     g_num_cpus = avail_cpus;
-    log_debug("found %zu cpus, using max = %zu, initializing %zu cpus",
-              smp->cpu_count, MAX_CPUS, avail_cpus);
+    log_debug("found %zu cpus, using max = %d, initializing %zu cpus",
+              smp->cpu_count, CONFIG_CPU_MAX, avail_cpus);
 
     Cpu *caller_cpu = cpu_get();
 
     for (usize i = 0; i < avail_cpus; i++) {
         struct limine_smp_info *info = smp->cpus[i];
-        Cpu *cpu = &cpus[i];
+        Cpu *cpu = &g_cpus[i];
         cpu->lapic_id = info->lapic_id;
         cpu->id = i;
         cpu->root_page_table = caller_cpu->root_page_table;
@@ -127,8 +124,8 @@ void smp_init(void) {
             continue;
         }
 
-        __atomic_store_n(&g_sentinel, 0, __ATOMIC_SEQ_CST);
         info->goto_address = cpu_init;
+        __atomic_store_n(&g_sentinel, 0, __ATOMIC_SEQ_CST);
 
         while (__atomic_load_n(&g_sentinel, __ATOMIC_SEQ_CST) == 0) {
             asm("pause");
