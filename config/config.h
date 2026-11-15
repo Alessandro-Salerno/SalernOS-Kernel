@@ -61,7 +61,7 @@
 #define CONFIG_IOV_MAX          256 /* <= PAGE_SIZE / sizeof(struct iovec) */
 #define CONFIG_TTY_MAX          7
 #define CONFIG_CPU_MAX          512
-#define CONFIG_VMM_PREFAULT_MAX 512 /* max n. pages faultable at once */
+#define CONFIG_VMM_PREFAULT_MAX 16 /* max n. pages faultable at once */
 
 // Misc
 #define CONFIG_TERM_FPS           60 /* FPS of buffered terminals */
@@ -74,9 +74,9 @@
 #define CONFIG_UNIX_SOCK_RB_SIZE  (256 * 1024UL)
 #define CONFIG_VMM_ANON_START     0x100000000
 #define CONFIG_VMM_REAPER_NOTIFY  8
+#define CONFIG_PMM_CPU_PAGE_HIGH  512
+#define CONFIG_PMM_CPU_PAGE_MAX   1024
 #define CONFIG_DEFAULT_KBD_LAYOUT en_us
-#define CONFIG_PMM_NOTIFY_ZERO    200 /* % of memory to zero before notify */
-#define CONFIG_PMM_NOTIFY_INSERT  200 /* % of memory to free before notify */
 #define CONFIG_TRACK_SLEEP_TIME   1
 #define CONFIG_USE_PROFILER       1
 #define CONFIG_SPINLOCK_DEBUG     0

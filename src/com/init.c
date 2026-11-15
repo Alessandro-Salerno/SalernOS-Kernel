@@ -184,7 +184,6 @@ void init_pid1(void) {
     CONTEXT_RESTORE_EXTRA(thread->xctx);
 
     vmm_init_reaper();
-    pmm_init_threads();
 
     assert(g_main_term != NULL);
     log_set_user_hook(NULL);

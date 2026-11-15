@@ -74,7 +74,7 @@ void thread_reap(void) {
 }
 
 static Thread *new_thread(Proc *proc, Context ctx) {
-    Thread *thread = (void *)PHYS_TO_HHDM(pmm_alloc());
+    Thread *thread = (void *)PHYS_TO_HHDM(pmm_allocz());
     thread->proc = proc;
     thread->ctx = ctx;
     thread->lock_depth = 1;

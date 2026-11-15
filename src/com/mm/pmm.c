@@ -1,498 +1,968 @@
-#include <arch/info.h>
-#include <errno.h>
-#include <kernel/com/crt/string.h>
-#include <kernel/com/ds/hashmap.h>
-#include <kernel/com/ds/searchtree.h>
+#include <arch/cpu.h>
+#include <kernel/com/crt.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/sync/sync.h>
-#include <kernel/com/sys/callout.h>
-#include <kernel/com/sys/panic.h>
-#include <kernel/com/sys/profiler.h>
-#include <kernel/com/sys/sched.h>
-#include <kernel/com/sys/thread.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/util.h>
 #include <kernel/platform/info.h>
-#include <vendor/printf.h>
 #include <vendor/tailq.h>
 
-#define FREELIST_LOCK(freelist_head)   spinlock_acq(&(freelist_head)->lock);
-#define FREELIST_UNLOCK(freelist_head) spinlock_rel(&(freelist_head)->lock);
+typedef struct Page Page;
+typedef TAILQ_HEAD(FreelistHead, Page) FreelistHead;
 
-#define PHYS_TO_META_INDEX(page_phys) ((uptr)(page_phys) / PAGE_SIZE)
-#define PAGE_META_ARRAY_LEN(memsize)  ((memsize) / PAGE_SIZE)
-#define PAGE_META_ARRAY_SIZE(memsize) \
-    (PAGE_META_ARRAY_LEN(memsize) * sizeof(struct PageMeta))
+typedef struct Freelist {
+    FreelistHead head;
+    Page *smallest_run;
+    Page *largest_run;
+} Freelist;
 
-#define UPDATE_STATS(field, diff) \
-    __atomic_add_fetch(&g_memory_stats.field, diff *PAGE_SIZE, __ATOMIC_RELAXED)
-#define READ_STATS(field) \
-    __atomic_load_n(&g_memory_stats.field, __ATOMIC_RELAXED)
+typedef struct CpuPageSet {
+    FreelistHead main_head;
+    usize main_num_pages;
+    FreelistHead extra_head;
+    usize extra_num_pages;
+} CpuPageSet;
 
-TAILQ_HEAD(FreelistTailQ, FreelistEntry);
-
-struct FreelistHead {
-    struct FreelistTailQ head;
-    Spinlock lock;
-};
-
-// A block of one or more contigous pages that points to two more such blocks
-// (one before, one after)
-struct FreelistEntry {
-    TAILQ_ENTRY(FreelistEntry) tqe;
-    usize pages;
-};
-
-enum PageState {
-    // NOTE: this must be zero, since all memory is zeroed on boot, and all page
-    // structs in the array are assumed to report a free state
+typedef enum PageState {
     PAGE_STATE_FREE = 0,
     PAGE_STATE_RESERVED,
-    PAGE_STATE_TAKEN
+    PAGE_STATE_ALLOCATED
+} PageState;
+
+// Pages cached by CPU page sets are allocated, but borrow the free fields
+struct Page {
+    PageState state;
+    union {
+        struct {
+            usize num_ref;
+        } allocated;
+        struct {
+            TAILQ_ENTRY(Page) link;
+            u32 block_start;
+            u32 block_num_pages;
+        } free;
+    };
 };
 
-enum PageType {
-    PAGE_TYPE_ANONYMOUS,
-    PAGE_TYPE_FILE
-};
+static CpuPageSet g_cpu_page_sets[CONFIG_CPU_MAX];
 
-// An entry into the global page array that holds data about the page which is
-// situated outside the page tiself. The index into the array is calculated as
-// follows:
-//      idx = page_phys_addr / PAGE_SIZE
-struct PageMeta {
-    enum PageState state;
-    usize num_ref;
+static Spinlock g_pmm_lock = SPINLOCK_NEW();
+static Freelist g_pow2_freelists[64];
+static u64 g_bitmap = 0;
+static usize g_num_free_pages = 0;
+static usize g_num_usable_pages = 0;
+static usize g_num_reserved_pages = 0;
+static usize g_num_total_pages = 0;
+static struct {
+    Page *array;
+    usize real_len;
+    Page fake_entry;
+} g_pfn_db;
 
-    enum PageType type;
-    union {};
-};
+// PFN HELPERS
 
-struct PageMetaArray {
-    struct PageMeta *buffer;
-    usize len;
-    // Having a page meta array the size of physical memory is too expensive. We
-    // thus have an array that goes up to the highest could-be-usable address.
-    // Everything above that is an imaginary reserved entry
-    usize reserved_start;
-    usize extended_len;
-    struct PageMeta fake_entry;
-};
-
-// GLOBAL VARIABLES
-
-// List of currently available blocks. This list is ordered by block size
-static struct FreelistHead g_main_free_list = {0};
-// Array of page metadata. Initialized by the init() function to piont to a the
-// HHDMInfo representation of a memory map entry large enough to hold it
-static struct PageMetaArray g_page_meta = {0};
-// Consolidated data for fast access. Should be accessed atomically after
-// initialization
-static PMMStats g_memory_stats = {0};
-
-// UTILITY FUNCTIONS
-
-// Freelists are ordered, so insertion should be too
-static inline void freelist_add_ordered_nolock(struct FreelistHead *freelist,
-                                               struct FreelistEntry *entry) {
-    // Fast path for 1-page sized inserts. These will always go to the end
-    if (entry->pages == 1) {
-        struct FreelistEntry *curr_last = TAILQ_LAST(&freelist->head,
-                                                     FreelistTailQ);
-        // If the freelist is empty, we just add the entry
-        if (curr_last == NULL) goto fallback;
-        // If it comes right after the last entry, we merge the two
-        if ((uptr)entry == (uptr)curr_last + curr_last->pages * PAGE_SIZE) {
-            curr_last->pages++;
-            return;
-        }
-        // If it comes right before, we do the same
-        if ((uptr)curr_last == (uptr)entry + PAGE_SIZE) {
-            entry->pages += curr_last->pages;
-            TAILQ_REMOVE(&freelist->head, curr_last, tqe);
-        }
-        // If the two entries exist, but are not contiguous, or the new entry is
-        // contiguous but comes before (last if statement), we ad the new entryu
-        // to the end
-        goto fallback;
-    }
-
-    struct FreelistEntry *curr, *_;
-    TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
-        if (entry->pages >= curr->pages) {
-            TAILQ_INSERT_BEFORE(curr, entry, tqe);
-            return;
-        }
-    }
-
-fallback:
-    // Either the freelist is empty or this entry is the smallest. Either way,
-    // just add it to the end
-    TAILQ_INSERT_TAIL(&freelist->head, entry, tqe);
+static bool pfn_is_fake(u32 pfn) { return pfn >= g_pfn_db.real_len; }
+static Page *pfn_get(u32 pfn) {
+    if (pfn < g_pfn_db.real_len) return g_pfn_db.array + pfn;
+    else return &g_pfn_db.fake_entry;
+}
+static void *pfn_to_hhdm(u32 pfn) {
+    return (void *)PHYS_TO_HHDM((uptr)pfn * PAGE_SIZE);
+}
+static bool pfn_is_reserved(u32 pfn) {
+    return pfn_is_fake(pfn) || pfn_get(pfn)->state == PAGE_STATE_RESERVED;
+}
+static bool pfn_is_allocated(u32 pfn) {
+    return !pfn_is_fake(pfn) && pfn_get(pfn)->state == PAGE_STATE_ALLOCATED;
 }
 
-// Freelists are not just ordered, they're faster if they contain fewer entries.
-// Thus, before adding an entry, we should check if it is just a continuation of
-// a preexisting entry. The reason why we keep the "basic oerdered" function is
-// that this one is slower, so it should be called as rarely as possiblle,
-// whereas the other one might be called by some allocation code.
-// NOTE: This functions does not perform defragmentation
-static inline void freelist_add_merged_nolock(struct FreelistHead *freelist,
-                                              struct FreelistEntry *entry) {
-    uptr entry_first_page = (uptr)entry;
-    uptr entry_last_page = entry_first_page + (entry->pages - 1) * PAGE_SIZE;
+// PAGE HELPERS
 
-    struct FreelistEntry *curr, *_;
-    TAILQ_FOREACH_SAFE(curr, &freelist->head, tqe, _) {
-        uptr curr_first_page = (uptr)curr;
-        uptr curr_last_page = curr_first_page + (entry->pages - 1) * PAGE_SIZE;
-
-        if (curr_first_page == entry_last_page + PAGE_SIZE) {
-            entry->pages += curr->pages;
-            TAILQ_INSERT_BEFORE(curr, entry, tqe);
-            TAILQ_REMOVE(&freelist->head, curr, tqe);
-            curr = entry;
-            return;
-        }
-
-        if (curr_last_page == entry_first_page - PAGE_SIZE) {
-            curr->pages += entry->pages;
-            return;
-        }
-    }
-
-    // Could not be merged with any existing entry, so we jsut add it as a
-    // separate one
-    freelist_add_ordered_nolock(freelist, entry);
+static bool page_is_fake(Page *page) { return page == &g_pfn_db.fake_entry; }
+static u32 page_to_pfn(Page *page) {
+    assert(!page_is_fake(page));
+    return (u32)(uptr)(page - g_pfn_db.array);
+}
+static bool page_is_reserved(Page *page) {
+    return page_is_fake(page) || page->state == PAGE_STATE_RESERVED;
+}
+static bool page_is_allocated(Page *page) {
+    return !page_is_fake(page) && page->state == PAGE_STATE_ALLOCATED;
+}
+static bool page_is_free(Page *page) {
+    return !page_is_fake(page) && page->state == PAGE_STATE_FREE;
+}
+static bool page_is_free_leader(Page *page) {
+    assert(page_is_free(page));
+    return page->free.block_start == page_to_pfn(page);
+}
+static bool page_is_free_edge(Page *page) {
+    assert(page_is_free(page));
+    assert(page->free.block_start <= page_to_pfn(page));
+    return page_to_pfn(page) ==
+        page->free.block_start + page->free.block_num_pages - 1;
+}
+static void page_make_free_leader(Page *page, u32 block_num_pages) {
+    page->state = PAGE_STATE_FREE;
+    page->free.block_start = page_to_pfn(page);
+    page->free.block_num_pages = block_num_pages;
+    assert(page_is_free_leader(page));
+}
+static void page_make_free_edge(Page *end_page, Page *leader_page) {
+    assert(page_is_free_leader(leader_page));
+    assert(page_to_pfn(end_page) >= page_to_pfn(leader_page));
+    end_page->state = PAGE_STATE_FREE;
+    end_page->free.block_start = page_to_pfn(leader_page);
+    end_page->free.block_num_pages = leader_page->free.block_num_pages;
 }
 
-// Since the freelist is ordered, taking from the rear means taking from the
-// smaller chunks, which is good when allocating single pages
-static inline struct FreelistEntry *
-freelist_pop_rear_nolock(struct FreelistHead *freelist) {
-    struct FreelistEntry *last = TAILQ_LAST(&g_main_free_list.head,
-                                            FreelistTailQ);
+// PMM AND BLOCK HELPERS
+
+static void pmm_lock(void) { spinlock_acq(&g_pmm_lock); }
+static void pmm_unlock(void) { spinlock_rel(&g_pmm_lock); }
+// Spinlocks are no-ops before the first thread exists
+static bool pmm_is_locked(void) {
+    return cpu_get_thread() == NULL || spinlock_is_held(&g_pmm_lock);
+}
+
+static Freelist *pmm_find_fit(usize num_pages) {
+    assert(pmm_is_locked());
+    assert(num_pages != 0);
+
+    u64 leading_zeros = __builtin_clzg(num_pages);
+    u64 pow2 = 64 - (leading_zeros + 1);
+    u64 mask = ~((1ULL << pow2) - 1);
+
+    u64 avail_lists = g_bitmap & mask;
+    while (avail_lists != 0) {
+        u64 n = __builtin_ffsll(avail_lists);
+        assert(n != 0);
+        assert(n <= 64);
+
+        Freelist *fl = &g_pow2_freelists[n - 1];
+        assert(!TAILQ_EMPTY(&fl->head));
+        assert(fl->largest_run != NULL);
+        assert(fl->smallest_run != NULL);
+
+        if (fl->largest_run->free.block_num_pages >= num_pages) return fl;
+        avail_lists &= avail_lists - 1;
+    }
+
+    return NULL;
+}
+
+static void pmm_make_free_block(u32 start_pfn, u32 block_len) {
+    assert(pfn_is_allocated(start_pfn));
+    assert(block_len > 0);
+
+    u32 end_pfn = start_pfn + block_len - 1;
+    assert(pfn_is_allocated(end_pfn));
+
+    Page *start_page = pfn_get(start_pfn);
+    Page *end_page = pfn_get(end_pfn);
+
+    page_make_free_leader(start_page, block_len);
+    page_make_free_edge(end_page, start_page);
+}
+
+static u32 pmm_split_block(u32 start_pfn, u32 right_start_idx) {
+    assert(pmm_is_locked());
+    assert(right_start_idx > 0);
+
+    Page *start_page = pfn_get(start_pfn);
+    assert(page_is_free(start_page));
+    assert(page_is_free_leader(start_page));
+    assert(right_start_idx < start_page->free.block_num_pages);
+
+    // Shrink the left block to only reach [start_pfn, start_pfn +
+    // right_start_idx)
+    u32 block_num_pages = start_page->free.block_num_pages;
+    start_page->free.block_num_pages = right_start_idx;
+
+    // Create the edge of the left block
+    u32 end_pfn = start_pfn + right_start_idx - 1;
+    Page *end_page = pfn_get(end_pfn);
+    page_make_free_edge(end_page, start_page);
+
+    // Create the right-most block's leader
+    u32 new_block_num_pages = block_num_pages - right_start_idx;
+    u32 new_start_pfn = start_pfn + right_start_idx;
+    Page *new_start_page = pfn_get(new_start_pfn);
+    page_make_free_leader(new_start_page, new_block_num_pages);
+
+    // Move the right-most end's leader to right_start_idx
+    u32 new_end_pfn = start_pfn + block_num_pages - 1;
+    Page *new_end_page = pfn_get(new_end_pfn);
+    assert(page_is_free(new_end_page));
+    page_make_free_edge(new_end_page, new_start_page);
+
+    return new_start_pfn;
+}
+
+static u32 pmm_join_block(u32 start_pfn, u32 block_len, u32 *out_left_len,
+                          u32 *out_right_len) {
+    u32 end_pfn = start_pfn + block_len - 1;
+    Page *start_page = pfn_get(start_pfn);
+    Page *end_page = pfn_get(end_pfn);
+    assert(page_is_free(start_page));
+    assert(page_is_free_leader(start_page));
+    assert(page_is_free(end_page));
+    assert(page_is_free_edge(end_page));
+
+    u32 new_start_pfn = start_pfn;
+    u32 new_end_pfn = end_pfn;
+    *out_left_len = 0;
+    *out_right_len = 0;
+
+    // Join left if there's another free block there
+    if (start_pfn == 0) goto join_right;
+    u32 prev_pfn = start_pfn - 1;
+    Page *prev_page = pfn_get(prev_pfn);
+    if (!page_is_free(prev_page)) goto join_right;
+    if (!page_is_free_edge(prev_page)) goto join_right;
+    u32 prev_leader_pfn = prev_page->free.block_start;
+    assert(page_is_free_leader(pfn_get(prev_leader_pfn)));
+    assert(new_start_pfn == start_pfn);
+    new_start_pfn = prev_leader_pfn;
+    *out_left_len = prev_page->free.block_num_pages;
+
+join_right:
+    // We join right if this is not the last real page. The composition alof
+    // these two always joins full blocks and does not need to be recursively
+    // repeated because of invariants
+    if (end_pfn == g_pfn_db.real_len - 1) goto exit;
+    u32 next_pfn = end_pfn + 1;
+    Page *next_page = pfn_get(next_pfn);
+    if (!page_is_free(next_page)) goto exit;
+    if (!page_is_free_leader(next_page)) goto exit;
+    u32 next_block_len = next_page->free.block_num_pages;
+    assert(new_end_pfn == end_pfn);
+    new_end_pfn += next_block_len;
+    *out_right_len = next_block_len;
+
+exit:
+    assert(new_start_pfn <= start_pfn);
+    assert(new_end_pfn >= end_pfn);
+
+    Page *new_start_page = pfn_get(new_start_pfn);
+    Page *new_end_page = pfn_get(new_end_pfn);
+    u32 new_block_len = new_end_pfn - new_start_pfn + 1;
+    page_make_free_leader(new_start_page, new_block_len);
+    page_make_free_edge(new_end_page, new_start_page);
+
+    return new_start_pfn;
+}
+
+static void pmm_punch_block(u32 start_pfn) {
+    Page *start_page = pfn_get(start_pfn);
+    assert(page_is_free_leader(start_page));
+
+    u32 block_len = start_page->free.block_num_pages;
+    Page model = {0};
+    model.state = PAGE_STATE_ALLOCATED;
+    model.allocated.num_ref = 1;
+
+    // Benchmarks have shown thi to be a useful optiimzation, especially with
+    // profiling enabled
+    if (block_len == 1) *start_page = model;
+    else memrepcpy(start_page, &model, sizeof(Page), block_len);
+}
+
+// FREE LISTS
+
+static bool fl_invariants(Freelist *fl) {
+    assert(fl != NULL);
+    assert(fl >= g_pow2_freelists && fl <= &g_pow2_freelists[63]);
+    assert(!(!TAILQ_EMPTY(&fl->head) &&
+             (fl->smallest_run == NULL || fl->largest_run == NULL)));
+    assert(TAILQ_EMPTY(&fl->head) ||
+           fl->smallest_run->free.block_num_pages <=
+               fl->largest_run->free.block_num_pages);
+    return true;
+}
+
+static void fl_init(Freelist *fl) {
+    TAILQ_INIT(&fl->head);
+    fl->smallest_run = NULL;
+    fl->largest_run = NULL;
+    assert(fl_invariants(fl));
+}
+
+static u64 fl_pow(Freelist *fl) { return fl - g_pow2_freelists; }
+static u64 fl_lower_bound(Freelist *fl) { return 1ULL << fl_pow(fl); }
+static u64 fl_upper_bound(Freelist *fl) {
+    if (fl_pow(fl) != 63) return fl_lower_bound(fl + 1) - 1;
+    else return UINT64_MAX;
+}
+
+static void fl_empty(Freelist *fl) {
+    fl->smallest_run = fl->largest_run = NULL;
+    g_bitmap &= ~(1ULL << fl_pow(fl));
+    assert(fl_invariants(fl));
+}
+
+static Freelist *fl_get_from_len(u32 num_pages) {
+    assert(num_pages > 0);
+    usize pow2 = 64 - (__builtin_clzg((u64)num_pages) + 1);
+    return &g_pow2_freelists[pow2];
+}
+
+static Freelist *fl_get_from_entry(Page *entry) {
+    assert(entry != NULL);
+    return fl_get_from_len(entry->free.block_num_pages);
+}
+
+static void fl_refetch_cached_pointers(Freelist *fl) {
+    assert(fl != NULL);
+
+    Page *smallest_entry = NULL;
+    usize smallest_num_pages = 0;
+    Page *largest_entry = NULL;
+    usize largest_num_pages = 0;
+
+    Page *entry;
+    TAILQ_FOREACH(entry, &fl->head, free.link) {
+        if (entry->free.block_num_pages < smallest_num_pages ||
+            smallest_entry == NULL) {
+            smallest_entry = entry;
+            smallest_num_pages = entry->free.block_num_pages;
+        }
+        if (entry->free.block_num_pages > largest_num_pages) {
+            largest_entry = entry;
+            largest_num_pages = entry->free.block_num_pages;
+        }
+        if (smallest_num_pages == fl_lower_bound(fl) &&
+            largest_num_pages == fl_upper_bound(fl))
+            break;
+    }
+
+    assert(!((smallest_entry != NULL) ^ (largest_entry != NULL)));
+    assert(smallest_entry == NULL ||
+           smallest_entry->free.block_num_pages == smallest_num_pages);
+    assert(smallest_entry == NULL ||
+           smallest_entry->free.block_num_pages <=
+               largest_entry->free.block_num_pages);
+    assert(largest_entry == NULL ||
+           largest_entry->free.block_num_pages == largest_num_pages);
+
+    fl->smallest_run = smallest_entry;
+    fl->largest_run = largest_entry;
+    if (largest_entry == NULL) fl_empty(fl);
+}
+
+// We don't assume invariants hold because we have to restore them
+// The fixup only needs to run if the update touched one of the cached values:
+//      - Shrinking only needs to update cached pointer if the entry being
+//      shrunk is the largest entry. We apply a couple of fast paths to this
+//      end, but the guarantee ramains
+//      - Removing needs to update cached pointers whenever at least one is
+//      affected. Fast paths exist for this as well, but the guarantee remains
+static void fl_shrink_fixup(Freelist *fl, Page *updated, bool removed) {
+    assert(fl != NULL);
+    assert(updated != NULL);
+    assert(fl->smallest_run != NULL);
+    assert(fl->largest_run != NULL);
+
+    // Regardless of whether we're removing or shrinking an entry, there's no
+    // need to do any of this if neither cached pointer is affected
+    if (updated != fl->smallest_run && updated != fl->largest_run) goto exit;
+
+    // The we catch the case in which update is not equal to both but only to
+    // one, yet both have the same size, so they can just alias
+    assert(updated == fl->smallest_run || updated == fl->largest_run);
+    if (removed && fl->smallest_run != fl->largest_run &&
+        fl->smallest_run->free.block_num_pages ==
+            fl->largest_run->free.block_num_pages) {
+        if (updated == fl->smallest_run) fl->smallest_run = fl->largest_run;
+        else fl->largest_run = fl->smallest_run;
+        goto exit;
+    }
+
+    if (!removed && updated != fl->largest_run) goto exit;
+    if (!removed &&
+        TAILQ_FIRST(&fl->head) == TAILQ_LAST(&fl->head, FreelistHead)) {
+        assert(updated == fl->largest_run);
+        goto exit;
+    }
+
+    fl_refetch_cached_pointers(fl);
+
+exit:
+    assert(fl_invariants(fl));
+}
+
+static void fl_grow_fixup(Freelist *fl, Page *updated) {
+    assert(fl != NULL);
+    assert(updated != NULL);
+
+    if (fl->largest_run == NULL) {
+        assert(fl->smallest_run == NULL);
+        assert(TAILQ_FIRST(&fl->head) == updated);
+        assert(TAILQ_NEXT(updated, free.link) == NULL);
+        fl->smallest_run = fl->largest_run = updated;
+        g_bitmap |= (1ULL << fl_pow(fl));
+        goto exit;
+    }
+
+    assert(fl->smallest_run != NULL);
+    assert(fl->largest_run != NULL);
+    assert(!TAILQ_EMPTY(&fl->head));
+
+    if (updated->free.block_num_pages > fl->largest_run->free.block_num_pages)
+        fl->largest_run = updated;
+
+    if (updated->free.block_num_pages <
+        fl->smallest_run->free.block_num_pages) {
+        fl->smallest_run = updated;
+        goto exit;
+    }
+
+    // In the case in which the entry is not new  but has just grown, we have to
+    // rescan only if the entry was the smallest
+    if (updated == fl->smallest_run) fl_refetch_cached_pointers(fl);
+
+exit:
+    assert(fl_invariants(fl));
+}
+
+static void fl_remove_entry(Freelist *fl, Page *entry) {
+    TAILQ_REMOVE(&fl->head, entry, free.link);
+    fl_shrink_fixup(fl, entry, true);
+}
+
+static void fl_insert_entry(Freelist *fl, Page *entry) {
+    TAILQ_INSERT_TAIL(&fl->head, entry, free.link);
+    fl_grow_fixup(fl, entry);
+}
+
+static Freelist *fl_bubble_down(Freelist *fl, Page *entry) {
+    Freelist *last = NULL;
+    Freelist *curr = fl;
+    while (entry->free.block_num_pages <= fl_upper_bound(curr)) {
+        last = curr;
+        if (curr != &g_pow2_freelists[0]) curr--;
+        else break;
+    }
+
     assert(last != NULL);
-
-    if (last->pages == 1) {
-        TAILQ_REMOVE(&freelist->head, last, tqe);
-    } else {
-        last->pages--;
-        last = (void *)((uptr)last + PAGE_SIZE * last->pages);
+    if (last == fl) {
+        fl_shrink_fixup(fl, entry, false);
+        return last;
     }
 
+    assert(fl_invariants(last));
+    assert(fl_lower_bound(last) <= entry->free.block_num_pages &&
+           entry->free.block_num_pages <= fl_upper_bound(last));
+
+    fl_remove_entry(fl, entry);
+    fl_insert_entry(last, entry);
     return last;
 }
 
-// When allocating multiple pages, however, we take them from the front, because
-// it is more likelly that we'll find a match immediatelly
-static inline struct FreelistEntry *
-freelist_pop_front_nolock(struct FreelistHead *freelist, usize num_pages,
-                          usize *out_alloc_size) {
-    struct FreelistEntry *ret = TAILQ_FIRST(&freelist->head);
-    assert(ret != NULL);
-    usize alloc_size = min(num_pages, ret->pages);
-
-    struct FreelistEntry *entry = ret;
-    struct FreelistEntry *next_entry = TAILQ_NEXT(entry, tqe);
-
-    if (alloc_size == ret->pages) {
-        TAILQ_REMOVE(&freelist->head, ret, tqe);
-    } else {
-        ret->pages -= alloc_size;
-        ret = (void *)((uptr)ret + PAGE_SIZE * ret->pages);
+static Freelist *fl_bubble_up(Freelist *fl, Page *entry) {
+    Freelist *last = NULL;
+    Freelist *curr = fl;
+    while (entry->free.block_num_pages >= fl_lower_bound(curr)) {
+        last = curr;
+        if (curr != &g_pow2_freelists[63]) curr++;
     }
 
-    // Since we decrement the number of pages in this entry, it may now longer
-    // be the largest
-    if (next_entry != NULL && next_entry->pages > entry->pages) {
-        TAILQ_REMOVE(&freelist->head, entry, tqe);
-        freelist_add_ordered_nolock(freelist, entry);
+    assert(last != NULL);
+    if (last == fl) {
+        fl_grow_fixup(fl, entry);
+        return last;
     }
 
-    *out_alloc_size = alloc_size;
-    return ret;
+    assert(fl_invariants(last));
+    assert(fl_lower_bound(last) <= entry->free.block_num_pages &&
+           entry->free.block_num_pages <= fl_upper_bound(last));
+
+    fl_remove_entry(fl, entry);
+    fl_insert_entry(last, entry);
+    return last;
 }
 
-static inline struct PageMeta *page_meta_get(void *phys_addr) {
-    usize index = PHYS_TO_META_INDEX(phys_addr);
-    assert(index < g_page_meta.extended_len);
+static Page *fl_shrink(Freelist *fl, Page *entry, usize shrink_by) {
+    assert(fl != NULL);
+    assert(entry != NULL);
+    assert(shrink_by > 0);
+    assert(shrink_by <= entry->free.block_num_pages);
+    assert(fl_invariants(fl));
+    __atomic_store_n(&g_num_free_pages, g_num_free_pages - shrink_by,
+                     __ATOMIC_RELAXED);
 
-    if (index < g_page_meta.reserved_start) return &g_page_meta.buffer[index];
-
-    return &g_page_meta.fake_entry;
-}
-
-static inline void page_meta_set(void *page_phys, struct PageMeta *tocopy,
-                                 usize num_pages) {
-    uptr end_addr = (uptr)page_phys + num_pages * PAGE_SIZE;
-    usize index1 = PHYS_TO_META_INDEX(page_phys);
-    usize index2 = PHYS_TO_META_INDEX(end_addr) - 1;
-    assert(index1 < g_page_meta.len);
-    assert(index2 < g_page_meta.len);
-
-    memrepcpy(page_meta_get(page_phys), tocopy, sizeof(struct PageMeta),
-              num_pages);
-}
-
-// INTERFACE FUNCTIONS
-
-void *pmm_alloc(void) {
-    ProfilerData profiler_data = profiler_start_function(
-        PROFILE_FUNC_PMM_ALLOC);
-    FREELIST_LOCK(&g_main_free_list);
-    struct FreelistEntry *virt_ret = freelist_pop_rear_nolock(
-        &g_main_free_list);
-    FREELIST_UNLOCK(&g_main_free_list);
-
-    *virt_ret = (struct FreelistEntry){0};
-    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
-    struct PageMeta *page_meta = page_meta_get(phys);
-
-    assert(page_meta->state == PAGE_STATE_FREE);
-    assert(page_meta->num_ref == 0);
-    page_meta->num_ref = 1;
-    page_meta->state = PAGE_STATE_TAKEN;
-    page_meta->type = PAGE_TYPE_ANONYMOUS;
-
-    UPDATE_STATS(allocated, +1);
-    UPDATE_STATS(free, -1);
-
-    profiler_end_function(&profiler_data);
-    return phys;
-}
-
-void *pmm_allocn(usize pages) {
-    if (pages == 1) return pmm_alloc();
-
-    ProfilerData profiler_data = profiler_start_function(
-        PROFILE_FUNC_PMM_ALLOC);
-    FREELIST_LOCK(&g_main_free_list);
-    usize alloc_size;
-    struct FreelistEntry *virt_ret = freelist_pop_front_nolock(
-        &g_main_free_list, pages, &alloc_size);
-    FREELIST_UNLOCK(&g_main_free_list);
-    assert(alloc_size == pages);
-
-    *virt_ret = (struct FreelistEntry){0};
-    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
-
-    struct PageMeta model = {.num_ref = 1,
-                             .state = PAGE_STATE_TAKEN,
-                             .type = PAGE_TYPE_ANONYMOUS};
-    page_meta_set(phys, &model, pages);
-
-    UPDATE_STATS(allocated, +pages);
-    UPDATE_STATS(free, -pages);
-
-    profiler_end_function(&profiler_data);
-    return phys;
-}
-
-void *pmm_allocz(void) { return pmm_alloc(); }
-
-void *pmm_alloczn(usize pages) { return pmm_allocn(pages); }
-
-void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
-    if (pages == 1) {
-        if (out_alloc_size != NULL) *out_alloc_size = 1;
-        return pmm_alloc();
+    u32 num_pages = entry->free.block_num_pages;
+    if (shrink_by == num_pages) {
+        fl_remove_entry(fl, entry);
+        return entry;
     }
 
-    FREELIST_LOCK(&g_main_free_list);
-    usize alloc_size;
-    struct FreelistEntry *virt_ret = freelist_pop_front_nolock(
-        &g_main_free_list, pages, &alloc_size);
-    FREELIST_UNLOCK(&g_main_free_list);
+    // Splitting the block shrinks the entry, which may then move to a lower
+    // freelist
+    u32 right_leader_pfn = pmm_split_block(page_to_pfn(entry),
+                                           num_pages - shrink_by);
+    fl_bubble_down(fl, entry);
 
-    *virt_ret = (struct FreelistEntry){0};
-    void *phys = (void *)HHDM_TO_PHYS(virt_ret);
+    // Build the new, unlinked entry
+    Page *right_entry = pfn_get(right_leader_pfn);
+    right_entry->free.link.tqe_prev = NULL;
+    right_entry->free.link.tqe_next = NULL;
+    assert(right_entry->free.block_num_pages == shrink_by);
 
-    struct PageMeta model = {.num_ref = 1,
-                             .state = PAGE_STATE_TAKEN,
-                             .type = PAGE_TYPE_ANONYMOUS};
-    page_meta_set(phys, &model, alloc_size);
-
-    UPDATE_STATS(allocated, +alloc_size);
-    UPDATE_STATS(free, -alloc_size);
-
-    if (out_alloc_size != NULL) *out_alloc_size = alloc_size;
-
-    return phys;
+    assert(fl_invariants(fl));
+    return right_entry;
 }
 
-void *pmm_alloczn_max(usize pages, usize *out_alloc_size) {
-    return pmm_allocn_max(pages, out_alloc_size);
+// The caller has already grown the block, so only the freelist may change.
+// Until the bubble-up, fl's cached pointers may see the new length
+static void fl_grow(Freelist *fl, Page *entry) {
+    assert(fl != NULL);
+    assert(entry != NULL);
+    fl_bubble_up(fl, entry);
 }
 
-void pmm_hold(void *page) {
-    struct PageMeta *page_meta = page_meta_get(page);
-    assert(page_meta->state != PAGE_STATE_FREE);
-    __atomic_add_fetch(&page_meta->num_ref, 1, __ATOMIC_RELAXED);
+static Page *fl_alloc(Freelist *fl, usize num_pages) {
+    assert(fl_invariants(fl));
+    assert(num_pages > 0);
+
+    if (TAILQ_EMPTY(&fl->head)) return NULL;
+    assert(fl->largest_run->free.block_num_pages >= num_pages);
+
+    if (fl->smallest_run->free.block_num_pages >= num_pages) {
+        return fl_shrink(fl, fl->smallest_run, num_pages);
+    }
+
+    Page *entry, *_;
+    Page *found = NULL;
+    usize found_pages = 0;
+    TAILQ_FOREACH_SAFE(entry, &fl->head, free.link, _) {
+        if (entry->free.block_num_pages >= num_pages &&
+            (found == NULL || entry->free.block_num_pages < found_pages)) {
+            found = entry;
+            found_pages = entry->free.block_num_pages;
+        }
+        if (found_pages == num_pages || found_pages == fl_lower_bound(fl))
+            break;
+    }
+
+    assert(found != NULL);
+    return fl_shrink(fl, found, num_pages);
 }
 
-bool pmm_is_shared(void *page) {
-    struct PageMeta *page_meta = page_meta_get(page);
-    assert(page_meta->state != PAGE_STATE_FREE);
-    return __atomic_load_n(&page_meta->num_ref, __ATOMIC_ACQUIRE) > 1;
-}
+// This doesn't take a freelit, see below
+// There's a necessary asymmetry between fl_free and fl_aloc: fl_alloc leaves
+// fl_shrink to split blocks, whereas here we create and join the block
+// ourselves before possibly handing it over to fl_grow. The reason is that
+// every free needs to attempt a join to keep the global invariant, but not
+// every free will end up growing an existing entry. Meanwhile, allocating from
+// a freelist necessarily means shrinking an existing entry, and thus splitting
+// an existing block
+static void fl_free(Page *entry, u32 num_pages) {
+    assert(entry != NULL);
+    assert(num_pages > 0);
+    __atomic_store_n(&g_num_free_pages, g_num_free_pages + num_pages,
+                     __ATOMIC_RELAXED);
 
-void pmm_free(void *page) {
-    struct PageMeta *page_meta = page_meta_get(page);
+    u32 entry_pfn = page_to_pfn(entry);
+    u32 entry_end_pfn = entry_pfn + num_pages - 1;
 
-    if (page_meta->state != PAGE_STATE_TAKEN ||
-        __atomic_add_fetch(&page_meta->num_ref, -1, __ATOMIC_ACQ_REL) != 0) {
+    // This is a bit ugly here, but doing it in the block helpers would be
+    // uglier: in order to maintain freelist invariants, we have to remove what
+    // will woon be the "right-join" from its freelist, otherwise state could
+    // appear corrupted
+    u32 unlinked_len = 0;
+    if (entry_end_pfn != g_pfn_db.real_len - 1) {
+        Page *next_page = pfn_get(entry_end_pfn + 1);
+        if (page_is_free(next_page) && page_is_free_leader(next_page)) {
+            unlinked_len = next_page->free.block_num_pages;
+            fl_remove_entry(fl_get_from_entry(next_page), next_page);
+        }
+    }
+
+    pmm_make_free_block(entry_pfn, num_pages);
+    u32 left_len, right_len;
+    u32 block_start_pfn = pmm_join_block(entry_pfn, num_pages, &left_len,
+                                         &right_len);
+    assert(right_len == unlinked_len);
+
+    // If a block was joined to the left, it now covers the center and right.
+    // Its freelist can be obtained through its old length, and the the
+    // bubble-up does the rest
+    if (left_len != 0) {
+        assert(block_start_pfn != entry_pfn);
+        fl_grow(fl_get_from_len(left_len), pfn_get(block_start_pfn));
         return;
     }
 
-    // TODO: reimplement free
+    // The entry is in no freelist, but a rightward join may have grown it
+    assert(block_start_pfn == entry_pfn);
+    fl_insert_entry(fl_get_from_entry(entry), entry);
+}
+
+// CPU PAGE SETS
+
+static void cpups_init(CpuPageSet *cpu_ps) {
+    TAILQ_INIT(&cpu_ps->main_head);
+    TAILQ_INIT(&cpu_ps->extra_head);
+    cpu_ps->main_num_pages = 0;
+    cpu_ps->extra_num_pages = 0;
+}
+
+static Page *cpups_refill(CpuPageSet *cpu_ps) {
+    assert(cpu_ps->main_num_pages == 0);
+    assert(cpu_ps->extra_num_pages == 0);
+
+    pmm_lock();
+    while (cpu_ps->main_num_pages < CONFIG_PMM_CPU_PAGE_HIGH) {
+        Freelist *fl = pmm_find_fit(1);
+        if (fl == NULL) break;
+
+        // Worst case, this is just like allocating one page at a time. Best
+        // case, this contributes significantly to improving refill performance
+        while (cpu_ps->main_num_pages < CONFIG_PMM_CPU_PAGE_HIGH &&
+               !TAILQ_EMPTY(&fl->head)) {
+            usize take = min(CONFIG_PMM_CPU_PAGE_HIGH - cpu_ps->main_num_pages,
+                             fl->smallest_run->free.block_num_pages);
+            Page *entry = fl_alloc(fl, take);
+            assert(entry->free.block_num_pages == take);
+            pmm_punch_block(page_to_pfn(entry));
+            entry->free.block_num_pages = take;
+            TAILQ_INSERT_TAIL(&cpu_ps->main_head, entry, free.link);
+            cpu_ps->main_num_pages += take;
+        }
+    }
+    pmm_unlock();
+
+    return TAILQ_FIRST(&cpu_ps->main_head);
+}
+
+static bool cpups_alloc(u32 *out_pfn) {
+    assert(out_pfn != NULL);
+
+    spinlock_fake_acq();
+    usize cpu_id = cpu_get_id();
+    assert(cpu_id < CONFIG_CPU_MAX);
+
+    CpuPageSet *cpu_ps = &g_cpu_page_sets[cpu_id];
+    assert(cpu_ps->main_num_pages <= CONFIG_PMM_CPU_PAGE_HIGH);
+    assert(cpu_ps->main_num_pages + cpu_ps->extra_num_pages <=
+           CONFIG_PMM_CPU_PAGE_MAX);
+
+    FreelistHead *head = NULL;
+    Page *entry = NULL;
+
+    if (cpu_ps->main_num_pages > 0) {
+        entry = TAILQ_FIRST(&cpu_ps->main_head);
+        assert(entry != NULL);
+        cpu_ps->main_num_pages--;
+        head = &cpu_ps->main_head;
+    } else if (cpu_ps->extra_num_pages > 0) {
+        entry = TAILQ_FIRST(&cpu_ps->extra_head);
+        assert(entry != NULL);
+        cpu_ps->extra_num_pages--;
+        head = &cpu_ps->extra_head;
+    } else if ((entry = cpups_refill(cpu_ps)) != NULL) {
+        cpu_ps->main_num_pages--;
+        head = &cpu_ps->main_head;
+    }
+
+    if (entry != NULL) {
+        if (entry->free.block_num_pages > 1) {
+            Page *sub_entry = entry + entry->free.block_num_pages - 1;
+            entry->free.block_num_pages--;
+            entry = sub_entry;
+        } else TAILQ_REMOVE(head, entry, free.link);
+    }
+
+    spinlock_fake_rel();
+
+    if (entry != NULL) {
+        entry->allocated.num_ref = 1;
+        *out_pfn = page_to_pfn(entry);
+        return true;
+    }
+
+    return false;
+}
+
+static void cpups_free(u32 start_pfn, u32 block_len) {
+    spinlock_fake_acq();
+    usize cpu_id = cpu_get_id();
+    assert(cpu_id < CONFIG_CPU_MAX);
+
+    CpuPageSet *cpu_ps = &g_cpu_page_sets[cpu_id];
+    assert(cpu_ps->main_num_pages <= CONFIG_PMM_CPU_PAGE_HIGH);
+    assert(cpu_ps->main_num_pages + cpu_ps->extra_num_pages <=
+           CONFIG_PMM_CPU_PAGE_MAX);
+
+    usize to_main = min(block_len,
+                        CONFIG_PMM_CPU_PAGE_HIGH - cpu_ps->main_num_pages);
+    if (to_main > 0) {
+        Page *entry = pfn_get(start_pfn);
+        entry->free.block_num_pages = to_main;
+
+        TAILQ_INSERT_TAIL(&cpu_ps->main_head, entry, free.link);
+        cpu_ps->main_num_pages += to_main;
+
+        start_pfn += to_main;
+        block_len -= to_main;
+    }
+
+    if (block_len == 0) goto exit;
+    assert(cpu_ps->main_num_pages == CONFIG_PMM_CPU_PAGE_HIGH);
+
+    Page *entry = pfn_get(start_pfn);
+    entry->free.block_num_pages = block_len;
+
+    if (cpu_ps->main_num_pages + cpu_ps->extra_num_pages + block_len <=
+        CONFIG_PMM_CPU_PAGE_MAX) {
+        TAILQ_INSERT_TAIL(&cpu_ps->extra_head, entry, free.link);
+        cpu_ps->extra_num_pages += block_len;
+        goto exit;
+    }
+
+    pmm_lock();
+    fl_free(entry, block_len);
+    while ((entry = TAILQ_FIRST(&cpu_ps->extra_head))) {
+        TAILQ_REMOVE_HEAD(&cpu_ps->extra_head, free.link);
+        u32 entry_len = entry->free.block_num_pages;
+        cpu_ps->extra_num_pages -= entry_len;
+        fl_free(entry, entry_len);
+    }
+    pmm_unlock();
+
+exit:
+    spinlock_fake_rel();
+}
+
+// PMM HELPERS THAT NEED TO BE HERE
+
+static void pmm_release_block(u32 start_pfn, u32 block_len) {
+    // fl_free expects allocated ranges, so we'll give it what it wants
+    Page model = {0};
+    model.state = PAGE_STATE_ALLOCATED;
+    memrepcpy(pfn_get(start_pfn), &model, sizeof(Page), block_len);
+    __atomic_add_fetch(&g_num_usable_pages, block_len, __ATOMIC_RELAXED);
+
+    pmm_lock();
+    fl_free(pfn_get(start_pfn), block_len);
+    pmm_unlock();
+}
+
+// PUBLIC API
+
+void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
+    assert(pages > 0);
+
+    if (pages == 1) {
+        u32 pfn;
+        if (!cpups_alloc(&pfn)) {
+            if (out_alloc_size != NULL) *out_alloc_size = 0;
+            return NULL;
+        }
+        if (out_alloc_size != NULL) *out_alloc_size = 1;
+        return (void *)((uptr)pfn * PAGE_SIZE);
+    }
+
+    pmm_lock();
+    Freelist *fl = pmm_find_fit(pages);
+    if (fl == NULL) {
+        pmm_unlock();
+        // In TCO we trust... plus this is bounded so it should be fine
+        return pmm_allocn_max(pages / 2, out_alloc_size);
+    }
+
+    Page *entry = fl_alloc(fl, pages);
+    assert(entry != NULL);
+    // Punching overwrites the free fields
+    usize entry_len = entry->free.block_num_pages;
+    pmm_punch_block(page_to_pfn(entry));
+    pmm_unlock();
+
+    if (out_alloc_size != NULL) *out_alloc_size = entry_len;
+    return (void *)((uptr)page_to_pfn(entry) * PAGE_SIZE);
+}
+
+void *pmm_alloczn_max(usize pages, usize *out_alloc_size) {
+    usize alloc_size = 0;
+    void *ret = pmm_allocn_max(pages, &alloc_size);
+    // if (ret != NULL)
+    //  memset((void *)PHYS_TO_HHDM(ret), 0, alloc_size * PAGE_SIZE);
+    if (out_alloc_size != NULL) *out_alloc_size = alloc_size;
+    return ret;
+}
+
+void *pmm_allocn(usize pages) {
+    usize alloc_size;
+    void *ret = pmm_allocn_max(pages, &alloc_size);
+    assert(alloc_size == pages);
+    return ret;
+}
+void *pmm_alloczn(usize pages) {
+    usize alloc_size;
+    void *ret = pmm_alloczn_max(pages, &alloc_size);
+    assert(alloc_size == pages);
+    return ret;
+}
+
+void *pmm_alloc(void) { return pmm_allocn(1); }
+void *pmm_allocz(void) { return pmm_alloczn(1); }
+
+usize pmm_alloczn_arr(usize num_pages, void **out_pages) {
+    assert(out_pages != NULL);
+
+    usize successful = 0;
+    for (usize i = 0; i < num_pages; i++) {
+        void *ret = pmm_allocz();
+        if (ret == NULL) break;
+        out_pages[i] = ret;
+        successful++;
+    }
+
+    return successful;
+}
+
+void *pmm_allocz_reserved(void) {
+    void *ret = pmm_allocz();
+    if (ret == NULL) return NULL;
+    u32 pfn = (uptr)ret / PAGE_SIZE;
+    Page *page = pfn_get(pfn);
+    assert(page->state == PAGE_STATE_ALLOCATED);
+    page->state = PAGE_STATE_RESERVED;
+    __atomic_sub_fetch(&g_num_usable_pages, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&g_num_reserved_pages, 1, __ATOMIC_RELAXED);
+    return ret;
+}
+
+// For multi-page contiguous allocations, we use the head page for refcounts.
+// Dropping references on intermediate pages is undefined behavior
+
+void pmm_hold(void *page) {
+    u32 pfn = (uptr)page / PAGE_SIZE;
+    Page *page_desc = pfn_get(pfn);
+    if (page_is_reserved(page_desc)) return;
+    assert(page_is_allocated(page_desc));
+    __atomic_add_fetch(&page_desc->allocated.num_ref, 1, __ATOMIC_RELAXED);
+}
+bool pmm_is_shared(void *page) {
+    u32 pfn = (uptr)page / PAGE_SIZE;
+    Page *page_desc = pfn_get(pfn);
+    assert(!page_is_free(page_desc));
+    return page_is_reserved(page_desc) ||
+        (page_is_allocated(page_desc) &&
+         __atomic_load_n(&page_desc->allocated.num_ref, __ATOMIC_ACQUIRE) > 1);
 }
 
 void pmm_freen(void *base, usize pages) {
-    for (usize i = 0; i < pages; i++) pmm_free((u8 *)base + i * PAGE_SIZE);
+    u32 pfn = (u32)((uptr)base / PAGE_SIZE);
+    Page *page = pfn_get(pfn);
+    if (page_is_reserved(page)) return;
+    if (__atomic_add_fetch(&page->allocated.num_ref, -1, __ATOMIC_ACQ_REL) ==
+        0) {
+        memset(pfn_to_hhdm(pfn), 0, pages * PAGE_SIZE);
+        cpups_free(pfn, pages);
+    }
 }
+void pmm_free(void *page) { pmm_freen(page, 1); }
 
 void pmm_unreserven(void *base, usize pages) {
-    struct PageMeta *page_meta_base = page_meta_get(base);
-    struct FreelistEntry *entry = (void *)PHYS_TO_HHDM(base);
-    memset(entry, 0, pages * PAGE_SIZE);
-    memset(page_meta_base, 0, pages * sizeof(struct PageMeta));
-    entry->pages = pages;
+    u32 pfn = (u32)((uptr)base / PAGE_SIZE);
+    assert(pages > 0);
+    assert(!pfn_is_fake(pfn + pages - 1));
+    assert(pfn_is_reserved(pfn) && pfn_is_reserved(pfn + pages - 1));
 
-    FREELIST_LOCK(&g_main_free_list);
-    freelist_add_ordered_nolock(&g_main_free_list, entry);
-    FREELIST_UNLOCK(&g_main_free_list);
-
-    UPDATE_STATS(reserved, -pages);
-    UPDATE_STATS(free, +pages);
+    memset(pfn_to_hhdm(pfn), 0, pages * PAGE_SIZE);
+    __atomic_sub_fetch(&g_num_reserved_pages, pages, __ATOMIC_RELAXED);
+    pmm_release_block(pfn, pages);
 }
 
-void pmm_get_stats(PMMStats *out_pmm_stats) { *out_pmm_stats = g_memory_stats; }
+void pmm_get_stats(PMMStats *out_pmm_stats) {
+    usize num_free_pages = __atomic_load_n(&g_num_free_pages, __ATOMIC_RELAXED);
+    usize num_usable_pages = __atomic_load_n(&g_num_usable_pages,
+                                             __ATOMIC_RELAXED);
+    usize num_reserved_pages = __atomic_load_n(&g_num_reserved_pages,
+                                               __ATOMIC_RELAXED);
+    num_free_pages = min(num_free_pages, num_usable_pages);
 
-void pmm_init_threads(void) {
-    log("TODO: reimplement pmm threads");
-    // TODO reimplement pmm threads
+    *out_pmm_stats = (PMMStats){
+        .total = g_num_total_pages * PAGE_SIZE,
+        .usable = num_usable_pages * PAGE_SIZE,
+        .reserved = num_reserved_pages * PAGE_SIZE,
+        .free = num_free_pages * PAGE_SIZE,
+        .allocated = (num_usable_pages - num_free_pages) * PAGE_SIZE};
 }
 
 void pmm_init(void) {
     log("initializing pmm");
+
+    // Initialize freelists
+    for (usize i = 0; i < 64; i++) fl_init(&g_pow2_freelists[i]);
+    for (usize i = 0; i < CONFIG_CPU_MAX; i++) cpups_init(&g_cpu_page_sets[i]);
+
+    g_pfn_db.fake_entry.state = PAGE_STATE_RESERVED;
+    g_pfn_db.fake_entry.allocated.num_ref = 1;
+
+    // The PFN database only covers memory that is or may become usable,
+    // everything above is backed by the fake entry
     MemMap *memmap = info_get_memmap();
-    uptr highest_addr = 0;
     uptr highest_indexed_addr = 0;
-    TAILQ_INIT(&g_main_free_list.head);
-
-    // Setup the fake entry in the page meta array
-    g_page_meta.fake_entry.type = PAGE_TYPE_ANONYMOUS;
-    g_page_meta.fake_entry.state = PAGE_STATE_RESERVED;
-    g_page_meta.fake_entry.num_ref = 1;
-
-    // Calculate memory map & page meta array size
     for (u64 i = 0; i < memmap->entry_count; i++) {
         MemMapEntry *entry = memmap->entries[i];
-        g_memory_stats.total += entry->length;
         uptr seg_top = entry->base + entry->length;
-
         log_debug("segment: base=%p top=%p usable=%zu length=%zu", entry->base,
                   seg_top, memmap_is_usable(entry), entry->length);
+        g_num_total_pages = max(g_num_total_pages,
+                                (seg_top + PAGE_SIZE - 1) / PAGE_SIZE);
 
-        highest_addr = max(highest_addr, seg_top);
-
-        if (memmap_is_reclaimable(entry)) {
+        if (memmap_is_reclaimable(entry))
             highest_indexed_addr = max(highest_indexed_addr, seg_top);
-        }
-
         if (!memmap_is_usable(entry)) {
-            g_memory_stats.reserved += entry->length;
+            g_num_reserved_pages += (entry->length + PAGE_SIZE - 1) / PAGE_SIZE;
             continue;
         }
 
         memset((void *)PHYS_TO_HHDM(entry->base), 0, entry->length);
-        g_memory_stats.usable += entry->length;
         highest_indexed_addr = max(highest_indexed_addr, seg_top);
     }
 
-    g_memory_stats.total = highest_addr;
-    log_debug("searched all segments, found highest address at %p",
-              highest_addr);
+    usize real_len = highest_indexed_addr / PAGE_SIZE;
+    assert(real_len <= (usize)UINT32_MAX + 1);
+    usize array_pages = (real_len * sizeof(Page) + PAGE_SIZE - 1) / PAGE_SIZE;
 
-    // Compute the actual size of the page meta array
-    usize page_meta_size = PAGE_META_ARRAY_SIZE(highest_indexed_addr);
-    usize page_meta_pages = (page_meta_size + PAGE_SIZE - 1) / PAGE_SIZE;
-    usize page_meta_aligned_size = page_meta_pages * PAGE_SIZE;
-    log_debug("page meta array size = %zu byte(s) = %zu page(s) = %zu aligned "
-              "byte(s)",
-              page_meta_size, page_meta_pages, page_meta_aligned_size);
-
-    // Find a segment that fits the array and allocate it there
+    MemMapEntry *array_entry = NULL;
     for (u64 i = 0; i < memmap->entry_count; i++) {
         MemMapEntry *entry = memmap->entries[i];
+        if (!memmap_is_usable(entry)) continue;
+        if (entry->length < array_pages * PAGE_SIZE) continue;
+        array_entry = entry;
+        break;
+    }
 
+    assert(array_entry != NULL);
+    g_num_reserved_pages += array_pages;
+    g_pfn_db.array = (void *)PHYS_TO_HHDM(array_entry->base);
+    g_pfn_db.real_len = real_len;
+    log_debug("pfn database: base=%p, len=%zu, pages=%zu", g_pfn_db.array,
+              real_len, array_pages);
+
+    // Everything starts reserved (including holes in the memory map and the
+    // database itself), then usable segments are released
+    Page model = {0};
+    model.state = PAGE_STATE_RESERVED;
+    model.allocated.num_ref = 1;
+    memrepcpy(g_pfn_db.array, &model, sizeof(Page), real_len);
+
+    for (u64 i = 0; i < memmap->entry_count; i++) {
+        MemMapEntry *entry = memmap->entries[i];
         if (!memmap_is_usable(entry)) continue;
 
-        if (g_page_meta.buffer == NULL &&
-            entry->length >= page_meta_aligned_size) {
-            g_page_meta.buffer = (void *)PHYS_TO_HHDM(entry->base);
-            g_page_meta.len = PAGE_META_ARRAY_LEN(highest_indexed_addr);
-            g_page_meta.reserved_start = PHYS_TO_META_INDEX(
-                highest_indexed_addr);
-            g_page_meta.extended_len = PAGE_META_ARRAY_LEN(highest_addr);
-            // Already zeroed before. Remember, 0 == PAGE_STATE_FREE
-
-            // We now reserve the pages used for this array
-            struct PageMeta model = {.num_ref = 1,
-                                     .state = PAGE_STATE_RESERVED};
-            page_meta_set((void *)entry->base, &model, page_meta_pages);
-            g_memory_stats.usable -= page_meta_aligned_size;
-            g_memory_stats.reserved += page_meta_aligned_size;
-
-            // We also add this to the freelist. This list entry of couse is
-            // a little special since a part of it has been reserved. The
-            // address is rounded down to the nearest fully free page
-            // boundary to guarantee that allocations will always return
-            // aligned addresses. This is only performed if there is still
-            // at least one page elft
-            if (entry->length >= page_meta_aligned_size + PAGE_SIZE) {
-                usize remaining_length = entry->length - page_meta_aligned_size;
-                usize remaining_pages = remaining_length / PAGE_SIZE;
-
-                struct FreelistEntry
-                    *list_entry = (void *)(PHYS_TO_HHDM(entry->base) +
-                                           page_meta_aligned_size);
-                list_entry->pages = remaining_pages;
-                freelist_add_ordered_nolock(&g_main_free_list, list_entry);
-            }
-
-            log_debug("page meta array: base=%p, segment=%zu, length=%zu",
-                      g_page_meta.buffer, i, g_page_meta.len);
-            continue;
+        u32 start_pfn = entry->base / PAGE_SIZE;
+        u32 block_len = entry->length / PAGE_SIZE;
+        if (entry == array_entry) {
+            start_pfn += array_pages;
+            block_len -= array_pages;
         }
 
-        // If we got here, it means the entire entry is free for us!
-        struct FreelistEntry *list_entry = (void *)(PHYS_TO_HHDM(entry->base));
-        list_entry->pages = entry->length / PAGE_SIZE;
-        freelist_add_ordered_nolock(&g_main_free_list, list_entry);
-    }
-
-    log_debug("reserving remaining unusable pages");
-
-    // We couldn't reserve all unusable regions before because the array
-    // might not have been set yet. But we can not
-    for (u64 i = 0; i < memmap->entry_count; i++) {
-        MemMapEntry *entry = memmap->entries[i];
-
-        if (!memmap_is_usable(entry) &&
-            entry->base + entry->length < highest_indexed_addr) {
-            struct PageMeta model = {.num_ref = 1,
-                                     .state = PAGE_STATE_RESERVED};
-            page_meta_set((void *)entry->base, &model,
-                          (entry->length + PAGE_SIZE - 1) / PAGE_SIZE);
-        }
-    }
-
-    g_memory_stats.free = g_memory_stats.usable;
-
-    struct FreelistEntry *e, *_;
-    TAILQ_FOREACH_SAFE(e, &g_main_free_list.head, tqe, _) {
-        log_debug("freelist entry %p has %zu pages", e, e->pages);
+        if (block_len > 0) pmm_release_block(start_pfn, block_len);
     }
 }

@@ -4,17 +4,12 @@
 #include <kernel/com/crt/string.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/mm/pmmcache.h>
 #include <kernel/com/util.h>
 #include <kernel/platform/info.h>
 #include <kernel/platform/mmu.h>
 #include <kernel/platform/x86-64/mmu.h>
 #include <kernel/platform/x86-64/smp.h>
 #include <threads.h>
-
-#define PT_CACHE_INIT_SIZE     1024
-#define PT_CACHE_POOL_SIZE     512
-#define PT_CACHE_MAX_POOL_SIZE 4096
 
 #define ADDRMASK (u64)0x7ffffffffffff000
 #define PTMASK   (u64)0b111111111000000000000
@@ -39,19 +34,8 @@ extern u8 _USER_DATA_END[];
 
 static MMUPageTable *g_root_table = NULL;
 
-static inline void *internal_alloc_phys(void) {
-    Cpu *curr_cpu = cpu_get();
-    return pmm_cache_alloc(&curr_cpu->mmu_cache, 1);
-}
-
-static inline void internal_free_phys(void *page) {
-    Cpu *curr_cpu = cpu_get();
-    pmm_cache_free(&curr_cpu->mmu_cache, page);
-}
-
 static inline u64 *next(u64 entry) {
     if (entry == 0) return NULL;
-
     return (u64 *)PHYS_TO_HHDM(entry & ADDRMASK);
 }
 
@@ -90,7 +74,7 @@ static bool add_page(MMUPageTable *top, void *vaddr, u64 entry, int depth) {
 
     u64 *pdpt = next(pml4[pml4offset]);
     if (pdpt == NULL) {
-        pdpt = internal_alloc_phys();
+        pdpt = pmm_allocz();
         if (pdpt == NULL) return false;
         pml4[pml4offset] = (u64)pdpt | MMU_FLAGS_READ | MMU_FLAGS_WRITE |
             MMU_FLAGS_USER;
@@ -104,7 +88,7 @@ static bool add_page(MMUPageTable *top, void *vaddr, u64 entry, int depth) {
 
     u64 *pd = next(pdpt[pdptoffset]);
     if (pd == NULL) {
-        pd = internal_alloc_phys();
+        pd = pmm_allocz();
         if (pd == NULL) return false;
         pdpt[pdptoffset] = (u64)pd | MMU_FLAGS_READ | MMU_FLAGS_WRITE |
             MMU_FLAGS_USER;
@@ -118,7 +102,7 @@ static bool add_page(MMUPageTable *top, void *vaddr, u64 entry, int depth) {
 
     u64 *pt = next(pd[pdoffset]);
     if (pt == NULL) {
-        pt = internal_alloc_phys();
+        pt = pmm_allocz();
         if (pt == NULL) return false;
         pd[pdoffset] = (u64)pt | MMU_FLAGS_READ | MMU_FLAGS_WRITE |
             MMU_FLAGS_USER;
@@ -164,7 +148,7 @@ static u64 duplicate_recursive(u64 entry, usize level, usize addr) {
             : (entry & ~MMU_FLAGS_WRITE) | (entry_writable << 9);
     }
 
-    u64 new = (u64)internal_alloc_phys();
+    u64 new = (u64)pmm_allocz();
     u64 *nvirt = (u64 *)PHYS_TO_HHDM(new);
 
     for (usize i = 0; i < 512; i++) {
@@ -189,16 +173,14 @@ void destroy_recursive(u64 entry, usize level) {
             }
         }
 
-        internal_free_phys(phys);
+        pmm_free(phys);
     } else {
-        // If we're at level 0, then this page is not part of the PT and needs
-        // to be returned to pmm
         pmm_free(phys);
     }
 }
 
 MMUPageTable *mmu_new_table(void) {
-    MMUPageTable *table = internal_alloc_phys();
+    MMUPageTable *table = pmm_allocz();
 
     if (table == NULL) return NULL;
 
@@ -214,7 +196,7 @@ void mmu_destroy_table(MMUPageTable *pt) {
         if (pt_virt[i] & MMU_FLAGS_PRESENT) destroy_recursive(pt_virt[i], 3);
     }
 
-    internal_free_phys(pt);
+    pmm_free(pt);
 }
 
 MMUPageTable *mmu_duplicate_table(MMUPageTable *pt) {
@@ -369,14 +351,14 @@ void mmu_init(void) {
     // Allocate the kernel (root) page table
     log("initializing mmu");
     mmu_init_cpu();
-    g_root_table = internal_alloc_phys();
+    g_root_table = pmm_allocz();
     assert(g_root_table != NULL);
     g_root_table = (MMUPageTable *)PHYS_TO_HHDM(g_root_table);
 
     // Map the higher half into the new page table
     log_debug("mapping higher half to kernel page table");
     for (u64 i = 256; i < 512; i++) {
-        u64 *entry = internal_alloc_phys();
+        u64 *entry = pmm_allocz();
         assert(entry != NULL);
         g_root_table[i] = (u64)entry | MMU_FLAGS_WRITE | MMU_FLAGS_READ |
             MMU_FLAGS_GLOBAL;
@@ -444,14 +426,7 @@ void mmu_init(void) {
     cpu_get()->root_page_table = (void *)HHDM_TO_PHYS(g_root_table);
 }
 
-void mmu_init_cpu(void) {
-    Cpu *curr_cpu = cpu_get();
-    if (curr_cpu->mmu_cache.private.pool != NULL) return;
-
-    pmm_cache_init(&curr_cpu->mmu_cache, PT_CACHE_INIT_SIZE, PT_CACHE_POOL_SIZE,
-                   PT_CACHE_MAX_POOL_SIZE,
-                   PMM_CACHE_FLAGS_AUTOALLOC | PMM_CACHE_FLAGS_AUTOLOCK);
-}
+void mmu_init_cpu(void) {}
 
 void mmu_fault_isr(InterruptHandler *isr, Context *ctx) {
     (void)isr;

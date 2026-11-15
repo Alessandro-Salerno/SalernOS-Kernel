@@ -1,6 +1,5 @@
 #pragma once
 
-#include <kernel/com/mm/pmmcache.h>
 #include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/thread.h>
@@ -26,7 +25,7 @@ typedef struct Cpu {
     u64 gdt[7];
     InterruptStackTable ist;
     u64 tsc_reverse_mult;
-    PMMCache mmu_cache;
+
     usize *mmu_shootdown_counter;
     Spinlock mmu_shootdown_lock;
     void *mmu_shootdown_virt;
@@ -37,8 +36,9 @@ typedef struct Cpu {
     struct ThreadSList zombies; // Cpu-local, accessed with interrupts disabled
     Spinlock runqueue_lock;
     struct ThreadTailQ sched_queue;
-    struct CalloutQueue callout;
     struct Thread *idle_thread;
+
+    struct CalloutQueue callout;
 } Cpu;
 
 static inline Cpu *cpu_get(void) {

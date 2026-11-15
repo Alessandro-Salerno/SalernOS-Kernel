@@ -257,17 +257,15 @@ void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,
     if (likely(attr & VMM_FAULT_ATTR_MAP)) {
         void *fault_virt_page = (void *)((uptr)fault_virt &
                                          ~(uptr)(PAGE_SIZE - 1));
-        for (usize i = 0; i < num_pages_hint;) {
-            usize got;
-            void *new_phys = pmm_alloczn_max(num_pages_hint - i, &got);
-            for (usize j = 0; j < got; j++, i++) {
-                mmu_map(curr_proc->vmm_context->pagetable,
-                        fault_virt_page + PAGE_SIZE * i,
-                        new_phys + PAGE_SIZE * j, mmu_flags_hint);
-            }
+        assert(num_pages_hint <= CONFIG_VMM_PREFAULT_MAX);
+        void *new_pages[CONFIG_VMM_PREFAULT_MAX];
+        usize got = pmm_alloczn_arr(num_pages_hint, new_pages);
+        for (usize i = 0; i < got; i++) {
+            mmu_map(curr_proc->vmm_context->pagetable,
+                    fault_virt_page + PAGE_SIZE * i, new_pages[i],
+                    mmu_flags_hint);
         }
-        mmu_invalidate(curr_proc->vmm_context->pagetable, fault_virt_page,
-                       num_pages_hint);
+        mmu_invalidate(curr_proc->vmm_context->pagetable, fault_virt_page, got);
         // pmm_free(ZeroPage);
         goto end;
     }
@@ -323,7 +321,7 @@ void vmm_init(void) {
     log("initializing vmm");
     g_root_context.pagetable = mmu_get_table();
     g_root_context.lock = SPINLOCK_NEW();
-    g_zero_page = pmm_allocz();
+    g_zero_page = pmm_allocz_reserved();
 }
 
 void *vmm_prealloc_range(VMMContext *context, VMMRangeType rangetype,
