@@ -83,10 +83,15 @@ static int load(uptr vaddr, struct ELFPHdr *phdr, Vnode *elf_file,
         isize rem = PAGE_SIZE - misalign;
         isize mapping_len = min(rem, fsz);
         void *phys_page = pmm_alloc();
+        u8 *page_hhdm = (u8 *)PHYS_TO_HHDM(phys_page);
         vmm_map(vmm_context, (void *)(vaddr - misalign), phys_page, mapping_len,
                 VMM_FLAGS_NONE, mmu_flags);
-        vfs_read((void *)(PHYS_TO_HHDM(phys_page) + misalign), mapping_len,
-                 elf_file, phdr->off, O_RDONLY, NULL);
+        usize bytes_read = 0;
+        vfs_read(page_hhdm + misalign, mapping_len, elf_file, phdr->off,
+                 O_RDONLY, &bytes_read);
+        // The page is not zeroed, so clear what the file did not fill
+        memset(page_hhdm, 0, misalign);
+        memset(page_hhdm + misalign + bytes_read, 0, rem - bytes_read);
         vaddr += mapping_len;
         fsz -= mapping_len;
         mem_sz -= mapping_len;

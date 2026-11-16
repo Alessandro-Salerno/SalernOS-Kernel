@@ -21,6 +21,9 @@ static void sched_idle(void) {
     for (;;) {
         curr_thread->lock_depth = 0;
         cpu_enable_interrupts();
+        // We can do it for now, so we do it. This ensures that evne programs
+        // that don't sleep a lot eventually get unreferenced
+        thread_reap();
         cpu_halt();
     }
 }

@@ -76,6 +76,7 @@
 #define CONFIG_VMM_REAPER_NOTIFY  8
 #define CONFIG_PMM_CPU_PAGE_HIGH  512
 #define CONFIG_PMM_CPU_PAGE_MAX   1024
+#define CONFIG_PMM_EXACT_LISTS    31 /* One per run length: 1, 3, 7, 15 or 31 */
 #define CONFIG_DEFAULT_KBD_LAYOUT en_us
 #define CONFIG_TRACK_SLEEP_TIME   1
 #define CONFIG_USE_PROFILER       1

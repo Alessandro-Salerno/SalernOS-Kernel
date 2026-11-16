@@ -55,7 +55,8 @@ void vmm_destroy_context(VMMContext *context) {
     assert(context->pagetable != mmu_get_table());
     assert(context->pagetable != NULL);
 
-    // TODO: reimplement this
+    mmu_destroy_table(context->pagetable);
+    slab_free(context, sizeof(VMMContext));
 }
 
 VMMContext *vmm_duplicate_context(VMMContext *context) {

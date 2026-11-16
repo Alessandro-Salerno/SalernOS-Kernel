@@ -7,6 +7,27 @@
 #include <kernel/platform/info.h>
 #include <vendor/tailq.h>
 
+// TODO: the exact-size lists are a patchy solution to a deeper problem caused
+// by best-fit. Global lock hold times baloon without them in my benchmarks
+// because the cahced-pionter refetch starts to dominate as smalls-size lists
+// become longer and longer due to fragmentation. Fragmentation itself is not a
+// major concern, as tests have shown it is not too bad, but even then it leaves
+// uite a few small runs. This fixes the problem, though it has an arbitrary
+// ceiling which probably shows in some workloads, so a good-fit alternative on
+// the lines of TLSF would probably be better
+
+// Runs of up to CONFIG_PMM_EXACT_LISTS pages each have a freelist of their own.
+// Longer runs share a freelist with all runs whose length has the same bit
+// width, up to the 32 bits of block_num_pages
+#define FIRST_RANGE_LEN   (CONFIG_PMM_EXACT_LISTS + 1)
+#define FIRST_RANGE_WIDTH (64 - __builtin_clzll(FIRST_RANGE_LEN))
+#define NUM_FREELISTS     (CONFIG_PMM_EXACT_LISTS + 33 - FIRST_RANGE_WIDTH)
+
+_Static_assert(CONFIG_PMM_EXACT_LISTS > 0, "there must be an exact freelist");
+_Static_assert((FIRST_RANGE_LEN & (FIRST_RANGE_LEN - 1)) == 0,
+               "the first range must start a new bit width");
+_Static_assert(NUM_FREELISTS <= 64, "every freelist needs a bit in g_bitmap");
+
 typedef struct Page Page;
 typedef TAILQ_HEAD(FreelistHead, Page) FreelistHead;
 
@@ -47,7 +68,7 @@ struct Page {
 static CpuPageSet g_cpu_page_sets[CONFIG_CPU_MAX];
 
 static Spinlock g_pmm_lock = SPINLOCK_NEW();
-static Freelist g_pow2_freelists[64];
+static Freelist g_freelists[NUM_FREELISTS];
 static u64 g_bitmap = 0;
 static usize g_num_free_pages = 0;
 static usize g_num_usable_pages = 0;
@@ -118,6 +139,9 @@ static void page_make_free_edge(Page *end_page, Page *leader_page) {
 
 // PMM AND BLOCK HELPERS
 
+static u64 fl_index(Freelist *fl);
+static Freelist *fl_get_from_len(u32 num_pages);
+
 static void pmm_lock(void) { spinlock_acq(&g_pmm_lock); }
 static void pmm_unlock(void) { spinlock_rel(&g_pmm_lock); }
 // Spinlocks are no-ops before the first thread exists
@@ -128,18 +152,17 @@ static bool pmm_is_locked(void) {
 static Freelist *pmm_find_fit(usize num_pages) {
     assert(pmm_is_locked());
     assert(num_pages != 0);
+    if (num_pages > UINT32_MAX) return NULL;
 
-    u64 leading_zeros = __builtin_clzg(num_pages);
-    u64 pow2 = 64 - (leading_zeros + 1);
-    u64 mask = ~((1ULL << pow2) - 1);
+    u64 mask = ~((1ULL << fl_index(fl_get_from_len(num_pages))) - 1);
 
     u64 avail_lists = g_bitmap & mask;
     while (avail_lists != 0) {
         u64 n = __builtin_ffsll(avail_lists);
         assert(n != 0);
-        assert(n <= 64);
+        assert(n <= NUM_FREELISTS);
 
-        Freelist *fl = &g_pow2_freelists[n - 1];
+        Freelist *fl = &g_freelists[n - 1];
         assert(!TAILQ_EMPTY(&fl->head));
         assert(fl->largest_run != NULL);
         assert(fl->smallest_run != NULL);
@@ -272,7 +295,7 @@ static void pmm_punch_block(u32 start_pfn) {
 
 static bool fl_invariants(Freelist *fl) {
     assert(fl != NULL);
-    assert(fl >= g_pow2_freelists && fl <= &g_pow2_freelists[63]);
+    assert(fl >= g_freelists && fl <= &g_freelists[NUM_FREELISTS - 1]);
     assert(!(!TAILQ_EMPTY(&fl->head) &&
              (fl->smallest_run == NULL || fl->largest_run == NULL)));
     assert(TAILQ_EMPTY(&fl->head) ||
@@ -288,23 +311,28 @@ static void fl_init(Freelist *fl) {
     assert(fl_invariants(fl));
 }
 
-static u64 fl_pow(Freelist *fl) { return fl - g_pow2_freelists; }
-static u64 fl_lower_bound(Freelist *fl) { return 1ULL << fl_pow(fl); }
+static u64 fl_index(Freelist *fl) { return fl - g_freelists; }
+static u64 fl_lower_bound(Freelist *fl) {
+    u64 index = fl_index(fl);
+    if (index < CONFIG_PMM_EXACT_LISTS) return index + 1;
+    return (u64)FIRST_RANGE_LEN << (index - CONFIG_PMM_EXACT_LISTS);
+}
 static u64 fl_upper_bound(Freelist *fl) {
-    if (fl_pow(fl) != 63) return fl_lower_bound(fl + 1) - 1;
+    if (fl_index(fl) != NUM_FREELISTS - 1) return fl_lower_bound(fl + 1) - 1;
     else return UINT64_MAX;
 }
 
 static void fl_empty(Freelist *fl) {
     fl->smallest_run = fl->largest_run = NULL;
-    g_bitmap &= ~(1ULL << fl_pow(fl));
+    g_bitmap &= ~(1ULL << fl_index(fl));
     assert(fl_invariants(fl));
 }
 
 static Freelist *fl_get_from_len(u32 num_pages) {
     assert(num_pages > 0);
-    usize pow2 = 64 - (__builtin_clzg((u64)num_pages) + 1);
-    return &g_pow2_freelists[pow2];
+    if (num_pages <= CONFIG_PMM_EXACT_LISTS) return &g_freelists[num_pages - 1];
+    usize width = 64 - __builtin_clzg((u64)num_pages);
+    return &g_freelists[CONFIG_PMM_EXACT_LISTS + width - FIRST_RANGE_WIDTH];
 }
 
 static Freelist *fl_get_from_entry(Page *entry) {
@@ -400,7 +428,7 @@ static void fl_grow_fixup(Freelist *fl, Page *updated) {
         assert(TAILQ_FIRST(&fl->head) == updated);
         assert(TAILQ_NEXT(updated, free.link) == NULL);
         fl->smallest_run = fl->largest_run = updated;
-        g_bitmap |= (1ULL << fl_pow(fl));
+        g_bitmap |= (1ULL << fl_index(fl));
         goto exit;
     }
 
@@ -440,7 +468,7 @@ static Freelist *fl_bubble_down(Freelist *fl, Page *entry) {
     Freelist *curr = fl;
     while (entry->free.block_num_pages <= fl_upper_bound(curr)) {
         last = curr;
-        if (curr != &g_pow2_freelists[0]) curr--;
+        if (curr != &g_freelists[0]) curr--;
         else break;
     }
 
@@ -464,7 +492,8 @@ static Freelist *fl_bubble_up(Freelist *fl, Page *entry) {
     Freelist *curr = fl;
     while (entry->free.block_num_pages >= fl_lower_bound(curr)) {
         last = curr;
-        if (curr != &g_pow2_freelists[63]) curr++;
+        if (curr != &g_freelists[NUM_FREELISTS - 1]) curr++;
+        else break;
     }
 
     assert(last != NULL);
@@ -786,8 +815,8 @@ void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
 void *pmm_alloczn_max(usize pages, usize *out_alloc_size) {
     usize alloc_size = 0;
     void *ret = pmm_allocn_max(pages, &alloc_size);
-    // if (ret != NULL)
-    //  memset((void *)PHYS_TO_HHDM(ret), 0, alloc_size * PAGE_SIZE);
+    if (ret != NULL)
+        memset((void *)PHYS_TO_HHDM(ret), 0, alloc_size * PAGE_SIZE);
     if (out_alloc_size != NULL) *out_alloc_size = alloc_size;
     return ret;
 }
@@ -859,7 +888,6 @@ void pmm_freen(void *base, usize pages) {
     if (page_is_reserved(page)) return;
     if (__atomic_add_fetch(&page->allocated.num_ref, -1, __ATOMIC_ACQ_REL) ==
         0) {
-        memset(pfn_to_hhdm(pfn), 0, pages * PAGE_SIZE);
         cpups_free(pfn, pages);
     }
 }
@@ -896,7 +924,7 @@ void pmm_init(void) {
     log("initializing pmm");
 
     // Initialize freelists
-    for (usize i = 0; i < 64; i++) fl_init(&g_pow2_freelists[i]);
+    for (usize i = 0; i < NUM_FREELISTS; i++) fl_init(&g_freelists[i]);
     for (usize i = 0; i < CONFIG_CPU_MAX; i++) cpups_init(&g_cpu_page_sets[i]);
 
     g_pfn_db.fake_entry.state = PAGE_STATE_RESERVED;

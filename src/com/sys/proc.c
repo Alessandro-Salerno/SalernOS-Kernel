@@ -501,6 +501,11 @@ void proc_hide(Proc *proc) {
     proc->proc_group = NULL;
     spinlock_rel(&proc->pg_lock);
     spinlock_rel(&g_pid_namespace_lock);
+
+    // Threads drop their references after switching out, so no Cpu uses it
+    VMMContext *vmm_context = proc->vmm_context;
+    proc->vmm_context = NULL;
+    if (vmm_context != NULL) vmm_destroy_context(vmm_context);
 }
 
 ProcGroup *proc_new_group(Proc *leader, ProcSession *session) {
