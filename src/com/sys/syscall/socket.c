@@ -29,10 +29,18 @@ SYSCALL(syscall_socket) {
 
     Socket *socket = socket_new(sys_type);
     Vnode *socket_vn = sockfs_new();
+    File *file = slab_alloc(sizeof(File));
+    if (socket == NULL || socket_vn == NULL || file == NULL) {
+        if (socket_vn != NULL) slab_free(socket_vn, sizeof(SocketVnode));
+        if (socket != NULL) verify(SOCKET_DESTROY(socket) == 0);
+        slab_free(file, sizeof(File));
+        proc_unreserve_fd(curr_proc, fd);
+        return SYSCALL_ERR(ENOMEM);
+    }
+
     SocketVnode *sockfs_vn = (void *)socket_vn;
     sockfs_vn->socket = socket;
 
-    File *file = slab_alloc(sizeof(File));
     file->vnode = socket_vn;
     file->flags = 0;
     file->num_ref = 1;

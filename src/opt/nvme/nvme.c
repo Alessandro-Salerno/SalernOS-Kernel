@@ -1,5 +1,6 @@
 #include <arch/barrier.h>
 #include <arch/info.h>
+#include <errno.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sync/mutex.h>
@@ -223,22 +224,26 @@ static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
     mutex_rel(&drive->queues[0].lock);
 }
 
-static void nvme_submit_multipage_command_sync(struct NVMeDevice *drive,
-                                               void *buf, usize pageno,
-                                               usize num_pages, u8 opcode) {
+static int nvme_submit_multipage_command_sync(struct NVMeDevice *drive,
+                                              void *buf, usize pageno,
+                                              usize num_pages, u8 opcode) {
     for (usize i = 0; i < num_pages; i++) {
         // DMA does not trigger page faults, so we must do it ourselves if this
         // page was not writable or COW or similar. This value will be
         // overridden by DMA anyway
         if (opcode == NVME_OPCODE_READ) *(u8 *)buf = 0;
 
-        nvme_submit_page_command_sync(drive,
-                                      (buf > MMU_KERNELSPACE_START)
-                                          ? (void *)HHDM_TO_PHYS(buf)
-                                          : vmm_get_physical(NULL, buf),
-                                      pageno + i, opcode);
+        void *phys = (void *)HHDM_TO_PHYS(buf);
+        if (buf <= MMU_KERNELSPACE_START) {
+            int ret = vmm_get_physical(NULL, buf, &phys);
+            if (ret != 0) return ret;
+        }
+
+        nvme_submit_page_command_sync(drive, phys, pageno + i, opcode);
         buf += PAGE_SIZE;
     }
+
+    return 0;
 }
 
 static void nvme_isr(InterruptHandler *isr, Context *ctx) {
@@ -273,8 +278,9 @@ static int nvme_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
 
     // Fast path if the buffer is aligned
     if (rem == 0 && buflen % PAGE_SIZE == 0 && (uptr)buf % PAGE_SIZE == 0) {
-        nvme_submit_multipage_command_sync(
+        int ret = nvme_submit_multipage_command_sync(
             device, buf, base_page, buflen / PAGE_SIZE, NVME_OPCODE_READ);
+        if (ret != 0) return ret;
         *out_bytes_read = buflen;
         return 0;
     }
@@ -294,12 +300,17 @@ static int nvme_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
         usize rounded_pages = rounded_buflen / PAGE_SIZE;
         usize head_size = (uptr)rounded_buf - (uptr)buf;
         usize tail_size = (uptr)buf + buflen - (uptr)rounded_last;
+        void *tmp_phys = pmm_alloc();
+        if (tmp_phys == NULL) return ENOMEM;
         // Read the contiguous block
-        nvme_submit_multipage_command_sync(
+        int ret = nvme_submit_multipage_command_sync(
             device, rounded_buf, base_page + ((buf != rounded_buf) ? 1 : 0),
             rounded_pages, NVME_OPCODE_READ);
+        if (ret != 0) {
+            pmm_free(tmp_phys);
+            return ret;
+        }
         // Read base and tail
-        void *tmp_phys = pmm_alloc();
         void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
         // No need to copy base/head if the buffer was aligned because we
         // already did before
@@ -318,6 +329,7 @@ static int nvme_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
     }
 
     void *tmp_phys = pmm_alloc();
+    if (tmp_phys == NULL) return ENOMEM;
     void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
 
     for (usize i = 0; i < (buflen + PAGE_SIZE - 1) / PAGE_SIZE; i++) {
@@ -357,13 +369,15 @@ static int nvme_write(void *devdata, void *buf, usize buflen, u64 off,
 
     // Fast path if the buffer is aligned
     if (rem == 0 && buflen % PAGE_SIZE == 0 && (uptr)buf % PAGE_SIZE == 0) {
-        nvme_submit_multipage_command_sync(
+        int ret = nvme_submit_multipage_command_sync(
             device, buf, base_page, buflen / PAGE_SIZE, NVME_OPCODE_WRITE);
+        if (ret != 0) return ret;
         *out_bytes_written = buflen;
         return 0;
     }
 
     void *tmp_phys = pmm_alloc();
+    if (tmp_phys == NULL) return ENOMEM;
     void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
 
     for (usize i = 0; i < (buflen + PAGE_SIZE - 1) / PAGE_SIZE; i++) {
@@ -405,6 +419,7 @@ static int nvme_init_device(PCIEnum *pci_enum) {
 
     InterruptHandler *devisr = interrupt_allocate(nvme_isr, pci_msi_eoi);
     struct NVMeDevice *dev = slab_alloc(sizeof(struct NVMeDevice));
+    assert(dev != NULL);
     waitlist_init(&dev->queues[0].irq_waiters);
     mutex_init(&dev->queues[0].lock);
     devisr->extra = dev;
@@ -431,6 +446,7 @@ static int nvme_init_device(PCIEnum *pci_enum) {
     u64 dstrd = (nvme_read64(base + NVME_REG64_CAP) >> 32) & 0xF;
     void *asq_phys = pmm_allocz();
     void *acq_phys = pmm_allocz();
+    assert(asq_phys != NULL && acq_phys != NULL);
     nvme_write32(base + NVME_REG32_AQA,
                  ((qe - 1) << 16) |
                      (qe - 1)); // CQ size is at 16, SQ size is at 0
@@ -454,6 +470,7 @@ static int nvme_init_device(PCIEnum *pci_enum) {
         ((2 * admin_queue.qid + 1) << (2 + dstrd));
 
     void *temp_buf = pmm_allocz();
+    assert(temp_buf != NULL);
 
     // issue NS0 Identify command
     struct NVMeIdentifySQE ident_in = {.opcode = 0x06,
@@ -475,6 +492,7 @@ static int nvme_init_device(PCIEnum *pci_enum) {
     // create CQ0
     void *sq0_phys = pmm_allocz();
     void *cq0_phys = pmm_allocz();
+    assert(sq0_phys != NULL && cq0_phys != NULL);
     struct NVMeCreateCQSQE ccq_in = {.opcode = NVME_OPCODE_ADMIN_CREATE_CQ,
                                      .prp1 = (uptr)cq0_phys,
                                      .qid = 1,

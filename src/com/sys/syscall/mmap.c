@@ -92,10 +92,10 @@ SYSCALL(syscall_mmap) {
     }
 
     // Allocate anonymous pages
-    void *virt = vmm_map(curr_proc->vmm_context, hint, NULL, size,
-                         vmm_flags | VMM_FLAGS_ALLOCATE, mmu_flags);
-
-    if (virt == NULL) return SYSCALL_ERR(ENOMEM);
+    void *virt = NULL;
+    int ret = vmm_map(curr_proc->vmm_context, hint, NULL, size,
+                      vmm_flags | VMM_FLAGS_ALLOCATE, mmu_flags, &virt);
+    if (ret != 0) return SYSCALL_ERR(ret);
 
     return SYSCALL_OK(virt);
 }

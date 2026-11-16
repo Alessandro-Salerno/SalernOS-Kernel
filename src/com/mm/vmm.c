@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <arch/mmu.h>
+#include <errno.h>
 #include <kernel/com/crt/string.h>
 #include <kernel/com/crt/usercopy.h>
 #include <kernel/com/mm/pmm.h>
@@ -16,7 +17,7 @@
 #include <kernel/platform/mmu.h>
 #include <stdatomic.h>
 
-#define UNMAP_MAX_ARRAY_ON_STACK 64
+#define UNMAP_BATCH_PAGES 64
 
 static VMMContext g_root_context = {0};
 static void *g_zero_page = NULL;
@@ -39,10 +40,16 @@ static inline VMMContext *vmm_ensure_context(VMMContext *context) {
 }
 
 VMMContext *vmm_new_context(MMUPageTable *pagetable) {
-    if (pagetable == NULL) pagetable = mmu_new_table();
+    MMUPageTable *new_pt = pagetable != NULL ? pagetable : mmu_new_table();
+    if (new_pt == NULL) return NULL;
 
     VMMContext *context = slab_alloc(sizeof(VMMContext));
-    context->pagetable = pagetable;
+    if (context == NULL) {
+        if (pagetable == NULL) mmu_destroy_table(new_pt);
+        return NULL;
+    }
+
+    context->pagetable = new_pt;
     context->lock = SPINLOCK_NEW();
     return context;
 }
@@ -63,7 +70,12 @@ VMMContext *vmm_duplicate_context(VMMContext *context) {
     if (context == NULL) return vmm_new_context(NULL);
 
     MMUPageTable *new_pt = mmu_duplicate_table(context->pagetable);
+    if (new_pt == NULL) return NULL;
     VMMContext *new_vmm_ctx = vmm_new_context(new_pt);
+    if (new_vmm_ctx == NULL) {
+        mmu_destroy_table(new_pt);
+        return NULL;
+    }
     new_vmm_ctx->anon_pages = context->anon_pages;
     return new_vmm_ctx;
 }
@@ -87,8 +99,36 @@ static void *vmm_alloc_anon_range(VMMContext *context, usize pages) {
     return base;
 }
 
-void *vmm_map(VMMContext *context, void *virt, void *phys, usize len,
-              int vmm_flags, MMUFlags mmu_flags) {
+// Stops at the first address without a page table
+static void unmap_pages(VMMContext *context, void *virt, usize num_pages,
+                        bool release) {
+    void *phys[UNMAP_BATCH_PAGES];
+
+    for (usize done = 0; done < num_pages;) {
+        void *batch_virt = (void *)((uptr)virt + done * PAGE_SIZE);
+        usize batch = min(num_pages - done, UNMAP_BATCH_PAGES);
+        usize unmapped = 0;
+        while (unmapped < batch &&
+               mmu_unmap(context->pagetable,
+                         (void *)((uptr)batch_virt + unmapped * PAGE_SIZE),
+                         &phys[unmapped])) {
+            unmapped++;
+        }
+
+        if (unmapped != 0) {
+            mmu_invalidate(context->pagetable, batch_virt, unmapped);
+        }
+        if (release) {
+            for (usize i = 0; i < unmapped; i++) pmm_free(phys[i]);
+        }
+
+        if (unmapped != batch) return;
+        done += batch;
+    }
+}
+
+int vmm_map(VMMContext *context, void *virt, void *phys, usize len,
+            int vmm_flags, MMUFlags mmu_flags, void **out_addr) {
     if (vmm_flags & VMM_FLAGS_ALLOCATE) phys = NULL;
 
 #ifdef MMU_EXTRA_FLAGS_SHARED
@@ -121,20 +161,18 @@ void *vmm_map(VMMContext *context, void *virt, void *phys, usize len,
     usize size_in_pages = (size_p_off + PAGE_SIZE - 1) / PAGE_SIZE;
 
     context = vmm_ensure_context(context);
+    bool hhdm = false;
 
     if (vmm_flags & VMM_FLAGS_NOHINT) {
         if (vmm_flags & VMM_FLAGS_ANONYMOUS) {
             virt = vmm_alloc_anon_range(context, size_in_pages);
-            if (virt == NULL) return NULL;
+            if (virt == NULL) return ENOMEM;
         } else if (vmm_flags & VMM_FLAGS_PHYSICAL) {
             virt = (void *)PHYS_TO_HHDM(page_paddr);
             mmu_flags |= MMU_FLAGS_GLOBAL;
-        } else {
-            assert(!"unsupported vmm flags");
-        }
-    } else {
-        virt = (void *)((uptr)virt & ~(uptr)(PAGE_SIZE - 1));
-    }
+            hhdm = true;
+        } else assert(!"unsupported vmm flags");
+    } else virt = (void *)((uptr)virt & ~(uptr)(PAGE_SIZE - 1));
 
     for (usize i = 0; i < size_in_pages; i++) {
         uptr offset = i * PAGE_SIZE;
@@ -146,11 +184,16 @@ void *vmm_map(VMMContext *context, void *virt, void *phys, usize len,
             pmm_hold(g_zero_page);
         }
 
-        bool success = mmu_map(context->pagetable, vaddr, paddr, mmu_flags);
-        assert(success);
+        if (!mmu_map(context->pagetable, vaddr, paddr, mmu_flags)) {
+            if (vmm_flags & VMM_FLAGS_ALLOCATE) pmm_free(g_zero_page);
+            if (!hhdm)
+                unmap_pages(context, virt, i, vmm_flags & VMM_FLAGS_ALLOCATE);
+            return ENOMEM;
+        }
     }
 
-    return (void *)((uptr)virt + page_off);
+    if (out_addr != NULL) *out_addr = (void *)((uptr)virt + page_off);
+    return 0;
 }
 
 void vmm_switch(VMMContext *context) {
@@ -159,67 +202,43 @@ void vmm_switch(VMMContext *context) {
     mmu_switch(context->pagetable);
 }
 
-void *vmm_get_physical(VMMContext *context, void *virt_addr) {
+int vmm_get_physical(VMMContext *context, void *virt_addr, void **out_phys) {
     context = vmm_ensure_context(context);
     MMUFlags flags;
     int attr;
     void *phys = mmu_get_physical(context->pagetable, virt_addr, &flags, &attr);
-    if (phys == NULL || !(attr & (VMM_FAULT_ATTR_MAP | VMM_FAULT_ATTR_COW))) {
-        return phys;
+    if (phys == NULL) return EFAULT;
+    if (!(attr & (VMM_FAULT_ATTR_MAP | VMM_FAULT_ATTR_COW))) {
+        *out_phys = phys;
+        return 0;
     }
 
     uptr offset = (uptr)virt_addr & (PAGE_SIZE - 1);
     void *old_page = (void *)((uptr)phys - offset);
     void *virt_page = (void *)((uptr)virt_addr - offset);
     void *new_page = (attr & VMM_FAULT_ATTR_MAP) ? pmm_allocz() : pmm_alloc();
-    if (new_page == NULL) return NULL;
+    if (new_page == NULL) return ENOMEM;
     if (attr & VMM_FAULT_ATTR_COW) {
         memcpy((void *)PHYS_TO_HHDM(new_page), (void *)PHYS_TO_HHDM(old_page),
                PAGE_SIZE);
     }
-    if (!mmu_map(context->pagetable, virt_page, new_page, flags)) {
-        pmm_free(new_page);
-        return NULL;
-    }
+    verify(mmu_remap(context->pagetable, virt_page, new_page, flags));
     mmu_invalidate(context->pagetable, virt_page, 1);
     pmm_free(old_page);
-    return (void *)((uptr)new_page + offset);
+    *out_phys = (void *)((uptr)new_page + offset);
+    return 0;
 }
 
 void vmm_unmap(VMMContext *context, void *virt, usize len) {
+    // Kernel addresses would need a shootdown on every CPU
+    assert(MMU_RANGE_IS_USER(virt, len));
     context = vmm_ensure_context(context);
 
     uptr page_off = (uptr)virt % PAGE_SIZE;
     usize size_p_off = page_off + len;
     usize size_in_pages = (size_p_off + PAGE_SIZE - 1) / PAGE_SIZE;
     virt = (void *)((uptr)virt & ~(uptr)(PAGE_SIZE - 1));
-
-    void *tmp_phys_array[UNMAP_MAX_ARRAY_ON_STACK];
-    void **tmp_phys_buf = tmp_phys_array;
-    usize tmp_phys_buf_pages = (size_in_pages * sizeof(void *) + PAGE_SIZE -
-                                1) /
-        PAGE_SIZE;
-    usize unmaps_done = 0;
-    if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
-        tmp_phys_buf = (void *)PHYS_TO_HHDM(pmm_allocn(tmp_phys_buf_pages));
-    }
-
-    for (usize i = 0; i < size_in_pages; i++) {
-        usize offset = i * PAGE_SIZE;
-        if (!mmu_unmap(context->pagetable, virt + offset, &tmp_phys_buf[i])) {
-            tmp_phys_buf[i] = NULL;
-            break;
-        }
-        unmaps_done++;
-    }
-
-    mmu_invalidate(context->pagetable, virt, unmaps_done);
-
-    for (usize i = 0; i < unmaps_done; i++) pmm_free(tmp_phys_buf[i]);
-
-    if (size_in_pages > UNMAP_MAX_ARRAY_ON_STACK) {
-        pmm_freen((void *)HHDM_TO_PHYS(tmp_phys_buf), tmp_phys_buf_pages);
-    }
+    unmap_pages(context, virt, size_in_pages, true);
 }
 
 // NOTE: always runs in thread context with interrupts on, unless a kernel bug
@@ -261,13 +280,13 @@ void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,
         assert(num_pages_hint <= CONFIG_VMM_PREFAULT_MAX);
         void *new_pages[CONFIG_VMM_PREFAULT_MAX];
         usize got = pmm_alloczn_arr(num_pages_hint, new_pages);
+        if (got == 0) goto oom;
         for (usize i = 0; i < got; i++) {
-            mmu_map(curr_proc->vmm_context->pagetable,
-                    fault_virt_page + PAGE_SIZE * i, new_pages[i],
-                    mmu_flags_hint);
+            verify(mmu_remap(curr_proc->vmm_context->pagetable,
+                             fault_virt_page + PAGE_SIZE * i, new_pages[i],
+                             mmu_flags_hint));
         }
         mmu_invalidate(curr_proc->vmm_context->pagetable, fault_virt_page, got);
-        // pmm_free(ZeroPage);
         goto end;
     }
 
@@ -277,18 +296,19 @@ void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,
         void *fault_phys_page = (void *)((uptr)fault_phys &
                                          ~(uptr)(PAGE_SIZE - 1));
         if (!pmm_is_shared(fault_phys_page)) {
-            mmu_map(curr_proc->vmm_context->pagetable, fault_virt_page,
-                    fault_phys_page, mmu_flags_hint);
+            verify(mmu_remap(curr_proc->vmm_context->pagetable,
+                             fault_virt_page, fault_phys_page, mmu_flags_hint));
             mmu_invalidate(curr_proc->vmm_context->pagetable, fault_virt_page,
                            1);
             goto end;
         }
         void *fault_hhdm = (void *)PHYS_TO_HHDM(fault_phys_page);
         void *new_phys = (void *)pmm_alloc();
+        if (new_phys == NULL) goto oom;
         void *new_hhdm = (void *)PHYS_TO_HHDM(new_phys);
         memcpy(new_hhdm, fault_hhdm, PAGE_SIZE);
-        mmu_map(curr_proc->vmm_context->pagetable, fault_virt_page, new_phys,
-                mmu_flags_hint);
+        verify(mmu_remap(curr_proc->vmm_context->pagetable, fault_virt_page,
+                         new_phys, mmu_flags_hint));
         mmu_invalidate(curr_proc->vmm_context->pagetable, fault_virt_page, 1);
         pmm_free(fault_phys_page);
         goto end;
@@ -296,6 +316,13 @@ void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,
 
     if (likely(context_is_user(fault_ctx))) {
         signal_send_to_proc(curr_proc->pid, SIGSEGV, NULL);
+        goto end;
+    }
+
+oom:
+    // Kernel copies from or to user memory fail with EFAULT through the fixup
+    if (context_is_user(fault_ctx)) {
+        signal_send_to_proc(curr_proc->pid, SIGKILL, NULL);
         goto end;
     }
 
@@ -323,6 +350,7 @@ void vmm_init(void) {
     g_root_context.pagetable = mmu_get_table();
     g_root_context.lock = SPINLOCK_NEW();
     g_zero_page = pmm_allocz_reserved();
+    assert(g_zero_page != NULL);
 }
 
 void *vmm_prealloc_range(VMMContext *context, VMMRangeType rangetype,

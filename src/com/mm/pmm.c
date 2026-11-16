@@ -3,6 +3,7 @@
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sync/spinlock.h>
+#include <kernel/com/sys/failnth.h>
 #include <kernel/com/util.h>
 #include <kernel/platform/info.h>
 #include <vendor/tailq.h>
@@ -780,16 +781,13 @@ static void pmm_release_block(u32 start_pfn, u32 block_len) {
 
 // PUBLIC API
 
-void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
+void *pmm_allocn(usize pages) {
     assert(pages > 0);
+    if (failnth_should_fail()) return NULL;
 
     if (pages == 1) {
         u32 pfn;
-        if (!cpups_alloc(&pfn)) {
-            if (out_alloc_size != NULL) *out_alloc_size = 0;
-            return NULL;
-        }
-        if (out_alloc_size != NULL) *out_alloc_size = 1;
+        if (!cpups_alloc(&pfn)) return NULL;
         return (void *)((uptr)pfn * PAGE_SIZE);
     }
 
@@ -797,40 +795,22 @@ void *pmm_allocn_max(usize pages, usize *out_alloc_size) {
     Freelist *fl = pmm_find_fit(pages);
     if (fl == NULL) {
         pmm_unlock();
-        // In TCO we trust... plus this is bounded so it should be fine
-        return pmm_allocn_max(pages / 2, out_alloc_size);
+        return NULL;
     }
 
     Page *entry = fl_alloc(fl, pages);
     assert(entry != NULL);
     // Punching overwrites the free fields
-    usize entry_len = entry->free.block_num_pages;
+    assert(entry->free.block_num_pages == pages);
     pmm_punch_block(page_to_pfn(entry));
     pmm_unlock();
 
-    if (out_alloc_size != NULL) *out_alloc_size = entry_len;
     return (void *)((uptr)page_to_pfn(entry) * PAGE_SIZE);
 }
 
-void *pmm_alloczn_max(usize pages, usize *out_alloc_size) {
-    usize alloc_size = 0;
-    void *ret = pmm_allocn_max(pages, &alloc_size);
-    if (ret != NULL)
-        memset((void *)PHYS_TO_HHDM(ret), 0, alloc_size * PAGE_SIZE);
-    if (out_alloc_size != NULL) *out_alloc_size = alloc_size;
-    return ret;
-}
-
-void *pmm_allocn(usize pages) {
-    usize alloc_size;
-    void *ret = pmm_allocn_max(pages, &alloc_size);
-    assert(alloc_size == pages);
-    return ret;
-}
 void *pmm_alloczn(usize pages) {
-    usize alloc_size;
-    void *ret = pmm_alloczn_max(pages, &alloc_size);
-    assert(alloc_size == pages);
+    void *ret = pmm_allocn(pages);
+    if (ret != NULL) memset((void *)PHYS_TO_HHDM(ret), 0, pages * PAGE_SIZE);
     return ret;
 }
 

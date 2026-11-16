@@ -61,10 +61,17 @@ static int unix_socket_rb_check_hangup(usize curr_nbytes, Ringbuffer *rb,
 
 static struct UnixSocket *unix_socket_alloc(void) {
     struct UnixSocket *sock = slab_alloc(sizeof(struct UnixSocket));
+    if (sock == NULL) return NULL;
+    usize rb_pages = CONFIG_UNIX_SOCK_RB_SIZE / PAGE_SIZE + 1;
+    void *rb_phys = pmm_allocn(rb_pages);
+    if (rb_phys == NULL) {
+        slab_free(sock, sizeof(struct UnixSocket));
+        return NULL;
+    }
+
     sock->socket.ops = &g_unix_socket_ops;
     sock->socket.type = SOCKET_TYPE_UNIX;
-    usize rb_pages = CONFIG_UNIX_SOCK_RB_SIZE / PAGE_SIZE + 1;
-    void *rb_buff = (void *)PHYS_TO_HHDM(pmm_allocn(rb_pages));
+    void *rb_buff = (void *)PHYS_TO_HHDM(rb_phys);
     ringbuffer_init_custom(&sock->rb, rb_buff, CONFIG_UNIX_SOCK_RB_SIZE);
     sync_init_mutex(&sock->rb.condvar);
     sock->rb.fallback_hu_arg = sock;
@@ -223,6 +230,12 @@ static int unix_socket_connect(Socket *socket, SocketAddr *addr) {
     // However, send() and recv() don't know if the socket is a server or a
     // client
     struct UnixSocket *server_peer = unix_socket_alloc();
+    if (server_peer == NULL) {
+        ret = ENOMEM;
+        mutex_rel(&server->socket.lock);
+        vfs_binding_rel(server_vn);
+        goto end;
+    }
     __atomic_add_fetch(&server_peer->num_ref, 1, __ATOMIC_RELAXED);
     __atomic_add_fetch(&client->num_ref, 1, __ATOMIC_RELAXED);
     server_peer->peer = client;

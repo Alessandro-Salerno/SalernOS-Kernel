@@ -24,6 +24,7 @@ SYSCALL(syscall_sigaction) {
     SignalAction *new_act = NULL;
     if (act != NULL) {
         new_act = slab_alloc(sizeof(SignalAction));
+        if (new_act == NULL) return SYSCALL_ERR(ENOMEM);
         int copy_ret = memcpy_from_user(new_act, act, sizeof(*new_act));
         // According to clankers, Linux does not error in this case. However,
         // there's no good reason for which a userspace process would want to

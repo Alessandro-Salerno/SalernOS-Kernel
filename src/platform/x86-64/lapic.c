@@ -61,9 +61,10 @@ static void periodic(u64 ns, usize interrupt) {
 }
 
 void lapic_bsp_init(void) {
-    vmm_map(NULL, NULL, BSP_APIC_ADDR, PAGE_SIZE,
-            VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
-            MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC);
+    verify(vmm_map(NULL, NULL, BSP_APIC_ADDR, PAGE_SIZE,
+                   VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                   MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC,
+                   NULL) == 0);
 
     lapic_calibrate();
 }

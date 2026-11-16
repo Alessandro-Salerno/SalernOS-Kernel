@@ -8,6 +8,7 @@ MMUPageTable *mmu_new_table(void);
 void mmu_destroy_table(MMUPageTable *pt);
 MMUPageTable *mmu_duplicate_table(MMUPageTable *pt);
 bool mmu_map(MMUPageTable *pt, void *virt, void *phys, MMUFlags flags);
+bool mmu_remap(MMUPageTable *pt, void *virt, void *phys, MMUFlags flags);
 bool mmu_chflags(MMUPageTable *pt, void *virt, MMUFlags new_flags);
 bool mmu_unmap(MMUPageTable *pt, void *virt, void **out_old_phys);
 void mmu_invalidate(MMUPageTable *pt, void *virt, usize pages);

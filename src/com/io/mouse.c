@@ -127,6 +127,7 @@ Mouse *mouse_new(void) {
     strcpy(&mouse_name[5], mouse_num_str);
 
     Mouse *mouse = slab_alloc(sizeof(Mouse));
+    assert(mouse != NULL);
     ringbuffer_init(&mouse->rb);
     sync_init_mutex(&mouse->rb.condvar);
     LIST_INIT(&mouse->pollhead.polled_list);

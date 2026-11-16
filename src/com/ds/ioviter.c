@@ -266,8 +266,8 @@ int ioviter_next_page(IOVIter *ioviter, VMMContext *vmm_context,
         void *vaddr = (void *)((u8 *)ioviter->curr_iov->iov_base +
                                ioviter->curr_off);
         page_off = (uptr)vaddr % PAGE_SIZE;
-        void *paddr = vmm_get_physical(vmm_context, vaddr);
-        if (paddr == NULL) {
+        void *paddr = NULL;
+        if (vmm_get_physical(vmm_context, vaddr, &paddr) != 0) {
             ret = EFAULT;
             goto end;
         }

@@ -44,7 +44,8 @@ static inline void sched_switch_vmm_context(Thread *curr, Thread *next) {
         prev_vmm_ctx = curr->proc->vmm_context;
     }
 
-    if (!context_is_user(&next->ctx)) {
+    // An exiting process has already released its address space
+    if (!context_is_user(&next->ctx) || next_vmm_ctx == NULL) {
         vmm_switch(NULL);
     } else if (next_vmm_ctx != NULL && next_vmm_ctx != prev_vmm_ctx) {
         vmm_switch(next_vmm_ctx);
@@ -356,6 +357,7 @@ void sched_init(void) {
     Cpu *curr_cpu = cpu_get();
     SLIST_INIT(&curr_cpu->zombies);
     curr_cpu->idle_thread = thread_new_kernel(NULL, sched_idle, NULL);
+    assert(curr_cpu->idle_thread != NULL);
     curr_cpu->idle_thread->cpu = curr_cpu;
     // NOTE: this is different from other CPUs because those run the idle thread
     // as their first thread, while the BSP runs the init thread as its first

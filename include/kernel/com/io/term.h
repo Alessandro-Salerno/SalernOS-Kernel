@@ -2,6 +2,7 @@
 
 #include <arch/info.h>
 #include <kernel/com/sync/spinlock.h>
+#include <kernel/com/sys/callout.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
 
@@ -36,6 +37,8 @@ typedef struct Term {
         char buffer[TERM_BUFSZ];
         usize index;
         Waitlist waiters;
+        bool flush_armed; // avoid queing callouts for the same TTY twice
+        Callout flush_callout;
     } buffering;
 } Term;
 

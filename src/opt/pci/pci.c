@@ -79,10 +79,13 @@ static inline PCIEnum *pci_enum_next(PCIEnum *e, PCIQuery wildcard,
 
 static void *pci_map_bar(PCIBar bar) {
     MMUFlags cache_flags = (bar.prefetchable ? MMU_FLAGS_WT : MMU_FLAGS_UC);
-    return vmm_map(NULL, NULL, (void *)bar.physical, bar.length,
+    void *virt = NULL;
+    verify(vmm_map(NULL, NULL, (void *)bar.physical, bar.length,
                    VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
                    MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC |
-                       cache_flags);
+                       cache_flags,
+                   &virt) == 0);
+    return virt;
 }
 
 static inline u8 pci_raw_read8(u32 bus, u32 dev, u32 func, usize off) {
@@ -97,6 +100,7 @@ static inline u32 pci_raw_read32(u32 bus, u32 dev, u32 func, usize off) {
 
 static void enumerate_function(u32 bus, u32 dev, u32 func) {
     PCIEnum *e = slab_alloc(sizeof(*e));
+    assert(e != NULL);
     e->addr.bus = bus;
     e->addr.device = dev;
     e->addr.function = func;

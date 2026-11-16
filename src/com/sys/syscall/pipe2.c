@@ -28,17 +28,23 @@ SYSCALL(syscall_pipe2) {
         return SYSCALL_ERR(EMFILE);
     }
 
+    File *rf = slab_alloc(sizeof(File));
+    File *wf = slab_alloc(sizeof(File));
     Vnode *read;
     Vnode *write;
-    pipefs_new(&read, &write);
+    if (rf == NULL || wf == NULL || !pipefs_new(&read, &write)) {
+        slab_free(rf, sizeof(File));
+        slab_free(wf, sizeof(File));
+        proc_unreserve_fd(curr, rfd);
+        proc_unreserve_fd(curr, wfd);
+        return SYSCALL_ERR(ENOMEM);
+    }
 
-    File *rf = slab_alloc(sizeof(File));
     rf->vnode = read;
     rf->flags = flags & O_NONBLOCK;
     rf->num_ref = 1;
     rf->off = 0;
 
-    File *wf = slab_alloc(sizeof(File));
     wf->vnode = write;
     wf->flags = flags & O_NONBLOCK;
     wf->num_ref = 1;

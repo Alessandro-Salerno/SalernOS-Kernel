@@ -42,7 +42,6 @@ typedef struct Proc {
     pid_t pid;
     pid_t parent_pid;
     VMMContext *vmm_context;
-    usize num_children;
 
     // Threads
     Spinlock threads_lock;
@@ -66,8 +65,13 @@ typedef struct Proc {
     int state_cause_sig;
     bool state_notified; // reported to the parent
     int exit_code;
+    // A child is on its parent's list until reaped, and the list holds the
+    // parent's reference. The list and the children's parent_pid change under
+    // waitpid_lock
     Spinlock waitpid_lock;
     struct Waitlist waitpid_waitlist;
+    struct ProcTailQ children;
+    TAILQ_ENTRY(Proc) siblings;
     struct SignalAction *sigaction[NSIG];
     struct Waitlist stop_waitlist;
 
@@ -82,8 +86,8 @@ typedef struct Proc {
     char executable_path[CONFIG_PATH_MAX];
 } Proc;
 
-Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
-               Vnode *cwd);
+int proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root, Vnode *cwd,
+             Proc **out_proc);
 void proc_destroy(Proc *proc);
 
 // File management
@@ -106,12 +110,11 @@ int proc_duplicate_file_nolock(Proc *proc, int new_fd, int old_fd);
 int proc_duplicate_file(Proc *proc, int new_fd, int old_fd);
 int proc_close_file_nolock(Proc *proc, int fd, File **out_file);
 int proc_close_file(Proc *proc, int fd);
-// These return referenced vnodes, set_cwd takes its own reference
 Vnode *proc_get_cwd(Proc *proc);
 void proc_set_cwd(Proc *proc, Vnode *cwd);
 int proc_get_directory(Proc *proc, int dir_fd, Vnode **out_dir);
 Proc *proc_get_by_pid(pid_t pid);
-Proc *proc_get_arbitrary_child(Proc *proc);
+Proc *proc_get_arbitrary_child_nolock(Proc *proc);
 
 // Threads
 // Caller holds threads_lock, excludes except when non-NULL

@@ -183,6 +183,8 @@ int signal_send_to_proc_group(pid_t pgid, int sig, Proc *sender) {
 int signal_send_to_thread_nolock(struct Thread *thread, int sig,
                                  struct Proc *sender) {
     (void)sender;
+    // Interval timers may fire after their process has exited
+    if (thread->proc->state == PROC_STATE_EXITED) return ESRCH;
     signal_publish(thread, sig);
     return 0;
 }

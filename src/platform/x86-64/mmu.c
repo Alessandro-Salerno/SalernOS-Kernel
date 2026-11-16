@@ -133,35 +133,6 @@ static inline void internal_invalidate(void *virt, usize pages) {
     }
 }
 
-// CREDIT: vloxei64/ke
-static u64 duplicate_recursive(u64 entry, usize level, usize addr) {
-    u64 *virt = (u64 *)PHYS_TO_HHDM(entry & ADDRMASK);
-    bool entry_shared = entry & MMU_EXTRA_FLAGS_SHARED;
-    bool entry_writable = entry & MMU_FLAGS_WRITE;
-
-    if (!(entry & MMU_FLAGS_PRESENT)) return 0;
-
-    if (level == 0) {
-        pmm_hold((void *)(entry & ADDRMASK));
-        return (entry_shared)
-            ? entry
-            : (entry & ~MMU_FLAGS_WRITE) | (entry_writable << 9);
-    }
-
-    u64 new = (u64)pmm_allocz();
-    u64 *nvirt = (u64 *)PHYS_TO_HHDM(new);
-
-    for (usize i = 0; i < 512; i++) {
-        if (virt[i] & MMU_FLAGS_PRESENT) {
-            nvirt[i] = duplicate_recursive(
-                virt[i], level - 1, addr | ((i << (12 + (level - 1) * 9))));
-            if (level == 1) virt[i] = nvirt[i];
-        }
-    }
-
-    return new | (entry & ~ADDRMASK);
-}
-
 void destroy_recursive(u64 entry, usize level) {
     u64 *directory = (void *)PHYS_TO_HHDM(entry & ADDRMASK);
     void *phys = (void *)(entry & ADDRMASK);
@@ -177,6 +148,42 @@ void destroy_recursive(u64 entry, usize level) {
     } else {
         pmm_free(phys);
     }
+}
+
+// CREDIT: vloxei64/ke
+// Returns 0 if out of memory. Parent entries already made COW stay so, but
+// their pages are no longer shared, so the next write makes them writable again
+static u64 duplicate_recursive(u64 entry, usize level, usize addr) {
+    u64 *virt = (u64 *)PHYS_TO_HHDM(entry & ADDRMASK);
+    bool entry_shared = entry & MMU_EXTRA_FLAGS_SHARED;
+    bool entry_writable = entry & MMU_FLAGS_WRITE;
+
+    if (!(entry & MMU_FLAGS_PRESENT)) return 0;
+
+    if (level == 0) {
+        pmm_hold((void *)(entry & ADDRMASK));
+        return (entry_shared)
+            ? entry
+            : (entry & ~MMU_FLAGS_WRITE) | (entry_writable << 9);
+    }
+
+    u64 new = (u64)pmm_allocz();
+    if (new == 0) return 0;
+    u64 *nvirt = (u64 *)PHYS_TO_HHDM(new);
+
+    for (usize i = 0; i < 512; i++) {
+        if (virt[i] & MMU_FLAGS_PRESENT) {
+            nvirt[i] = duplicate_recursive(
+                virt[i], level - 1, addr | ((i << (12 + (level - 1) * 9))));
+            if (nvirt[i] == 0) {
+                destroy_recursive(new, level);
+                return 0;
+            }
+            if (level == 1) virt[i] = nvirt[i];
+        }
+    }
+
+    return new | (entry & ~ADDRMASK);
 }
 
 MMUPageTable *mmu_new_table(void) {
@@ -210,6 +217,10 @@ MMUPageTable *mmu_duplicate_table(MMUPageTable *pt) {
     for (usize i = 0; i < 256; i++) {
         if (pt_virt[i] & MMU_FLAGS_PRESENT) {
             new_virt[i] = duplicate_recursive(pt_virt[i], 3, 0);
+            if (new_virt[i] == 0) {
+                mmu_destroy_table(new_pt);
+                return NULL;
+            }
         }
     }
 
@@ -218,6 +229,13 @@ MMUPageTable *mmu_duplicate_table(MMUPageTable *pt) {
 
 bool mmu_map(MMUPageTable *pt, void *virt, void *phys, MMUFlags flags) {
     return add_page(pt, virt, ((u64)phys & ADDRMASK) | flags, 0);
+}
+
+bool mmu_remap(MMUPageTable *pt, void *virt, void *phys, MMUFlags flags) {
+    u64 *entry = get_page(pt, virt);
+    if (entry == NULL) return false;
+    *entry = ((u64)phys & ADDRMASK) | flags;
+    return true;
 }
 
 bool mmu_chflags(MMUPageTable *pt, void *virt, MMUFlags new_flags) {
@@ -251,6 +269,11 @@ void mmu_invalidate(MMUPageTable *pt, void *virt, usize pages) {
          ((virt == NULL || is_user) && curr_thread->proc != NULL &&
           __atomic_load_n(&curr_thread->proc->num_running_threads,
                           __ATOMIC_ACQUIRE) > 1));
+    // TODO: add support for kernel shootdowns
+    // Only the threads of the current process can have its table loaded
+    Proc *target_proc = pt == curr_pt && curr_thread != NULL
+                            ? curr_thread->proc
+                            : NULL;
     // numer of other CPUs that have completed the shootdown
     usize shootdown_counter = 0;
     // expected number of CPUs to compelte the shootdown
@@ -262,15 +285,14 @@ void mmu_invalidate(MMUPageTable *pt, void *virt, usize pages) {
         // Skipp current Cpu, we'll do that later
         if (next_cpu->id == curr_cpu->id) continue;
         // Skip CPUs that are not running any process or are running a different
-        // process then the one we're targetting
+        // process then the one we're targetting. The lock keeps the thread
+        // running, so its process cannot be freed and reused meanwhile
         spinlock_acq(&next_cpu->runqueue_lock);
         Thread *next_cpu_thread = next_cpu->thread;
-        if (next_cpu_thread == NULL || next_cpu_thread->proc == NULL ||
-            pt != next_cpu_thread->proc->vmm_context->pagetable) {
-            spinlock_rel(&next_cpu->runqueue_lock);
-            continue;
-        }
+        bool is_target = target_proc != NULL && next_cpu_thread != NULL &&
+                         next_cpu_thread->proc == target_proc;
         spinlock_rel(&next_cpu->runqueue_lock);
+        if (!is_target) continue;
 
         // Now here we know we have ourselves a Cpu we can target. At the very
         // worst it will context switch and receivea spurious IPI and we loose a

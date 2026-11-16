@@ -9,6 +9,7 @@
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
+#include <kernel/com/sys/panic.h>
 #include <kernel/com/sys/proc.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/util.h>
@@ -22,14 +23,48 @@ static RadixTree g_processes;
 static pid_t g_next_pid = 1;
 static RadixTree g_proc_group_map;
 
+// The parent may be reparenting its children meanwhile, so the parent is
+// checked again under its lock
 static void proc_notify_parent(Proc *proc) {
-    Proc *parent = proc_get_by_pid(proc->parent_pid);
-    if (parent != NULL) {
-        spinlock_acq(&parent->waitpid_lock);
-        sched_notify_all(&parent->waitpid_waitlist);
-        spinlock_rel(&parent->waitpid_lock);
-        proc_rel(parent);
+    pid_t parent_pid = __atomic_load_n(&proc->parent_pid, __ATOMIC_RELAXED);
+    while (true) {
+        Proc *parent = proc_get_by_pid(parent_pid);
+        if (parent != NULL) spinlock_acq(&parent->waitpid_lock);
+        pid_t curr_parent_pid = __atomic_load_n(&proc->parent_pid,
+                                                __ATOMIC_RELAXED);
+        bool found = parent != NULL && curr_parent_pid == parent_pid;
+        if (found) sched_notify_all(&parent->waitpid_waitlist);
+        if (parent != NULL) spinlock_rel(&parent->waitpid_lock);
+
+        if (found) signal_send_to_proc(parent_pid, SIGCHLD, proc);
+        if (parent != NULL) proc_rel(parent);
+        if (found || curr_parent_pid == parent_pid) return;
+        parent_pid = curr_parent_pid;
     }
+}
+
+static void proc_reparent_children(Proc *proc) {
+    spinlock_acq(&proc->waitpid_lock);
+    if (TAILQ_EMPTY(&proc->children)) {
+        spinlock_rel(&proc->waitpid_lock);
+        return;
+    }
+
+    Proc *init = proc_get_by_pid(1);
+    assert(init != NULL && init != proc);
+    spinlock_acq(&init->waitpid_lock);
+    Proc *child;
+    TAILQ_FOREACH(child, &proc->children, siblings) {
+        __atomic_store_n(&child->parent_pid, 1, __ATOMIC_RELAXED);
+    }
+    TAILQ_CONCAT(&init->children, &proc->children, siblings);
+    // Children that have already exited notified this process instead
+    sched_notify_all(&init->waitpid_waitlist);
+    spinlock_rel(&init->waitpid_lock);
+    spinlock_rel(&proc->waitpid_lock);
+
+    signal_send_to_proc(1, SIGCHLD, proc);
+    proc_rel(init);
 }
 
 static bool fd_free(Proc *proc, int fd) {
@@ -51,15 +86,15 @@ end:
     proc->max_fd = max(proc->max_fd, proc->next_fd);
 }
 
-Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
-               Vnode *cwd) {
+int proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root, Vnode *cwd,
+             Proc **out_proc) {
     Proc *proc = slab_alloc(sizeof(Proc));
+    if (proc == NULL) return ENOMEM;
     proc->vmm_context = vmm_context;
     proc->state = PROC_STATE_RUNNING;
     proc->state_cause_sig = SIGNAL_NONE;
     proc->state_notified = false;
     proc->exit_code = 0;
-    proc->num_children = 0;
     proc->parent_pid = parent_pid;
     vfs_vnode_hold(root);
     vfs_vnode_hold(cwd);
@@ -69,18 +104,13 @@ Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
     proc->num_running_threads = 0;
     proc->waitpid_lock = SPINLOCK_NEW();
     waitlist_init(&proc->waitpid_waitlist);
+    TAILQ_INIT(&proc->children);
     waitlist_init(&proc->stop_waitlist);
 
     proc->threads_lock = SPINLOCK_NEW();
     TAILQ_INIT(&proc->threads);
     waitlist_init(&proc->threads_waitlist);
     proc->threads_killer = NULL;
-
-    spinlock_acq(&g_processes.lock);
-    assert(g_next_pid <= CONFIG_PROC_MAX);
-    proc->pid = g_next_pid++;
-    radixtree_put_nolock(&g_processes, proc->pid - 1, proc);
-    spinlock_rel(&g_processes.lock);
 
     proc->fd_lock = SPINLOCK_NEW();
     proc->next_fd = 0;
@@ -93,6 +123,21 @@ Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
     proc->signal_lock = SPINLOCK_NEW();
     signal_sigmask_init(&proc->pending_signals);
 
+    // Must be the last step that can fail
+    spinlock_acq(&g_processes.lock);
+    int ret = EAGAIN;
+    if (g_next_pid <= CONFIG_PROC_MAX) {
+        ret = radixtree_put_nolock(&g_processes, g_next_pid - 1, proc);
+    }
+    if (ret == 0) proc->pid = g_next_pid++;
+    spinlock_rel(&g_processes.lock);
+    if (ret != 0) {
+        vfs_vnode_rel(root);
+        vfs_vnode_rel(cwd);
+        slab_free(proc, sizeof(Proc));
+        return ret;
+    }
+
     Proc *parent = proc_get_by_pid(parent_pid);
     if (parent != NULL) {
         spinlock_acq(&parent->pg_lock);
@@ -100,19 +145,24 @@ Proc *proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root,
             proc_join_group(proc, parent->proc_group);
         }
         spinlock_rel(&parent->pg_lock);
+        spinlock_acq(&parent->waitpid_lock);
+        TAILQ_INSERT_TAIL(&parent->children, proc, siblings);
+        spinlock_rel(&parent->waitpid_lock);
         proc_rel(parent);
     }
 
-    return proc;
+    *out_proc = proc;
+    return 0;
 }
 
+// This is called only when all references are dropped, so the PID table entry
+// is already removed by proc_hide
 void proc_destroy(Proc *proc) {
     assert(proc->num_ref == 0);
     assert(proc->state == PROC_STATE_EXITED);
-
-    VMMContext *proc_vmm_ctx = proc->vmm_context;
+    assert(proc->vmm_context == NULL);
+    assert(TAILQ_EMPTY(&proc->children));
     slab_free(proc, sizeof(Proc));
-    vmm_destroy_context(proc_vmm_ctx);
 }
 
 int proc_next_fd(Proc *proc) {
@@ -287,29 +337,22 @@ Proc *proc_get_by_pid(pid_t pid) {
     return ret;
 }
 
-Proc *proc_get_arbitrary_child(Proc *proc) {
-    spinlock_acq(&g_pid_namespace_lock);
-
-    Proc *ret = NULL;
-    for (int i = 0; i < g_next_pid + 1; i++) {
-        Proc *candidate = NULL;
-        radixtree_get_nolock(&g_processes, i, (void *)&candidate);
-
-        if (candidate != NULL && candidate->parent_pid == proc->pid) {
-            spinlock_acq(&candidate->signal_lock);
-            bool eligible = candidate->state != PROC_STATE_EXITED ||
-                !candidate->state_notified;
-            bool ready = (candidate->state == PROC_STATE_EXITED ||
-                          candidate->state == PROC_STATE_STOPPED) &&
-                !candidate->state_notified;
-            spinlock_rel(&candidate->signal_lock);
-            if (eligible && (ret == NULL || ready)) ret = candidate;
-            if (eligible && ready) break;
+Proc *proc_get_arbitrary_child_nolock(Proc *proc) {
+    Proc *ret = TAILQ_FIRST(&proc->children);
+    Proc *child;
+    TAILQ_FOREACH(child, &proc->children, siblings) {
+        spinlock_acq(&child->signal_lock);
+        bool ready = (child->state == PROC_STATE_EXITED ||
+                      child->state == PROC_STATE_STOPPED) &&
+            !child->state_notified;
+        spinlock_rel(&child->signal_lock);
+        if (ready) {
+            ret = child;
+            break;
         }
     }
 
     if (ret != NULL) proc_hold(ret);
-    spinlock_rel(&g_pid_namespace_lock);
     return ret;
 }
 
@@ -408,6 +451,10 @@ void proc_exit(int exit_code, int cause_sig) {
     Proc *curr_proc = curr_thread->proc;
     assert(curr_proc != NULL);
     assert(curr_proc->num_running_threads == 1);
+    if (curr_proc->pid == 1) {
+        panic(NULL, "init exited with code %d, signal %d", exit_code,
+              cause_sig);
+    }
 
     // NOTE: we don't need to take the fd lock because we are guaranteed to be
     // the only thread left
@@ -423,6 +470,15 @@ void proc_exit(int exit_code, int cause_sig) {
     vfs_vnode_rel(cwd);
     vfs_vnode_rel(root);
 
+    // The other threads have switched out, so this is the last user of the
+    // address space. Once it is NULL, the scheduler keeps this thread on the
+    // root table, so a preemption between these two lines is harmless
+    VMMContext *vmm_context = curr_proc->vmm_context;
+    assert(vmm_context != NULL);
+    curr_proc->vmm_context = NULL;
+    vmm_switch(NULL);
+    vmm_destroy_context(vmm_context);
+
     // A session loses its controlling terminal with the controlling process
     ProcSession *session = curr_proc->proc_group->session;
     if (session != NULL && session->sid == curr_proc->pid) {
@@ -433,6 +489,8 @@ void proc_exit(int exit_code, int cause_sig) {
         vfs_vnode_rel(ctty);
     }
 
+    proc_reparent_children(curr_proc);
+
     // Publish status before notifying and never acquire authority under
     // signal_lock
     spinlock_acq(&curr_proc->signal_lock);
@@ -440,8 +498,14 @@ void proc_exit(int exit_code, int cause_sig) {
     proc_transition_nolock(curr_proc, PROC_STATE_EXITED, cause_sig);
 
     spinlock_rel(&curr_proc->signal_lock);
+
+    // Senders check the state under signal_lock, so nobody reads these anymore
+    for (usize i = 0; i < NSIG; i++) {
+        slab_free(curr_proc->sigaction[i], sizeof(SignalAction));
+        curr_proc->sigaction[i] = NULL;
+    }
+
     proc_notify_parent(curr_proc);
-    signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
 
     log_debug("pid=%d exited with code %d", curr_proc->pid, exit_code);
 }
@@ -465,7 +529,6 @@ void proc_stop_nolock(int stop_signal) {
     }
     spinlock_rel(&curr_proc->threads_lock);
     proc_notify_parent(curr_proc);
-    signal_send_to_proc(curr_proc->parent_pid, SIGCHLD, curr_proc);
     spinlock_acq(&curr_proc->signal_lock);
 }
 
@@ -502,15 +565,16 @@ void proc_hide(Proc *proc) {
     spinlock_rel(&proc->pg_lock);
     spinlock_rel(&g_pid_namespace_lock);
 
-    // Threads drop their references after switching out, so no Cpu uses it
+    // Only processes that never ran proc_exit still have one here
     VMMContext *vmm_context = proc->vmm_context;
     proc->vmm_context = NULL;
     if (vmm_context != NULL) vmm_destroy_context(vmm_context);
+    proc_destroy(proc);
 }
 
 ProcGroup *proc_new_group(Proc *leader, ProcSession *session) {
-    spinlock_acq(&g_proc_group_map.lock);
     ProcGroup *group = slab_alloc(sizeof(ProcGroup));
+    if (group == NULL) return NULL;
     group->procs_lock = SPINLOCK_NEW();
     group->pgid = leader->pid;
     group->session = session;
@@ -520,9 +584,15 @@ ProcGroup *proc_new_group(Proc *leader, ProcSession *session) {
         group->session = leader->proc_group->session;
     }
 
-    verify(radixtree_put_nolock(&g_proc_group_map, group->pgid, group) == 0);
-    log_debug("created pgid=%d", group->pgid);
+    spinlock_acq(&g_proc_group_map.lock);
+    int ret = radixtree_put_nolock(&g_proc_group_map, group->pgid, group);
     spinlock_rel(&g_proc_group_map.lock);
+    if (ret != 0) {
+        slab_free(group, sizeof(ProcGroup));
+        return NULL;
+    }
+
+    log_debug("created pgid=%d", group->pgid);
     return group;
 }
 
@@ -568,11 +638,20 @@ ProcGroup *proc_get_group_by_pgid(pid_t pgid) {
 
 ProcSession *proc_new_session_nolock(Proc *leader, Vnode *tty) {
     ProcSession *session = slab_alloc(sizeof(ProcSession));
-    if (tty != NULL) vfs_vnode_hold(tty);
-    session->tty = tty;
+    if (session == NULL) return NULL;
+    session->tty = NULL;
     session->pg_lock = SPINLOCK_NEW();
     session->sid = leader->pid;
     TAILQ_INIT(&session->proc_groups);
+
+    ProcGroup *new_group = proc_new_group(leader, session);
+    if (new_group == NULL) {
+        slab_free(session, sizeof(ProcSession));
+        return NULL;
+    }
+
+    if (tty != NULL) vfs_vnode_hold(tty);
+    session->tty = tty;
 
     if (leader->proc_group != NULL) {
         spinlock_acq(&leader->proc_group->procs_lock);
@@ -580,7 +659,6 @@ ProcSession *proc_new_session_nolock(Proc *leader, Vnode *tty) {
         spinlock_rel(&leader->proc_group->procs_lock);
     }
 
-    ProcGroup *new_group = proc_new_group(leader, session);
     proc_join_group_nolock(leader, new_group);
 
     log_debug("pid=%d is now leader of session sid=%d", leader->pid,
@@ -592,6 +670,6 @@ void proc_init(void) {
     // 2 layers of radix tree are sufficient to hold like 260K processes on a
     // 64-bit system, so they should be enough. More layers may break
     // compatibility and cause lookup overhead
-    radixtree_init(&g_processes, 2);
-    radixtree_init(&g_proc_group_map, 2);
+    verify(radixtree_init(&g_processes, 2) == 0);
+    verify(radixtree_init(&g_proc_group_map, 2) == 0);
 }

@@ -25,7 +25,7 @@
 #include <uacpi/platform/arch_helpers.h>
 
 #define UACPI_ALLOC_HEADER_SIZE 16UL
-#define UACPI_SLAB_MAX          (PAGE_SIZE - 16UL)
+#define UACPI_SLAB_MAX          SLAB_MAX_SIZE
 
 _Static_assert(__builtin_types_compatible_p(uacpi_handle, UACPIHandle),
                "uacpi_handle must be the same as UACPIHandle");
@@ -123,9 +123,13 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
         addr > UINT64_MAX - (len - 1) ||
         addr + len - 1 > UINTPTR_MAX - PHYS_TO_HHDM(0))
         return NULL;
-    return vmm_map(NULL, NULL, (void *)addr, len,
-                   VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
-                   MMU_FLAGS_READ | MMU_FLAGS_WRITE);
+    void *virt = NULL;
+    if (vmm_map(NULL, NULL, (void *)addr, len,
+                VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                MMU_FLAGS_READ | MMU_FLAGS_WRITE, &virt) != 0) {
+        return NULL;
+    }
+    return virt;
 }
 
 /*

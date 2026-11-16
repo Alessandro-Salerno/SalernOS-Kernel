@@ -14,7 +14,11 @@ static inline void split_index(u64 indices[], u64 index, usize num_layers) {
 
 RadixTree *radixtree_new(usize num_layers) {
     RadixTree *rxtree = slab_alloc(sizeof(RadixTree));
-    radixtree_init(rxtree, num_layers);
+    if (rxtree == NULL) return NULL;
+    if (radixtree_init(rxtree, num_layers) != 0) {
+        slab_free(rxtree, sizeof(RadixTree));
+        return NULL;
+    }
     return rxtree;
 }
 
@@ -65,8 +69,9 @@ int radixtree_put_nolock(RadixTree *rxtree, u64 index, void *data) {
         RadixTreeBack *tmp = root->branches[indices[i]];
 
         if (tmp == NULL) {
-            void *page = (void *)PHYS_TO_HHDM(pmm_allocz());
-            tmp = root->branches[indices[i]] = page;
+            void *page = pmm_allocz();
+            if (page == NULL) return ENOMEM;
+            tmp = root->branches[indices[i]] = (void *)PHYS_TO_HHDM(page);
         }
 
         root = tmp;
@@ -100,9 +105,12 @@ int radixtree_remove_nolock(RadixTree *rxtree, u64 index) {
     return 0;
 }
 
-void radixtree_init(RadixTree *rxtree, usize layers) {
+int radixtree_init(RadixTree *rxtree, usize layers) {
     assert(layers <= RADIXTREE_MAX_LAYERS);
+    void *back = pmm_allocz();
+    if (back == NULL) return ENOMEM;
     rxtree->num_layers = layers;
     rxtree->lock = SPINLOCK_NEW();
-    rxtree->back = (void *)PHYS_TO_HHDM(pmm_allocz());
+    rxtree->back = (void *)PHYS_TO_HHDM(back);
+    return 0;
 }

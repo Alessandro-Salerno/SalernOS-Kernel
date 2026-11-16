@@ -697,6 +697,7 @@ int tty_init_text(Term *term, Vnode **out_vnode, Tty **out_tty) {
     log("initializing text tty %zu", tty_num);
 
     Tty *tty_data = slab_alloc(sizeof(Tty));
+    assert(tty_data != NULL);
     mutex_init(&tty_data->lock);
     tty_data->type = TTY_TYPE_TEXT;
     tty_data->kbd_in = text_tty_kbd_in;

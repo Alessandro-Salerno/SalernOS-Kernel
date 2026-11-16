@@ -66,6 +66,7 @@ static int pty_echo(const char *buf, usize buflen, bool blocking,
 static Pty *pty_alloc(void) {
     // pty initialization
     Pty *pty = slab_alloc(sizeof(Pty));
+    if (pty == NULL) return NULL;
     pty->pts_num = __atomic_fetch_add(&g_next_pts_num, 1, __ATOMIC_SEQ_CST);
     tty_init_text_backend(&pty->backend, 80, 25, pty_echo);
 
@@ -341,6 +342,7 @@ static int pts_open(void *devdata, Vnode **out_vnode) {
     if (atomic_load(&pty->master_vn) == NULL) return EIO;
 
     PTYSlave *pty_slave = slab_alloc(sizeof(PTYSlave));
+    if (pty_slave == NULL) return ENOMEM;
     pty_slave->pty = pty;
 
     int ret = devfs_register_anonymous(&g_pts_dev_ops, pty_slave,
@@ -380,6 +382,7 @@ static int ptmx_open(void *devdata, Vnode **out_vnode) {
     (void)devdata;
 
     Pty *pty = pty_alloc();
+    if (pty == NULL) return ENOMEM;
 
     // The master comes first because pts_open needs it
     Vnode *master_vn = NULL;

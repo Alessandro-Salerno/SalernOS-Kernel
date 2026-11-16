@@ -46,7 +46,7 @@ void thread_rel(Thread *thread) {
         assert(__atomic_load_n(&thread->state, __ATOMIC_RELAXED) ==
                THREAD_STATE_EXITED);
         assert(thread->cpu == NULL && thread->waiting_on == NULL);
-        // Reclamation can sleep: never free from a switch-in or idle context
+        // Reclamation is left to thread_reap: never free from a switch-in
         spinlock_fake_acq();
         SLIST_INSERT_HEAD(&cpu_get()->zombies, thread, zombies);
         spinlock_fake_rel();
@@ -55,9 +55,8 @@ void thread_rel(Thread *thread) {
 
 void thread_reap(void) {
     Thread *curr = cpu_get_thread();
-    if (curr == NULL || curr == cpu_get()->idle_thread || curr->lock_depth) {
-        return;
-    }
+    // The idle thread may reap too: nothing below sleeps
+    if (curr == NULL || curr->lock_depth) return;
     spinlock_fake_acq();
     struct ThreadSList zombies = cpu_get()->zombies;
     SLIST_INIT(&cpu_get()->zombies);
@@ -74,7 +73,20 @@ void thread_reap(void) {
 }
 
 static Thread *new_thread(Proc *proc, Context ctx) {
-    Thread *thread = (void *)PHYS_TO_HHDM(pmm_allocz());
+    void *thread_phys = pmm_allocz();
+    void *stack_phys = pmm_alloc();
+    void *scratch_phys = pmm_alloc();
+    Callout *timed_wait_callout = callout_new(NULL, NULL, 0);
+    if (thread_phys == NULL || stack_phys == NULL || scratch_phys == NULL ||
+        timed_wait_callout == NULL) {
+        if (thread_phys != NULL) pmm_free(thread_phys);
+        if (stack_phys != NULL) pmm_free(stack_phys);
+        if (scratch_phys != NULL) pmm_free(scratch_phys);
+        if (timed_wait_callout != NULL) callout_destroy(timed_wait_callout);
+        return NULL;
+    }
+
+    Thread *thread = (void *)PHYS_TO_HHDM(thread_phys);
     thread->proc = proc;
     thread->ctx = ctx;
     thread->lock_depth = 1;
@@ -89,15 +101,16 @@ static Thread *new_thread(Proc *proc, Context ctx) {
     thread->signal_stopped = false;
     thread->cpu = NULL;
     __atomic_store_n(&thread->state, THREAD_STATE_NEW, __ATOMIC_RELAXED);
-    thread->kernel_stack = (void *)PHYS_TO_HHDM(pmm_alloc()) + PAGE_SIZE;
+    thread->kernel_stack = (void *)PHYS_TO_HHDM(stack_phys) + PAGE_SIZE;
     CONTEXT_INIT_EXTRA(thread->xctx);
     thread->tid = __atomic_fetch_add(&g_next_tid, 1, __ATOMIC_RELAXED);
 
     thread->usercopy_ctx = NULL;
-    thread->scratch = (void *)PHYS_TO_HHDM(pmm_alloc());
+    thread->scratch = (void *)PHYS_TO_HHDM(scratch_phys);
     thread->waiting_on = NULL;
     thread->ctime = cpu_get_timestamp();
-    thread->timed_wait_callout = callout_new(NULL, thread, 0);
+    thread->timed_wait_callout = timed_wait_callout;
+    thread->timed_wait_callout->arg = thread;
     thread->timed_wait_callout->permanent = true;
     thread->timed_wait_callout->snapshot = true;
 
@@ -120,6 +133,7 @@ Thread *thread_new(Proc *proc, void *stack, u64 stack_size, void *entry) {
 Thread *thread_new_kernel(Proc *proc, void *entry, void *arg) {
     Context ctx = {0};
     Thread *t = new_thread(proc, ctx);
+    if (t == NULL) return NULL;
     CONTEXT_THREAD_SET_KERNEL(t->ctx, t->kernel_stack, entry, arg);
     return t;
 }

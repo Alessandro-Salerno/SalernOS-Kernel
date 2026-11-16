@@ -21,7 +21,8 @@ SYSCALL(syscall_setpgid) {
     if (pid != 0 && pid != curr_proc->pid) {
         proc = proc_get_by_pid(pid);
         if (proc == NULL) return SYSCALL_ERR(ESRCH);
-        if (proc->parent_pid != curr_proc->pid) {
+        if (__atomic_load_n(&proc->parent_pid, __ATOMIC_RELAXED) !=
+            curr_proc->pid) {
             proc_rel(proc);
             return SYSCALL_ERR(ESRCH);
         }
@@ -62,6 +63,10 @@ SYSCALL(syscall_setpgid) {
             goto end;
         }
         group = proc_new_group(proc, NULL);
+        if (group == NULL) {
+            ret.err = ENOMEM;
+            goto end;
+        }
     } else if (group->session != session) {
         ret.err = EPERM;
         goto end;

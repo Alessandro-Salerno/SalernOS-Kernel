@@ -19,7 +19,10 @@ SYSCALL(syscall_setsid) {
         goto end;
     }
 
-    proc_new_session_nolock(curr_proc, NULL);
+    if (proc_new_session_nolock(curr_proc, NULL) == NULL) {
+        ret.err = ENOMEM;
+        goto end;
+    }
     ret.value = curr_proc->proc_group->pgid;
 
 end:

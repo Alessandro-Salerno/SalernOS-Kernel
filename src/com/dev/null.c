@@ -68,6 +68,7 @@ int null_init(void) {
     log("initializing /dev/null");
 
     struct DevNull *devnull = slab_alloc(sizeof(struct DevNull));
+    assert(devnull != NULL);
     LIST_INIT(&devnull->pollhead.polled_list);
 
     int ret = devfs_register(NULL, "null", 4, &g_dev_null_ops, devnull, NULL);

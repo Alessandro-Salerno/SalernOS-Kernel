@@ -28,6 +28,9 @@ SYSCALL(syscall_openat) {
     int accmode = flags & O_ACCMODE;
     bool writable = accmode == O_WRONLY || accmode == O_RDWR;
 
+    File *file = slab_alloc(sizeof(File));
+    if (file == NULL) return SYSCALL_ERR(ENOMEM);
+
     Vnode *dir = NULL;
     Vnode *file_vn = NULL;
     Vnode *open_vn = NULL;
@@ -88,7 +91,6 @@ SYSCALL(syscall_openat) {
         goto end;
     }
 
-    File *file = slab_alloc(sizeof(File));
     file->vnode = open_vn;
     file->flags = flags;
     file->num_ref = 1;
@@ -99,6 +101,9 @@ SYSCALL(syscall_openat) {
 end:
     vfs_vnode_rel(file_vn);
     vfs_vnode_rel(dir);
-    if (err != 0) return SYSCALL_ERR(err);
+    if (err != 0) {
+        slab_free(file, sizeof(File));
+        return SYSCALL_ERR(err);
+    }
     return SYSCALL_OK(fd);
 }

@@ -13,4 +13,4 @@ void pipefs_inactive(Vnode *vnode);
 int pipefs_stat(Vnode *node, struct stat *out_stat);
 int pipefs_seekable(Vnode *node);
 
-void pipefs_new(Vnode **out_read, Vnode **out_write);
+bool pipefs_new(Vnode **out_read, Vnode **out_write);

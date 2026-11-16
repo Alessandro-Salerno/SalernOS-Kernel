@@ -81,3 +81,4 @@
 #define CONFIG_TRACK_SLEEP_TIME   1
 #define CONFIG_USE_PROFILER       1
 #define CONFIG_SPINLOCK_DEBUG     0
+#define CONFIG_FAIL_NTH           0 /* /dev/failnth allocation fault injection */

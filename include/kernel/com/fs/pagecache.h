@@ -13,7 +13,7 @@ typedef RadixTree PageCache;
     ((u64)1 << (RADIXTREE_INDEX_BITS * PAGECACHE_LAYERS))
 
 bool pagecache_get(PageCache *root, u64 index, uptr *out_addr);
-void pagecache_default(PageCache *root, u64 index, uptr *out_addr);
+bool pagecache_default(PageCache *root, u64 index, uptr *out_addr);
 PageCache *pagecache_new(void);
 // Pages that are still mapped stay alive through their mappings
 void pagecache_free(PageCache *root);

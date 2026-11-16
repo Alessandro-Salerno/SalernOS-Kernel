@@ -83,6 +83,7 @@ Keyboard *keyboard_new(KbdLayoutFn layout) {
     strcpy(&kbd_name[8], kbd_num_str);
 
     Keyboard *keyboard = slab_alloc(sizeof(Keyboard));
+    assert(keyboard != NULL);
     keyboard->layout = DEFAULT_LAYOUT;
     ringbuffer_init(&keyboard->rb);
     sync_init_mutex(&keyboard->rb.condvar);

@@ -5,5 +5,7 @@
 // SYSCALL: getpid()
 SYSCALL(syscall_getppid) {
     SYSCALL_UNUSED_START(0);
-    return SYSCALL_OK(cpu_get_thread()->proc->parent_pid);
+    Proc *curr_proc = cpu_get_thread()->proc;
+    pid_t parent_pid = __atomic_load_n(&curr_proc->parent_pid, __ATOMIC_RELAXED);
+    return SYSCALL_OK(parent_pid);
 }

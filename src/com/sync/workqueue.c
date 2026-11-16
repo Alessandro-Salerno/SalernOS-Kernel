@@ -45,6 +45,7 @@ void workqueue_init(WorkQueue *wq, Cpu *cpu) {
     wq->active = 0;
     wq->stopping = false;
     wq->worker = thread_new_kernel(NULL, worker_main, wq);
+    assert(wq->worker != NULL);
     if (cpu != NULL) thread_ready_on_cpu(wq->worker, cpu);
     else thread_ready(wq->worker);
 }

@@ -72,6 +72,7 @@ int sockfs_seekable(Vnode *node) {
 
 Vnode *sockfs_new(void) {
     SocketVnode *sockfs_vn = slab_alloc(sizeof(SocketVnode));
+    if (sockfs_vn == NULL) return NULL;
     vfs_vnode_init(&sockfs_vn->vnode, NULL, VNODE_TYPE_SOCKET,
                    &g_sockfs_node_ops, NULL);
     return &sockfs_vn->vnode;

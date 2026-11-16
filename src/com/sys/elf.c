@@ -77,15 +77,21 @@ static int load(uptr vaddr, struct ELFPHdr *phdr, Vnode *elf_file,
     isize mem_sz = phdr->mem_sz;
     bool vaddr_mapped = false; // if *vaddr is ok
     MMUFlags mmu_flags = MMU_FLAGS_USER | MMU_FLAGS_READ | MMU_FLAGS_WRITE;
+    int ret = 0;
 
     if (vaddr % PAGE_SIZE != 0 && fsz > 0) {
         isize misalign = vaddr % PAGE_SIZE;
         isize rem = PAGE_SIZE - misalign;
         isize mapping_len = min(rem, fsz);
         void *phys_page = pmm_alloc();
+        if (phys_page == NULL) return ENOMEM;
         u8 *page_hhdm = (u8 *)PHYS_TO_HHDM(phys_page);
-        vmm_map(vmm_context, (void *)(vaddr - misalign), phys_page, mapping_len,
-                VMM_FLAGS_NONE, mmu_flags);
+        ret = vmm_map(vmm_context, (void *)(vaddr - misalign), phys_page,
+                      mapping_len, VMM_FLAGS_NONE, mmu_flags, NULL);
+        if (ret != 0) {
+            pmm_free(phys_page);
+            return ret;
+        }
         usize bytes_read = 0;
         vfs_read(page_hhdm + misalign, mapping_len, elf_file, phdr->off,
                  O_RDONLY, &bytes_read);
@@ -102,9 +108,10 @@ static int load(uptr vaddr, struct ELFPHdr *phdr, Vnode *elf_file,
     if (fsz <= 0) goto zero_fill;
 
     // here vaddr is guaranteed to be page-aligned
-    vfs_mmap(elf_file, vmm_context, (void *)vaddr, fsz, VMM_FLAGS_PRIVATE,
-             MMU_FLAGS_USER | MMU_FLAGS_READ | MMU_FLAGS_WRITE, phdr->off + idx,
-             NULL);
+    ret = vfs_mmap(elf_file, vmm_context, (void *)vaddr, fsz, VMM_FLAGS_PRIVATE,
+                   MMU_FLAGS_USER | MMU_FLAGS_READ | MMU_FLAGS_WRITE,
+                   phdr->off + idx, NULL);
+    if (ret != 0) return ret;
     vaddr += fsz;
     mem_sz -= fsz;
     vaddr_mapped = true;
@@ -115,8 +122,9 @@ zero_fill:
         isize rem = PAGE_SIZE - misalign;
         if (vaddr_mapped) {
             isize zero_size = min(mem_sz, rem);
-            void *phys_page = vmm_get_physical(vmm_context, (void *)vaddr);
-            if (phys_page == NULL) return EFAULT;
+            void *phys_page = NULL;
+            ret = vmm_get_physical(vmm_context, (void *)vaddr, &phys_page);
+            if (ret != 0) return ret;
             // NOTE: the value returned by vmm_get_physical already accounts for
             // in-page offset (misalign)
             memset((void *)PHYS_TO_HHDM(phys_page), 0, zero_size);
@@ -131,10 +139,8 @@ zero_fill:
 
     if (mem_sz <= 0) return 0;
 
-    vmm_map(vmm_context, (void *)vaddr, NULL, mem_sz, VMM_FLAGS_ALLOCATE,
-            mmu_flags);
-
-    return 0;
+    return vmm_map(vmm_context, (void *)vaddr, NULL, mem_sz, VMM_FLAGS_ALLOCATE,
+                   mmu_flags, NULL);
 }
 
 int elf64_load(const char *exec_path, usize exec_path_len, Vnode *root,
@@ -279,9 +285,10 @@ static int push_buffer(VMMContext *vmm_ctx, uptr stack_virt_end,
         len -= can_write;
 
         if (can_write == page_rem && *stack_off < stack_len) {
-            void *res = vmm_get_physical(
-                vmm_ctx, (void *)(stack_virt_end - *stack_off - 1));
-            if (res == NULL) return EFAULT;
+            void *res = NULL;
+            ret = vmm_get_physical(
+                vmm_ctx, (void *)(stack_virt_end - *stack_off - 1), &res);
+            if (ret != 0) return ret;
             *stack_page = (void *)PHYS_TO_HHDM((uptr)res &
                                                ~(uptr)(PAGE_SIZE - 1));
         }
@@ -323,8 +330,9 @@ static int push_string_ptrs(VMMContext *vmm_ctx, uptr stack_virt_end,
     for (uptr va = lo; va < hi;) {
         usize pgoff = va % PAGE_SIZE;
         usize n = min(hi - va, PAGE_SIZE - pgoff);
-        void *phys = vmm_get_physical(vmm_ctx, (void *)va);
-        if (phys == NULL) return EFAULT;
+        void *phys = NULL;
+        int phys_ret = vmm_get_physical(vmm_ctx, (void *)va, &phys);
+        if (phys_ret != 0) return phys_ret;
 
         const char *page = (void *)PHYS_TO_HHDM((uptr)phys &
                                                 ~(uptr)(PAGE_SIZE - 1));
@@ -371,8 +379,10 @@ int elf64_prepare_stack(VMMContext *vmm_ctx, ELFData elf_data,
     assert(stack_end_virt % PAGE_SIZE == 0);
     assert(stack_len <= stack_end_virt);
     if (stack_len == 0) return E2BIG;
-    void *stack_phys = vmm_get_physical(vmm_ctx, (void *)(stack_end_virt - 1));
-    if (stack_phys == NULL) return EFAULT;
+    void *stack_phys = NULL;
+    int phys_ret = vmm_get_physical(vmm_ctx, (void *)(stack_end_virt - 1),
+                                    &stack_phys);
+    if (phys_ret != 0) return phys_ret;
     void *stack_page = (void *)PHYS_TO_HHDM((uptr)stack_phys &
                                             ~(uptr)(PAGE_SIZE - 1));
     usize stack_off = 0;
@@ -445,6 +455,7 @@ int elf64_prepare_proc(const char *path, usize pathlen,
                        Context *ctx, VMMContext **out_vmm_context) {
     assert(pathlen < sizeof(proc->executable_path));
     VMMContext *new_vmm_ctx = vmm_new_context(NULL);
+    if (new_vmm_ctx == NULL) return ENOMEM;
     *out_vmm_context = new_vmm_ctx;
     Vnode *cwd = proc_get_cwd(proc);
 
@@ -471,9 +482,11 @@ int elf64_prepare_proc(const char *path, usize pathlen,
     usize stack_len = PAGE_SIZE * 2048;
     uptr stack_start = stack_end - stack_len;
 
-    vmm_map(
+    status = vmm_map(
         new_vmm_ctx, (void *)stack_start, NULL, stack_len, VMM_FLAGS_ALLOCATE,
-        MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC | MMU_FLAGS_USER);
+        MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC | MMU_FLAGS_USER,
+        NULL);
+    if (status != 0) goto fail;
 
     // ctx belongs to the caller, so it is only touched on success
     uptr stack_ptr = 0;

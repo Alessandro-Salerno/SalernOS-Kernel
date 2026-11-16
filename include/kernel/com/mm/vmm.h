@@ -39,9 +39,9 @@ void vmm_init_reaper(void);
 VMMContext *vmm_new_context(MMUPageTable *pagetable);
 void vmm_destroy_context(VMMContext *context);
 VMMContext *vmm_duplicate_context(VMMContext *context);
-void *vmm_map(VMMContext *context, void *virt, void *phys, usize len,
-              int vmm_flags, MMUFlags mmu_flags);
-void *vmm_get_physical(VMMContext *context, void *virt_addr);
+int vmm_map(VMMContext *context, void *virt, void *phys, usize len,
+            int vmm_flags, MMUFlags mmu_flags, void **out_addr);
+int vmm_get_physical(VMMContext *context, void *virt_addr, void **out_phys);
 void vmm_switch(VMMContext *context);
 void vmm_unmap(VMMContext *context, void *virt, usize len);
 void vmm_handle_fault(void *fault_virt, void *fault_phys, Context *fault_ctx,

@@ -9,6 +9,7 @@ Socket *socket_new(SocketType type) {
     switch (type) {
         case SOCKET_TYPE_UNIX: {
             Socket *sun = socket_unix_new();
+            if (sun == NULL) return NULL;
             sun->type = type;
             return sun;
         }

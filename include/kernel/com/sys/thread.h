@@ -66,6 +66,12 @@ typedef struct Thread {
 
     // Each outstanding interval-timer callout owns a thread reference
     ThreadTimer real_timer;
+
+#if CONFIG_FAIL_NTH
+    // Used for fault injection and testing of OOM paths (/dev/failnth). If 0,
+    // fault injection is disabled
+    usize fail_nth;
+#endif
 } Thread;
 
 Thread *thread_new(struct Proc *proc, void *stack, u64 stack_size, void *entry);

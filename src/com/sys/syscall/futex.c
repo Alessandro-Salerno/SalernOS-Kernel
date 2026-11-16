@@ -28,7 +28,7 @@ static Hashmap g_futex_map;
 
 void syscall_futex_init(void) {
     log("initializing futex");
-    HASHMAP_INIT(&g_futex_map);
+    verify(HASHMAP_INIT(&g_futex_map) == 0);
     mutex_init(&g_futex_lock);
 }
 
@@ -47,8 +47,9 @@ SYSCALL(syscall_futex) {
     if ((uptr)word_ptr % sizeof(*word_ptr) != 0) return SYSCALL_ERR(EINVAL);
 
     Proc *curr_proc = cpu_get_thread()->proc;
-    uptr phys = (uptr)vmm_get_physical(curr_proc->vmm_context, word_ptr);
-    if (phys == 0) return SYSCALL_ERR(EFAULT);
+    void *phys = NULL;
+    int phys_ret = vmm_get_physical(curr_proc->vmm_context, word_ptr, &phys);
+    if (phys_ret != 0) return SYSCALL_ERR(phys_ret);
 
     u32 temp = value;
 
@@ -70,10 +71,17 @@ SYSCALL(syscall_futex) {
                 if (get_ret == ENOENT) {
                     struct Futex *default_futex = slab_alloc(
                         sizeof(struct Futex));
-                    waitlist_init(&default_futex->waiters);
-
-                    verify(HASHMAP_PUT(&g_futex_map, &phys, default_futex) ==
-                           0);
+                    int put_ret = ENOMEM;
+                    if (default_futex != NULL) {
+                        waitlist_init(&default_futex->waiters);
+                        put_ret = HASHMAP_PUT(&g_futex_map, &phys,
+                                              default_futex);
+                    }
+                    if (put_ret != 0) {
+                        mutex_rel(&g_futex_lock);
+                        slab_free(default_futex, sizeof(struct Futex));
+                        return SYSCALL_ERR(put_ret);
+                    }
                     futex = default_futex;
                 } else if (get_ret != 0) {
                     mutex_rel(&g_futex_lock);

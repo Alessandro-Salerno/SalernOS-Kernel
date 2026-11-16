@@ -95,6 +95,7 @@ SYSCALL(syscall_setitimer) {
     u64 new_delay = 0;
     bool schedule_callout = false;
     struct ITimerCalloutArg *callout_arg = NULL;
+    Callout *callout = NULL;
 
     struct itimerval knew;
     struct itimerval kold;
@@ -111,6 +112,12 @@ SYSCALL(syscall_setitimer) {
         new_delay = timeval_to_ns(knew.it_value);
         if (new_delay != 0) {
             callout_arg = slab_alloc(sizeof(struct ITimerCalloutArg));
+            callout = callout_new(itimer_callout, callout_arg, 0);
+            if (callout_arg == NULL || callout == NULL) {
+                slab_free(callout_arg, sizeof(struct ITimerCalloutArg));
+                if (callout != NULL) callout_destroy(callout);
+                return SYSCALL_ERR(ENOMEM);
+            }
         }
     }
 
@@ -164,7 +171,7 @@ end:
 
     if (schedule_callout) {
         thread_hold(curr_thread);
-        callout_add(itimer_callout, callout_arg, new_delay);
+        callout_set_and_enqueue(callout, itimer_callout, new_delay);
     }
 
     return ret;

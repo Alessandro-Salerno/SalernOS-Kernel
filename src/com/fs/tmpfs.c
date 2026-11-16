@@ -253,7 +253,7 @@ static bool file_page(struct TmpFSFile *file, usize index, bool create,
             pagecache_get(file->pages, index, out_page);
     }
 
-    pagecache_default(file->pages, index, out_page);
+    if (!pagecache_default(file->pages, index, out_page)) return false;
     file->num_pages = max(file->num_pages, index + 1);
     return true;
 }
@@ -571,7 +571,10 @@ static int tmpfs_write(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
     for (u64 curr = off; curr < off + buflen;) {
         u64 end = min(PAGE_ROUND(curr) + PAGE_SIZE, off + buflen);
         uptr page;
-        file_page(file, curr / PAGE_SIZE, true, &page);
+        if (!file_page(file, curr / PAGE_SIZE, true, &page)) {
+            ret = ENOSPC;
+            break;
+        }
         ret = memcpy_maybe_user((u8 *)page + curr % PAGE_SIZE,
                                 (u8 *)buf + (curr - off), end - curr);
         if (ret != 0) break;
@@ -625,9 +628,17 @@ static int tmpfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint,
     if (shared) rwlock_acq_write(&file->lock);
     else rwlock_acq_read(&file->lock);
 
-    for (u64 curr = off; curr < off + size; curr += PAGE_SIZE) {
+    int ret = 0;
+    u64 curr = off;
+    for (; curr < off + size; curr += PAGE_SIZE) {
         uptr page;
         bool present = file_page(file, curr / PAGE_SIZE, shared, &page);
+        // Shared mappings must map the file's own pages, mapping the zero page
+        // here would break that guarantee
+        if (shared && !present) {
+            ret = ENOMEM;
+            break;
+        }
 
         void *page_phys = NULL;
         if (present) {
@@ -635,12 +646,22 @@ static int tmpfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint,
             pmm_hold(page_phys);
         }
 
-        vmm_map(vmm_context, range_base + (curr - off), page_phys, PAGE_SIZE,
-                vmm_flags | (present ? 0 : VMM_FLAGS_ALLOCATE), mmu_flags);
+        ret = vmm_map(vmm_context, range_base + (curr - off), page_phys,
+                      PAGE_SIZE, vmm_flags | (present ? 0 : VMM_FLAGS_ALLOCATE),
+                      mmu_flags, NULL);
+        if (ret != 0) {
+            if (present) pmm_free(page_phys);
+            break;
+        }
     }
 
     if (shared) rwlock_rel_write(&file->lock);
     else rwlock_rel_read(&file->lock);
+
+    if (ret != 0) {
+        vmm_unmap(vmm_context, range_base, curr - off);
+        return ret;
+    }
 
     *out_addr = (void *)((uptr)range_base + (off % PAGE_SIZE));
     return 0;

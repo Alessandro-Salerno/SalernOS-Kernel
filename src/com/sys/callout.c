@@ -41,9 +41,10 @@ static void enqueue_callout(CalloutQueue *cpu_callout, Callout *callout) {
     spinlock_rel(&callout->entry_lock);
 }
 
-static void callout_queue_add_at(CalloutQueue *cpu_callout, CalloutFn handler,
+static bool callout_queue_add_at(CalloutQueue *cpu_callout, CalloutFn handler,
                                  void *arg, u64 ns) {
     Callout *new = slab_alloc(sizeof(Callout));
+    if (new == NULL) return false;
     new->handler = handler;
     new->arg = arg;
     new->ns = ns;
@@ -52,20 +53,23 @@ static void callout_queue_add_at(CalloutQueue *cpu_callout, CalloutFn handler,
     spinlock_acq(&cpu_callout->lock);
     enqueue_callout(cpu_callout, new);
     spinlock_rel(&cpu_callout->lock);
+    return true;
 }
 
 // NOTE: repeated code for locking reasons
-static void callout_queue_add(CalloutQueue *cpu_callout, CalloutFn handler,
+static bool callout_queue_add(CalloutQueue *cpu_callout, CalloutFn handler,
                               void *arg, u64 delay) {
-    spinlock_acq(&cpu_callout->lock);
     Callout *new = slab_alloc(sizeof(Callout));
+    if (new == NULL) return false;
     new->handler = handler;
     new->arg = arg;
-    new->ns = cpu_callout->ns + delay;
     new->reuse = false;
 
+    spinlock_acq(&cpu_callout->lock);
+    new->ns = cpu_callout->ns + delay;
     enqueue_callout(cpu_callout, new);
     spinlock_rel(&cpu_callout->lock);
+    return true;
 }
 
 u64 callout_get_time(void) {
@@ -149,20 +153,20 @@ void callout_reschedule(Callout *callout, u64 delay) {
     spinlock_rel(&cpu_callout->lock);
 }
 
-void callout_add_at(CalloutFn handler, void *arg, u64 ns) {
-    callout_queue_add_at(GET_CALLOUT(), handler, arg, ns);
+bool callout_add_at(CalloutFn handler, void *arg, u64 ns) {
+    return callout_queue_add_at(GET_CALLOUT(), handler, arg, ns);
 }
 
-void callout_add(CalloutFn handler, void *arg, u64 delay) {
-    callout_queue_add(GET_CALLOUT(), handler, arg, delay);
+bool callout_add(CalloutFn handler, void *arg, u64 delay) {
+    return callout_queue_add(GET_CALLOUT(), handler, arg, delay);
 }
 
-void callout_add_at_bsp(CalloutFn handler, void *arg, u64 ns) {
-    callout_queue_add_at(g_bsp_callout, handler, arg, ns);
+bool callout_add_at_bsp(CalloutFn handler, void *arg, u64 ns) {
+    return callout_queue_add_at(g_bsp_callout, handler, arg, ns);
 }
 
-void callout_add_bsp(CalloutFn handler, void *arg, u64 delay) {
-    callout_queue_add(g_bsp_callout, handler, arg, delay);
+bool callout_add_bsp(CalloutFn handler, void *arg, u64 delay) {
+    return callout_queue_add(g_bsp_callout, handler, arg, delay);
 }
 
 void callout_set_bsp_nolock(CalloutQueue *bsp_queue) {
@@ -171,6 +175,7 @@ void callout_set_bsp_nolock(CalloutQueue *bsp_queue) {
 
 Callout *callout_new(CalloutFn handler, void *arg, u64 ns) {
     Callout *new = slab_alloc(sizeof(Callout));
+    if (new == NULL) return NULL;
     new->handler = handler;
     new->arg = arg;
     new->ns = ns;

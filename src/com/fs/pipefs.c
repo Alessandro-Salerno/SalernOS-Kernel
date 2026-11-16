@@ -227,8 +227,19 @@ int pipefs_seekable(Vnode *node) {
     return ESPIPE;
 }
 
-void pipefs_new(Vnode **out_read, Vnode **out_write) {
+bool pipefs_new(Vnode **out_read, Vnode **out_write) {
     struct PipeFSNode *pipe = slab_alloc(sizeof(struct PipeFSNode));
+    void *buf_phys = pmm_alloc();
+    Vnode *r = slab_alloc(sizeof(Vnode));
+    Vnode *w = slab_alloc(sizeof(Vnode));
+    if (pipe == NULL || buf_phys == NULL || r == NULL || w == NULL) {
+        slab_free(pipe, sizeof(struct PipeFSNode));
+        if (buf_phys != NULL) pmm_free(buf_phys);
+        slab_free(r, sizeof(Vnode));
+        slab_free(w, sizeof(Vnode));
+        return false;
+    }
+
     mutex_init(&pipe->condvar);
     pipe->pollhead.lock = SPINLOCK_NEW();
     LIST_INIT(&pipe->pollhead.polled_list);
@@ -236,17 +247,16 @@ void pipefs_new(Vnode **out_read, Vnode **out_write) {
     waitlist_init(&pipe->writers);
     pipe->read = 0;
     pipe->write = 0;
-    pipe->buf = (u8 *)PHYS_TO_HHDM(pmm_alloc());
+    pipe->buf = (u8 *)PHYS_TO_HHDM(buf_phys);
 
-    Vnode *r = slab_alloc(sizeof(Vnode));
     vfs_vnode_init(r, NULL, VNODE_TYPE_FIFO, &g_pipefs_node_ops, pipe);
     pipe->read_end = r;
 
-    Vnode *w = slab_alloc(sizeof(Vnode));
     vfs_vnode_init(w, NULL, VNODE_TYPE_FIFO, &g_pipefs_node_ops, pipe);
     w->ino = r->ino;
     pipe->write_end = w;
 
     *out_read = r;
     *out_write = w;
+    return true;
 }

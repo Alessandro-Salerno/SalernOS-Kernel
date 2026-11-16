@@ -61,7 +61,8 @@ static void flanterm_backend_panic(void *termdata) {
 }
 
 static void *flanterm_backend_malloc(usize bytes) {
-    return (void *)PHYS_TO_HHDM(pmm_allocn(bytes / PAGE_SIZE + 1));
+    void *phys = pmm_allocn(bytes / PAGE_SIZE + 1);
+    return phys != NULL ? (void *)PHYS_TO_HHDM(phys) : NULL;
 }
 
 static void flanterm_backend_free(void *buf, usize bytes) {
@@ -76,6 +77,7 @@ void *flanterm_init(Framebuffer *fb, u32 fg_color, u32 bg_color, usize scale_x,
         fb->green_mask_size, fb->green_mask_shift, fb->blue_mask_size,
         fb->blue_mask_shift, NULL, NULL, NULL, &bg_color, &fg_color, NULL, NULL,
         NULL, 0, 0, 1, scale_x, scale_y, 0);
+    assert(ret != NULL);
     flanterm_set_oob_output(ret, 0);
     flanterm_backend_disable(ret);
     return ret;

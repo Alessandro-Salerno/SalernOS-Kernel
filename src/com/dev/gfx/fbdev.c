@@ -50,9 +50,8 @@ static int fbdev_mmap(void *devdata, VMMContext *vmm_context, void *hint,
     FBDev *fbdev = devdata;
     void *phys = (void *)HHDM_TO_PHYS(fbdev->fb->address);
 
-    *out_addr = vmm_map(vmm_context, hint, phys, size, vmm_flags,
-                        mmu_flags | MMU_FLAGS_WC);
-    return (*out_addr == NULL) ? ENOMEM : 0;
+    return vmm_map(vmm_context, hint, phys, size, vmm_flags,
+                   mmu_flags | MMU_FLAGS_WC, out_addr);
 }
 
 static DevOps g_fbdev_ops = {.type = VNODE_TYPE_CHARDEV,
@@ -64,6 +63,7 @@ int fbdev_init(FBDev **out_fbdev) {
     log("initializing /dev/fb0 fbdev");
     Framebuffer *fb = info_get_fb();
     FBDev *fbdev = slab_alloc(sizeof(FBDev));
+    assert(fbdev != NULL);
     fbdev->fb = fb;
     int ret = devfs_register(NULL, "fb0", 3, &g_fbdev_ops, fbdev,
                              &fbdev->vnode);

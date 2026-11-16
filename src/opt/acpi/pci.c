@@ -114,6 +114,7 @@ int acpi_init_pci(void) {
     void *entries_phys = pmm_allocn(
         g_mcfg_num_entries * sizeof(struct acpi_mcfg_allocation) / PAGE_SIZE +
         1);
+    assert(entries_phys != NULL);
     g_mcfg_entries = (void *)PHYS_TO_HHDM(entries_phys);
     memcpy(g_mcfg_entries, mcfg->entries,
            g_mcfg_num_entries * sizeof(struct acpi_mcfg_allocation));
@@ -125,10 +126,12 @@ int acpi_init_pci(void) {
             MCFG_MAPPING_SIZE(g_mcfg_entries[i].end_bus -
                               g_mcfg_entries[i].start_bus + 1);
 
-        g_mcfg_entries[i].address = (uptr)vmm_map(
-            NULL, NULL, phys_addr, mapping_size,
-            VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
-            MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC);
+        void *virt = NULL;
+        verify(vmm_map(NULL, NULL, phys_addr, mapping_size,
+                       VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                       MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC,
+                       &virt) == 0);
+        g_mcfg_entries[i].address = (uptr)virt;
     }
 
     // TODO: unref the table

@@ -42,4 +42,4 @@ int radixtree_put_nolock(RadixTree *rxtree, u64 index, void *data);
 int radixtree_remove(RadixTree *rxtree, u64 index);
 int radixtree_remove_nolock(RadixTree *rxtree, u64 index);
 
-void radixtree_init(RadixTree *rxtree, usize layers);
+int radixtree_init(RadixTree *rxtree, usize layers);

@@ -50,21 +50,27 @@ SYSCALL(syscall_accept) {
         goto end;
     }
 
+    // Allocating after accepting would drop the connection
+    Vnode *client_vn = sockfs_new();
+    File *new_file = slab_alloc(sizeof(File));
+    int sock_ret = ENOMEM;
     SocketAddr new_client_addr;
     Socket *new_client;
-    int sock_ret = SOCKET_ACCEPT(server_socket, sockfile->flags, &new_client,
+    if (client_vn != NULL && new_file != NULL) {
+        sock_ret = SOCKET_ACCEPT(server_socket, sockfile->flags, &new_client,
                                  &new_client_addr);
+    }
     if (sock_ret != 0) {
+        if (client_vn != NULL) slab_free(client_vn, sizeof(SocketVnode));
+        slab_free(new_file, sizeof(File));
         proc_unreserve_fd(curr_proc, new_fd);
         ret = SYSCALL_ERR(sock_ret);
         goto end;
     }
 
-    Vnode *client_vn = sockfs_new();
     SocketVnode *sockfs_vn = (void *)client_vn;
     sockfs_vn->socket = new_client;
 
-    File *new_file = slab_alloc(sizeof(File));
     new_file->vnode = client_vn;
     new_file->flags = 0;
     new_file->num_ref = 1;

@@ -26,6 +26,7 @@ SYSCALL(syscall_clone) {
     Proc *curr_proc = curr_thread->proc;
 
     Thread *new_thread = thread_new(curr_proc, NULL, 0, NULL);
+    if (new_thread == NULL) return SYSCALL_ERR(ENOMEM);
     CONTEXT_CLONE(new_thread, new_ip, new_sp);
     CONTEXT_INIT_EXTRA(new_thread->xctx);
 

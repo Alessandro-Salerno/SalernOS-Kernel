@@ -14,12 +14,19 @@ bool pagecache_get(PageCache *root, u64 index, uptr *out_addr) {
     return true;
 }
 
-void pagecache_default(PageCache *root, u64 index, uptr *out_addr) {
-    if (pagecache_get(root, index, out_addr)) return;
+bool pagecache_default(PageCache *root, u64 index, uptr *out_addr) {
+    if (pagecache_get(root, index, out_addr)) return true;
 
-    void *data = (void *)PHYS_TO_HHDM(pmm_allocz());
-    radixtree_put_nolock(root, index, data);
+    void *phys = pmm_allocz();
+    if (phys == NULL) return false;
+    void *data = (void *)PHYS_TO_HHDM(phys);
+    if (radixtree_put_nolock(root, index, data) != 0) {
+        pmm_free(phys);
+        return false;
+    }
+
     *out_addr = (uptr)data;
+    return true;
 }
 
 PageCache *pagecache_new(void) { return radixtree_new(PAGECACHE_LAYERS); }

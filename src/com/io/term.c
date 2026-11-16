@@ -31,18 +31,39 @@ static void flush_callout(Callout *callout) {
     spinlock_acq(&term->lock);
     flush_buffer_nolock(term);
     bool should_resched = term->buffering.enabled && term->enabled;
+    term->buffering.flush_armed = should_resched;
     spinlock_rel(&term->lock);
 
-    if (should_resched) callout_reschedule(callout, fps_to_ns(CONFIG_TERM_FPS));
+    if (should_resched) {
+        callout_reschedule(&term->buffering.flush_callout,
+                           fps_to_ns(CONFIG_TERM_FPS));
+    }
+}
+
+static void init_buffering(Term *term) {
+    term->buffering.enabled = false;
+    waitlist_init(&term->buffering.waiters);
+    term->buffering.flush_armed = false;
+    term->buffering.flush_callout = (Callout){.handler = flush_callout,
+                                              .arg = term,
+                                              .permanent = true,
+                                              .snapshot = true,
+                                              .entry_lock = SPINLOCK_NEW()};
+}
+
+static bool arm_flush_nolock(Term *term) {
+    if (term->buffering.flush_armed) return false;
+    term->buffering.flush_armed = true;
+    return true;
 }
 
 Term *term_new(TermBackend backend) {
     Term *ret = slab_alloc(sizeof(Term));
+    assert(ret != NULL);
     ret->backend = backend;
     ret->lock = SPINLOCK_NEW();
     ret->enabled = true;
-    ret->buffering.enabled = false;
-    waitlist_init(&ret->buffering.waiters);
+    init_buffering(ret);
 
     ret->backend.data = ret->backend.ops->init();
 
@@ -51,9 +72,9 @@ Term *term_new(TermBackend backend) {
 
 Term *term_clone(Term *parent) {
     Term *ret = slab_alloc(sizeof(Term));
+    if (ret == NULL) return NULL;
     ret->lock = SPINLOCK_NEW();
-    ret->buffering.enabled = false;
-    waitlist_init(&ret->buffering.waiters);
+    init_buffering(ret);
 
     if (parent != NULL) {
         ret->enabled = parent->enabled;
@@ -138,9 +159,13 @@ void term_set_buffering(Term *term, bool state) {
     term->backend.ops->flush(term->backend.data);
     term->backend.ops->refresh(term->backend.data);
     term->buffering.enabled = state;
+    bool arm = state && arm_flush_nolock(term);
     spinlock_rel(&term->lock);
 
-    if (state) callout_add(flush_callout, term, fps_to_ns(CONFIG_TERM_FPS));
+    if (arm) {
+        callout_reschedule(&term->buffering.flush_callout,
+                           fps_to_ns(CONFIG_TERM_FPS));
+    }
 }
 
 void term_enable(Term *term) {
@@ -151,10 +176,12 @@ void term_enable(Term *term) {
     term->enabled = true;
 
     refresh_term_nolock(term);
+    bool arm = term->buffering.enabled && arm_flush_nolock(term);
     spinlock_rel(&term->lock);
 
-    if (term->buffering.enabled) {
-        callout_add(flush_callout, term, fps_to_ns(CONFIG_TERM_FPS));
+    if (arm) {
+        callout_reschedule(&term->buffering.flush_callout,
+                           fps_to_ns(CONFIG_TERM_FPS));
     }
 }
 

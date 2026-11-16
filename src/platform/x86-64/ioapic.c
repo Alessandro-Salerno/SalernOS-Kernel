@@ -168,10 +168,10 @@ void ioapic_init(void) {
             ACPI_MADT_ENTRY_TYPE_IOAPIC, i);
         struct IOAPICDevice *ioapic = &g_ioapic_array[i];
 
-        ioapic->addr = vmm_map(NULL, NULL, (void *)(uptr)entry->address,
-                               PAGE_SIZE, VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
-                               MMU_FLAGS_READ | MMU_FLAGS_WRITE |
-                                   MMU_FLAGS_NOEXEC);
+        verify(vmm_map(NULL, NULL, (void *)(uptr)entry->address, PAGE_SIZE,
+                       VMM_FLAGS_NOHINT | VMM_FLAGS_PHYSICAL,
+                       MMU_FLAGS_READ | MMU_FLAGS_WRITE | MMU_FLAGS_NOEXEC,
+                       &ioapic->addr) == 0);
 
         ioapic->base = entry->gsi_base;
         usize count = ioapic_read(ioapic->addr, IOAPIC_REG_ENTRY_COUNT);

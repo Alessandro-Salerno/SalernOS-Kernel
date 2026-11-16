@@ -4,6 +4,7 @@
 #include <kernel/com/crt/string.h>
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
+#include <kernel/com/dev/failnth.h>
 #include <kernel/com/dev/profile.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
@@ -124,6 +125,7 @@ void init_devices(void) {
     fbdev_init(NULL);
     null_init();
     profile_init();
+    failnth_init();
 }
 
 // The config lists are NULL-terminated
@@ -147,8 +149,10 @@ void init_pid1(void) {
     usize argc = init_strs(init_argv, argv);
     usize envc = init_strs(init_envp, envp);
 
-    Proc *proc = proc_new(NULL, 0, g_root_fs->root, g_root_fs->root);
+    Proc *proc = NULL;
+    verify(proc_new(NULL, 0, g_root_fs->root, g_root_fs->root, &proc) == 0);
     Thread *thread = thread_new(proc, NULL, 0, NULL);
+    assert(thread != NULL);
     int elf_ret = elf64_prepare_proc(argv[0].str, argv[0].len, argv, argc, envp,
                                      envc, proc, &thread->ctx,
                                      &proc->vmm_context);
@@ -159,6 +163,7 @@ void init_pid1(void) {
 
     assert(g_main_tty_dev != NULL);
     File *stdfile = slab_alloc(sizeof(File));
+    assert(stdfile != NULL);
     stdfile->vnode = g_main_tty_dev;
     stdfile->num_ref = 3;
     proc->num_running_threads = 1;
@@ -169,7 +174,7 @@ void init_pid1(void) {
     proc->fd[1] = stddesc;
     proc->fd[2] = stddesc;
 
-    proc_new_session_nolock(proc, g_main_tty_dev);
+    verify(proc_new_session_nolock(proc, g_main_tty_dev) != NULL);
 
     Cpu *curr_cpu = cpu_get();
     assert(curr_cpu != NULL);

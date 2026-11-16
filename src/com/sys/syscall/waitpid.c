@@ -10,8 +10,7 @@
 #include <stdatomic.h>
 #include <sys/wait.h>
 
-static int waitpid_check(Proc *curr_proc, Proc *towait, int *out_status,
-                         bool *out_reaped) {
+static int waitpid_check(Proc *towait, int *out_status, bool *out_reaped) {
     spinlock_acq(&towait->signal_lock);
 
     if (towait->state == PROC_STATE_EXITED && towait->state_notified) {
@@ -24,7 +23,6 @@ static int waitpid_check(Proc *curr_proc, Proc *towait, int *out_status,
             ? (towait->exit_code & 0xff) << 8
             : towait->state_cause_sig & 0x7f;
         towait->state_notified = true;
-        __atomic_sub_fetch(&curr_proc->num_children, 1, __ATOMIC_RELAXED);
         spinlock_rel(&towait->signal_lock);
         *out_reaped = true;
         return towait->pid;
@@ -46,17 +44,19 @@ static int waitpid_proc(Proc *curr_proc, pid_t pid, int flags,
     while (true) {
         spinlock_acq(&curr_proc->waitpid_lock);
 
-        Proc *towait = pid == -1 ? proc_get_arbitrary_child(curr_proc)
+        Proc *towait = pid == -1 ? proc_get_arbitrary_child_nolock(curr_proc)
                                  : proc_get_by_pid(pid);
 
         int ret = -ECHILD;
         bool reaped = false;
         bool slept = false;
+        // Our children can only be moved away under our waitpid_lock
         if (towait != NULL &&
-            __atomic_load_n(&curr_proc->num_children, __ATOMIC_RELAXED) != 0 &&
-            towait->parent_pid == curr_proc->pid) {
-            ret = waitpid_check(curr_proc, towait, out_status, &reaped);
+            __atomic_load_n(&towait->parent_pid, __ATOMIC_RELAXED) ==
+                curr_proc->pid) {
+            ret = waitpid_check(towait, out_status, &reaped);
         }
+        if (reaped) TAILQ_REMOVE(&curr_proc->children, towait, siblings);
 
         if (ret == 0 && !(flags & WNOHANG)) {
             ret = -spinlock_wait(&curr_proc->waitpid_lock,
