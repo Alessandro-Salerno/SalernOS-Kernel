@@ -3,13 +3,74 @@
 #include <kernel/com/sys/profiler.h>
 #include <kernel/com/util.h>
 
+// NOTE: we use __builtin_* for some small buffers because libhelp may provide
+// instructions that work best on large ones and have higher startup cost
+// TODO: properly abstract this
+
+static inline bool small_memset(u8 *d, u8 c, usize n) {
+    if (n > 32) return false;
+    u64 v = 0x0101010101010101UL * c;
+    if (n >= 16) {
+        __builtin_memcpy(d, &v, 8);
+        __builtin_memcpy(d + 8, &v, 8);
+        __builtin_memcpy(d + n - 16, &v, 8);
+        __builtin_memcpy(d + n - 8, &v, 8);
+    } else if (n >= 8) {
+        __builtin_memcpy(d, &v, 8);
+        __builtin_memcpy(d + n - 8, &v, 8);
+    } else if (n >= 4) {
+        __builtin_memcpy(d, &v, 4);
+        __builtin_memcpy(d + n - 4, &v, 4);
+    } else if (n != 0) {
+        d[0] = c;
+        d[n / 2] = c;
+        d[n - 1] = c;
+    }
+    return true;
+}
+
+static inline bool small_memcpy(u8 *d, const u8 *s, usize n) {
+    if (n > 32) return false;
+    if (n >= 16) {
+        u64 a, b, y, z;
+        __builtin_memcpy(&a, s, 8);
+        __builtin_memcpy(&b, s + 8, 8);
+        __builtin_memcpy(&y, s + n - 16, 8);
+        __builtin_memcpy(&z, s + n - 8, 8);
+        __builtin_memcpy(d, &a, 8);
+        __builtin_memcpy(d + 8, &b, 8);
+        __builtin_memcpy(d + n - 16, &y, 8);
+        __builtin_memcpy(d + n - 8, &z, 8);
+    } else if (n >= 8) {
+        u64 a, z;
+        __builtin_memcpy(&a, s, 8);
+        __builtin_memcpy(&z, s + n - 8, 8);
+        __builtin_memcpy(d, &a, 8);
+        __builtin_memcpy(d + n - 8, &z, 8);
+    } else if (n >= 4) {
+        u32 a, z;
+        __builtin_memcpy(&a, s, 4);
+        __builtin_memcpy(&z, s + n - 4, 4);
+        __builtin_memcpy(d, &a, 4);
+        __builtin_memcpy(d + n - 4, &z, 4);
+    } else if (n != 0) {
+        u8 a = s[0], m = s[n / 2], z = s[n - 1];
+        d[0] = a;
+        d[n / 2] = m;
+        d[n - 1] = z;
+    }
+    return true;
+}
+
 void *memset(void *dst, int c, usize n) {
     ProfilerData profiler_data = profiler_start_function(PROFILE_FUNC_MEMSET);
+    if (!small_memset(dst, c, n)) {
 #ifdef LIBHELP_FAST_MEMSET
-    LIBHELP_FAST_MEMSET(dst, c, n);
+        LIBHELP_FAST_MEMSET(dst, c, n);
 #else
-    for (usize i = 0; i < n; i++) ((u8 *)dst)[i] = (u8)c;
+        for (usize i = 0; i < n; i++) ((u8 *)dst)[i] = (u8)c;
 #endif
+    }
     profiler_end_function(&profiler_data);
     return dst;
 }
@@ -27,17 +88,19 @@ int memcmp(const void *s1, const void *s2, usize n) {
 
 void *memcpy(void *restrict dst, const void *restrict src, usize buffsize) {
     ProfilerData profiler_data = profiler_start_function(PROFILE_FUNC_MEMCPY);
+    if (!small_memcpy(dst, src, buffsize)) {
 #ifdef LIBHELP_FAST_MEMCPY
-    LIBHELP_FAST_MEMCPY(dst, src, buffsize);
+        LIBHELP_FAST_MEMCPY(dst, src, buffsize);
 #else
-    u64 src_off = (u64)src;
-    u64 dst_off = (u64)dst;
+        u64 src_off = (u64)src;
+        u64 dst_off = (u64)dst;
 
-    for (u64 i = 0; i < buffsize; i++) {
-        u8 val = *(u8 *)(src_off + i);
-        *(u8 *)(dst_off + i) = val;
-    }
+        for (u64 i = 0; i < buffsize; i++) {
+            u8 val = *(u8 *)(src_off + i);
+            *(u8 *)(dst_off + i) = val;
+        }
 #endif
+    }
     profiler_end_function(&profiler_data);
     return dst;
 }

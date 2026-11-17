@@ -24,8 +24,7 @@
 #include <uacpi/kernel_api.h>
 #include <uacpi/platform/arch_helpers.h>
 
-#define UACPI_ALLOC_HEADER_SIZE 16UL
-#define UACPI_SLAB_MAX          SLAB_MAX_SIZE
+#define UACPI_SLAB_MAX SLAB_MAX_SIZE
 
 _Static_assert(__builtin_types_compatible_p(uacpi_handle, UACPIHandle),
                "uacpi_handle must be the same as UACPIHandle");
@@ -404,47 +403,31 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle, uacpi_size offset,
  * The contents of the allocated memory are unspecified.
  */
 static void *uacpi_glue_alloc(uacpi_size size, bool zeroed) {
-    if (size > SIZE_MAX - UACPI_ALLOC_HEADER_SIZE - (PAGE_SIZE - 1))
-        return NULL;
-    uacpi_size total = size + UACPI_ALLOC_HEADER_SIZE;
-    void *base;
-    if (total <= UACPI_SLAB_MAX) {
-        // Slab memory is always zeroed
-        base = slab_alloc(total);
-    } else {
-        usize pages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
-        void *phys = zeroed ? pmm_alloczn(pages) : pmm_allocn(pages);
-        if (phys == NULL) return NULL;
-        base = (void *)PHYS_TO_HHDM(phys);
-    }
-    if (base == NULL) return NULL;
-    *(uacpi_size *)base = total;
-    return (char *)base + UACPI_ALLOC_HEADER_SIZE;
+    // Slab class 0 has no entries
+    if (size == 0) size = 1;
+    if (size <= UACPI_SLAB_MAX) return slab_alloc(size);
+    if (size > SIZE_MAX - (PAGE_SIZE - 1)) return NULL;
+    usize pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    void *phys = zeroed ? pmm_alloczn(pages) : pmm_allocn(pages);
+    if (phys == NULL) return NULL;
+    return (void *)PHYS_TO_HHDM(phys);
 }
 
 void *uacpi_kernel_alloc(uacpi_size size) {
     return uacpi_glue_alloc(size, false);
 }
 
-#ifdef UACPI_NATIVE_ALLOC_ZEROED
 void *uacpi_kernel_alloc_zeroed(uacpi_size size) {
     return uacpi_glue_alloc(size, true);
 }
-#endif
 
-#ifndef UACPI_SIZED_FREES
-void uacpi_kernel_free(void *mem) {
-#else
 void uacpi_kernel_free(void *mem, uacpi_size size_hint) {
-    (void)size_hint;
-#endif
     if (mem == NULL) return;
-    void *base = (char *)mem - UACPI_ALLOC_HEADER_SIZE;
-    uacpi_size total = *(uacpi_size *)base;
-    if (total <= UACPI_SLAB_MAX) slab_free(base, total);
+    if (size_hint == 0) size_hint = 1;
+    if (size_hint <= UACPI_SLAB_MAX) slab_free(mem, size_hint);
     else
-        pmm_freen((void *)HHDM_TO_PHYS(base),
-                  (total + PAGE_SIZE - 1) / PAGE_SIZE);
+        pmm_freen((void *)HHDM_TO_PHYS(mem),
+                  (size_hint + PAGE_SIZE - 1) / PAGE_SIZE);
 }
 
 /*

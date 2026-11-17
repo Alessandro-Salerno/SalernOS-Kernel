@@ -1,8 +1,8 @@
 #include <kernel/com/crt.h>
 #include <vendor/printf.h>
 
-// Using __VA_ARGS__ cause it's easier and the result is the same
-#define uacpi_memcpy(...)  memcpy(__VA_ARGS__)
-#define uacpi_memmove(...) memmove(__VA_ARGS__)
-#define uacpi_memset(...)  memset(__VA_ARGS__)
-#define uacpi_memcmp(...)  memcmp(__VA_ARGS__)
+// Builtins inline constant sizes and fall back to the kernel functions
+#define uacpi_memcpy(...)  __builtin_memcpy(__VA_ARGS__)
+#define uacpi_memmove(...) __builtin_memmove(__VA_ARGS__)
+#define uacpi_memset(...)  __builtin_memset(__VA_ARGS__)
+#define uacpi_memcmp(...)  __builtin_memcmp(__VA_ARGS__)
