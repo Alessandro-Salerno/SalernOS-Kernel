@@ -2,9 +2,9 @@
 #include <arch/cpu.h>
 #include <arch/info.h>
 #include <kernel/com/crt/string.h>
+#include <kernel/com/dev/failnth.h>
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
-#include <kernel/com/dev/failnth.h>
 #include <kernel/com/dev/profile.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
@@ -18,6 +18,7 @@
 #include <kernel/com/io/term.h>
 #include <kernel/com/io/tty.h>
 #include <kernel/com/ipc/signal.h>
+#include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/mm/vmm.h>
@@ -66,6 +67,7 @@ void init_splash(void) {
 
 void init_memory(void) {
     pmm_init();
+    verify(buffcache_init() == 0);
     mmu_init();
     vmm_init();
 }

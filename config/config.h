@@ -82,3 +82,4 @@
 #define CONFIG_USE_PROFILER       1
 #define CONFIG_SPINLOCK_DEBUG     0
 #define CONFIG_FAIL_NTH           0 /* /dev/failnth allocation fault injection */
+#define CONFIG_BUFFCACHE_SIZE     1000 /* % of system RAM (in basis points) */

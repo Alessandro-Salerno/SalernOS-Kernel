@@ -54,7 +54,7 @@ The kernel itself roughly includes the following:
     - [x] Slab allocator
     - [x] VMM (currently being reworrked in a separate tree)
     - [x] Copy-on-write
-    - [ ] Buffer cache
+    - [x] Buffer cache
   - System management
     - [x] System call interface
     - [x] Callout (Timer multiplexer)

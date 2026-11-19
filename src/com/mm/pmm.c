@@ -853,14 +853,15 @@ void pmm_hold(void *page) {
     assert(page_is_allocated(page_desc));
     __atomic_add_fetch(&page_desc->allocated.num_ref, 1, __ATOMIC_RELAXED);
 }
-bool pmm_is_shared(void *page) {
+usize pmm_get_num_ref(void *page) {
     u32 pfn = (uptr)page / PAGE_SIZE;
     Page *page_desc = pfn_get(pfn);
     assert(!page_is_free(page_desc));
-    return page_is_reserved(page_desc) ||
-        (page_is_allocated(page_desc) &&
-         __atomic_load_n(&page_desc->allocated.num_ref, __ATOMIC_ACQUIRE) > 1);
+    if (page_is_reserved(page_desc)) return SIZE_MAX;
+    assert(page_is_allocated(page_desc));
+    return __atomic_load_n(&page_desc->allocated.num_ref, __ATOMIC_ACQUIRE);
 }
+bool pmm_is_shared(void *page) { return pmm_get_num_ref(page) > 1; }
 
 void pmm_freen(void *base, usize pages) {
     u32 pfn = (u32)((uptr)base / PAGE_SIZE);

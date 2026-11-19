@@ -21,6 +21,7 @@ void *pmm_allocz_reserved(void);
 void *pmm_alloczn(usize pages);
 usize pmm_alloczn_arr(usize num_pages, void **out_pages);
 void pmm_hold(void *page);
+usize pmm_get_num_ref(void *page);
 bool pmm_is_shared(void *page);
 void pmm_free(void *page);
 void pmm_freen(void *base, usize pages);
