@@ -61,6 +61,13 @@ static int devfs_write(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
                               out_bytes_written);
 }
 
+static int devfs_get_page(Vnode *node, usize index, int flags,
+                          BufferPage **out_page) {
+    struct DevFSDev *dev = dev_of(node);
+    if (dev->devops->get_page == NULL) return ENOSYS;
+    return dev->devops->get_page(dev->devdata, index, flags, out_page);
+}
+
 static int devfs_ioctl(Vnode *node, u64 op, void *buf) {
     struct DevFSDev *dev = dev_of(node);
     if (dev->devops->ioctl == NULL) return ENOSYS;
@@ -120,6 +127,7 @@ static VnodeOps g_devfs_node_ops = {.open = devfs_open,
                                     .inactive = devfs_inactive,
                                     .read = devfs_read,
                                     .write = devfs_write,
+                                    .get_page = devfs_get_page,
                                     .ioctl = devfs_ioctl,
                                     .isatty = devfs_isatty,
                                     .seekable = devfs_seekable,

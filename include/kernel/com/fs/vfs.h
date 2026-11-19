@@ -8,6 +8,7 @@ typedef struct Vfs Vfs;
 struct PollHead;
 
 #include <kernel/com/ds/ioviter.h>
+#include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/vmm.h>
 #include <kernel/com/sync/mutex.h>
 #include <kernel/com/sync/rwlock.h>
@@ -60,6 +61,12 @@ struct PollHead;
 #define VFS_NAME_MAX 255
 
 #define VFS_MOUNT_RDONLY 1
+
+// The caller promises to only use the returned page to read data
+#define VFS_GETPAGE_RDONLY (1 << 0)
+// The caller does not need the callee to fetch the contents of the page and
+// instead prefers to receive a fresh one on a miss
+#define VFS_GETPAGE_NOFETCH (1 << 1)
 
 typedef enum VnodeType {
     VNODE_TYPE_FILE,
@@ -173,6 +180,7 @@ typedef struct VnodeOps {
                  usize *out_bytes_read);
     int (*writev)(Vnode *node, IOVIter *ioviter, u64 off, u64 flags,
                   usize *out_bytes_written);
+    int (*get_page)(Vnode *node, usize index, int flags, BufferPage **out_page);
     int (*truncate)(Vnode *node, usize size);
     int (*mmap)(Vnode *node, VMMContext *vmm_context, void *hint, usize size,
                 int vmm_flags, MMUFlags mmu_flags, u64 off, void **out_addr);
@@ -379,6 +387,7 @@ int vfs_readv(IOVIter *ioviter, Vnode *node, u64 off, u64 flags,
               usize *out_bytes_read);
 int vfs_writev(Vnode *node, IOVIter *ioviter, u64 off, u64 flags,
                usize *out_bytes_written);
+int vfs_get_page(Vnode *node, usize index, int flags, BufferPage **out_page);
 int vfs_truncate(Vnode *node, usize size);
 int vfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint, usize size,
              int vmm_flags, MMUFlags mmu_flags, u64 off, void **out_addr);

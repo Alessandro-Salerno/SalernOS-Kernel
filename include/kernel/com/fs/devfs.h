@@ -9,6 +9,8 @@ typedef struct DevOps {
                 usize *out_bytes_read);
     int (*write)(void *devdata, void *buf, usize buflen, u64 off, u64 flags,
                  usize *out_bytes_written);
+    int (*get_page)(void *devdata, usize index, int flags,
+                    BufferPage **out_page);
     int (*ioctl)(void *devdata, u64 op, void *buf);
     int (*isatty)(void *devdata);
     int (*seekable)(void *devdata);

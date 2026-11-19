@@ -1,7 +1,10 @@
 #include <arch/barrier.h>
 #include <arch/info.h>
 #include <errno.h>
+#include <kernel/com/crt/usercopy.h>
+#include <kernel/com/ds/radixtree.h>
 #include <kernel/com/fs/devfs.h>
+#include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sync/mutex.h>
 #include <kernel/com/sys/sched.h>
@@ -9,9 +12,6 @@
 #include <kernel/com/util.h>
 #include <kernel/opt/nvme.h>
 #include <kernel/opt/pci.h>
-
-// TAKEN: vloxei64/ke
-// CREDIT: vloxei64/ke
 
 #define NVME_LOG(fmt, ...) log_opt("NVME", fmt "\n", __VA_ARGS__)
 #define NVME_PANIC()       panic(NULL, "nvme error")
@@ -139,6 +139,9 @@ struct NVMeDevice {
     u64 size;
     u32 blocks_shift;
     struct NVMeQueue queues[1]; // 1 for now, 64 in general
+
+    Sync lock;
+    RadixTree buffcache;
 };
 
 // Used to generate /dev/nvme%zu
@@ -209,8 +212,12 @@ static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
     nvme_submit(&drive->queues[0], &rw_in);
 
     while (!nvme_queue_done_nobarrier(&drive->queues[0])) {
+        // We make this non-interruptible otherwise it becomes a busy wait after
+        // the first signal is delivered. A better solution would be to make it
+        // interruptible and fallible, but for now we assume that progress is
+        // maintained because the device will eventually send an interrupt
         mutex_wait(&drive->queues[0].lock, &drive->queues[0].irq_waiters, 0,
-                   true);
+                   false);
     }
     barrier_generic_read();
 
@@ -224,28 +231,6 @@ static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
     mutex_rel(&drive->queues[0].lock);
 }
 
-static int nvme_submit_multipage_command_sync(struct NVMeDevice *drive,
-                                              void *buf, usize pageno,
-                                              usize num_pages, u8 opcode) {
-    for (usize i = 0; i < num_pages; i++) {
-        // DMA does not trigger page faults, so we must do it ourselves if this
-        // page was not writable or COW or similar. This value will be
-        // overridden by DMA anyway
-        if (opcode == NVME_OPCODE_READ) *(u8 *)buf = 0;
-
-        void *phys = (void *)HHDM_TO_PHYS(buf);
-        if (buf <= MMU_KERNELSPACE_START) {
-            int ret = vmm_get_physical(NULL, buf, &phys);
-            if (ret != 0) return ret;
-        }
-
-        nvme_submit_page_command_sync(drive, phys, pageno + i, opcode);
-        buf += PAGE_SIZE;
-    }
-
-    return 0;
-}
-
 static void nvme_isr(InterruptHandler *isr, Context *ctx) {
     (void)ctx;
     struct NVMeDevice *drive = isr->extra;
@@ -255,146 +240,166 @@ static void nvme_isr(InterruptHandler *isr, Context *ctx) {
 
 // /dev/nvme%z DEVICE OPERATIONS
 
-// TODO: fix the most terrible read implementation ever
+static int nvme_evict_page(void *device, u32 index, void *phys, int page_flags,
+                           int evict_flags) {
+    struct NVMeDevice *dev = device;
+    if (page_flags & BUFFCACHE_DIRTY)
+        nvme_submit_page_command_sync(dev, phys, index, NVME_OPCODE_WRITE);
+    if (evict_flags & BUFFCACHE_EVICT_SYNC) return 0;
+
+    sync_acq(&dev->lock);
+    verify(radixtree_remove_nolock(&dev->buffcache, index) == 0);
+    sync_rel(&dev->lock);
+    return 0;
+}
+
+static int nvme_get_page(void *devdata, usize index, int flags,
+                         BufferPage **out_page) {
+    struct NVMeDevice *dev = devdata;
+    usize dev_pages = (dev->num_blocks << dev->blocks_shift) / PAGE_SIZE;
+    if (index >= dev_pages) return ERANGE;
+
+    RadixTree *cache_tree = &dev->buffcache;
+    BufferPage *page = NULL;
+    BufferPage *old_page = NULL;
+    int ret = 0;
+
+    sync_acq(&dev->lock);
+    while (ret == 0) {
+        if (radixtree_get_nolock(cache_tree, index, (void *)&page) == ENOENT) {
+            sync_rel(&dev->lock);
+            page = buffcache_alloc();
+            sync_acq(&dev->lock);
+            if (page == NULL) {
+                ret = ENOMEM;
+                break;
+            }
+
+            // Here the lookup can both fail and succeed: if will probably fail
+            // if uncontended, and if may fail if contended too if a page is
+            // inserted and removed before we relock. But it may also succeed if
+            // a page is added while we were not holding the lock
+            BufferPage *present = NULL;
+            if (radixtree_get_nolock(cache_tree, index, (void *)&present) ==
+                0) {
+                assert(present != NULL);
+                assert(present != page);
+                buffcache_discard(page);
+                continue;
+            }
+
+            // Here the second lookup failed, so we insert our own
+            ret = radixtree_put_nolock(cache_tree, index, page);
+            if (ret != 0) break;
+
+            if (!(flags & VFS_GETPAGE_NOFETCH)) {
+                sync_rel(&dev->lock);
+                void *phys = buffcache_get_phys(page);
+                nvme_submit_page_command_sync(dev, phys, index,
+                                              NVME_OPCODE_READ);
+                // old_page == NULL ==> this is the first time we attempt it. We
+                // cannt attempt this multiple times, because if we get here
+                // then the page is in the tree and it is marked as BUSY. Being
+                // BUSY, it cannot be removed, so the next lookup cannot fail
+                assert(old_page == NULL);
+                old_page = page;
+                sync_acq(&dev->lock);
+                continue;
+            } else old_page = page;
+        }
+
+        assert(page != NULL);
+
+        // old_page == page ==> we created the page and we just need to
+        // communicate this to the buffer cache. We cannot have old_page != NULL
+        // when the page was already in the tree
+
+        // Case 1: miss + successful I/O fetch. Owning does not pin the page,
+        // so from here on this is a hit
+        if (old_page != NULL && page == old_page) {
+            buffcache_own(page, dev, index, nvme_evict_page);
+            old_page = NULL;
+        }
+        // Case 2: hit, so hold the page and retry on failure
+        if (!buffcache_hold(page, &dev->lock)) continue;
+        break;
+    }
+    sync_rel(&dev->lock);
+
+    assert(old_page == NULL);
+    if (ret == 0) *out_page = page;
+    else if (page != NULL) buffcache_discard(page);
+    return ret;
+}
+
 static int nvme_read(void *buf, usize buflen, void *devdata, u64 off, u64 flags,
                      usize *out_bytes_read) {
-    struct NVMeDevice *device = devdata;
+    struct NVMeDevice *dev = devdata;
+    *out_bytes_read = 0;
+    if (off >= dev->size) return 0;
+    buflen = min(buflen, dev->size - off);
 
-    if (off >= device->size) {
-        *out_bytes_read = 0;
-        return 0;
-    }
-
-    if (off + buflen >= device->size) buflen = device->size - off;
-
-    if (buflen == 0) {
-        *out_bytes_read = 0;
-        return 0;
-    }
-
-    usize base_page = off / PAGE_SIZE;
-    usize rem = off % PAGE_SIZE;
-    usize rem_buflen = buflen;
-
-    // Fast path if the buffer is aligned
-    if (rem == 0 && buflen % PAGE_SIZE == 0 && (uptr)buf % PAGE_SIZE == 0) {
-        int ret = nvme_submit_multipage_command_sync(
-            device, buf, base_page, buflen / PAGE_SIZE, NVME_OPCODE_READ);
-        if (ret != 0) return ret;
-        *out_bytes_read = buflen;
-        return 0;
-    }
-
-    // Other fast path: the buffe and length may not be aligned, but
-    // the buffer is long enough to contain at least one full physical page. In
-    // this case, we can do the same as above, but only for  those full pages.
-    // If buflen >= 2 pages, we know that the buffer must have the following
-    // structure: <unaligned base> [<aligned pages>] [<unaligned tail>]. This
-    // means we have to load in the base and tail separately
-    if (rem == 0 && buflen >= 2 * PAGE_SIZE) {
-        void *rounded_buf = (void *)(((uptr)buf + PAGE_SIZE - 1) &
-                                     ~(uptr)(PAGE_SIZE - 1));
-        void *rounded_last = (void *)(((uptr)buf + buflen) &
-                                      ~(uptr)(PAGE_SIZE - 1));
-        usize rounded_buflen = (uptr)(rounded_last - rounded_buf);
-        usize rounded_pages = rounded_buflen / PAGE_SIZE;
-        usize head_size = (uptr)rounded_buf - (uptr)buf;
-        usize tail_size = (uptr)buf + buflen - (uptr)rounded_last;
-        void *tmp_phys = pmm_alloc();
-        if (tmp_phys == NULL) return ENOMEM;
-        // Read the contiguous block
-        int ret = nvme_submit_multipage_command_sync(
-            device, rounded_buf, base_page + ((buf != rounded_buf) ? 1 : 0),
-            rounded_pages, NVME_OPCODE_READ);
-        if (ret != 0) {
-            pmm_free(tmp_phys);
-            return ret;
+    int ret = 0;
+    while (buflen > 0) {
+        if (signal_check() != SIGNAL_NONE) {
+            ret = EINTR;
+            break;
         }
-        // Read base and tail
-        void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
-        // No need to copy base/head if the buffer was aligned because we
-        // already did before
-        if (buf != rounded_buf) {
-            nvme_submit_page_command_sync(device, tmp_phys, base_page,
-                                          NVME_OPCODE_READ);
-            memcpy(buf, tmp_hhdm, head_size);
-        }
-        // Tail must always be copied however
-        nvme_submit_page_command_sync(
-            device, tmp_phys, base_page + rounded_pages, NVME_OPCODE_READ);
-        memcpy(rounded_last, tmp_hhdm, tail_size);
-        pmm_free(tmp_phys);
-        *out_bytes_read = buflen;
-        return 0;
+
+        usize page_off = off % PAGE_SIZE;
+        usize len = min(PAGE_SIZE - page_off, buflen);
+
+        BufferPage *page;
+        ret = nvme_get_page(dev, off / PAGE_SIZE, VFS_GETPAGE_RDONLY, &page);
+        if (ret != 0) break;
+        u8 *data = (u8 *)PHYS_TO_HHDM(buffcache_get_phys(page));
+        ret = memcpy_maybe_user(buf, data + page_off, len);
+        buffcache_rel(page);
+        if (ret != 0) break;
+
+        buf += len;
+        off += len;
+        buflen -= len;
+        *out_bytes_read += len;
     }
 
-    void *tmp_phys = pmm_alloc();
-    if (tmp_phys == NULL) return ENOMEM;
-    void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
-
-    for (usize i = 0; i < (buflen + PAGE_SIZE - 1) / PAGE_SIZE; i++) {
-        usize read_size = min(PAGE_SIZE - rem, rem_buflen);
-        nvme_submit_page_command_sync(device, tmp_phys, base_page + i,
-                                      NVME_OPCODE_READ);
-        memcpy(buf, tmp_hhdm + rem, read_size);
-        buf += read_size;
-        *out_bytes_read += read_size;
-        rem_buflen -= read_size;
-        rem = 0;
-    }
-
-    pmm_free(tmp_phys);
-    return 0;
+    return *out_bytes_read != 0 ? 0 : ret;
 }
 
 static int nvme_write(void *devdata, void *buf, usize buflen, u64 off,
                       u64 flags, usize *out_bytes_written) {
-    struct NVMeDevice *device = devdata;
+    struct NVMeDevice *dev = devdata;
+    *out_bytes_written = 0;
+    if (off >= dev->size) return 0;
+    buflen = min(buflen, dev->size - off);
 
-    if (off >= device->size) {
-        *out_bytes_written = 0;
-        return 0;
+    int ret = 0;
+    while (buflen > 0) {
+        if (signal_check() != SIGNAL_NONE) {
+            ret = EINTR;
+            break;
+        }
+
+        usize page_off = off % PAGE_SIZE;
+        usize len = min(PAGE_SIZE - page_off, buflen);
+
+        BufferPage *page;
+        ret = nvme_get_page(dev, off / PAGE_SIZE, 0, &page);
+        if (ret != 0) break;
+        u8 *data = (u8 *)PHYS_TO_HHDM(buffcache_get_phys(page));
+        ret = memcpy_maybe_user(data + page_off, buf, len);
+        // A faulting copy may still have changed part of the page
+        buffcache_mkdirty(page);
+        buffcache_rel(page);
+        if (ret != 0) break;
+
+        buf += len;
+        off += len;
+        buflen -= len;
+        *out_bytes_written += len;
     }
 
-    if (off + buflen >= device->size) buflen = device->size - off;
-
-    if (buflen == 0) {
-        *out_bytes_written = 0;
-        return 0;
-    }
-
-    usize base_page = off / PAGE_SIZE;
-    usize rem = off % PAGE_SIZE;
-    usize rem_buflen = buflen;
-
-    // Fast path if the buffer is aligned
-    if (rem == 0 && buflen % PAGE_SIZE == 0 && (uptr)buf % PAGE_SIZE == 0) {
-        int ret = nvme_submit_multipage_command_sync(
-            device, buf, base_page, buflen / PAGE_SIZE, NVME_OPCODE_WRITE);
-        if (ret != 0) return ret;
-        *out_bytes_written = buflen;
-        return 0;
-    }
-
-    void *tmp_phys = pmm_alloc();
-    if (tmp_phys == NULL) return ENOMEM;
-    void *tmp_hhdm = (void *)PHYS_TO_HHDM(tmp_phys);
-
-    for (usize i = 0; i < (buflen + PAGE_SIZE - 1) / PAGE_SIZE; i++) {
-        usize read_size = min(PAGE_SIZE - rem, rem_buflen);
-        nvme_submit_page_command_sync(device, tmp_phys, base_page + i,
-                                      NVME_OPCODE_READ);
-        memcpy(tmp_hhdm + rem, buf, read_size);
-        nvme_submit_page_command_sync(device, tmp_phys, base_page + i,
-                                      NVME_OPCODE_WRITE);
-        buf += read_size;
-        *out_bytes_written += read_size;
-        rem_buflen -= read_size;
-        rem = 0;
-    }
-
-    pmm_free(tmp_phys);
-    return 0;
+    return *out_bytes_written != 0 ? 0 : ret;
 }
 
 static int nvme_stat(void *devdata, struct stat *out_stat) {
@@ -409,6 +414,7 @@ static int nvme_stat(void *devdata, struct stat *out_stat) {
 static DevOps g_nvme_dev_ops = {.type = VNODE_TYPE_BLOCKDEV,
                                 .read = nvme_read,
                                 .write = nvme_write,
+                                .get_page = nvme_get_page,
                                 .stat = nvme_stat};
 
 static int nvme_init_device(PCIEnum *pci_enum) {
@@ -519,6 +525,15 @@ static int nvme_init_device(PCIEnum *pci_enum) {
         ((2 * dev->queues[0].qid) << (2 + dstrd));
     dev->queues[0].cq_doorbell = base + 0x1000 +
         ((2 * dev->queues[0].qid + 1) << (2 + dstrd));
+
+    // Enough layers to index every page of the device
+    usize dev_pages = dev->size / PAGE_SIZE;
+    usize num_layers = 1;
+    while (dev_pages > 1ull << (RADIXTREE_INDEX_BITS * num_layers)) {
+        num_layers++;
+    }
+    sync_init_spinlock(&dev->lock);
+    verify(radixtree_init(&dev->buffcache, num_layers) == 0);
 
     // Init devfs
     char devname[32];

@@ -1351,6 +1351,12 @@ int vfs_writev(Vnode *node, IOVIter *ioviter, u64 off, u64 flags,
     return tot_write != 0 ? 0 : ret;
 }
 
+int vfs_get_page(Vnode *node, usize index, int flags, BufferPage **out_page) {
+    if (node->ops->get_page == NULL) return ENOSYS;
+    if (vfs_readonly(node) && !(flags & VFS_GETPAGE_RDONLY)) return EROFS;
+    return node->ops->get_page(node, index, flags, out_page);
+}
+
 int vfs_truncate(Vnode *node, usize size) {
     if (is_dir(node)) return EISDIR;
     if (vfs_readonly(node)) return EROFS;
