@@ -81,7 +81,14 @@ struct Ext2Superblock {
     u32 rev;
     u16 def_resuid;
     u16 def_resgid;
-    u8 reserved[940];
+    // Revision 1 only
+    u32 first_ino;
+    u16 inode_size;
+    u16 block_group_nr;
+    u32 feature_compat;
+    u32 feature_incompat;
+    u32 feature_ro_compat;
+    u8 reserved[920];
 } packed;
 
 struct Ext2GroupDesc {
@@ -108,10 +115,17 @@ struct Ext2Inode {
     u32 num_sectors; // 512-byte units, not blocks
     u32 flags;
     u32 osd1;
-    u32 block[EXT2_NUM_BLOCKS];
+    union {
+        u32 block[EXT2_NUM_BLOCKS];
+        char fast_link[EXT2_NUM_BLOCKS * sizeof(u32)];
+        u32 rdev; // major << 8 | minor, as Linux does when they fit
+    };
     u32 generation;
     u32 file_acl;
-    u32 size_high; // dir_acl in revision 0
+    union {
+        u32 size_high; // regular files
+        u32 dir_acl;
+    };
     u32 faddr;
     u8 frag;
     u8 fsize;
@@ -141,6 +155,7 @@ struct Ext2FS {
     BufferPage *superblock_page;
     u32 num_groups;
     u32 block_size;
+    u32 inode_size;
 };
 
 struct Ext2Node {
@@ -186,6 +201,42 @@ static int type_of_mode(u16 mode, VnodeType *out_type) {
     }
 }
 
+static inline u64 file_size(struct Ext2Inode *inode) {
+    if ((inode->mode & EXT2_S_IFMT) != EXT2_S_IFREG) return inode->size;
+    return inode->size | (u64)inode->size_high << 32;
+}
+
+static inline bool has_incompat(struct Ext2Superblock *superblock,
+                                u32 feature) {
+    return superblock->rev == EXT2_DYNAMIC_REV &&
+        (superblock->feature_incompat & feature) != 0;
+}
+
+static unsigned char dirent_type(struct Ext2FS *fs, u8 type) {
+    if (!has_incompat(fs->superblock, EXT2_FEATURE_INCOMPAT_FILETYPE)) {
+        return DT_UNKNOWN;
+    }
+
+    switch (type) {
+        case EXT2_FT_REG_FILE:
+            return DT_REG;
+        case EXT2_FT_DIR:
+            return DT_DIR;
+        case EXT2_FT_CHRDEV:
+            return DT_CHR;
+        case EXT2_FT_BLKDEV:
+            return DT_BLK;
+        case EXT2_FT_FIFO:
+            return DT_FIFO;
+        case EXT2_FT_SOCK:
+            return DT_SOCK;
+        case EXT2_FT_SYMLINK:
+            return DT_LNK;
+        default:
+            return DT_UNKNOWN;
+    }
+}
+
 // NODES
 
 // *out_desc points into *out_page and can be released with buffcache_rel
@@ -224,11 +275,10 @@ static int inode_get(struct Ext2FS *fs, ino_t ino, BufferPage **out_page,
 
     u32 inode_table_start = bg_desc->inode_table;
     usize inode_glob_off = (usize)inode_table_start * fs->block_size +
-        (usize)inode_index * EXT2_GOOD_OLD_INODE_SIZE;
+        (usize)inode_index * fs->inode_size;
     usize inode_page_index = inode_glob_off / PAGE_SIZE;
     if (inode_table_start == 0 ||
-        inode_table_start +
-                inode_index * EXT2_GOOD_OLD_INODE_SIZE / fs->block_size >=
+        inode_table_start + inode_index * fs->inode_size / fs->block_size >=
             fs->superblock->num_blocks)
         return EIO;
 
@@ -434,7 +484,7 @@ static int ext2_readdir(void *buf, usize buflen, Vnode *dir, u64 off,
             if (entry->ino != 0) {
                 VFSDirEnt hdr = {0};
                 hdr.ino = entry->ino;
-                hdr.type = DT_UNKNOWN;
+                hdr.type = dirent_type(fs, entry->type);
                 hdr.off = block_start + pos + entry->reclen;
                 ret = readdir_emit(buf, buflen, &hdr, entry->name,
                                    entry->namelen, out_bytes_read);
@@ -460,10 +510,12 @@ static int ext2_readlink(char *buf, usize buflen, Vnode *link, usize *out_len) {
     *out_len = 0;
     if (size >= fs->block_size) return EIO;
 
-    // Fast symlinks keep the target in the block pointers
-    if (node->inode->num_sectors == 0) {
-        if (size > sizeof(node->inode->block)) return EIO;
-        memcpy(buf, node->inode->block, min(buflen, size));
+    // Fast symlinks keep the target in the block pointers, but an xattr block
+    // still counts towards num_sectors
+    u32 ea_sectors = node->inode->file_acl != 0 ? fs->block_size / 512 : 0;
+    if (node->inode->num_sectors == ea_sectors) {
+        if (size > sizeof(node->inode->fast_link)) return EIO;
+        memcpy(buf, node->inode->fast_link, min(buflen, size));
         *out_len = size;
         return 0;
     }
@@ -490,8 +542,9 @@ static int ext2_read(void *buf, usize buflen, Vnode *vnode, u64 off, u64 flags,
     if (ret != 0) return ret;
 
     *out_bytes_read = 0;
-    if (off >= node->inode->size) return 0;
-    buflen = min(buflen, node->inode->size - off);
+    u64 size = file_size(node->inode);
+    if (off >= size) return 0;
+    buflen = min(buflen, size - off);
 
     while (buflen > 0) {
         if (signal_check() != SIGNAL_NONE) {
@@ -537,17 +590,15 @@ static int ext2_stat(Vnode *vnode, struct stat *out_stat) {
     out_stat->st_nlink = inode->num_links;
     out_stat->st_uid = inode->uid | (u32)inode->uid_high << 16;
     out_stat->st_gid = inode->gid | (u32)inode->gid_high << 16;
-    out_stat->st_size = inode->size;
+    out_stat->st_size = file_size(inode);
     out_stat->st_blksize = fs_of(vnode->vfs)->block_size;
     out_stat->st_blocks = inode->num_sectors;
     out_stat->st_atim.tv_sec = inode->atime;
     out_stat->st_mtim.tv_sec = inode->mtime;
     out_stat->st_ctim.tv_sec = inode->ctime;
-
-    // Linux stores devices that fit major << 8 | minor in block[0]
     if (vnode->type == VNODE_TYPE_CHARDEV ||
         vnode->type == VNODE_TYPE_BLOCKDEV) {
-        out_stat->st_rdev = inode->block[0];
+        out_stat->st_rdev = inode->rdev;
     }
 
     return 0;
@@ -571,7 +622,7 @@ static inline u32 sb_num_groups(struct Ext2Superblock *superblock) {
 
 static bool validate_superblock(struct Ext2Superblock *superblock) {
     if (superblock->magic != EXT2_MAGIC) return false;
-    if (superblock->rev != EXT2_GOOD_OLD_REV) return false;
+    if (superblock->rev > EXT2_DYNAMIC_REV) return false;
     // shifting by a garbage value is undefined
     if (superblock->log_block_size > 2 ||
         (1024u << superblock->log_block_size) != PAGE_SIZE) {
@@ -596,7 +647,22 @@ static bool validate_superblock(struct Ext2Superblock *superblock) {
     // So that every valid inode number falls in an existing group
     u64 max_inodes = (u64)sb_num_groups(superblock) *
         superblock->inodes_per_group;
-    return superblock->num_inodes <= max_inodes;
+    if (superblock->num_inodes > max_inodes) return false;
+    if (superblock->rev == EXT2_GOOD_OLD_REV) return true;
+
+    // We use a power of two because it ensures that an inode structure never
+    // straddles a page
+    u16 inode_size = superblock->inode_size;
+    if (inode_size < EXT2_GOOD_OLD_INODE_SIZE || inode_size > PAGE_SIZE ||
+        (inode_size & (inode_size - 1)) != 0) {
+        return false;
+    }
+
+    if ((superblock->feature_incompat & ~EXT2_FEATURE_INCOMPAT_SUPP) != 0) {
+        return false;
+    }
+
+    return (superblock->feature_ro_compat & ~EXT2_FEATURE_RO_COMPAT_SUPP) == 0;
 }
 
 static int ext2_unmount(Vfs *vfs) { return ENOSYS; }
@@ -655,6 +721,9 @@ static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     fs->superblock_page = superblock_page;
     fs->block_size = 1024 << superblock->log_block_size;
     fs->num_groups = sb_num_groups(superblock);
+    fs->inode_size = superblock->rev == EXT2_GOOD_OLD_REV
+        ? EXT2_GOOD_OLD_INODE_SIZE
+        : superblock->inode_size;
     ret = vfs_cache_init(&fs->vfs, 100);
     if (ret != 0) {
         slab_free(fs, sizeof(*fs));
