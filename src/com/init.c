@@ -6,6 +6,7 @@
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
 #include <kernel/com/dev/profile.h>
+#include <kernel/com/fs/ext2.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
@@ -74,6 +75,7 @@ void init_memory(void) {
 
 void init_filesystem(void) {
     tmpfs_init();
+    ext2_init();
     Vfs *rootfs = NULL;
     verify(tmpfs_mount(NULL, &rootfs) == 0);
 

@@ -337,8 +337,8 @@ static int open_backing(FSType *type, Vnode *source, u64 flags,
     *out_backing = NULL;
     if (source == NULL) return EINVAL;
 
-    // Only files and block devices provide storage; IPC bindings hold IPC
-    // objects.
+    // Only files and block devices provide storage. IPC bindings hold IPC
+    // objects
     if (source->type != VNODE_TYPE_BLOCKDEV &&
         source->type != VNODE_TYPE_FILE) {
         return ENOTBLK;
@@ -1220,9 +1220,8 @@ int vfs_bind(Vnode *node, void *binding) {
 
     int ret = 0;
     rwlock_acq_write(&node->lock);
-    if (node->binding != NULL) {
-        ret = EADDRINUSE;
-    } else {
+    if (node->binding != NULL) ret = EADDRINUSE;
+    else {
         vfs_vnode_hold(node);
         node->binding = binding;
     }

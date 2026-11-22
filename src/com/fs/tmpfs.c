@@ -422,10 +422,9 @@ static int readdir_emit(void *buf, usize buflen, VFSDirEnt *hdr,
 
     hdr->reclen = req_size;
     VFSDirEnt *ud = buf;
-    char nul = 0;
     int ret = memcpy_maybe_user(ud, hdr, sizeof(*hdr));
     if (ret == 0) ret = memcpy_maybe_user(ud->name, name, namelen);
-    if (ret == 0) ret = memcpy_maybe_user(ud->name + namelen, &nul, 1);
+    if (ret == 0) ret = memset_maybe_user(ud->name + namelen, 0, 1);
     if (ret == 0) *out_bytes_read = req_size;
     return ret;
 }
@@ -512,7 +511,6 @@ static int tmpfs_readlink(char *buf, usize buflen, Vnode *link,
 
 static int check_file_io(Vnode *node) {
     if (node->type == VNODE_TYPE_FILE) return 0;
-
     return node->type == VNODE_TYPE_DIR ? EISDIR : EINVAL;
 }
 
