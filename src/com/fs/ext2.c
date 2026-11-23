@@ -465,7 +465,36 @@ exit:
     return ret;
 }
 
-static int block_free() {}
+static int block_free(struct Ext2FS *fs, u32 block) {
+    assert(block < fs->superblock->num_blocks);
+    assert(block != EXT2_NULL);
+    mutex_acq(&fs->alloc_lock);
+
+    u32 rel = block - fs->superblock->first_data_block;
+    u32 bpg = fs->superblock->blocks_per_group;
+    u32 bgid = rel / bpg;
+    BufferPage *bg_page;
+    struct Ext2GroupDesc *bg_desc;
+    int ret = bg_get(fs, bgid, &bg_page, &bg_desc);
+    if (ret != 0) {
+        mutex_rel(&fs->alloc_lock);
+        return ret;
+    }
+
+    if (bg_desc->num_free_blocks == group_num_blocks(fs, bgid)) ret = EIO;
+    else ret = bitmap_free(fs, bg_desc->block_bitmap, rel % bpg);
+    if (ret != 0) goto exit;
+
+    bg_desc->num_free_blocks++;
+    buffcache_mkdirty(bg_page);
+
+    // TODO: remove page from backing device (eviction optimization)
+
+exit:
+    mutex_rel(&fs->alloc_lock);
+    buffcache_rel(bg_page);
+    return ret;
+}
 
 // *out_depth is how many levels were left below the last pointer read, so a
 // hole spans 1 << (ptr_shift * *out_depth) blocks
@@ -560,10 +589,14 @@ static int block_allocz(struct Ext2FS *fs, u32 preferred_block,
     int ret = block_alloc(fs, preferred_block, &block);
     if (ret != 0) return ret;
 
-    // TODO: free the block on failure once block_free exists
     BufferPage *page;
     ret = vfs_get_page(fs->vfs.backing, block, VFS_GETPAGE_NOFETCH, &page);
-    if (ret != 0) return ret;
+    if (ret != 0) {
+        // We ignore the return value of this free, since we wouldn't be able to
+        // propagate it anyway since we're on the error path of another error
+        block_free(fs, block);
+        return ret;
+    }
     memset((void *)PHYS_TO_HHDM(buffcache_get_phys(page)), 0, fs->block_size);
     buffcache_mkdirty(page);
     buffcache_rel(page);
