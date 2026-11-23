@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <arch/info.h>
 #include <dirent.h>
 #include <errno.h>
@@ -7,6 +8,8 @@
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/slab.h>
+#include <kernel/com/sync/mutex.h>
+#include <kernel/com/sync/rwlock.h>
 #include <kernel/com/util.h>
 #include <sys/stat.h>
 
@@ -133,7 +136,7 @@ struct Ext2Inode {
     u16 uid_high;
     u16 gid_high;
     u32 reserved;
-} packed;
+};
 
 // Without EXT2_FEATURE_INCOMPAT_FILETYPE, type is the high byte of a 16-bit
 // name length, so it is always 0
@@ -156,12 +159,20 @@ struct Ext2FS {
     u32 num_groups;
     u32 block_size;
     u32 inode_size;
+    // Technically an over-approximation, but it works and its practical impact
+    // is low for now: allocations are all group-local, so an fswide lock is
+    // safe but potentially slow, though or block device drivers are slow enough
+    // that they make this a good simplification
+    Mutex alloc_lock;
 };
 
 struct Ext2Node {
     Vnode vnode;
     BufferPage *inode_page; // held until inactive
     struct Ext2Inode *inode;
+    // Directories are already locked by the VFS, so this lock only protects
+    // files
+    RWLock file_lock;
 };
 
 static VnodeOps g_ext2_node_ops;
@@ -321,18 +332,151 @@ static int ptr_read(struct Ext2FS *fs, u32 block, u32 index, u32 *out_ptr) {
     return 0;
 }
 
-// *out_pblock == EXT2_NULL is a hole
-static int bmap(struct Ext2Node *node, u32 lblock, bool alloc,
-                u32 *out_pblock) {
-    assert(!alloc);
-    struct Ext2Inode *inode = node->inode;
-    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+static int bitmap_alloc(struct Ext2FS *fs, u32 bitmap_block, u32 num_bits,
+                        u32 preferred_bit, u32 *out_bit) {
+    assert(preferred_bit < num_bits);
+    u32 num_bytes = num_bits / 8 + (num_bits % 8 != 0);
 
-    u32 pblock = EXT2_NULL;
+    BufferPage *bitmap_page;
+    int ret = vfs_get_page(fs->vfs.backing, bitmap_block, 0, &bitmap_page);
+    if (ret != 0) return ret;
+
+    u8 *bitmap = (void *)PHYS_TO_HHDM(buffcache_get_phys(bitmap_page));
+    u32 found = 0;
+
+    u32 preferred_byte = preferred_bit / 8;
+    u32 preferred_off = preferred_bit % 8;
+    if (!(bitmap[preferred_byte] & (1 << preferred_off))) {
+        found = preferred_bit;
+        goto exit;
+    }
+
+    // num_bits is bounded by how many bits can stay in a block, but it can also
+    // be lower. When it is lower, it can also not be a multiple of the byte
+    // size. Therefore, we loop on every byte and get the first free bit. If the
+    // iteration is the "tail" iteration, the allocation may still fail even if
+    // a bit is found when that bit is past the tail
+
+    // We start from preferred_bit and wrap around instead of starting from 0 to
+    // hopefully keep some locality
+
+    for (usize n = 0; n < num_bytes; n++) {
+        u32 i = (preferred_bit / 8 + n) % num_bytes;
+        u8 byte = bitmap[i];
+        usize free_bit = __builtin_ffs(~byte & 0xff);
+        if (free_bit != 0) {
+            free_bit--;
+            found = i * 8 + free_bit;
+            // This terminates because the loop guard is monotonic, though it
+            // may perform extra checks if the bitmap is entirely full
+            if (found < num_bits) goto exit;
+        }
+    }
+
+    // We only get here if the loop terminated naturally, which only happens on
+    // failed allocations
+    ret = ENOSPC;
+
+exit:
+    if (ret == 0) {
+        bitmap[found / 8] |= 1 << (found % 8);
+        buffcache_mkdirty(bitmap_page);
+        *out_bit = found;
+    }
+    buffcache_rel(bitmap_page);
+    return ret;
+}
+
+static int bitmap_free(struct Ext2FS *fs, u32 bitmap_block, u32 bit) {
+    BufferPage *bitmap_page;
+    int ret = vfs_get_page(fs->vfs.backing, bitmap_block, 0, &bitmap_page);
+    if (ret != 0) return ret;
+
+    u8 *bitmap = (void *)PHYS_TO_HHDM(buffcache_get_phys(bitmap_page));
+    u32 byte = bit / 8;
+    u32 off = bit % 8;
+    if (!(bitmap[byte] & (1 << off))) ret = EIO;
+    else {
+        bitmap[byte] &= ~(1 << off);
+        buffcache_mkdirty(bitmap_page);
+    }
+
+    buffcache_rel(bitmap_page);
+    return ret;
+}
+
+// The last group is usually shorter
+static u32 group_num_blocks(struct Ext2FS *fs, u32 bgid) {
+    struct Ext2Superblock *superblock = fs->superblock;
+    if (bgid < fs->num_groups - 1) return superblock->blocks_per_group;
+    return superblock->num_blocks - superblock->first_data_block -
+        bgid * superblock->blocks_per_group;
+}
+
+static int block_alloc(struct Ext2FS *fs, u32 preferred_block, u32 *out_block) {
+    assert(preferred_block < fs->superblock->num_blocks);
+    mutex_acq(&fs->alloc_lock);
     int ret = 0;
+    u32 block = EXT2_NULL;
+
+    u32 preferred_rel = preferred_block == EXT2_NULL
+        ? EXT2_NULL
+        : preferred_block - fs->superblock->first_data_block;
+    u32 preferred_group = preferred_rel / fs->superblock->blocks_per_group;
+    for (u32 n = 0; n < fs->num_groups; n++) {
+        u32 bgid = (preferred_group + n) % fs->num_groups;
+        BufferPage *bg_page;
+        struct Ext2GroupDesc *bg_desc;
+        ret = bg_get(fs, bgid, &bg_page, &bg_desc);
+        if (ret != 0) goto exit;
+
+        if (bg_desc->num_free_blocks == 0) {
+            buffcache_rel(bg_page);
+            continue;
+        }
+
+        u32 preferred_bit = n == 0
+            ? preferred_rel % fs->superblock->blocks_per_group
+            : 0;
+        u32 bit;
+        ret = bitmap_alloc(fs, bg_desc->block_bitmap,
+                           group_num_blocks(fs, bgid), preferred_bit, &bit);
+        if (ret == 0) {
+            bg_desc->num_free_blocks--;
+            block = fs->superblock->first_data_block +
+                bgid * fs->superblock->blocks_per_group + bit;
+            buffcache_mkdirty(bg_page);
+        } else if (ret == ENOSPC) ret = EIO;
+
+        // A block group whose free count is non-zero should never fail
+        // allocation, so we interpret it as filesystem corruption and return an
+        // I/O error
+
+        buffcache_rel(bg_page);
+        goto exit;
+    }
+
+    // Same story as before (I mean, bitmap_alloc)
+    ret = ENOSPC;
+
+exit:
+    mutex_rel(&fs->alloc_lock);
+    if (ret == 0) *out_block = block;
+    return ret;
+}
+
+static int block_free() {}
+
+// *out_depth is how many levels were left below the last pointer read, so a
+// hole spans 1 << (ptr_shift * *out_depth) blocks
+static int block_translate(struct Ext2FS *fs, u32 block_map[EXT2_NUM_BLOCKS],
+                           u32 lblock, u32 *out_depth, u32 *out_pblock) {
+    int ret = 0;
+    u32 pblock = EXT2_NULL;
+    u32 level = 0;
 
     if (lblock < EXT2_NUM_DIRECT) {
-        pblock = inode->block[lblock];
+        pblock = block_map[lblock];
         goto exit;
     }
 
@@ -358,13 +502,163 @@ static int bmap(struct Ext2Node *node, u32 lblock, bool alloc,
         lblock -= span;
     }
 
-    pblock = inode->block[EXT2_IND_BLOCK + depth - 1];
-    if (pblock >= fs->superblock->num_blocks) return EIO;
-    for (u32 level = depth; level > 0 && pblock != EXT2_NULL; level--) {
+    pblock = block_map[EXT2_IND_BLOCK + depth - 1];
+    if (pblock >= fs->superblock->num_blocks) {
+        ret = EIO;
+        goto exit;
+    }
+
+    for (level = depth; level > 0 && pblock != EXT2_NULL; level--) {
         u32 index = (lblock >> (ptr_shift * (level - 1))) & ptr_mask;
         ret = ptr_read(fs, pblock, index, &pblock);
         if (ret != 0) goto exit;
     }
+
+exit:
+    // ptr_read checks what it reads, but we read direct pointers ourselves
+    if (ret == 0 && pblock >= fs->superblock->num_blocks) ret = EIO;
+    if (out_depth != NULL) *out_depth = level;
+    *out_pblock = pblock;
+    return ret;
+}
+
+// First logical block mapped through block[EXT2_IND_BLOCK + depth - 1]
+static u64 tree_base(u32 ptr_shift, u32 depth) {
+    u64 base = depth > 0 ? EXT2_NUM_DIRECT : 0;
+    for (u32 i = 1; i < depth; i++) base += 1ULL << (ptr_shift * i);
+    return base;
+}
+
+// *out_pblock is the closest mapped block before lblock, or EXT2_NULL if there
+// was no predecessor
+static int block_get_best_predecessor(struct Ext2FS *fs,
+                                      u32 block_map[EXT2_NUM_BLOCKS],
+                                      u32 lblock, u32 *out_pblock) {
+    u32 ptr_shift = fs->superblock->log_block_size + 8;
+    u32 pblock = EXT2_NULL;
+    int ret = 0;
+
+    while (lblock > 0) {
+        u32 depth;
+        u32 prev = lblock - 1;
+        ret = block_translate(fs, block_map, prev, &depth, &pblock);
+        if (ret != 0 || pblock != EXT2_NULL) break;
+
+        // Skip the whole hole. It is aligned to its size within its tree, and
+        // the bases of deeper trees only differ by multiples of that size
+        u64 span_mask = (1ULL << (ptr_shift * depth)) - 1;
+        lblock = prev - ((prev - tree_base(ptr_shift, depth)) & span_mask);
+    }
+
+    *out_pblock = pblock;
+    return ret;
+}
+
+static int block_allocz(struct Ext2FS *fs, u32 preferred_block,
+                        u32 *out_block) {
+    u32 block;
+    int ret = block_alloc(fs, preferred_block, &block);
+    if (ret != 0) return ret;
+
+    // TODO: free the block on failure once block_free exists
+    BufferPage *page;
+    ret = vfs_get_page(fs->vfs.backing, block, VFS_GETPAGE_NOFETCH, &page);
+    if (ret != 0) return ret;
+    memset((void *)PHYS_TO_HHDM(buffcache_get_phys(page)), 0, fs->block_size);
+    buffcache_mkdirty(page);
+    buffcache_rel(page);
+
+    *out_block = block;
+    return 0;
+}
+
+static int bmap_fill(struct Ext2Node *node, u32 lblock, u32 preferred_block,
+                     u32 *out_pblock) {
+    struct Ext2Inode *inode = node->inode;
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    u32 ptr_shift = fs->superblock->log_block_size + 8;
+    u32 ptr_mask = (1ULL << ptr_shift) - 1;
+    u32 depth = 0;
+    u32 *slot;
+
+    if (lblock < EXT2_NUM_DIRECT) slot = &inode->block[lblock];
+    else {
+        u64 span = 1ULL << ptr_shift;
+        lblock -= EXT2_NUM_DIRECT;
+        for (depth = 1; lblock >= span; depth++, span <<= ptr_shift) {
+            assert(depth < 3);
+            lblock -= span;
+        }
+        slot = &inode->block[EXT2_IND_BLOCK + depth - 1];
+    }
+
+    // slot points into the block covered by slot_page. slot_page == NULL <==>
+    // the block was in one of the 12 direct links
+    BufferPage *slot_page = NULL;
+    u32 pblock = EXT2_NULL;
+    int ret = 0;
+    for (u32 level = depth;; level--) {
+        pblock = *slot;
+        if (pblock == EXT2_NULL) {
+            ret = block_allocz(fs, preferred_block, &pblock);
+            if (ret != 0) break;
+            *slot = pblock;
+            inode->num_sectors += fs->block_size / 512;
+            buffcache_mkdirty(node->inode_page);
+            if (slot_page != NULL) buffcache_mkdirty(slot_page);
+            preferred_block = pblock + 1 < fs->superblock->num_blocks
+                ? pblock + 1
+                : preferred_block;
+        } else if (pblock >= fs->superblock->num_blocks) {
+            ret = EIO;
+            break;
+        }
+
+        if (slot_page != NULL) buffcache_rel(slot_page);
+        slot_page = NULL;
+        if (level == 0) break;
+
+        // Here the slot page already exists and we don't need to allocate a new
+        // one. This happens both at the first iterations in a tree that was
+        // already partly built, or in all iterations of a tree that's just
+        // missing a last-level pointer that is currently EXT2_NULL
+        BufferPage *next;
+        ret = vfs_get_page(fs->vfs.backing, pblock, 0, &next);
+        if (ret != 0) break;
+        slot_page = next;
+        u32 *ptrs = (void *)PHYS_TO_HHDM(buffcache_get_phys(slot_page));
+        slot = &ptrs[(lblock >> (ptr_shift * (level - 1))) & ptr_mask];
+    }
+
+    if (slot_page != NULL) buffcache_rel(slot_page);
+    if (ret == 0) *out_pblock = pblock;
+    return ret;
+}
+
+// *out_pblock == EXT2_NULL is a hole
+static int bmap(struct Ext2Node *node, u32 lblock, bool alloc,
+                u32 *out_pblock) {
+    struct Ext2Inode *inode = node->inode;
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+
+    u32 pblock = EXT2_NULL;
+    int ret = block_translate(fs, inode->block, lblock, NULL, &pblock);
+    if (ret != 0 || pblock != EXT2_NULL || !alloc) goto exit;
+
+    u32 preferred_block;
+    ret = block_get_best_predecessor(fs, inode->block, lblock,
+                                     &preferred_block);
+    if (ret != 0) goto exit;
+    // If there's no predecessor, we try to keep the new block in near the one
+    // in which the inode is held
+    if (preferred_block == EXT2_NULL) {
+        struct Ext2Superblock *superblock = fs->superblock;
+        u32 bgid = (node->vnode.ino - 1) / superblock->inodes_per_group;
+        preferred_block = superblock->first_data_block +
+            bgid * superblock->blocks_per_group;
+    }
+
+    ret = bmap_fill(node, lblock, preferred_block, &pblock);
 
 exit:
     if (pblock >= fs->superblock->num_blocks) return EIO;
@@ -542,9 +836,9 @@ static int ext2_read(void *buf, usize buflen, Vnode *vnode, u64 off, u64 flags,
     if (ret != 0) return ret;
 
     *out_bytes_read = 0;
+    rwlock_acq_read(&node->file_lock);
     u64 size = file_size(node->inode);
-    if (off >= size) return 0;
-    buflen = min(buflen, size - off);
+    buflen = off < size ? min(buflen, size - off) : 0;
 
     while (buflen > 0) {
         if (signal_check() != SIGNAL_NONE) {
@@ -575,7 +869,107 @@ static int ext2_read(void *buf, usize buflen, Vnode *vnode, u64 off, u64 flags,
         *out_bytes_read += len;
     }
 
+    rwlock_rel_read(&node->file_lock);
     return *out_bytes_read != 0 ? 0 : ret;
+}
+
+static u64 max_file_size(struct Ext2FS *fs) {
+    struct Ext2Superblock *superblock = fs->superblock;
+    u32 ptr_shift = superblock->log_block_size + 8;
+    u64 num_ptrs = 1ULL << ptr_shift;
+    u64 max_blocks = tree_base(ptr_shift, 4);
+
+    // num_sectors is 32 bits wide and also counts the indirect blocks, which
+    // are at most one every num_ptrs - 1 data blocks plus the 3 tree roots
+    u64 sector_blocks = 0xFFFFFFFFULL / (fs->block_size / 512);
+    max_blocks = min(max_blocks,
+                     (sector_blocks - 3) / num_ptrs * (num_ptrs - 1));
+    u64 max_size = max_blocks * fs->block_size;
+
+    // Without large_file, size_high is dir_acl
+    if (superblock->rev == EXT2_GOOD_OLD_REV)
+        return min(max_size, 0x7FFFFFFFULL);
+    return max_size;
+}
+
+// LOCKING: node->file_lock held in write mode
+static void file_set_size(struct Ext2Node *node, u64 size) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    struct Ext2Superblock *superblock = fs->superblock;
+    node->inode->size = size;
+    node->inode->size_high = size >> 32;
+    buffcache_mkdirty(node->inode_page);
+
+    // Older drivers would truncate files past 2 GiB without this
+    if (size <= 0x7FFFFFFF) return;
+    mutex_acq(&fs->alloc_lock);
+    if (!(superblock->feature_ro_compat & EXT2_FEATURE_RO_COMPAT_LARGE_FILE)) {
+        superblock->feature_ro_compat |= EXT2_FEATURE_RO_COMPAT_LARGE_FILE;
+        buffcache_mkdirty(fs->superblock_page);
+    }
+    mutex_rel(&fs->alloc_lock);
+}
+
+static int ext2_write(Vnode *vnode, void *buf, usize buflen, u64 off, u64 flags,
+                      usize *out_bytes_written) {
+    (void)flags;
+    struct Ext2Node *node = extnode_of(vnode);
+    struct Ext2FS *fs = fs_of(vnode->vfs);
+    assert(fs->block_size == PAGE_SIZE);
+    *out_bytes_written = 0;
+
+    int ret = check_file_io(vnode);
+    if (ret != 0) return ret;
+    if (buflen == 0) return 0;
+
+    u64 max_size = max_file_size(fs);
+    if (off >= max_size) return EFBIG;
+    buflen = min(buflen, max_size - off);
+
+    rwlock_acq_write(&node->file_lock);
+    usize done = 0;
+    while (done < buflen) {
+        if (signal_check() != SIGNAL_NONE) {
+            ret = EINTR;
+            break;
+        }
+
+        // Partial writes need the old contents, new blocks are already zeroed
+        u64 pos = off + done;
+        usize page_off = pos % PAGE_SIZE;
+        usize len = min(PAGE_SIZE - page_off, buflen - done);
+        u32 pblock;
+        ret = bmap(node, pos / PAGE_SIZE, true, &pblock);
+        if (ret != 0) break;
+
+        BufferPage *page;
+        ret = vfs_get_page(fs->vfs.backing, pblock, 0, &page);
+        if (ret != 0) break;
+        u8 *data = (void *)PHYS_TO_HHDM(buffcache_get_phys(page));
+        ret = memcpy_maybe_user(data + page_off, (u8 *)buf + done, len);
+        // A faulting copy may still have changed part of the page
+        buffcache_mkdirty(page);
+        buffcache_rel(page);
+        if (ret != 0) break;
+
+        done += len;
+    }
+
+    // TODO: blocks allocated past the new size on failure are left behind
+    // until truncate exists
+    if (done != 0) {
+        if (off + done > file_size(node->inode))
+            file_set_size(node, off + done);
+
+        u32 now = cpu_get_time() / NANOS_PER_SEC;
+        node->inode->mtime = now;
+        node->inode->ctime = now;
+        buffcache_mkdirty(node->inode_page);
+    }
+
+    rwlock_rel_write(&node->file_lock);
+    *out_bytes_written = done;
+    return done != 0 ? 0 : ret;
 }
 
 static int ext2_mmap(Vnode *node, VMMContext *vmm_context, void *hint,
@@ -609,6 +1003,7 @@ static VnodeOps g_ext2_node_ops = {.inactive = ext2_inactive,
                                    .readdir = ext2_readdir,
                                    .readlink = ext2_readlink,
                                    .read = ext2_read,
+                                   .write = ext2_write,
                                    .mmap = ext2_mmap,
                                    .stat = ext2_stat};
 
@@ -690,6 +1085,7 @@ static int ext2_vget(Vfs *vfs, ino_t ino, Vnode **out_vnode) {
         return ret;
     }
 
+    rwlock_init(&node->file_lock);
     vfs_vnode_init(&node->vnode, vfs, type, &g_ext2_node_ops, NULL);
     *out_vnode = &node->vnode;
     return 0;
@@ -716,6 +1112,7 @@ static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     }
 
     vfs_init_vfs(&fs->vfs, &g_ext2_type, NULL);
+    mutex_init(&fs->alloc_lock);
     fs->vfs.backing = backing;
     fs->superblock = superblock;
     fs->superblock_page = superblock_page;
