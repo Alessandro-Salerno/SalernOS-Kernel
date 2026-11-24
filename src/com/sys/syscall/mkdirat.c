@@ -19,7 +19,6 @@ SYSCALL(syscall_mkdirat) {
     int dir_fd = SYSCALL_ARG(int, 1);
     const struct syscall_str *upath = SYSCALL_ARG(void *, 2);
     mode_t mode = SYSCALL_ARG(mode_t, 3);
-    (void)mode;
 
     char path[CONFIG_PATH_MAX];
     usize pathlen;
@@ -33,9 +32,11 @@ SYSCALL(syscall_mkdirat) {
     int err = proc_get_directory(curr_proc, dir_fd, &dir);
     if (err != 0) return SYSCALL_ERR(err);
 
+    VnodeAttr attr = VFS_ATTR(VNODE_TYPE_DIR);
+    attr.mode = mode & 07777;
     Vnode *new_dir = NULL;
-    err = vfs_create_path(path, pathlen, curr_proc->root, dir,
-                          &VFS_ATTR(VNODE_TYPE_DIR), VFS_CREATE_EXCL, &new_dir);
+    err = vfs_create_path(path, pathlen, curr_proc->root, dir, &attr,
+                          VFS_CREATE_EXCL, &new_dir);
     vfs_vnode_rel(new_dir);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);

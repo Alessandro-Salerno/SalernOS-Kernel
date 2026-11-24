@@ -9,14 +9,16 @@
 #include <kernel/com/sys/syscall.h>
 #include <kernel/com/util.h>
 
-// SYSCALL: openat(int dir_fd, const struct syscall_str *path, int flags)
+// SYSCALL: openat(int dir_fd, const struct syscall_str *path, int flags,
+// mode_t mode)
 SYSCALL(syscall_openat) {
     SYSCALL_UNUSED_CONTEXT();
-    SYSCALL_UNUSED_START(4);
+    SYSCALL_UNUSED_START(5);
 
     int dir_fd = SYSCALL_ARG(int, 1);
     const struct syscall_str *upath = SYSCALL_ARG(void *, 2);
     int flags = SYSCALL_ARG(int, 3);
+    mode_t mode = SYSCALL_ARG(mode_t, 4);
 
     char path[CONFIG_PATH_MAX];
     usize pathlen;
@@ -41,8 +43,10 @@ SYSCALL(syscall_openat) {
     int vfs_flags = (flags & O_NOFOLLOW) ? 0 : VFS_LOOKUP_FOLLOW;
     if (flags & O_CREAT) {
         if (flags & O_EXCL) vfs_flags |= VFS_CREATE_EXCL;
-        err = vfs_create_path(path, pathlen, curr_proc->root, dir,
-                              &VFS_ATTR(VNODE_TYPE_FILE), vfs_flags, &file_vn);
+        VnodeAttr attr = VFS_ATTR(VNODE_TYPE_FILE);
+        attr.mode = mode & 07777;
+        err = vfs_create_path(path, pathlen, curr_proc->root, dir, &attr,
+                              vfs_flags, &file_vn);
     } else {
         err = vfs_lookup(path, pathlen, curr_proc->root, dir, vfs_flags,
                          &file_vn);

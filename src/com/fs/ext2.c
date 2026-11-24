@@ -159,6 +159,7 @@ struct Ext2FS {
     u32 num_groups;
     u32 block_size;
     u32 inode_size;
+    u32 first_ino;
     // Technically an over-approximation, but it works and its practical impact
     // is low for now: allocations are all group-local, so an fswide lock is
     // safe but potentially slow, though or block device drivers are slow enough
@@ -212,6 +213,29 @@ static int type_of_mode(u16 mode, VnodeType *out_type) {
     }
 }
 
+// Devices need rdev, which create cannot provide
+static int mode_of_type(VnodeType type, u16 *out_mode) {
+    switch (type) {
+        case VNODE_TYPE_FILE:
+            *out_mode = EXT2_S_IFREG;
+            return 0;
+        case VNODE_TYPE_DIR:
+            *out_mode = EXT2_S_IFDIR;
+            return 0;
+        case VNODE_TYPE_LINK:
+            *out_mode = EXT2_S_IFLNK;
+            return 0;
+        case VNODE_TYPE_FIFO:
+            *out_mode = EXT2_S_IFIFO;
+            return 0;
+        case VNODE_TYPE_SOCKET:
+            *out_mode = EXT2_S_IFSOCK;
+            return 0;
+        default:
+            return EPERM;
+    }
+}
+
 static inline u64 file_size(struct Ext2Inode *inode) {
     if ((inode->mode & EXT2_S_IFMT) != EXT2_S_IFREG) return inode->size;
     return inode->size | (u64)inode->size_high << 32;
@@ -245,6 +269,31 @@ static unsigned char dirent_type(struct Ext2FS *fs, u8 type) {
             return DT_LNK;
         default:
             return DT_UNKNOWN;
+    }
+}
+
+static u8 ft_of_type(struct Ext2FS *fs, VnodeType type) {
+    if (!has_incompat(fs->superblock, EXT2_FEATURE_INCOMPAT_FILETYPE)) {
+        return EXT2_FT_UNKNOWN;
+    }
+
+    switch (type) {
+        case VNODE_TYPE_FILE:
+            return EXT2_FT_REG_FILE;
+        case VNODE_TYPE_DIR:
+            return EXT2_FT_DIR;
+        case VNODE_TYPE_CHARDEV:
+            return EXT2_FT_CHRDEV;
+        case VNODE_TYPE_BLOCKDEV:
+            return EXT2_FT_BLKDEV;
+        case VNODE_TYPE_FIFO:
+            return EXT2_FT_FIFO;
+        case VNODE_TYPE_SOCKET:
+            return EXT2_FT_SOCK;
+        case VNODE_TYPE_LINK:
+            return EXT2_FT_SYMLINK;
+        default:
+            return EXT2_FT_UNKNOWN;
     }
 }
 
@@ -443,9 +492,11 @@ static int block_alloc(struct Ext2FS *fs, u32 preferred_block, u32 *out_block) {
                            group_num_blocks(fs, bgid), preferred_bit, &bit);
         if (ret == 0) {
             bg_desc->num_free_blocks--;
+            fs->superblock->num_free_blocks--;
             block = fs->superblock->first_data_block +
                 bgid * fs->superblock->blocks_per_group + bit;
             buffcache_mkdirty(bg_page);
+            buffcache_mkdirty(fs->superblock_page);
         } else if (ret == ENOSPC) ret = EIO;
 
         // A block group whose free count is non-zero should never fail
@@ -486,7 +537,9 @@ static int block_free(struct Ext2FS *fs, u32 block) {
     if (ret != 0) goto exit;
 
     bg_desc->num_free_blocks++;
+    fs->superblock->num_free_blocks++;
     buffcache_mkdirty(bg_page);
+    buffcache_mkdirty(fs->superblock_page);
 
     // TODO: remove page from backing device (eviction optimization)
 
@@ -705,18 +758,237 @@ static int check_file_io(Vnode *node) {
 }
 
 // *out_data points into *out_page, released with buffcache_rel
-static int data_get(struct Ext2Node *dir, u32 lblock, BufferPage **out_page,
-                    u8 **out_data) {
+static int data_get_common(struct Ext2Node *dir, u32 lblock, bool write,
+                           BufferPage **out_page, u8 **out_data) {
     struct Ext2FS *fs = fs_of(dir->vnode.vfs);
     u32 pblock;
-    int ret = bmap(dir, lblock, false, &pblock);
+    int ret = bmap(dir, lblock, write, &pblock);
     if (ret != 0) return ret;
     if (pblock == EXT2_NULL) return EIO;
 
-    ret = vfs_get_page(fs->vfs.backing, pblock, VFS_GETPAGE_RDONLY, out_page);
+    ret = vfs_get_page(fs->vfs.backing, pblock, write ? 0 : VFS_GETPAGE_RDONLY,
+                       out_page);
     if (ret != 0) return ret;
     *out_data = (u8 *)PHYS_TO_HHDM(buffcache_get_phys(*out_page));
     return 0;
+}
+
+static int data_get(struct Ext2Node *dir, u32 lblock, BufferPage **out_page,
+                    u8 **out_data) {
+    return data_get_common(dir, lblock, false, out_page, out_data);
+}
+
+// Holes are allocated (zeroed), so appending a block to a directory is
+// data_get_w on the block past the end
+static int data_get_w(struct Ext2Node *dir, u32 lblock, BufferPage **out_page,
+                      u8 **out_data) {
+    return data_get_common(dir, lblock, true, out_page, out_data);
+}
+
+static int inode_alloc(struct Ext2FS *fs, u32 preferred_group, bool is_dir,
+                       ino_t *out_ino) {
+    assert(preferred_group < fs->num_groups);
+    mutex_acq(&fs->alloc_lock);
+
+    u32 found_group = 0;
+    u32 bit = 0;
+    BufferPage *bg_page;
+    struct Ext2GroupDesc *bg_desc;
+    int ret = 0;
+
+    // This is the only place that can return ENOSPC, because the rest can
+    // assume that there's at least 1 free inode, and that any allocation
+    // failure is disk corruption and therefore EIO
+    if (fs->superblock->num_free_inodes == 0) {
+        ret = ENOSPC;
+        goto exit;
+    }
+
+    if (is_dir) goto dir_check;
+    ret = bg_get(fs, preferred_group, &bg_page, &bg_desc);
+    if (ret != 0) goto exit;
+
+    // We skip the preferred block even if it had space for another inode simply
+    // because it had no space for its blocks, so we would end up with an inode
+    // whose metadata is guaranteed to live in a different group than its data
+    if (bg_desc->num_free_inodes != 0 && bg_desc->num_free_blocks != 0) {
+        found_group = preferred_group;
+        goto alloc;
+    }
+
+    buffcache_rel(bg_page);
+    bg_page = NULL;
+    bg_desc = NULL;
+
+    // Our allocation policy differs between directories and other types of
+    // files: a directory is the root of an independent tree, whereas regular
+    // files are part of one of those trees. We try to keep
+    // directories in those groups that have more than average free inodes, and
+    // have as many free blocks as possible, which should then let subsequent
+    // directory or file inode/block allocations in that directory to land on
+    // the preferred group (because it was chosen among the ones that had more
+    // space). For files the reasoning is reversed: since the preferred-group
+    // path has failed, we place it in whatever group we find because wherever
+    // that may be, it will still be slow to seek from the parent directory's
+    // block
+
+dir_check:
+    if (is_dir) {
+        usize avg_free_inodes = fs->superblock->num_free_inodes /
+            fs->num_groups;
+        BufferPage *bg_best_page = NULL;
+        struct Ext2GroupDesc *bg_best_desc = NULL;
+        for (u32 bgid = 0; bgid < fs->num_groups; bgid++) {
+            ret = bg_get(fs, bgid, &bg_page, &bg_desc);
+            if (ret != 0) {
+                if (bg_best_page != NULL) buffcache_rel(bg_best_page);
+                goto exit;
+            }
+
+            if (bg_desc->num_free_inodes != 0 &&
+                bg_desc->num_free_inodes >= avg_free_inodes) {
+                if (bg_best_page != NULL) {
+                    if (bg_desc->num_free_blocks >
+                        bg_best_desc->num_free_blocks) {
+                        buffcache_rel(bg_best_page);
+                        bg_best_page = bg_page;
+                        bg_best_desc = bg_desc;
+                        found_group = bgid;
+                    } else buffcache_rel(bg_page);
+                } else {
+                    bg_best_page = bg_page;
+                    bg_best_desc = bg_desc;
+                    found_group = bgid;
+                }
+            } else buffcache_rel(bg_page);
+        }
+
+        bg_page = bg_best_page;
+        bg_desc = bg_best_desc;
+    } else {
+        for (u32 n = 0; n < fs->num_groups; n++) {
+            u32 bgid = (preferred_group + n) % fs->num_groups;
+            ret = bg_get(fs, bgid, &bg_page, &bg_desc);
+            if (ret != 0) goto exit;
+            if (bg_desc->num_free_inodes != 0) {
+                found_group = bgid;
+                break;
+            }
+            buffcache_rel(bg_page);
+            bg_page = NULL;
+            bg_desc = NULL;
+        }
+    }
+
+    if (bg_page == NULL) {
+        ret = EIO;
+        goto exit;
+    }
+
+alloc:
+    assert(bg_desc->num_free_inodes != 0);
+    // If the block group has a free inode, the allocation can only fail due
+    // to disk corruption, so we always return EIO on ENOSPC
+    ret = bitmap_alloc(fs, bg_desc->inode_bitmap,
+                       fs->superblock->inodes_per_group, 0, &bit);
+    if (ret != 0) {
+        if (ret == ENOSPC) ret = EIO;
+        buffcache_rel(bg_page);
+    }
+
+exit:
+    // bg_page here is valid (and therefore, needs to be released) only if the
+    // allocation was successful. This lets us handle all block group lookup
+    // failures through this path as well
+    if (ret == 0) {
+        // In this case, the corruption is already deep so honestly I don't
+        // think preserving coherency makes any sense
+        ino_t ino = found_group * fs->superblock->inodes_per_group + bit + 1;
+        if (ino >= fs->first_ino) *out_ino = ino;
+        else ret = EIO;
+
+        fs->superblock->num_free_inodes--;
+        bg_desc->num_free_inodes--;
+        bg_desc->num_dirs += is_dir;
+        buffcache_mkdirty(fs->superblock_page);
+        buffcache_mkdirty(bg_page);
+        buffcache_rel(bg_page);
+    }
+    mutex_rel(&fs->alloc_lock);
+    return ret;
+}
+
+static int inode_free(struct Ext2FS *fs, ino_t ino, bool is_dir) {
+    assert(ino - 1 < fs->superblock->num_inodes);
+    assert(ino >= fs->first_ino);
+    assert(ino >= 1);
+
+    BufferPage *bg_page;
+    struct Ext2GroupDesc *bg_desc;
+    u32 bgid = (ino - 1) / fs->superblock->inodes_per_group;
+    u32 bit = (ino - 1) % fs->superblock->inodes_per_group;
+    int ret = bg_get(fs, bgid, &bg_page, &bg_desc);
+    if (ret != 0) return ret;
+
+    mutex_acq(&fs->alloc_lock);
+
+    if (fs->superblock->num_free_inodes == fs->superblock->num_inodes ||
+        bg_desc->num_free_inodes == fs->superblock->inodes_per_group ||
+        (is_dir && bg_desc->num_dirs == 0)) {
+        ret = EIO;
+        goto exit;
+    }
+
+    ret = bitmap_free(fs, bg_desc->inode_bitmap, bit);
+    if (ret != 0) goto exit;
+
+    bg_desc->num_free_inodes++;
+    bg_desc->num_dirs -= is_dir;
+    fs->superblock->num_free_inodes++;
+    buffcache_mkdirty(bg_page);
+    buffcache_mkdirty(fs->superblock_page);
+
+exit:
+    mutex_rel(&fs->alloc_lock);
+    buffcache_rel(bg_page);
+    return ret;
+}
+
+static int inode_alloc_initialized(struct Ext2FS *fs, u32 preferred_group,
+                                   bool is_dir, VnodeAttr *attr, ino_t *out_ino,
+                                   BufferPage **out_page,
+                                   struct Ext2Inode **out_desc) {
+    u16 mode;
+    int ret = mode_of_type(attr->type, &mode);
+    if (ret != 0) return ret;
+
+    ino_t ino;
+    ret = inode_alloc(fs, preferred_group, is_dir, &ino);
+    if (ret != 0) return ret;
+
+    BufferPage *ino_page;
+    struct Ext2Inode *ino_desc;
+    ret = inode_get(fs, ino, &ino_page, &ino_desc);
+    if (ret != 0) {
+        buffcache_rel(ino_page);
+        return ret;
+    }
+
+    memset(ino_desc, 0, fs->inode_size);
+    ino_desc->mode = mode | (attr->mode & 07777);
+    ino_desc->num_links = 1;
+
+    // TODO: handle time stamps
+
+    buffcache_mkdirty(ino_page);
+    *out_ino = ino;
+    *out_page = ino_page;
+    *out_desc = ino_desc;
+    return 0;
+}
+
+static usize dirent_rec_size(usize namelen) {
+    return (sizeof(struct Ext2DirEnt) + namelen + 3) & ~(usize)3;
 }
 
 static bool dirent_validate(struct Ext2DirEnt *entry, usize pos,
@@ -724,6 +996,45 @@ static bool dirent_validate(struct Ext2DirEnt *entry, usize pos,
     return entry->reclen >= sizeof(struct Ext2DirEnt) &&
         entry->reclen % 4 == 0 && pos + entry->reclen <= block_size &&
         sizeof(struct Ext2DirEnt) + entry->namelen <= entry->reclen;
+}
+
+// Inode number 0 does not exist, so we skip it because it is either padding or
+// deleted. *out_entry and *out_prev point into *out_page, released with
+// buffcache_rel. *out_prev is NULL if the entry is the first in its block
+static int dirent_find(struct Ext2Node *dir, const char *name, usize namelen,
+                       BufferPage **out_page, struct Ext2DirEnt **out_entry,
+                       struct Ext2DirEnt **out_prev) {
+    struct Ext2FS *fs = fs_of(dir->vnode.vfs);
+    u32 num_blocks = dir->inode->size / fs->block_size;
+
+    for (u32 lblock = 0; lblock < num_blocks; lblock++) {
+        BufferPage *page;
+        u8 *data;
+        int ret = data_get(dir, lblock, &page, &data);
+        if (ret != 0) return ret;
+
+        struct Ext2DirEnt *prev = NULL;
+        for (usize pos = 0; pos < fs->block_size;) {
+            struct Ext2DirEnt *entry = (void *)(data + pos);
+            if (!dirent_validate(entry, pos, fs->block_size)) {
+                buffcache_rel(page);
+                return EIO;
+            }
+            if (entry->ino != 0 && entry->namelen == namelen &&
+                memcmp(entry->name, name, namelen) == 0) {
+                *out_page = page;
+                *out_entry = entry;
+                if (out_prev != NULL) *out_prev = prev;
+                return 0;
+            }
+            prev = entry;
+            pos += entry->reclen;
+        }
+
+        buffcache_rel(page);
+    }
+
+    return ENOENT;
 }
 
 static int readdir_emit(void *buf, usize buflen, VFSDirEnt *hdr,
@@ -750,41 +1061,15 @@ static void ext2_inactive(Vnode *node) {
 
 static int ext2_lookup(Vnode *dir, const char *name, usize namelen,
                        Vnode **out_vnode) {
-    struct Ext2Node *edir = extnode_of(dir);
-    struct Ext2FS *fs = fs_of(dir->vfs);
-    u32 num_blocks = edir->inode->size / fs->block_size;
     *out_vnode = NULL;
+    BufferPage *page;
+    struct Ext2DirEnt *entry;
+    int ret = dirent_find(extnode_of(dir), name, namelen, &page, &entry, NULL);
+    if (ret != 0) return ret;
 
-    // Inode number 0 does not exist, so we skip it because it is either padding
-    // or deleted
-
-    for (u32 lblock = 0; lblock < num_blocks; lblock++) {
-        BufferPage *page;
-        u8 *data;
-        int ret = data_get(edir, lblock, &page, &data);
-        if (ret != 0) return ret;
-
-        ino_t ino = 0;
-        for (usize pos = 0; pos < fs->block_size;) {
-            struct Ext2DirEnt *entry = (void *)(data + pos);
-            if (!dirent_validate(entry, pos, fs->block_size)) {
-                ret = EIO;
-                break;
-            }
-            if (entry->ino != 0 && entry->namelen == namelen &&
-                memcmp(entry->name, name, namelen) == 0) {
-                ino = entry->ino;
-                break;
-            }
-            pos += entry->reclen;
-        }
-
-        buffcache_rel(page);
-        if (ret != 0) return ret;
-        if (ino != 0) return vfs_vget(dir->vfs, ino, out_vnode);
-    }
-
-    return ENOENT;
+    ino_t ino = entry->ino;
+    buffcache_rel(page);
+    return vfs_vget(dir->vfs, ino, out_vnode);
 }
 
 static int ext2_readdir(void *buf, usize buflen, Vnode *dir, u64 off,
@@ -1154,6 +1439,9 @@ static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     fs->inode_size = superblock->rev == EXT2_GOOD_OLD_REV
         ? EXT2_GOOD_OLD_INODE_SIZE
         : superblock->inode_size;
+    fs->first_ino = superblock->rev == EXT2_GOOD_OLD_REV
+        ? EXT2_GOOD_OLD_FIRST_INO
+        : superblock->first_ino;
     ret = vfs_cache_init(&fs->vfs, 100);
     if (ret != 0) {
         slab_free(fs, sizeof(*fs));

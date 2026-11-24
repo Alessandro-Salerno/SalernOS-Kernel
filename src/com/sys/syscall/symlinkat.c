@@ -38,6 +38,7 @@ SYSCALL(syscall_symlinkat) {
     if (err != 0) return SYSCALL_ERR(err);
 
     VnodeAttr attr = VFS_ATTR(VNODE_TYPE_LINK);
+    attr.mode = 0777;
     attr.target = path1;
     attr.targetlen = path1len;
     Vnode *link = NULL;

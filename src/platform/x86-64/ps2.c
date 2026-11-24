@@ -174,7 +174,10 @@ static const char G_PS2_KEYBOARD_EXT_SCANCODES[128] = {
     [0x50] = KEYBOARD_KEY_DOWN,        // down
     [0x51] = KEYBOARD_KEY_PAGEDOWN,    // page down
     [0x52] = KEYBOARD_KEY_INSERT,      // insert
-    [0x53] = KEYBOARD_KEY_DELETE       // delete
+    [0x53] = KEYBOARD_KEY_DELETE,      // delete
+    [0x5B] = KEYBOARD_KEY_LEFTMETA,
+    [0x5C] = KEYBOARD_KEY_RIGHTMETA,
+    [0x5D] = KEYBOARD_KEY_COMPOSE
 };
 
 static struct PS2Keyboard g_ps2_keyboard = {0};

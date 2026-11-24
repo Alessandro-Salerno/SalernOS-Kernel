@@ -26,6 +26,11 @@ KbdAction keyboard_layout_en_us(KbdPacket *pkt) {
 
     if (pkt->keycode >= 0x80) return KBD_ACTION_DISCARD;
 
+    if (pkt->keycode >= (int)sizeof(G_LAYOUT_EN_US_MAP)) {
+        pkt->c = 0;
+        return KBD_ACTION_SEND;
+    }
+
     bool shift = keyboard->state.mod & KEYBOARD_MOD_SHIFT;
     if (shift ^ keyboard->state.caps_lock) {
         pkt->c = G_LAYOUT_EN_US_MAP_SHIFTED[pkt->keycode];
