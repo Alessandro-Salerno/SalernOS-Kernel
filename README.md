@@ -75,6 +75,7 @@ The kernel itself roughly includes the following:
     - [x] Terminal
     - [x] Keyboard
     - [x] Mouse
+    - [x] Block device
   - Pseudo-devices
     - [x] Linux-compatible framebuffer device
     - [x] `/dev/null`

@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <errno.h>
 #include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/pmm.h>
@@ -56,8 +57,9 @@ static bool page_is_shared(BufferPage *page) {
 
 static void buffcache_lock(void) { spinlock_acq(&g_buffer_lock); }
 static void buffcache_unlock(void) { spinlock_rel(&g_buffer_lock); }
+// Spinlocks are no-ops before the first thread exists
 static bool buffcache_is_locked(void) {
-    return spinlock_is_held(&g_buffer_lock);
+    return cpu_get_thread() == NULL || spinlock_is_held(&g_buffer_lock);
 }
 static bool buffcache_is_initialized(void) { return g_buffer_cache != NULL; }
 

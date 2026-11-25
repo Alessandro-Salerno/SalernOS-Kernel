@@ -1,9 +1,11 @@
 #include <arch/barrier.h>
+#include <arch/cpu.h>
 #include <arch/info.h>
 #include <errno.h>
 #include <kernel/com/crt/usercopy.h>
 #include <kernel/com/ds/radixtree.h>
 #include <kernel/com/fs/devfs.h>
+#include <kernel/com/io/blockdev.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
 #include <kernel/com/sync/mutex.h>
@@ -212,6 +214,8 @@ static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
     nvme_submit(&drive->queues[0], &rw_in);
 
     while (!nvme_queue_done_nobarrier(&drive->queues[0])) {
+        // Before the first thread exists nobody can sleep, so we poll
+        if (cpu_get_thread() == NULL) continue;
         // We make this non-interruptible otherwise it becomes a busy wait after
         // the first signal is delivered. A better solution would be to make it
         // interruptible and fallible, but for now we assume that progress is
@@ -540,8 +544,8 @@ static int nvme_init_device(PCIEnum *pci_enum) {
     int namelen = snprintf(
         devname, 32, "nvme%zu",
         __atomic_fetch_add(&g_next_drive_id, 1, __ATOMIC_SEQ_CST));
-    Vnode *nvme_vn;
-    devfs_register(NULL, devname, namelen, &g_nvme_dev_ops, dev, &nvme_vn);
+    blockdev_register(devname, namelen, &g_nvme_dev_ops, dev, dev->size,
+                      1 << dev->blocks_shift);
 
     return 0;
 }
