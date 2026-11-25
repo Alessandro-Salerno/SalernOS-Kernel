@@ -32,6 +32,8 @@
 #define EXT2_VALID_FS 1
 #define EXT2_ERROR_FS 2
 
+#define EXT2_INDEX_FL 0x1000
+
 #define EXT2_FEATURE_INCOMPAT_FILETYPE      0x0002
 #define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER 0x0001
 #define EXT2_FEATURE_RO_COMPAT_LARGE_FILE   0x0002
@@ -969,10 +971,7 @@ static int inode_alloc_initialized(struct Ext2FS *fs, u32 preferred_group,
     BufferPage *ino_page;
     struct Ext2Inode *ino_desc;
     ret = inode_get(fs, ino, &ino_page, &ino_desc);
-    if (ret != 0) {
-        buffcache_rel(ino_page);
-        return ret;
-    }
+    if (ret != 0) return ret;
 
     memset(ino_desc, 0, fs->inode_size);
     ino_desc->mode = mode | (attr->mode & 07777);
@@ -1035,6 +1034,114 @@ static int dirent_find(struct Ext2Node *dir, const char *name, usize namelen,
     }
 
     return ENOENT;
+}
+
+static int dirent_alloc(struct Ext2Node *dir, usize namelen,
+                        BufferPage **out_page, struct Ext2DirEnt **out_entry) {
+    if (namelen > 255) return ENAMETOOLONG;
+
+    struct Ext2FS *fs = fs_of(dir->vnode.vfs);
+    u32 num_blocks = dir->inode->size / fs->block_size;
+    usize need = dirent_rec_size(namelen);
+
+    for (u32 lblock = 0; lblock < num_blocks; lblock++) {
+        BufferPage *page;
+        u8 *data;
+        int ret = data_get(dir, lblock, &page, &data);
+        if (ret != 0) return ret;
+
+        for (usize pos = 0; pos < fs->block_size;) {
+            struct Ext2DirEnt *entry = (void *)(data + pos);
+            if (!dirent_validate(entry, pos, fs->block_size)) {
+                buffcache_rel(page);
+                return EIO;
+            }
+
+            usize taken = entry->ino == 0 ? 0 : dirent_rec_size(entry->namelen);
+            if (entry->reclen - taken >= need) {
+                if (taken != 0) {
+                    struct Ext2DirEnt *new_entry = (void *)((u8 *)entry +
+                                                            taken);
+                    new_entry->ino = 0;
+                    new_entry->reclen = entry->reclen - taken;
+                    entry->reclen = taken;
+                    entry = new_entry;
+                    buffcache_mkdirty(page);
+                }
+                *out_page = page;
+                *out_entry = entry;
+                return 0;
+            }
+            pos += entry->reclen;
+        }
+
+        buffcache_rel(page);
+    }
+
+    // We get here if there's no entry left in the directory, so we need to
+    // allocate a new block
+    BufferPage *page;
+    u8 *data;
+    int ret = data_get_w(dir, num_blocks, &page, &data);
+    if (ret != 0) return ret;
+
+    struct Ext2DirEnt *entry = (void *)data;
+    entry->reclen = fs->block_size;
+    entry->ino = 0;
+    dir->inode->size += fs->block_size;
+    buffcache_mkdirty(dir->inode_page);
+
+    *out_page = page;
+    *out_entry = entry;
+    return 0;
+}
+
+static int dirent_free(struct Ext2Node *dir, const char *name, usize namelen,
+                       ino_t ino) {
+    BufferPage *ent_page;
+    struct Ext2DirEnt *ent_prev;
+    struct Ext2DirEnt *ent_desc;
+    int ret = dirent_find(dir, name, namelen, &ent_page, &ent_desc, &ent_prev);
+    if (ret != 0) return ret;
+
+    if (ent_desc->ino != ino) {
+        buffcache_rel(ent_page);
+        return EIO;
+    }
+
+    if (ent_prev != NULL) ent_prev->reclen += ent_desc->reclen;
+    else ent_desc->ino = 0;
+
+    // TODO: reclaim block if it was the last and it isempty
+
+    dir->inode->flags &= ~EXT2_INDEX_FL;
+    buffcache_mkdirty(dir->inode_page);
+
+    buffcache_mkdirty(ent_page);
+    buffcache_rel(ent_page);
+    return 0;
+}
+
+static int dirent_alloc_initialized(struct Ext2Node *dir, const char *name,
+                                    usize namelen, ino_t ino, VnodeType type) {
+    assert(ino != 0);
+    BufferPage *page;
+    struct Ext2DirEnt *entry;
+    int ret = dirent_alloc(dir, namelen, &page, &entry);
+    if (ret != 0) return ret;
+
+    entry->ino = ino;
+    entry->namelen = namelen;
+    entry->type = ft_of_type(fs_of(dir->vnode.vfs), type);
+    memcpy(entry->name, name, namelen);
+    buffcache_mkdirty(page);
+    buffcache_rel(page);
+
+    // See dirent_free
+    dir->inode->flags &= ~EXT2_INDEX_FL;
+    // TODO: update mtime and ctime
+    buffcache_mkdirty(dir->inode_page);
+    return 0;
 }
 
 static int readdir_emit(void *buf, usize buflen, VFSDirEnt *hdr,
