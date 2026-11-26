@@ -2,6 +2,7 @@
 #include <arch/info.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/crt/usercopy.h>
 #include <kernel/com/fs/ext2.h>
 #include <kernel/com/fs/vfs.h>
@@ -38,6 +39,7 @@
 #define EXT2_ATIME (1 << 0)
 #define EXT2_MTIME (1 << 1)
 #define EXT2_CTIME (1 << 2)
+#define EXT2_DTIME (1 << 3)
 
 #define EXT2_LINK_MAX      32000
 #define EXT2_XATTR_MAGIC   0xEA020000
@@ -279,13 +281,9 @@ static inline void inode_touch(struct Ext2Inode *inode, int which) {
     (void)which;
 }
 
-// TODO: use the real time once there is a clock. Until then, dtime is the
-// superblock's last write time plus our uptime, since e2fsck reads a dtime
-// lower than the inode count as a link in the orphan list
-static inline void inode_set_deleted(struct Ext2FS *fs,
-                                     struct Ext2Inode *inode) {
+static inline void inode_set_deleted(struct Ext2Inode *inode) {
     inode->num_links = 0;
-    inode->dtime = fs->superblock->wtime + cpu_get_time() / NANOS_PER_SEC;
+    inode_touch(inode, EXT2_DTIME);
 }
 
 static inline bool has_incompat(struct Ext2Superblock *superblock,
@@ -1140,7 +1138,7 @@ static void inode_release(struct Ext2Node *node) {
 
     inode->size = 0;
     if (node->vnode.type == VNODE_TYPE_FILE) inode->size_high = 0;
-    inode_set_deleted(fs, inode);
+    inode_set_deleted(inode);
     buffcache_mkdirty(node->inode_page);
     inode_free(fs, node->vnode.ino, node->vnode.type == VNODE_TYPE_DIR);
 }
@@ -1468,7 +1466,7 @@ static int ext2_create(Vnode *dir, const char *name, usize namelen,
     Vnode *vnode;
     ret = vfs_vget(dir->vfs, ino, &vnode);
     if (ret != 0) {
-        inode_set_deleted(fs, inode);
+        inode_set_deleted(inode);
         buffcache_mkdirty(ino_page);
         buffcache_rel(ino_page);
         inode_free(fs, ino, is_dir);
@@ -1776,7 +1774,6 @@ static void file_set_size(struct Ext2Node *node, u64 size) {
 
 static int ext2_write(Vnode *vnode, void *buf, usize buflen, u64 off, u64 flags,
                       usize *out_bytes_written) {
-    (void)flags;
     struct Ext2Node *node = extnode_of(vnode);
     struct Ext2FS *fs = fs_of(vnode->vfs);
     assert(fs->block_size == PAGE_SIZE);
@@ -1786,11 +1783,15 @@ static int ext2_write(Vnode *vnode, void *buf, usize buflen, u64 off, u64 flags,
     if (ret != 0) return ret;
     if (buflen == 0) return 0;
 
+    rwlock_acq_write(&node->file_lock);
+    if (flags & O_APPEND) off = file_size(node->inode);
     u64 max_size = max_file_size(fs);
-    if (off >= max_size) return EFBIG;
+    if (off >= max_size) {
+        rwlock_rel_write(&node->file_lock);
+        return EFBIG;
+    }
     buflen = min(buflen, max_size - off);
 
-    rwlock_acq_write(&node->file_lock);
     usize done = 0;
     while (done < buflen) {
         if (signal_check() != SIGNAL_NONE) {
@@ -1910,6 +1911,24 @@ static int mmap_page_copy(struct Ext2Node *node, u64 off, void **out_phys) {
     return 0;
 }
 
+static int ext2_set_times(Vnode *vnode, const struct timespec times[2]) {
+    struct Ext2Node *node = extnode_of(vnode);
+    u32 *fields[2] = {&node->inode->atime, &node->inode->mtime};
+    int now = EXT2_CTIME;
+
+    rwlock_acq_write(&node->file_lock);
+    for (usize i = 0; i < 2; i++) {
+        if (times[i].tv_nsec == UTIME_NOW)
+            now |= i == 0 ? EXT2_ATIME : EXT2_MTIME;
+        else if (times[i].tv_nsec != UTIME_OMIT) *fields[i] = times[i].tv_sec;
+    }
+    inode_touch(node->inode, now);
+    rwlock_rel_write(&node->file_lock);
+
+    buffcache_mkdirty(node->inode_page);
+    return 0;
+}
+
 // Buffer cache pages can be evicted at any time, so they cannot be user-mapped
 // with our current VMM. Private mappings get a copy of each page as it is when
 // mmap is called, but shared ones would need writes to reach the file. And yeah
@@ -1991,6 +2010,7 @@ static VnodeOps g_ext2_node_ops = {.inactive = ext2_inactive,
                                    .read = ext2_read,
                                    .write = ext2_write,
                                    .truncate = ext2_truncate,
+                                   .set_times = ext2_set_times,
                                    .mmap = ext2_mmap,
                                    .stat = ext2_stat};
 

@@ -174,6 +174,8 @@ typedef struct VnodeOps {
 
     int (*read)(void *buf, usize buflen, Vnode *node, u64 off, u64 flags,
                 usize *out_bytes_read);
+    // flags & O_APPEND ==> off is ignored on regular files, which append
+    // atomically with respect to other writes
     int (*write)(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
                  usize *out_bytes_written);
     int (*readv)(IOVIter *ioviter, Vnode *node, u64 off, u64 flags,
@@ -182,6 +184,9 @@ typedef struct VnodeOps {
                   usize *out_bytes_written);
     int (*get_page)(Vnode *node, usize index, int flags, BufferPage **out_page);
     int (*truncate)(Vnode *node, usize size);
+    // LOCKING: node->lock held in write mode
+    // pre: each tv_nsec is valid, UTIME_NOW or UTIME_OMIT, not both UTIME_OMIT
+    int (*set_times)(Vnode *node, const struct timespec times[2]);
     int (*mmap)(Vnode *node, VMMContext *vmm_context, void *hint, usize size,
                 int vmm_flags, MMUFlags mmu_flags, u64 off, void **out_addr);
 
@@ -389,6 +394,8 @@ int vfs_writev(Vnode *node, IOVIter *ioviter, u64 off, u64 flags,
                usize *out_bytes_written);
 int vfs_get_page(Vnode *node, usize index, int flags, BufferPage **out_page);
 int vfs_truncate(Vnode *node, usize size);
+// times is {atime, mtime} as in utimensat, NULL sets both to the current time
+int vfs_set_times(Vnode *node, const struct timespec *times);
 int vfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint, usize size,
              int vmm_flags, MMUFlags mmu_flags, u64 off, void **out_addr);
 // If strict, ENOSYS without a stat operation. Otherwise, Vfs fields only

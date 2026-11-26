@@ -746,7 +746,10 @@ static int create_nolock(Vnode **existing, Vnode *dir, const char *name,
 
     if (ret != ENOENT) return ret;
 
+    // Only once the name is known not to exist, so O_CREAT can still open
+    // existing files on file systems that cannot create them
     if (vfs_readonly(dir)) return EROFS;
+    if (dir->ops->create == NULL) return ENOSYS;
 
     ret = dir->ops->create(dir, name, namelen, attr, out_vnode);
     assert(ret != 0 || dir->vfs->cache == NULL || (*out_vnode)->cached);
@@ -763,8 +766,6 @@ static int check_create(Vnode *dir, const char *name, usize namelen,
         if (attr->targetlen == 0) return ENOENT;
         if (attr->targetlen >= CONFIG_PATH_MAX) return ENAMETOOLONG;
     }
-
-    if (dir->ops->create == NULL) return ENOSYS;
 
     return 0;
 }
@@ -1362,6 +1363,27 @@ int vfs_truncate(Vnode *node, usize size) {
     if (node->ops->truncate == NULL) return EINVAL;
 
     return node->ops->truncate(node, size);
+}
+
+static bool valid_time(const struct timespec *ts) {
+    if (ts->tv_nsec == UTIME_NOW || ts->tv_nsec == UTIME_OMIT) return true;
+    return ts->tv_nsec >= 0 && ts->tv_nsec < (long)NANOS_PER_SEC;
+}
+
+int vfs_set_times(Vnode *node, const struct timespec *times) {
+    struct timespec now[2] = {{.tv_nsec = UTIME_NOW}, {.tv_nsec = UTIME_NOW}};
+    if (times == NULL) times = now;
+
+    if (!valid_time(&times[0]) || !valid_time(&times[1])) return EINVAL;
+    if (times[0].tv_nsec == UTIME_OMIT && times[1].tv_nsec == UTIME_OMIT)
+        return 0;
+    if (vfs_readonly(node)) return EROFS;
+    if (node->ops->set_times == NULL) return ENOSYS;
+
+    rwlock_acq_write(&node->lock);
+    int ret = node->ops->set_times(node, times);
+    rwlock_rel_write(&node->lock);
+    return ret;
 }
 
 int vfs_mmap(Vnode *node, VMMContext *vmm_context, void *hint, usize size,

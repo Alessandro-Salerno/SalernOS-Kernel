@@ -410,4 +410,8 @@ void syscall_init(void) {
 
     syscall_register(0x3B, "umount2", syscall_umount2, 2, SYSCALL_TYPE_STR,
                      "target", SYSCALL_TYPE_FLAGS, "flags");
+
+    syscall_register(0x3C, "utimensat", syscall_utimensat, 4, SYSCALL_TYPE_INT,
+                     "dir_fd", SYSCALL_TYPE_STR, "path", SYSCALL_TYPE_PTR,
+                     "times", SYSCALL_TYPE_FLAGS, "flags");
 }

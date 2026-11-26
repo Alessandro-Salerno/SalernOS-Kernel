@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/ds/ioviter.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/vfs.h>
@@ -35,7 +36,8 @@ SYSCALL(syscall_writev) {
     }
 
     usize bytes_written = 0;
-    int vfs_op = vfs_writev(file->vnode, &ioviter, file->off, file->flags,
+    int flags = file->flags;
+    int vfs_op = vfs_writev(file->vnode, &ioviter, file->off, flags,
                             &bytes_written);
 
     if (vfs_op != 0) {
@@ -43,8 +45,15 @@ SYSCALL(syscall_writev) {
         goto cleanup;
     }
 
+    // With O_APPEND the file system picks the offset, so the new one is the
+    // end of the file, past this write if others appended in the meantime
+    // (whatever)
+    struct stat st;
+    bool append = (flags & O_APPEND) && vfs_stat(file->vnode, false, &st) == 0;
+
     spinlock_acq(&file->off_lock);
-    file->off += bytes_written;
+    if (append) file->off = st.st_size;
+    else file->off += bytes_written;
     spinlock_rel(&file->off_lock);
 
     ret = SYSCALL_OK(bytes_written);

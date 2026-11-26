@@ -1,6 +1,7 @@
 #include <arch/info.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <kernel/com/crt/string.h>
 #include <kernel/com/crt/usercopy.h>
 #include <kernel/com/ds/hashmap.h>
@@ -551,18 +552,22 @@ static int tmpfs_read(void *buf, usize buflen, Vnode *node, u64 off, u64 flags,
 
 static int tmpfs_write(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
                        usize *out_bytes_written) {
-    (void)flags;
     *out_bytes_written = 0;
     int ret = check_file_io(node);
     if (ret != 0) return ret;
-
     if (buflen == 0) return 0;
-    if (off >= TMPFS_MAX_SIZE) return EFBIG;
+
+    // The size is only stable under the lock, see VnodeOps.write
+    struct TmpFSFile *file = &tnode_of(node)->file;
+    rwlock_acq_write(&file->lock);
+    if (flags & O_APPEND) off = file->size;
+    if (off >= TMPFS_MAX_SIZE) {
+        rwlock_rel_write(&file->lock);
+        return EFBIG;
+    }
 
     buflen = min(buflen, TMPFS_MAX_SIZE - off);
-    struct TmpFSFile *file = &tnode_of(node)->file;
     usize done = 0;
-    rwlock_acq_write(&file->lock);
 
     if (off > file->size) file_zero(file, file->size, off);
 
@@ -586,6 +591,13 @@ static int tmpfs_write(Vnode *node, void *buf, usize buflen, u64 off, u64 flags,
     rwlock_rel_write(&file->lock);
     *out_bytes_written = done;
     return done != 0 ? 0 : ret;
+}
+
+// TODO: implement timestamps in tmpfs
+static int tmpfs_set_times(Vnode *node, const struct timespec times[2]) {
+    (void)node;
+    (void)times;
+    return 0;
 }
 
 static int tmpfs_truncate(Vnode *node, usize size) {
@@ -708,6 +720,7 @@ static VnodeOps g_tmpfs_node_ops = {.inactive = tmpfs_inactive,
                                     .read = tmpfs_read,
                                     .write = tmpfs_write,
                                     .truncate = tmpfs_truncate,
+                                    .set_times = tmpfs_set_times,
                                     .mmap = tmpfs_mmap,
                                     .stat = tmpfs_stat};
 
