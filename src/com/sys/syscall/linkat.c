@@ -37,11 +37,12 @@ SYSCALL(syscall_linkat) {
     Vnode *new_dir = NULL;
     Vnode *node = NULL;
     Vnode *parent = NULL;
+    Vnode *root = proc_get_root(curr_proc);
     int err = proc_get_directory(curr_proc, old_dir_fd, &old_dir);
     if (err == 0) err = proc_get_directory(curr_proc, new_dir_fd, &new_dir);
     if (err != 0) goto end;
 
-    err = vfs_lookup(oldpath, oldpathlen, curr_proc->root, old_dir,
+    err = vfs_lookup(oldpath, oldpathlen, root, old_dir,
                      (flags & AT_SYMLINK_FOLLOW) ? VFS_LOOKUP_FOLLOW : 0,
                      &node);
     if (err != 0) goto end;
@@ -49,8 +50,8 @@ SYSCALL(syscall_linkat) {
     const char *name;
     usize namelen;
     bool must_dir;
-    err = vfs_lookup_parent(newpath, newpathlen, curr_proc->root, new_dir,
-                            &parent, &name, &namelen, &must_dir);
+    err = vfs_lookup_parent(newpath, newpathlen, root, new_dir, &parent, &name,
+                            &namelen, &must_dir);
     if (err != 0) goto end;
 
     // A path that ends with '/' only names directories, which cannot be
@@ -66,6 +67,7 @@ SYSCALL(syscall_linkat) {
     err = vfs_link(parent, name, namelen, node);
 
 end:
+    vfs_vnode_rel(root);
     vfs_vnode_rel(parent);
     vfs_vnode_rel(node);
     vfs_vnode_rel(new_dir);

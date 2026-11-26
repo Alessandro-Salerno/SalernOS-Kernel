@@ -35,8 +35,9 @@ SYSCALL(syscall_faccessat) {
     // an faccessat2() that lets you disable this, so maybe some programs expect
     // it?
     Vnode *file_vn = NULL;
-    err = vfs_lookup(path, pathlen, curr_proc->root, dir, VFS_LOOKUP_FOLLOW,
-                     &file_vn);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_lookup(path, pathlen, root, dir, VFS_LOOKUP_FOLLOW, &file_vn);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(file_vn);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);

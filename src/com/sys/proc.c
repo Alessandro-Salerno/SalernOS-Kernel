@@ -294,6 +294,23 @@ void proc_set_cwd(Proc *proc, Vnode *cwd) {
     vfs_vnode_rel(old);
 }
 
+Vnode *proc_get_root(Proc *proc) {
+    spinlock_acq(&proc->fd_lock);
+    Vnode *root = proc->root;
+    vfs_vnode_hold(root);
+    spinlock_rel(&proc->fd_lock);
+    return root;
+}
+
+void proc_set_root(Proc *proc, Vnode *root) {
+    vfs_vnode_hold(root);
+    spinlock_acq(&proc->fd_lock);
+    Vnode *old = proc->root;
+    proc->root = root;
+    spinlock_rel(&proc->fd_lock);
+    vfs_vnode_rel(old);
+}
+
 int proc_get_directory(Proc *proc, int dir_fd, Vnode **out_dir) {
     if (dir_fd == AT_FDCWD) {
         *out_dir = proc_get_cwd(proc);

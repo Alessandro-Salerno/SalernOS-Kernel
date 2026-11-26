@@ -26,8 +26,9 @@ SYSCALL(syscall_chdir) {
 
     Vnode *cwd = proc_get_cwd(curr_proc);
     Vnode *new_cwd = NULL;
-    int err = vfs_lookup(path, pathlen, curr_proc->root, cwd, VFS_LOOKUP_FOLLOW,
-                         &new_cwd);
+    Vnode *root = proc_get_root(curr_proc);
+    int err = vfs_lookup(path, pathlen, root, cwd, VFS_LOOKUP_FOLLOW, &new_cwd);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(cwd);
     if (err != 0) return SYSCALL_ERR(err);
 

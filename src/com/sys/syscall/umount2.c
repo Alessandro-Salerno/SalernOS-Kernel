@@ -24,8 +24,9 @@ SYSCALL(syscall_umount2) {
     Proc *curr_proc = cpu_get_thread()->proc;
     Vnode *cwd = proc_get_cwd(curr_proc);
     Vnode *target = NULL;
-    err = vfs_lookup(path, pathlen, curr_proc->root, cwd, VFS_LOOKUP_FOLLOW,
-                     &target);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_lookup(path, pathlen, root, cwd, VFS_LOOKUP_FOLLOW, &target);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(cwd);
     if (err == 0) {
         // The reference to target is consumed

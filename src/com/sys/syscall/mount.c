@@ -40,22 +40,21 @@ SYSCALL(syscall_mount) {
     usize pathlen;
     Proc *curr_proc = cpu_get_thread()->proc;
     Vnode *cwd = proc_get_cwd(curr_proc);
+    Vnode *root = proc_get_root(curr_proc);
     Vnode *source = NULL;
     Vnode *target = NULL;
     if (type->needs_backing) {
         err = syscall_copy_str(path, sizeof(path), usource, &pathlen);
         if (err != 0) goto end;
 
-        err = vfs_lookup(path, pathlen, curr_proc->root, cwd, VFS_LOOKUP_FOLLOW,
-                         &source);
+        err = vfs_lookup(path, pathlen, root, cwd, VFS_LOOKUP_FOLLOW, &source);
         if (err != 0) goto end;
     }
 
     err = syscall_copy_str(path, sizeof(path), utarget, &pathlen);
     if (err != 0) goto end;
 
-    err = vfs_lookup(path, pathlen, curr_proc->root, cwd, VFS_LOOKUP_FOLLOW,
-                     &target);
+    err = vfs_lookup(path, pathlen, root, cwd, VFS_LOOKUP_FOLLOW, &target);
     if (err != 0) goto end;
 
     Vfs *vfs = NULL;
@@ -66,6 +65,7 @@ end:
     vfs_vnode_rel(target);
     vfs_vnode_rel(source);
     vfs_vnode_rel(cwd);
+    vfs_vnode_rel(root);
     if (err != 0) return SYSCALL_ERR(err);
     return SYSCALL_OK(0);
 }

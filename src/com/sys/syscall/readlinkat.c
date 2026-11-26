@@ -35,7 +35,9 @@ SYSCALL(syscall_readlinkat) {
     if (err != 0) return SYSCALL_ERR(err);
 
     Vnode *target = NULL;
-    err = vfs_lookup(path, pathlen, curr_proc->root, dir, 0, &target);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_lookup(path, pathlen, root, dir, 0, &target);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);
 

@@ -65,10 +65,11 @@ SYSCALL(syscall_fork) {
     int ret = ENOMEM;
     if (sigaction_ok) {
         Vnode *cwd = proc_get_cwd(curr_proc);
+        Vnode *root = proc_get_root(curr_proc);
         // NOTE: process group is inherited from parent in proc_new
-        ret = proc_new(new_vmm_ctx, curr_proc->pid, curr_proc->root, cwd,
-                       &new_proc);
+        ret = proc_new(new_vmm_ctx, curr_proc->pid, root, cwd, &new_proc);
         vfs_vnode_rel(cwd);
+        vfs_vnode_rel(root);
     }
 
     if (ret != 0) {

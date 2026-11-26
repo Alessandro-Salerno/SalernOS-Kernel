@@ -416,4 +416,9 @@ void syscall_init(void) {
                      "times", SYSCALL_TYPE_FLAGS, "flags");
 
     syscall_register(0x3D, "sync", syscall_sync, 0);
+
+    syscall_register(0x3E, "fchdir", syscall_fchdir, 1, SYSCALL_TYPE_INT, "fd");
+
+    syscall_register(0x3F, "chroot", syscall_chroot, 1, SYSCALL_TYPE_STR,
+                     "path");
 }

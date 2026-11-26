@@ -75,7 +75,7 @@ typedef struct Proc {
     struct SignalAction *sigaction[NSIG];
     struct Waitlist stop_waitlist;
 
-    // Both own a reference, cwd is protected by fd_lock
+    // Both own a reference and are protected by fd_lock
     cache_aligned Vnode *root;
     Vnode *cwd;
     Spinlock fd_lock;
@@ -112,6 +112,8 @@ int proc_close_file_nolock(Proc *proc, int fd, File **out_file);
 int proc_close_file(Proc *proc, int fd);
 Vnode *proc_get_cwd(Proc *proc);
 void proc_set_cwd(Proc *proc, Vnode *cwd);
+Vnode *proc_get_root(Proc *proc);
+void proc_set_root(Proc *proc, Vnode *root);
 int proc_get_directory(Proc *proc, int dir_fd, Vnode **out_dir);
 Proc *proc_get_by_pid(pid_t pid);
 Proc *proc_get_arbitrary_child_nolock(Proc *proc);

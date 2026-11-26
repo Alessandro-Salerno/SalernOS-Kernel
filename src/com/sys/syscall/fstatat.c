@@ -41,9 +41,11 @@ SYSCALL(syscall_fstatat) {
         target = dir;
         vfs_vnode_hold(target);
     } else {
-        err = vfs_lookup(path, pathlen, curr_proc->root, dir,
+        Vnode *root = proc_get_root(curr_proc);
+        err = vfs_lookup(path, pathlen, root, dir,
                          (flags & AT_SYMLINK_NOFOLLOW) ? 0 : VFS_LOOKUP_FOLLOW,
                          &target);
+        vfs_vnode_rel(root);
     }
 
     struct stat kstat;

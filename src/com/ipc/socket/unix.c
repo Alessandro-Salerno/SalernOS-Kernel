@@ -110,6 +110,7 @@ static int unix_socket_bind(Socket *socket, SocketAddr *addr) {
     struct UnixSocket *unix_socket = (void *)socket;
     Proc *curr_proc = cpu_get_thread()->proc;
     Vnode *cwd = proc_get_cwd(curr_proc);
+    Vnode *root = proc_get_root(curr_proc);
     Vnode *socket_vn = NULL;
     int ret = 0;
     mutex_acq(&unix_socket->socket.lock);
@@ -119,9 +120,9 @@ static int unix_socket_bind(Socket *socket, SocketAddr *addr) {
         goto end;
     }
 
-    ret = vfs_create_path(addr->local.path, addr->local.pathlen,
-                          curr_proc->root, cwd, &VFS_ATTR(VNODE_TYPE_SOCKET),
-                          VFS_CREATE_EXCL, &socket_vn);
+    ret = vfs_create_path(addr->local.path, addr->local.pathlen, root, cwd,
+                          &VFS_ATTR(VNODE_TYPE_SOCKET), VFS_CREATE_EXCL,
+                          &socket_vn);
     if (ret == EEXIST) ret = EADDRINUSE;
     if (ret != 0) goto end;
 
@@ -140,6 +141,7 @@ end:
     // The binding owns its own reference
     vfs_vnode_rel(socket_vn);
     vfs_vnode_rel(cwd);
+    vfs_vnode_rel(root);
     return ret;
 }
 
@@ -185,6 +187,7 @@ static int unix_socket_connect(Socket *socket, SocketAddr *addr) {
     struct UnixSocket *client = (void *)socket;
     Proc *curr_proc = cpu_get_thread()->proc;
     Vnode *cwd = proc_get_cwd(curr_proc);
+    Vnode *root = proc_get_root(curr_proc);
     Vnode *server_vn = NULL;
     int ret = 0;
     mutex_acq(&client->socket.lock);
@@ -199,8 +202,8 @@ static int unix_socket_connect(Socket *socket, SocketAddr *addr) {
         goto end;
     }
 
-    ret = vfs_lookup(addr->local.path, addr->local.pathlen, curr_proc->root,
-                     cwd, VFS_LOOKUP_FOLLOW, &server_vn);
+    ret = vfs_lookup(addr->local.path, addr->local.pathlen, root, cwd,
+                     VFS_LOOKUP_FOLLOW, &server_vn);
     if (ret != 0) goto end;
 
     if (server_vn->type != VNODE_TYPE_SOCKET) {
@@ -257,6 +260,7 @@ end:
     mutex_rel(&client->socket.lock);
     vfs_vnode_rel(server_vn);
     vfs_vnode_rel(cwd);
+    vfs_vnode_rel(root);
     return ret;
 }
 

@@ -37,6 +37,7 @@ SYSCALL(syscall_openat) {
     Vnode *file_vn = NULL;
     Vnode *open_vn = NULL;
     int fd = -1;
+    Vnode *root = proc_get_root(curr_proc);
     int err = proc_get_directory(curr_proc, dir_fd, &dir);
     if (err != 0) goto end;
 
@@ -45,11 +46,10 @@ SYSCALL(syscall_openat) {
         if (flags & O_EXCL) vfs_flags |= VFS_CREATE_EXCL;
         VnodeAttr attr = VFS_ATTR(VNODE_TYPE_FILE);
         attr.mode = mode & 07777;
-        err = vfs_create_path(path, pathlen, curr_proc->root, dir, &attr,
-                              vfs_flags, &file_vn);
+        err = vfs_create_path(path, pathlen, root, dir, &attr, vfs_flags,
+                              &file_vn);
     } else {
-        err = vfs_lookup(path, pathlen, curr_proc->root, dir, vfs_flags,
-                         &file_vn);
+        err = vfs_lookup(path, pathlen, root, dir, vfs_flags, &file_vn);
     }
     if (err != 0) goto end;
 
@@ -103,6 +103,7 @@ SYSCALL(syscall_openat) {
     log_debug("returning fd=%d for %s", fd, path);
 
 end:
+    vfs_vnode_rel(root);
     vfs_vnode_rel(file_vn);
     vfs_vnode_rel(dir);
     if (err != 0) {

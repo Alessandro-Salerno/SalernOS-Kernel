@@ -458,9 +458,10 @@ int elf64_prepare_proc(const char *path, usize pathlen,
     if (new_vmm_ctx == NULL) return ENOMEM;
     *out_vmm_context = new_vmm_ctx;
     Vnode *cwd = proc_get_cwd(proc);
+    Vnode *root = proc_get_root(proc);
 
     ELFData prog_data = {0};
-    int status = elf64_load(path, pathlen, proc->root, cwd, 0, new_vmm_ctx,
+    int status = elf64_load(path, pathlen, root, cwd, 0, new_vmm_ctx,
                             &prog_data);
 
     if (status != 0) goto fail;
@@ -470,8 +471,8 @@ int elf64_prepare_proc(const char *path, usize pathlen,
     if (prog_data.interpreter_len != 0) {
         ELFData interp_data = {0};
         status = elf64_load(prog_data.interpreter_path,
-                            prog_data.interpreter_len, proc->root, cwd,
-                            0x40000000, new_vmm_ctx, &interp_data);
+                            prog_data.interpreter_len, root, cwd, 0x40000000,
+                            new_vmm_ctx, &interp_data);
 
         if (status != 0) goto fail;
 
@@ -498,10 +499,12 @@ int elf64_prepare_proc(const char *path, usize pathlen,
     memcpy(proc->executable_path, path, pathlen);
     proc->executable_path[pathlen] = '\0';
     vfs_vnode_rel(cwd);
+    vfs_vnode_rel(root);
     return 0;
 
 fail:
     vfs_vnode_rel(cwd);
+    vfs_vnode_rel(root);
     vmm_destroy_context(new_vmm_ctx);
     return status;
 }

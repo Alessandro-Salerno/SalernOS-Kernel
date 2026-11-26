@@ -42,9 +42,11 @@ SYSCALL(syscall_utimensat) {
         target = dir;
         vfs_vnode_hold(target);
     } else {
-        err = vfs_lookup(path, pathlen, curr_proc->root, dir,
+        Vnode *root = proc_get_root(curr_proc);
+        err = vfs_lookup(path, pathlen, root, dir,
                          (flags & AT_SYMLINK_NOFOLLOW) ? 0 : VFS_LOOKUP_FOLLOW,
                          &target);
+        vfs_vnode_rel(root);
     }
 
     if (err == 0) err = vfs_set_times(target, utimes != NULL ? times : NULL);

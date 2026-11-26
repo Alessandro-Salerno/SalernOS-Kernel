@@ -35,8 +35,10 @@ SYSCALL(syscall_unlinkat) {
     const char *name;
     usize namelen;
     bool must_dir;
-    err = vfs_lookup_parent(path, pathlen, curr_proc->root, dir, &parent, &name,
-                            &namelen, &must_dir);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_lookup_parent(path, pathlen, root, dir, &parent, &name, &namelen,
+                            &must_dir);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);
 

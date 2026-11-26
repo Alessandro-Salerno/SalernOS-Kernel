@@ -35,8 +35,10 @@ SYSCALL(syscall_mkdirat) {
     VnodeAttr attr = VFS_ATTR(VNODE_TYPE_DIR);
     attr.mode = mode & 07777;
     Vnode *new_dir = NULL;
-    err = vfs_create_path(path, pathlen, curr_proc->root, dir, &attr,
-                          VFS_CREATE_EXCL, &new_dir);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_create_path(path, pathlen, root, dir, &attr, VFS_CREATE_EXCL,
+                          &new_dir);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(new_dir);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);

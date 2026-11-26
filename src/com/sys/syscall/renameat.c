@@ -34,6 +34,7 @@ SYSCALL(syscall_renameat) {
     Vnode *new_dir = NULL;
     Vnode *old_parent = NULL;
     Vnode *new_parent = NULL;
+    Vnode *root = proc_get_root(curr_proc);
     int err = proc_get_directory(curr_proc, old_dir_fd, &old_dir);
     if (err == 0) err = proc_get_directory(curr_proc, new_dir_fd, &new_dir);
     if (err != 0) goto end;
@@ -41,14 +42,12 @@ SYSCALL(syscall_renameat) {
     const char *old_name, *new_name;
     usize old_namelen, new_namelen;
     bool old_must_dir, new_must_dir;
-    err = vfs_lookup_parent(oldpath, oldpathlen, curr_proc->root, old_dir,
-                            &old_parent, &old_name, &old_namelen,
-                            &old_must_dir);
+    err = vfs_lookup_parent(oldpath, oldpathlen, root, old_dir, &old_parent,
+                            &old_name, &old_namelen, &old_must_dir);
     if (err != 0) goto end;
 
-    err = vfs_lookup_parent(newpath, newpathlen, curr_proc->root, new_dir,
-                            &new_parent, &new_name, &new_namelen,
-                            &new_must_dir);
+    err = vfs_lookup_parent(newpath, newpathlen, root, new_dir, &new_parent,
+                            &new_name, &new_namelen, &new_must_dir);
     if (err != 0) goto end;
 
     err = vfs_rename(old_parent, old_name, old_namelen, new_parent, new_name,
@@ -56,6 +55,7 @@ SYSCALL(syscall_renameat) {
                      (old_must_dir || new_must_dir) ? VFS_MUST_DIR : 0);
 
 end:
+    vfs_vnode_rel(root);
     vfs_vnode_rel(new_parent);
     vfs_vnode_rel(old_parent);
     vfs_vnode_rel(new_dir);

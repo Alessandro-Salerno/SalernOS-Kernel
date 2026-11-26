@@ -149,6 +149,8 @@ SYSCALL(syscall_mount);
 SYSCALL(syscall_umount2);
 SYSCALL(syscall_utimensat);
 SYSCALL(syscall_sync);
+SYSCALL(syscall_fchdir);
+SYSCALL(syscall_chroot);
 
 // SYSCALL UTILITIES
 

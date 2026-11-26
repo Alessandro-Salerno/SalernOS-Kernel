@@ -42,8 +42,10 @@ SYSCALL(syscall_symlinkat) {
     attr.target = path1;
     attr.targetlen = path1len;
     Vnode *link = NULL;
-    err = vfs_create_path(path2, path2len, curr_proc->root, dir, &attr,
-                          VFS_CREATE_EXCL, &link);
+    Vnode *root = proc_get_root(curr_proc);
+    err = vfs_create_path(path2, path2len, root, dir, &attr, VFS_CREATE_EXCL,
+                          &link);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(link);
     vfs_vnode_rel(dir);
     if (err != 0) return SYSCALL_ERR(err);

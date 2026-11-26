@@ -31,7 +31,9 @@ SYSCALL(syscall_getcwd) {
     char kbuf[CONFIG_PATH_MAX];
     usize ksize = min(size, sizeof(kbuf));
     usize start = 0;
-    int err = vfs_get_path(kbuf, ksize, cwd, curr_proc->root, &start);
+    Vnode *root = proc_get_root(curr_proc);
+    int err = vfs_get_path(kbuf, ksize, cwd, root, &start);
+    vfs_vnode_rel(root);
     vfs_vnode_rel(cwd);
     if (err == ERANGE && ksize != size) err = ENAMETOOLONG;
     if (err == 0) err = memcpy_to_user(buf, &kbuf[start], ksize - start);
