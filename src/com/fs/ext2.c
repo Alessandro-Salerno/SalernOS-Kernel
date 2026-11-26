@@ -7,6 +7,7 @@
 #include <kernel/com/fs/vfs.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/buffcache.h>
+#include <kernel/com/mm/pmm.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/sync/mutex.h>
 #include <kernel/com/sync/rwlock.h>
@@ -33,6 +34,14 @@
 #define EXT2_ERROR_FS 2
 
 #define EXT2_INDEX_FL 0x1000
+
+#define EXT2_ATIME (1 << 0)
+#define EXT2_MTIME (1 << 1)
+#define EXT2_CTIME (1 << 2)
+
+#define EXT2_LINK_MAX      32000
+#define EXT2_XATTR_MAGIC   0xEA020000
+#define EXT2_FAST_LINK_MAX (EXT2_NUM_BLOCKS * sizeof(u32))
 
 #define EXT2_FEATURE_INCOMPAT_FILETYPE      0x0002
 #define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER 0x0001
@@ -243,6 +252,42 @@ static inline u64 file_size(struct Ext2Inode *inode) {
     return inode->size | (u64)inode->size_high << 32;
 }
 
+// Fast symlinks keep the target in the block pointers, but an xattr block
+// still counts towards num_sectors
+static inline bool is_fast_link(u32 block_size, struct Ext2Inode *inode) {
+    u32 ea_sectors = inode->file_acl != 0 ? block_size / 512 : 0;
+    return inode->num_sectors == ea_sectors;
+}
+
+// Device numbers and fast symlink targets live in block[] instead of pointers
+static inline bool has_block_map(u32 block_size, struct Ext2Inode *inode) {
+    switch (inode->mode & EXT2_S_IFMT) {
+        case EXT2_S_IFREG:
+        case EXT2_S_IFDIR:
+            return true;
+        case EXT2_S_IFLNK:
+            return !is_fast_link(block_size, inode);
+        default:
+            return false;
+    }
+}
+
+// which is a mask of EXT2_*TIME. Callers mark the inode's page dirty
+static inline void inode_touch(struct Ext2Inode *inode, int which) {
+    // TODO: set the timestamps once there is a clock
+    (void)inode;
+    (void)which;
+}
+
+// TODO: use the real time once there is a clock. Until then, dtime is the
+// superblock's last write time plus our uptime, since e2fsck reads a dtime
+// lower than the inode count as a link in the orphan list
+static inline void inode_set_deleted(struct Ext2FS *fs,
+                                     struct Ext2Inode *inode) {
+    inode->num_links = 0;
+    inode->dtime = fs->superblock->wtime + cpu_get_time() / NANOS_PER_SEC;
+}
+
 static inline bool has_incompat(struct Ext2Superblock *superblock,
                                 u32 feature) {
     return superblock->rev == EXT2_DYNAMIC_REV &&
@@ -341,8 +386,10 @@ static int inode_get(struct Ext2FS *fs, ino_t ino, BufferPage **out_page,
     usize inode_page_index = inode_glob_off / PAGE_SIZE;
     if (inode_table_start == 0 ||
         inode_table_start + inode_index * fs->inode_size / fs->block_size >=
-            fs->superblock->num_blocks)
+            fs->superblock->num_blocks) {
+        buffcache_rel(bg_page);
         return EIO;
+    }
 
     BufferPage *inode_page;
     ret = vfs_get_page(fs->vfs.backing, inode_page_index, 0, &inode_page);
@@ -787,6 +834,71 @@ static int data_get_w(struct Ext2Node *dir, u32 lblock, BufferPage **out_page,
     return data_get_common(dir, lblock, true, out_page, out_data);
 }
 
+// Frees the blocks below *slot that map logical blocks from first on. *slot is
+// depth levels above the data and maps the blocks from start on, and it is
+// cleared once nothing below it is left
+static int trunc_tree(struct Ext2Node *node, u32 *slot, u32 depth, u64 start,
+                      u64 first) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    u32 pblock = *slot;
+    if (pblock == EXT2_NULL) return 0;
+    if (pblock >= fs->superblock->num_blocks) return EIO;
+
+    if (depth > 0) {
+        u32 ptr_shift = fs->superblock->log_block_size + 8;
+        u32 num_ptrs = 1u << ptr_shift;
+        u64 child_span = 1ULL << (ptr_shift * (depth - 1));
+        BufferPage *page;
+        int ret = vfs_get_page(fs->vfs.backing, pblock, 0, &page);
+        if (ret != 0) return ret;
+
+        u32 *ptrs = (void *)PHYS_TO_HHDM(buffcache_get_phys(page));
+        u32 i = first > start ? (first - start) / child_span : 0;
+        // Recursion is boudned so it's not that bad after all
+        for (; i < num_ptrs && ret == 0; i++) {
+            ret = trunc_tree(node, &ptrs[i], depth - 1, start + i * child_span,
+                             first);
+        }
+        buffcache_mkdirty(page);
+
+        // Blocks before first, or a failure, keep this block alive
+        bool empty = ret == 0;
+        for (u32 j = 0; j < num_ptrs && empty; j++)
+            empty = ptrs[j] == EXT2_NULL;
+        buffcache_rel(page);
+        if (!empty) return ret;
+    }
+
+    int ret = block_free(fs, pblock);
+    if (ret != 0) return ret;
+    *slot = EXT2_NULL;
+    node->inode->num_sectors -= fs->block_size / 512;
+    return 0;
+}
+
+// tree_trunc works on a tree, but inodes have multiple ones, so we call it on
+// all of them
+static int blocks_trunc(struct Ext2Node *node, u64 first) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    u32 ptr_shift = fs->superblock->log_block_size + 8;
+    u32 *block = node->inode->block;
+    int ret = 0;
+
+    for (u64 i = first; i < EXT2_NUM_DIRECT && ret == 0; i++)
+        ret = trunc_tree(node, &block[i], 0, i, first);
+
+    for (u32 depth = 1; depth <= 3 && ret == 0; depth++) {
+        u64 start = tree_base(ptr_shift, depth);
+        u64 span = 1ULL << (ptr_shift * depth);
+        if (first >= start + span) continue;
+        ret = trunc_tree(node, &block[EXT2_IND_BLOCK + depth - 1], depth, start,
+                         first);
+    }
+
+    buffcache_mkdirty(node->inode_page);
+    return ret;
+}
+
 static int inode_alloc(struct Ext2FS *fs, u32 preferred_group, bool is_dir,
                        ino_t *out_ino) {
     assert(preferred_group < fs->num_groups);
@@ -957,8 +1069,8 @@ exit:
 }
 
 static int inode_alloc_initialized(struct Ext2FS *fs, u32 preferred_group,
-                                   bool is_dir, VnodeAttr *attr, ino_t *out_ino,
-                                   BufferPage **out_page,
+                                   bool is_dir, const VnodeAttr *attr,
+                                   ino_t *out_ino, BufferPage **out_page,
                                    struct Ext2Inode **out_desc) {
     u16 mode;
     int ret = mode_of_type(attr->type, &mode);
@@ -971,19 +1083,66 @@ static int inode_alloc_initialized(struct Ext2FS *fs, u32 preferred_group,
     BufferPage *ino_page;
     struct Ext2Inode *ino_desc;
     ret = inode_get(fs, ino, &ino_page, &ino_desc);
-    if (ret != 0) return ret;
+    if (ret != 0) {
+        inode_free(fs, ino, is_dir);
+        return ret;
+    }
 
     memset(ino_desc, 0, fs->inode_size);
     ino_desc->mode = mode | (attr->mode & 07777);
     ino_desc->num_links = 1;
-
-    // TODO: handle time stamps
-
+    inode_touch(ino_desc, EXT2_ATIME | EXT2_MTIME | EXT2_CTIME);
     buffcache_mkdirty(ino_page);
     *out_ino = ino;
     *out_page = ino_page;
     *out_desc = ino_desc;
     return 0;
+}
+
+// xattr blocks may be shared by several inodes, and count their references
+static int xattr_release(struct Ext2Node *node) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    u32 block = node->inode->file_acl;
+    if (block == EXT2_NULL) return 0;
+    if (block >= fs->superblock->num_blocks) return EIO;
+
+    BufferPage *page;
+    int ret = vfs_get_page(fs->vfs.backing, block, 0, &page);
+    if (ret != 0) return ret;
+
+    // The header starts with the magic and the reference count
+    u32 *hdr = (void *)PHYS_TO_HHDM(buffcache_get_phys(page));
+    bool last = hdr[1] <= 1;
+    if (hdr[0] != EXT2_XATTR_MAGIC) ret = EIO;
+    else if (!last) {
+        hdr[1]--;
+        buffcache_mkdirty(page);
+    }
+    buffcache_rel(page);
+
+    if (ret == 0 && last) ret = block_free(fs, block);
+    if (ret != 0) return ret;
+    node->inode->file_acl = EXT2_NULL;
+    node->inode->num_sectors -= fs->block_size / 512;
+    buffcache_mkdirty(node->inode_page);
+    return 0;
+}
+
+// Freeing an inode in the bitmap is not enough, its blcoks and xattr also need
+// to be released
+static void inode_release(struct Ext2Node *node) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    struct Ext2Inode *inode = node->inode;
+    int ret = 0;
+    if (has_block_map(fs->block_size, inode)) ret = blocks_trunc(node, 0);
+    if (ret == 0) ret = xattr_release(node);
+    if (ret != 0) return;
+
+    inode->size = 0;
+    if (node->vnode.type == VNODE_TYPE_FILE) inode->size_high = 0;
+    inode_set_deleted(fs, inode);
+    buffcache_mkdirty(node->inode_page);
+    inode_free(fs, node->vnode.ino, node->vnode.type == VNODE_TYPE_DIR);
 }
 
 static usize dirent_rec_size(usize namelen) {
@@ -1115,6 +1274,7 @@ static int dirent_free(struct Ext2Node *dir, const char *name, usize namelen,
     // TODO: reclaim block if it was the last and it isempty
 
     dir->inode->flags &= ~EXT2_INDEX_FL;
+    inode_touch(dir->inode, EXT2_MTIME | EXT2_CTIME);
     buffcache_mkdirty(dir->inode_page);
 
     buffcache_mkdirty(ent_page);
@@ -1139,8 +1299,102 @@ static int dirent_alloc_initialized(struct Ext2Node *dir, const char *name,
 
     // See dirent_free
     dir->inode->flags &= ~EXT2_INDEX_FL;
-    // TODO: update mtime and ctime
+    inode_touch(dir->inode, EXT2_MTIME | EXT2_CTIME);
     buffcache_mkdirty(dir->inode_page);
+    return 0;
+}
+
+// Points an existing entry to another inode, so its name never stops existing
+static int dirent_retarget(struct Ext2Node *dir, const char *name,
+                           usize namelen, ino_t old_ino, ino_t new_ino,
+                           VnodeType type) {
+    BufferPage *page;
+    struct Ext2DirEnt *entry;
+    int ret = dirent_find(dir, name, namelen, &page, &entry, NULL);
+    if (ret != 0) return ret;
+
+    if (entry->ino != old_ino) ret = EIO;
+    else {
+        entry->ino = new_ino;
+        entry->type = ft_of_type(fs_of(dir->vnode.vfs), type);
+        buffcache_mkdirty(page);
+    }
+
+    buffcache_rel(page);
+    if (ret == 0) {
+        inode_touch(dir->inode, EXT2_MTIME | EXT2_CTIME);
+        buffcache_mkdirty(dir->inode_page);
+    }
+    return ret;
+}
+
+static bool is_dot_entry(struct Ext2DirEnt *entry) {
+    return (entry->namelen == 1 && entry->name[0] == '.') ||
+        (entry->namelen == 2 && entry->name[0] == '.' && entry->name[1] == '.');
+}
+
+// Returns ENOTEMPTY if dir has entries other than "." and ".."
+static int dir_check_empty(struct Ext2Node *dir) {
+    struct Ext2FS *fs = fs_of(dir->vnode.vfs);
+    u32 num_blocks = dir->inode->size / fs->block_size;
+
+    for (u32 lblock = 0; lblock < num_blocks; lblock++) {
+        BufferPage *page;
+        u8 *data;
+        int ret = data_get(dir, lblock, &page, &data);
+        if (ret != 0) return ret;
+
+        for (usize pos = 0; pos < fs->block_size && ret == 0;) {
+            struct Ext2DirEnt *entry = (void *)(data + pos);
+            if (!dirent_validate(entry, pos, fs->block_size)) ret = EIO;
+            else if (entry->ino != 0 && !is_dot_entry(entry)) ret = ENOTEMPTY;
+            pos += entry->reclen;
+        }
+
+        buffcache_rel(page);
+        if (ret != 0) return ret;
+    }
+
+    return 0;
+}
+
+// Directories start with "." and "..", slow symlinks with their target. Fast
+// symlinks are filled before the vnode exists
+static int node_init_data(struct Ext2Node *node, ino_t parent,
+                          const VnodeAttr *attr) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    bool slow_link = attr->type == VNODE_TYPE_LINK &&
+        attr->targetlen >= EXT2_FAST_LINK_MAX;
+    if (attr->type != VNODE_TYPE_DIR && !slow_link) return 0;
+
+    BufferPage *page;
+    u8 *data;
+    int ret = data_get_w(node, 0, &page, &data);
+    if (ret != 0) return ret;
+
+    if (slow_link) {
+        memcpy(data, attr->target, attr->targetlen);
+        node->inode->size = attr->targetlen;
+    } else {
+        struct Ext2DirEnt *dot = (void *)data;
+        dot->ino = node->vnode.ino;
+        dot->reclen = dirent_rec_size(1);
+        dot->namelen = 1;
+        dot->type = ft_of_type(fs, VNODE_TYPE_DIR);
+        memcpy(dot->name, ".", 1);
+
+        struct Ext2DirEnt *dotdot = (void *)(data + dot->reclen);
+        dotdot->ino = parent;
+        dotdot->reclen = fs->block_size - dot->reclen;
+        dotdot->namelen = 2;
+        dotdot->type = dot->type;
+        memcpy(dotdot->name, "..", 2);
+        node->inode->size = fs->block_size;
+    }
+
+    buffcache_mkdirty(page);
+    buffcache_rel(page);
+    buffcache_mkdirty(node->inode_page);
     return 0;
 }
 
@@ -1161,8 +1415,11 @@ static int readdir_emit(void *buf, usize buflen, VFSDirEnt *hdr,
 
 // VNODE OPS
 
-static void ext2_inactive(Vnode *node) {
-    buffcache_rel(extnode_of(node)->inode_page);
+static void ext2_inactive(Vnode *vnode) {
+    struct Ext2Node *node = extnode_of(vnode);
+    if (__atomic_load_n(&node->inode->num_links, __ATOMIC_RELAXED) == 0)
+        inode_release(node);
+    buffcache_rel(node->inode_page);
     slab_free(node, sizeof(struct Ext2Node));
 }
 
@@ -1177,6 +1434,191 @@ static int ext2_lookup(Vnode *dir, const char *name, usize namelen,
     ino_t ino = entry->ino;
     buffcache_rel(page);
     return vfs_vget(dir->vfs, ino, out_vnode);
+}
+
+static int ext2_create(Vnode *dir, const char *name, usize namelen,
+                       const VnodeAttr *attr, Vnode **out_vnode) {
+    struct Ext2Node *edir = extnode_of(dir);
+    struct Ext2FS *fs = fs_of(dir->vfs);
+    bool is_dir = attr->type == VNODE_TYPE_DIR;
+    *out_vnode = NULL;
+
+    // readlink reads at most one block
+    if (attr->type == VNODE_TYPE_LINK && attr->targetlen >= fs->block_size)
+        return ENAMETOOLONG;
+    // A new directory's ".." links to dir
+    if (is_dir && edir->inode->num_links >= EXT2_LINK_MAX) return EMLINK;
+
+    u32 group = (dir->ino - 1) / fs->superblock->inodes_per_group;
+    ino_t ino;
+    BufferPage *ino_page;
+    struct Ext2Inode *inode;
+    int ret = inode_alloc_initialized(fs, group, is_dir, attr, &ino, &ino_page,
+                                      &inode);
+    if (ret != 0) return ret;
+
+    // "." is the second link of a directory
+    if (is_dir) inode->num_links = 2;
+    if (attr->type == VNODE_TYPE_LINK && attr->targetlen < EXT2_FAST_LINK_MAX) {
+        memcpy(inode->fast_link, attr->target, attr->targetlen);
+        inode->size = attr->targetlen;
+    }
+    buffcache_mkdirty(ino_page);
+
+    Vnode *vnode;
+    ret = vfs_vget(dir->vfs, ino, &vnode);
+    if (ret != 0) {
+        inode_set_deleted(fs, inode);
+        buffcache_mkdirty(ino_page);
+        buffcache_rel(ino_page);
+        inode_free(fs, ino, is_dir);
+        return ret;
+    }
+    buffcache_rel(ino_page);
+
+    struct Ext2Node *node = extnode_of(vnode);
+    ret = node_init_data(node, dir->ino, attr);
+    if (ret == 0)
+        ret = dirent_alloc_initialized(edir, name, namelen, ino, attr->type);
+    if (ret != 0) {
+        // Without links, the last release frees the inode and its blocks
+        __atomic_store_n(&node->inode->num_links, 0, __ATOMIC_RELAXED);
+        buffcache_mkdirty(node->inode_page);
+        vfs_vnode_rel(vnode);
+        return ret;
+    }
+
+    // The parent link from above is counted here
+    if (is_dir) {
+        edir->inode->num_links++;
+        buffcache_mkdirty(edir->inode_page);
+    }
+
+    *out_vnode = vnode;
+    return 0;
+}
+
+static int ext2_link(Vnode *dir, const char *name, usize namelen,
+                     Vnode *vnode) {
+    struct Ext2Node *node = extnode_of(vnode);
+    u16 num_links = __atomic_load_n(&node->inode->num_links, __ATOMIC_RELAXED);
+
+    // Only dir is locked, so an unlink in another directory may drop the last
+    // link at any time. A node shall never go from 0 to 1 links
+    do {
+        if (num_links == 0) return ENOENT;
+        if (num_links >= EXT2_LINK_MAX) return EMLINK;
+    } while (!__atomic_compare_exchange_n(&node->inode->num_links, &num_links,
+                                          num_links + 1, false,
+                                          __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+
+    int ret = dirent_alloc_initialized(extnode_of(dir), name, namelen,
+                                       vnode->ino, vnode->type);
+    if (ret != 0)
+        __atomic_sub_fetch(&node->inode->num_links, 1, __ATOMIC_RELAXED);
+    else inode_touch(node->inode, EXT2_CTIME);
+    buffcache_mkdirty(node->inode_page);
+    return ret;
+}
+
+static int ext2_unlink(Vnode *dir, const char *name, usize namelen,
+                       Vnode *vnode) {
+    struct Ext2Node *edir = extnode_of(dir);
+    struct Ext2Node *node = extnode_of(vnode);
+    bool is_dir = vnode->type == VNODE_TYPE_DIR;
+
+    int ret = is_dir ? dir_check_empty(node) : 0;
+    if (ret == 0) ret = dirent_free(edir, name, namelen, vnode->ino);
+    if (ret != 0) return ret;
+
+    // A directory also loses "." and its child's ".."
+    if (is_dir) {
+        __atomic_store_n(&node->inode->num_links, 0, __ATOMIC_RELAXED);
+        edir->inode->num_links--;
+        buffcache_mkdirty(edir->inode_page);
+    } else {
+        __atomic_sub_fetch(&node->inode->num_links, 1, __ATOMIC_RELAXED);
+    }
+
+    inode_touch(node->inode, EXT2_CTIME);
+    buffcache_mkdirty(node->inode_page);
+    return 0;
+}
+
+static int ext2_rename(Vnode *srcdir, const char *srcname, usize srcnamelen,
+                       Vnode *vnode, Vnode *dstdir, const char *dstname,
+                       usize dstnamelen, Vnode *replaced) {
+    struct Ext2Node *esrc = extnode_of(srcdir);
+    struct Ext2Node *edst = extnode_of(dstdir);
+    struct Ext2Node *node = extnode_of(vnode);
+    bool is_dir = vnode->type == VNODE_TYPE_DIR;
+    bool moves = is_dir && srcdir != dstdir;
+    int ret = 0;
+
+    if (replaced != NULL && is_dir) {
+        ret = dir_check_empty(extnode_of(replaced));
+        if (ret != 0) return ret;
+    }
+
+    // The new parent gains a ".." unless it loses the replaced one
+    if (moves && replaced == NULL && edst->inode->num_links >= EXT2_LINK_MAX) {
+        return EMLINK;
+    }
+
+    if (moves) {
+        ret = dirent_retarget(node, "..", 2, srcdir->ino, dstdir->ino,
+                              VNODE_TYPE_DIR);
+        if (ret != 0) return ret;
+    }
+
+    // Everything below only fails on I/O errors, so the undos are best effort
+    if (replaced != NULL) {
+        ret = dirent_retarget(edst, dstname, dstnamelen, replaced->ino,
+                              vnode->ino, vnode->type);
+    } else {
+        ret = dirent_alloc_initialized(edst, dstname, dstnamelen, vnode->ino,
+                                       vnode->type);
+    }
+
+    if (ret == 0) {
+        ret = dirent_free(esrc, srcname, srcnamelen, vnode->ino);
+        if (ret != 0 && replaced != NULL) {
+            dirent_retarget(edst, dstname, dstnamelen, vnode->ino,
+                            replaced->ino, replaced->type);
+        } else if (ret != 0) {
+            dirent_free(edst, dstname, dstnamelen, vnode->ino);
+        }
+    }
+
+    if (ret != 0) {
+        if (moves) {
+            dirent_retarget(node, "..", 2, dstdir->ino, srcdir->ino,
+                            VNODE_TYPE_DIR);
+        }
+        return ret;
+    }
+
+    if (replaced != NULL) {
+        struct Ext2Node *rep = extnode_of(replaced);
+        if (is_dir) {
+            __atomic_store_n(&rep->inode->num_links, 0, __ATOMIC_RELAXED);
+            edst->inode->num_links--;
+        } else {
+            __atomic_sub_fetch(&rep->inode->num_links, 1, __ATOMIC_RELAXED);
+        }
+        buffcache_mkdirty(rep->inode_page);
+    }
+
+    if (moves) {
+        esrc->inode->num_links--;
+        edst->inode->num_links++;
+    }
+
+    inode_touch(node->inode, EXT2_CTIME);
+    buffcache_mkdirty(node->inode_page);
+    buffcache_mkdirty(esrc->inode_page);
+    buffcache_mkdirty(edst->inode_page);
+    return 0;
 }
 
 static int ext2_readdir(void *buf, usize buflen, Vnode *dir, u64 off,
@@ -1229,10 +1671,7 @@ static int ext2_readlink(char *buf, usize buflen, Vnode *link, usize *out_len) {
     *out_len = 0;
     if (size >= fs->block_size) return EIO;
 
-    // Fast symlinks keep the target in the block pointers, but an xattr block
-    // still counts towards num_sectors
-    u32 ea_sectors = node->inode->file_acl != 0 ? fs->block_size / 512 : 0;
-    if (node->inode->num_sectors == ea_sectors) {
+    if (is_fast_link(fs->block_size, node->inode)) {
         if (size > sizeof(node->inode->fast_link)) return EIO;
         memcpy(buf, node->inode->fast_link, min(buflen, size));
         *out_len = size;
@@ -1380,16 +1819,18 @@ static int ext2_write(Vnode *vnode, void *buf, usize buflen, u64 off, u64 flags,
         done += len;
     }
 
-    // TODO: blocks allocated past the new size on failure are left behind
-    // until truncate exists
     if (done != 0) {
         if (off + done > file_size(node->inode))
             file_set_size(node, off + done);
 
-        u32 now = cpu_get_time() / NANOS_PER_SEC;
-        node->inode->mtime = now;
-        node->inode->ctime = now;
+        inode_touch(node->inode, EXT2_MTIME | EXT2_CTIME);
         buffcache_mkdirty(node->inode_page);
+    }
+
+    // Blocks allocated past the end by a failed write are freed best effort
+    if (ret != 0) {
+        u64 size = file_size(node->inode);
+        blocks_trunc(node, (size + fs->block_size - 1) / fs->block_size);
     }
 
     rwlock_rel_write(&node->file_lock);
@@ -1397,10 +1838,126 @@ static int ext2_write(Vnode *vnode, void *buf, usize buflen, u64 off, u64 flags,
     return done != 0 ? 0 : ret;
 }
 
-static int ext2_mmap(Vnode *node, VMMContext *vmm_context, void *hint,
+static int ext2_truncate(Vnode *vnode, usize size) {
+    struct Ext2Node *node = extnode_of(vnode);
+    struct Ext2FS *fs = fs_of(vnode->vfs);
+    int ret = check_file_io(vnode);
+    if (ret != 0) return ret;
+    if (size > max_file_size(fs)) return EFBIG;
+
+    rwlock_acq_write(&node->file_lock);
+    u64 old_size = file_size(node->inode);
+
+    // The rest of the new last block is read back if the file grows again, so
+    // we zero it
+    u32 tail = size % fs->block_size;
+    if (size < old_size && tail != 0) {
+        u32 pblock;
+        ret = bmap(node, size / fs->block_size, false, &pblock);
+        BufferPage *page;
+        if (ret == 0 && pblock != EXT2_NULL)
+            ret = vfs_get_page(fs->vfs.backing, pblock, 0, &page);
+        if (ret == 0 && pblock != EXT2_NULL) {
+            u8 *data = (void *)PHYS_TO_HHDM(buffcache_get_phys(page));
+            memset(data + tail, 0, fs->block_size - tail);
+            buffcache_mkdirty(page);
+            buffcache_rel(page);
+        }
+    }
+
+    if (ret == 0 && size < old_size)
+        ret = blocks_trunc(node, (size + fs->block_size - 1) / fs->block_size);
+    if (ret == 0 && size != old_size) {
+        inode_touch(node->inode, EXT2_MTIME | EXT2_CTIME);
+        file_set_size(node, size);
+    }
+
+    rwlock_rel_write(&node->file_lock);
+    return ret;
+}
+
+// Copies the file's page at off into a new page, or returns NULL in *out_phys
+// for holes and pages past the end, which map the zero page
+// LOCKING: node->file_lock held
+static int mmap_page_copy(struct Ext2Node *node, u64 off, void **out_phys) {
+    struct Ext2FS *fs = fs_of(node->vnode.vfs);
+    u64 size = file_size(node->inode);
+    *out_phys = NULL;
+    if (off >= size) return 0;
+
+    u32 pblock;
+    int ret = bmap(node, off / PAGE_SIZE, false, &pblock);
+    if (ret != 0 || pblock == EXT2_NULL) return ret;
+
+    BufferPage *page;
+    ret = vfs_get_page(fs->vfs.backing, pblock, VFS_GETPAGE_RDONLY, &page);
+    if (ret != 0) return ret;
+
+    void *phys = pmm_alloc();
+    if (phys == NULL) {
+        buffcache_rel(page);
+        return ENOMEM;
+    }
+
+    // pmm_alloc does not zero, and the block past the end may hold anything
+    usize len = min(PAGE_SIZE, size - off);
+    u8 *dst = (void *)PHYS_TO_HHDM(phys);
+    memcpy(dst, (void *)PHYS_TO_HHDM(buffcache_get_phys(page)), len);
+    memset(dst + len, 0, PAGE_SIZE - len);
+    buffcache_rel(page);
+
+    *out_phys = phys;
+    return 0;
+}
+
+// Buffer cache pages can be evicted at any time, so they cannot be user-mapped
+// with our current VMM. Private mappings get a copy of each page as it is when
+// mmap is called, but shared ones would need writes to reach the file. And yeah
+// this is of course racy, but everything in this VMM is and I'm not fixing it
+// here
+static int ext2_mmap(Vnode *vnode, VMMContext *vmm_context, void *hint,
                      usize size, int vmm_flags, MMUFlags mmu_flags, u64 off,
                      void **out_addr) {
-    return ENOSYS;
+    struct Ext2Node *node = extnode_of(vnode);
+    if (vnode->type != VNODE_TYPE_FILE) return ENODEV;
+    if (vmm_flags & VMM_FLAGS_SHARED) return ENODEV;
+    if (size == 0 || off % PAGE_SIZE != 0) return EINVAL;
+    if (off + size < off) return EOVERFLOW;
+
+    void *range_base = hint;
+    if (vmm_flags & VMM_FLAGS_NOHINT) {
+        vmm_flags &= ~VMM_FLAGS_NOHINT;
+        range_base = vmm_prealloc_range(vmm_context, VMM_RANGE_TYPE_FILE, size);
+        if (range_base == NULL) return ENOMEM;
+    }
+    vmm_flags |= VMM_FLAGS_PRIVATE;
+
+    rwlock_acq_read(&node->file_lock);
+    int ret = 0;
+    u64 curr = off;
+    for (; curr < off + size; curr += PAGE_SIZE) {
+        void *phys;
+        ret = mmap_page_copy(node, curr, &phys);
+        if (ret != 0) break;
+
+        // The mapping owns the reference that pmm_alloc returned
+        int flags = vmm_flags | (phys == NULL ? VMM_FLAGS_ALLOCATE : 0);
+        ret = vmm_map(vmm_context, (u8 *)range_base + (curr - off), phys,
+                      PAGE_SIZE, flags, mmu_flags, NULL);
+        if (ret != 0) {
+            if (phys != NULL) pmm_free(phys);
+            break;
+        }
+    }
+    rwlock_rel_read(&node->file_lock);
+
+    if (ret != 0) {
+        vmm_unmap(vmm_context, range_base, curr - off);
+        return ret;
+    }
+
+    *out_addr = range_base;
+    return 0;
 }
 
 static int ext2_stat(Vnode *vnode, struct stat *out_stat) {
@@ -1425,10 +1982,15 @@ static int ext2_stat(Vnode *vnode, struct stat *out_stat) {
 
 static VnodeOps g_ext2_node_ops = {.inactive = ext2_inactive,
                                    .lookup = ext2_lookup,
+                                   .create = ext2_create,
+                                   .link = ext2_link,
+                                   .unlink = ext2_unlink,
+                                   .rename = ext2_rename,
                                    .readdir = ext2_readdir,
                                    .readlink = ext2_readlink,
                                    .read = ext2_read,
                                    .write = ext2_write,
+                                   .truncate = ext2_truncate,
                                    .mmap = ext2_mmap,
                                    .stat = ext2_stat};
 
@@ -1578,7 +2140,12 @@ static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     return 0;
 }
 
-static bool ext2_keep(Vnode *node) { return true; }
+static bool ext2_keep(Vnode *node) {
+    // Unlinked inodes are freed by inactive as soon as their last reference is
+    // gone
+    return __atomic_load_n(&extnode_of(node)->inode->num_links,
+                           __ATOMIC_RELAXED) != 0;
+}
 
 static FSType g_ext2_type = {.name = "ext2",
                              .needs_backing = true,
