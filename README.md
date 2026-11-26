@@ -96,7 +96,7 @@ The kernel itself roughly includes the following:
     - [x] sockfs
     - [x] tmpfs
     - [x] devfs
-    - [ ] ext2
+    - [x] ext2
   - Kernel library and data structures
     - [x] Hashmap
     - [x] Radix tree (XArray)

@@ -8,7 +8,7 @@
 #include <kernel/com/io/blockdev.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/pmm.h>
-#include <kernel/com/sync/mutex.h>
+#include <kernel/com/sync/spinlock.h>
 #include <kernel/com/sys/sched.h>
 #include <kernel/com/sys/thread.h>
 #include <kernel/com/util.h>
@@ -122,6 +122,14 @@ struct NVMeRWSQE {
     u16 elbat;
 };
 
+// One per command ID, waited on by the thread that submitted it
+struct NVMeSlot {
+    bool busy;
+    bool done;
+    u16 status;
+    Waitlist waiters;
+};
+
 struct NVMeQueue {
     u8 *sq;
     u8 *cq;
@@ -132,8 +140,14 @@ struct NVMeQueue {
     u32 cq_idx;
     u32 qid;
     bool cq_phase;
-    Waitlist irq_waiters;
-    Mutex lock;
+    // Held by the ISR while it reaps completions, so one cannot slip in between
+    // a submitter's check and its wait
+    Spinlock lock;
+    // Indexed by command ID. At most qe - 1 commands are in flight, so neither
+    // the submission nor the completion queue can fill up
+    struct NVMeSlot *slots;
+    u32 num_in_flight;
+    Waitlist slot_waiters;
 };
 
 struct NVMeDevice {
@@ -201,6 +215,31 @@ static void nvme_submit(struct NVMeQueue *q, void *in) {
     nvme_write32(q->sq_doorbell, q->sq_idx);
 }
 
+// Marks every completed command done and wakes its submitter
+static void nvme_queue_reap_nolock(struct NVMeQueue *q) {
+    bool reaped = false;
+    for (;;) {
+        u32 dw3 = ((volatile u32 *)(q->cq + q->cq_idx * 16))[3];
+        if (((dw3 >> 16) & 1) == q->cq_phase) break;
+        barrier_generic_read();
+
+        struct NVMeSlot *slot = &q->slots[dw3 & 0xFFFF];
+        assert(slot->busy && !slot->done);
+        slot->status = dw3 >> 17;
+        slot->done = true;
+        sched_notify(&slot->waiters);
+        reaped = true;
+
+        q->cq_idx++;
+        if (q->cq_idx == q->qe) {
+            q->cq_idx = 0;
+            q->cq_phase ^= 1;
+        }
+    }
+
+    if (reaped) nvme_write32(q->cq_doorbell, q->cq_idx);
+}
+
 static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
                                           usize pageno, u8 opcode) {
     u64 lba = pageno << (12 - drive->blocks_shift);
@@ -210,35 +249,53 @@ static void nvme_submit_page_command_sync(struct NVMeDevice *drive, void *buf,
                               .prp1 = (u64)buf,
                               .slba = lba,
                               .cdw12 = count - 1};
-    mutex_acq(&drive->queues[0].lock);
-    nvme_submit(&drive->queues[0], &rw_in);
+    struct NVMeQueue *q = &drive->queues[0];
+    spinlock_acq(&q->lock);
+    while (q->num_in_flight == q->qe - 1) {
+        spinlock_wait(&q->lock, &q->slot_waiters, 0, false);
+    }
 
-    while (!nvme_queue_done_nobarrier(&drive->queues[0])) {
-        // Before the first thread exists nobody can sleep, so we poll
-        if (cpu_get_thread() == NULL) continue;
+    u16 cid = 0;
+    while (q->slots[cid].busy) cid++;
+    struct NVMeSlot *slot = &q->slots[cid];
+    slot->busy = true;
+    slot->done = false;
+    q->num_in_flight++;
+    rw_in.cid = cid;
+    nvme_submit(q, &rw_in);
+
+    while (!slot->done) {
+        // Before the first thread exists nobody can sleep, and the ISR leaves
+        // the queue alone, so we poll
+        if (cpu_get_thread() == NULL) {
+            nvme_queue_reap_nolock(q);
+            continue;
+        }
         // We make this non-interruptible otherwise it becomes a busy wait after
         // the first signal is delivered. A better solution would be to make it
         // interruptible and fallible, but for now we assume that progress is
         // maintained because the device will eventually send an interrupt
-        mutex_wait(&drive->queues[0].lock, &drive->queues[0].irq_waiters, 0,
-                   false);
+        spinlock_wait(&q->lock, &slot->waiters, 0, false);
     }
-    barrier_generic_read();
 
-    drive->queues[0].cq_idx++;
-    if (drive->queues[0].cq_idx == drive->queues[0].qe) {
-        drive->queues[0].cq_idx = 0;
-        drive->queues[0].cq_phase ^= 1;
+    if (slot->status != 0) {
+        log_debug("command %u on page %zu failed with status %#x", opcode,
+                  pageno, slot->status);
     }
-    nvme_write32(drive->queues[0].cq_doorbell, drive->queues[0].cq_idx);
 
-    mutex_rel(&drive->queues[0].lock);
+    slot->busy = false;
+    q->num_in_flight--;
+    sched_notify(&q->slot_waiters);
+    spinlock_rel(&q->lock);
 }
 
 static void nvme_isr(InterruptHandler *isr, Context *ctx) {
     (void)ctx;
     struct NVMeDevice *drive = isr->extra;
-    sched_notify(&drive->queues[0].irq_waiters);
+    if (cpu_get_thread() == NULL) return;
+    spinlock_acq(&drive->queues[0].lock);
+    nvme_queue_reap_nolock(&drive->queues[0]);
+    spinlock_rel(&drive->queues[0].lock);
     sched_yield();
 }
 
@@ -430,8 +487,8 @@ static int nvme_init_device(PCIEnum *pci_enum) {
     InterruptHandler *devisr = interrupt_allocate(nvme_isr, pci_msi_eoi);
     struct NVMeDevice *dev = slab_alloc(sizeof(struct NVMeDevice));
     assert(dev != NULL);
-    waitlist_init(&dev->queues[0].irq_waiters);
-    mutex_init(&dev->queues[0].lock);
+    dev->queues[0].lock = SPINLOCK_NEW();
+    waitlist_init(&dev->queues[0].slot_waiters);
     devisr->extra = dev;
 
     pci_msix_add(pci_enum, 0, devisr->vec, PCI_MSIFMT_EDGE_TRIGGER);
@@ -525,6 +582,15 @@ static int nvme_init_device(PCIEnum *pci_enum) {
     dev->queues[0].sq = (void *)PHYS_TO_HHDM(sq0_phys);
     dev->queues[0].qid = 1;
     dev->queues[0].qe = qe;
+
+    assert(qe * sizeof(struct NVMeSlot) <= PAGE_SIZE);
+    void *slots_phys = pmm_allocz();
+    assert(slots_phys != NULL);
+    dev->queues[0].slots = (void *)PHYS_TO_HHDM(slots_phys);
+    for (u32 i = 0; i < qe; i++) {
+        waitlist_init(&dev->queues[0].slots[i].waiters);
+    }
+
     dev->queues[0].sq_doorbell = base + 0x1000 +
         ((2 * dev->queues[0].qid) << (2 + dstrd));
     dev->queues[0].cq_doorbell = base + 0x1000 +
