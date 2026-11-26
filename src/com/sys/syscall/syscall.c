@@ -421,4 +421,12 @@ void syscall_init(void) {
 
     syscall_register(0x3F, "chroot", syscall_chroot, 1, SYSCALL_TYPE_STR,
                      "path");
+
+    syscall_register(0x40, "preadv", syscall_preadv, 4, SYSCALL_TYPE_INT, "fd",
+                     SYSCALL_TYPE_PTR, "iov", SYSCALL_TYPE_INT, "iovcnt",
+                     SYSCALL_TYPE_OFFT, "off");
+
+    syscall_register(0x41, "pwritev", syscall_pwritev, 4, SYSCALL_TYPE_INT,
+                     "fd", SYSCALL_TYPE_PTR, "iov", SYSCALL_TYPE_INT, "iovcnt",
+                     SYSCALL_TYPE_OFFT, "off");
 }

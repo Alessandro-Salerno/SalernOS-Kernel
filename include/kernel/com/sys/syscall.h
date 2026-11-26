@@ -151,6 +151,8 @@ SYSCALL(syscall_utimensat);
 SYSCALL(syscall_sync);
 SYSCALL(syscall_fchdir);
 SYSCALL(syscall_chroot);
+SYSCALL(syscall_preadv);
+SYSCALL(syscall_pwritev);
 
 // SYSCALL UTILITIES
 
