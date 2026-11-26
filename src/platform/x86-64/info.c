@@ -60,8 +60,11 @@ InfoFile *info_get_initrd(void) {
 
     for (u64 i = 0; i < g_module_request.response->module_count; i++) {
         InfoFile *mod = g_module_request.response->modules[i];
-
-        if (strcmp("/initrd", mod->path) == 0) return mod;
+        const char *name = "/initrd";
+        usize len = strlen(mod->path), namelen = strlen(name);
+        if (len >= namelen && strcmp(name, mod->path + len - namelen) == 0) {
+            return mod;
+        }
     }
 
     assert(!"no initrd found");

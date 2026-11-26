@@ -166,7 +166,9 @@ int elf64_load(const char *exec_path, usize exec_path_len, Vnode *root,
     if (ret != 0) goto cleanup;
     if (signature_bytes != sizeof(elf_signature) ||
         memcmp(elf_signature, expected_signaturr, sizeof(elf_signature)) != 0) {
-        ret = EACCES;
+        // TODO: support #!, for now shells will have to figure it out
+        // themselves
+        ret = ENOEXEC;
         goto cleanup;
     }
 
