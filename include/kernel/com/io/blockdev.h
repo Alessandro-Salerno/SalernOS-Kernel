@@ -8,3 +8,4 @@
 // in bytes, lba_size is the logical block size partition tables are written in
 int blockdev_register(const char *name, usize namelen, DevOps *devops,
                       void *devdata, u64 size, u32 lba_size);
+int blockdev_ioctl(u64 size, u32 lba_size, u64 op, void *buf);

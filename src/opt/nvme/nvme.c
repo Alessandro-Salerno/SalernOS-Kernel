@@ -472,10 +472,16 @@ static int nvme_stat(void *devdata, struct stat *out_stat) {
     return 0;
 }
 
+static int nvme_ioctl(void *devdata, u64 op, void *buf) {
+    struct NVMeDevice *drive = devdata;
+    return blockdev_ioctl(drive->size, 1 << drive->blocks_shift, op, buf);
+}
+
 static DevOps g_nvme_dev_ops = {.type = VNODE_TYPE_BLOCKDEV,
                                 .read = nvme_read,
                                 .write = nvme_write,
                                 .get_page = nvme_get_page,
+                                .ioctl = nvme_ioctl,
                                 .stat = nvme_stat};
 
 static int nvme_init_device(PCIEnum *pci_enum) {

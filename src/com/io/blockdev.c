@@ -1,12 +1,14 @@
 #include <arch/info.h>
 #include <errno.h>
 #include <kernel/com/crt/string.h>
+#include <kernel/com/crt/usercopy.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/io/blockdev.h>
 #include <kernel/com/io/log.h>
 #include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/slab.h>
 #include <kernel/com/util.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <vendor/printf.h>
 
@@ -108,10 +110,16 @@ static int part_stat(void *devdata, struct stat *out_stat) {
     return 0;
 }
 
+static int part_ioctl(void *devdata, u64 op, void *buf) {
+    struct BlockDev *part = devdata;
+    return blockdev_ioctl(part->size, part->lba_size, op, buf);
+}
+
 static DevOps g_part_dev_ops = {.type = VNODE_TYPE_BLOCKDEV,
                                 .read = part_read,
                                 .write = part_write,
                                 .get_page = part_get_page,
+                                .ioctl = part_ioctl,
                                 .stat = part_stat};
 
 // PARTITION TABLE SCANNING
@@ -294,6 +302,17 @@ static void mbr_scan(struct BlockDev *disk, const char *name, usize namelen) {
 }
 
 // INTERFACE
+
+int blockdev_ioctl(u64 size, u32 lba_size, u64 op, void *buf) {
+    if (op == BLKGETSIZE64) return memcpy_to_user(buf, &size, sizeof(size));
+
+    if (op == BLKSSZGET) {
+        int ssz = lba_size;
+        return memcpy_to_user(buf, &ssz, sizeof(ssz));
+    }
+
+    return ENOSYS;
+}
 
 int blockdev_register(const char *name, usize namelen, DevOps *devops,
                       void *devdata, u64 size, u32 lba_size) {
