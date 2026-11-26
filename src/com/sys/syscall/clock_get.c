@@ -16,7 +16,7 @@ SYSCALL(syscall_clock_get) {
     struct timespec *ts = SYSCALL_ARG(void *, 2);
 
     (void)clock; // TODO: what is this?
-    u64 ns = cpu_get_time();
+    u64 ns = cpu_get_real_time();
     struct timespec kts = {.tv_sec = ns / NANOS_PER_SEC,
                            .tv_nsec = ns % NANOS_PER_SEC};
 

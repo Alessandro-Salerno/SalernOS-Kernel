@@ -6,3 +6,4 @@ MemMap *info_get_memmap(void);
 KAddr *info_get_kaddr(void);
 InfoFile *info_get_initrd(void);
 Framebuffer *info_get_fb(void);
+u64 info_get_boot_time(void);

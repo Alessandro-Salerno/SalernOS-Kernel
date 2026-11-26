@@ -6,6 +6,7 @@
 #include <kernel/com/crt/usercopy.h>
 #include <kernel/com/fs/ext2.h>
 #include <kernel/com/fs/vfs.h>
+#include <kernel/com/io/log.h>
 #include <kernel/com/ipc/signal.h>
 #include <kernel/com/mm/buffcache.h>
 #include <kernel/com/mm/pmm.h>
@@ -173,6 +174,7 @@ struct Ext2FS {
     u32 block_size;
     u32 inode_size;
     u32 first_ino;
+    u16 mount_state; // state before a read-write mount, restored on unmount
     // Technically an over-approximation, but it works and its practical impact
     // is low for now: allocations are all group-local, so an fswide lock is
     // safe but potentially slow, though or block device drivers are slow enough
@@ -274,11 +276,23 @@ static inline bool has_block_map(u32 block_size, struct Ext2Inode *inode) {
     }
 }
 
-// which is a mask of EXT2_*TIME. Callers mark the inode's page dirty
+static inline u32 now_seconds(void) {
+    return cpu_get_real_time() / NANOS_PER_SEC;
+}
+
+// which is a mask of EXT2_*TIME. Callers mark the inode's page dirty.
+// Timestamps are set under different locks (or none, e.g. ctime in link) and
+// read by stat without any, so they are accessed atomically
 static inline void inode_touch(struct Ext2Inode *inode, int which) {
-    // TODO: set the timestamps once there is a clock
-    (void)inode;
-    (void)which;
+    u32 now = now_seconds();
+    if (which & EXT2_ATIME)
+        __atomic_store_n(&inode->atime, now, __ATOMIC_RELAXED);
+    if (which & EXT2_MTIME)
+        __atomic_store_n(&inode->mtime, now, __ATOMIC_RELAXED);
+    if (which & EXT2_CTIME)
+        __atomic_store_n(&inode->ctime, now, __ATOMIC_RELAXED);
+    if (which & EXT2_DTIME)
+        __atomic_store_n(&inode->dtime, now, __ATOMIC_RELAXED);
 }
 
 static inline void inode_set_deleted(struct Ext2Inode *inode) {
@@ -1920,7 +1934,8 @@ static int ext2_set_times(Vnode *vnode, const struct timespec times[2]) {
     for (usize i = 0; i < 2; i++) {
         if (times[i].tv_nsec == UTIME_NOW)
             now |= i == 0 ? EXT2_ATIME : EXT2_MTIME;
-        else if (times[i].tv_nsec != UTIME_OMIT) *fields[i] = times[i].tv_sec;
+        else if (times[i].tv_nsec != UTIME_OMIT)
+            __atomic_store_n(fields[i], times[i].tv_sec, __ATOMIC_RELAXED);
     }
     inode_touch(node->inode, now);
     rwlock_rel_write(&node->file_lock);
@@ -1988,9 +2003,10 @@ static int ext2_stat(Vnode *vnode, struct stat *out_stat) {
     out_stat->st_size = file_size(inode);
     out_stat->st_blksize = fs_of(vnode->vfs)->block_size;
     out_stat->st_blocks = inode->num_sectors;
-    out_stat->st_atim.tv_sec = inode->atime;
-    out_stat->st_mtim.tv_sec = inode->mtime;
-    out_stat->st_ctim.tv_sec = inode->ctime;
+    // See inode_touch
+    out_stat->st_atim.tv_sec = __atomic_load_n(&inode->atime, __ATOMIC_RELAXED);
+    out_stat->st_mtim.tv_sec = __atomic_load_n(&inode->mtime, __ATOMIC_RELAXED);
+    out_stat->st_ctim.tv_sec = __atomic_load_n(&inode->ctime, __ATOMIC_RELAXED);
     if (vnode->type == VNODE_TYPE_CHARDEV ||
         vnode->type == VNODE_TYPE_BLOCKDEV) {
         out_stat->st_rdev = inode->rdev;
@@ -2067,7 +2083,57 @@ static bool validate_superblock(struct Ext2Superblock *superblock) {
     return (superblock->feature_ro_compat & ~EXT2_FEATURE_RO_COMPAT_SUPP) == 0;
 }
 
-static int ext2_unmount(Vfs *vfs) { return ENOSYS; }
+// Until unmount restores the old state, the disk says that the file system was
+// not cleanly unmounted, so e2fsck checks it after a crash
+static int superblock_mount_rw(struct Ext2FS *fs) {
+    struct Ext2Superblock *sb = fs->superblock;
+    if (!(sb->state & EXT2_VALID_FS))
+        log_debug("not cleanly unmounted, running e2fsck is recommended");
+    else if (sb->state & EXT2_ERROR_FS)
+        log_debug("mounting with errors, running e2fsck is recommended");
+    else if (sb->max_mounts > 0 && sb->num_mounts >= (u16)sb->max_mounts)
+        log_debug("maximal mount count reached, running e2fsck is recommended");
+
+    u16 old_num_mounts = sb->num_mounts;
+    u32 old_mtime = sb->mtime;
+    u32 old_wtime = sb->wtime;
+    fs->mount_state = sb->state;
+    sb->state &= ~EXT2_VALID_FS;
+    sb->num_mounts++;
+    sb->mtime = now_seconds();
+    sb->wtime = sb->mtime;
+    buffcache_mkdirty(fs->superblock_page);
+
+    int ret = buffcache_sync();
+    if (ret != 0) {
+        sb->state = fs->mount_state;
+        sb->num_mounts = old_num_mounts;
+        sb->mtime = old_mtime;
+        sb->wtime = old_wtime;
+    }
+    return ret;
+}
+
+static int ext2_unmount(Vfs *vfs) {
+    int ret = buffcache_sync();
+    if (ret != 0) return ret;
+
+    vfs_vnode_rel(vfs->root);
+    vfs_vnode_rel(vfs->root);
+    vfs_cache_destroy(vfs);
+
+    struct Ext2FS *fs = fs_of(vfs);
+    if (!(fs->vfs.flags & VFS_MOUNT_RDONLY)) {
+        fs->superblock->state = fs->mount_state;
+        fs->superblock->wtime = now_seconds();
+        buffcache_mkdirty(fs->superblock_page);
+    }
+    buffcache_rel(fs->superblock_page);
+    slab_free(fs, sizeof(struct Ext2FS));
+
+    buffcache_sync();
+    return 0;
+}
 
 static int ext2_vget(Vfs *vfs, ino_t ino, Vnode **out_vnode) {
     struct Ext2FS *fs = fs_of(vfs);
@@ -2100,7 +2166,8 @@ static int ext2_vget(Vfs *vfs, ino_t ino, Vnode **out_vnode) {
 
 static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
     BufferPage *superblock_page;
-    int ret = vfs_get_page(backing, 0, VFS_GETPAGE_RDONLY, &superblock_page);
+    int page_flags = flags & VFS_MOUNT_RDONLY ? VFS_GETPAGE_RDONLY : 0;
+    int ret = vfs_get_page(backing, 0, page_flags, &superblock_page);
     if (ret != 0) return ret;
 
     void *sb_phys = buffcache_get_phys(superblock_page);
@@ -2147,14 +2214,17 @@ static int ext2_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
         return ret;
     }
 
-    if (root->type == VNODE_TYPE_DIR) vfs_set_root(&fs->vfs, root);
-    else {
+    if (root->type != VNODE_TYPE_DIR) ret = EIO;
+    else if (!(flags & VFS_MOUNT_RDONLY)) ret = superblock_mount_rw(fs);
+    if (ret != 0) {
         vfs_vnode_rel(root);
         vfs_cache_destroy(&fs->vfs);
         slab_free(fs, sizeof(*fs));
         buffcache_rel(superblock_page);
-        return EIO;
+        return ret;
     }
+
+    vfs_set_root(&fs->vfs, root);
 
     *out_vfs = &fs->vfs;
     return 0;

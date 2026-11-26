@@ -93,3 +93,7 @@ static inline u64 cpu_timestamp_to_ns(u64 ts) {
 static inline u64 cpu_get_time(void) {
     return tsc_get_ns(cpu_get()->tsc_reverse_mult);
 }
+static inline u64 cpu_get_real_time(void) {
+    extern u64 info_get_boot_time();
+    return info_get_boot_time() + cpu_get_time();
+}

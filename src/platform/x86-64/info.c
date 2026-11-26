@@ -33,6 +33,12 @@ used __attribute__((section(
         .id = LIMINE_FRAMEBUFFER_REQUEST,
         .revision = 0};
 
+used __attribute__((section(
+    ".limine_response"))) static volatile struct limine_boot_time_request
+    g_boot_time_request = (struct limine_boot_time_request){
+        .id = LIMINE_BOOT_TIME_REQUEST,
+        .revision = 0};
+
 MemMap *info_get_memmap(void) {
     assert(g_memory_map_request.response != NULL);
     return g_memory_map_request.response;
@@ -66,4 +72,9 @@ Framebuffer *info_get_fb(void) {
     assert(g_framebuffer_request.response->framebuffer_count > 0);
 
     return g_framebuffer_request.response->framebuffers[0];
+}
+
+u64 info_get_boot_time(void) {
+    assert(g_boot_time_request.response != NULL);
+    return g_boot_time_request.response->boot_time * NANOS_PER_SEC;
 }
