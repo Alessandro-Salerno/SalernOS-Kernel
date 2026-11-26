@@ -148,7 +148,7 @@ SYSCALL(syscall_renameat);
 SYSCALL(syscall_mount);
 SYSCALL(syscall_umount2);
 SYSCALL(syscall_utimensat);
-SYSCALL(syscall_sysprofile);
+SYSCALL(syscall_sync);
 
 // SYSCALL UTILITIES
 
