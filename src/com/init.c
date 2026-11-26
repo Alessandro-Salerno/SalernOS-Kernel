@@ -6,6 +6,7 @@
 #include <kernel/com/dev/failnth.h>
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
+#include <kernel/com/dev/power.h>
 #include <kernel/com/dev/profile.h>
 #include <kernel/com/fs/devfs.h>
 #include <kernel/com/fs/ext2.h>
@@ -133,6 +134,7 @@ void init_devices(void) {
     null_init();
     profile_init();
     failnth_init();
+    devpower_init();
 }
 
 // The config lists are NULL-terminated

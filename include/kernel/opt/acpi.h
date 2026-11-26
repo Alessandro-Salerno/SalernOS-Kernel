@@ -15,6 +15,15 @@ typedef struct ACPITable {
     void *virt_addr;
 } ACPITable;
 
+typedef enum ACPISleepState {
+    ACPI_SLEEP_S0,
+    ACPI_SLEEP_S1,
+    ACPI_SLEEP_S2,
+    ACPI_SLEEP_S3,
+    ACPI_SLEEP_S4,
+    ACPI_SLEEP_S5,
+} ACPISleepState;
+
 // these functions are implemennted by platforms using this option
 RSDPInfo *info_get_rsdp(void);
 

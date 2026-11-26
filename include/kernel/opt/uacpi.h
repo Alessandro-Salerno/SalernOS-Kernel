@@ -6,6 +6,8 @@
 #error "cannot include this header without having opt/uacpi"
 #endif
 
+#include <kernel/opt/acpi.h>
+
 // NOTE: these types are definedi n uACPI, but the kernel's option system tries
 // to keep things separate, and expose a consistent API to common and
 // platform-specific code. Thus these types are redefined here. The uACPI option
@@ -46,3 +48,5 @@ void arch_uacpi_irq_eoi(InterruptHandler *isr);
 int arch_uacpi_early_init(void);
 
 int uacpi_init(UACPIUint64 flags);
+int uacpi_prepare_sleep(ACPISleepState state);
+int uacpi_enter_sleep(ACPISleepState state);
