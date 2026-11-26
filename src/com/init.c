@@ -1,13 +1,14 @@
 #include <arch/context.h>
 #include <arch/cpu.h>
 #include <arch/info.h>
+#include <fcntl.h>
 #include <kernel/com/crt/string.h>
 #include <kernel/com/dev/failnth.h>
 #include <kernel/com/dev/gfx/fbdev.h>
 #include <kernel/com/dev/null.h>
 #include <kernel/com/dev/profile.h>
-#include <kernel/com/fs/ext2.h>
 #include <kernel/com/fs/devfs.h>
+#include <kernel/com/fs/ext2.h>
 #include <kernel/com/fs/file.h>
 #include <kernel/com/fs/initrd.h>
 #include <kernel/com/fs/tmpfs.h>
@@ -47,6 +48,7 @@ extern const char _binary_src_splash_txt_end[];
 static Term *g_main_term = NULL;
 static Vnode *g_main_tty_dev = NULL;
 static Vfs *g_root_fs = NULL;
+static Vfs *g_devfs = NULL;
 
 static Vfs *init_tmpfs(Vfs *rootfs) {
     Vnode *tmpfs_mountpoint = NULL;
@@ -85,9 +87,10 @@ void init_filesystem(void) {
     initrd_make(rootfs->root, initrd->address, initrd->size);
 
     Vfs *devfs = NULL;
-    verify(devfs_init(rootfs, &devfs) == 0);
+    verify(devfs_init(&devfs) == 0);
 
     g_root_fs = rootfs;
+    g_devfs = devfs;
 }
 
 void init_tty(TermBackend (*new_backend)(void)) {
@@ -171,12 +174,28 @@ void init_pid1(void) {
     stdfile->vnode = g_main_tty_dev;
     stdfile->num_ref = 3;
     proc->num_running_threads = 1;
-    proc->next_fd = 3;
+    proc->next_fd = 4;
     proc->max_fd = proc->next_fd;
     FileDesc stddesc = {.file = stdfile, .flags = 0};
     proc->fd[0] = stddesc;
     proc->fd[1] = stddesc;
     proc->fd[2] = stddesc;
+
+    // We don't want to mount devfs right away, otherwise we would need to move
+    // it onto the (potentially different) file system that is mounted after the
+    // first stage of init runs. Instead, we pass it a capability to the raw
+    // devfs root, and let init then mount devfs on whatever media it uses as
+    // root
+    File *devfs_file = slab_alloc(sizeof(File));
+    assert(devfs_file != NULL);
+    vfs_vnode_hold(g_devfs->root);
+    devfs_file->vnode = g_devfs->root;
+    devfs_file->flags = O_DIRECTORY;
+    devfs_file->num_ref = 1;
+    // Only init's first stage needs it, so neither its children nor its next
+    // stage inherit it
+    FileDesc devfs_fd = {.file = devfs_file, .flags = FD_CLOEXEC};
+    proc->fd[3] = devfs_fd;
 
     verify(proc_new_session_nolock(proc, g_main_tty_dev) != NULL);
 

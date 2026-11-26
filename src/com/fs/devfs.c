@@ -136,6 +136,38 @@ static VnodeOps g_devfs_node_ops = {.open = devfs_open,
                                     .poll = devfs_poll,
                                     .mmap = devfs_mmap};
 
+// devfs is made at boot, so that drivers can register devices before anything
+// is mounted, and init mounts that one instance wherever its root ends up (see
+// init_pid1). Mounting it again elsewhere would need it to move
+static bool g_devfs_mounted = false;
+
+static int devfs_op_mount(Vnode *backing, u64 flags, Vfs **out_vfs) {
+    (void)backing;
+    *out_vfs = NULL;
+    // Read-only would make vfs_create fail, and with it every later register
+    if (flags & VFS_MOUNT_RDONLY) return EINVAL;
+
+    // mount_nolock cannot fail once this returns, so the flag is never reset
+    bool mounted = false;
+    if (!__atomic_compare_exchange_n(&g_devfs_mounted, &mounted, true, false,
+                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+        return EBUSY;
+    }
+
+    *out_vfs = g_devfs;
+    return 0;
+}
+
+// Unreachable, the root reference held by devfs_init keeps num_ext above 2
+static int devfs_op_unmount(Vfs *vfs) {
+    (void)vfs;
+    return EBUSY;
+}
+
+static FSType g_devfs_type = {.name = "devfs",
+                              .mount = devfs_op_mount,
+                              .unmount = devfs_op_unmount};
+
 // INTERFACE
 
 static int make_dev_attr(TmpFSSpecial *special, DevOps *devops, void *devdata,
@@ -198,23 +230,17 @@ int devfs_mkdir(Vnode *parent, const char *name, usize namelen,
 
 void *devfs_get_data(Vnode *node) { return dev_of(node)->devdata; }
 
-int devfs_init(Vfs *rootfs, Vfs **out_vfs) {
-    log("mounting devfs in /dev/");
+int devfs_init(Vfs **out_vfs) {
+    log("initializing devfs");
     *out_vfs = NULL;
-    Vnode *dir = NULL;
-    int ret = vfs_create(rootfs->root, "dev", 3, &VFS_ATTR(VNODE_TYPE_DIR),
-                         &dir);
-
-    // The initrd may already have /dev
-    if (ret == EEXIST) {
-        ret = vfs_lookup("dev", 3, rootfs->root, rootfs->root, 0, &dir);
-    }
-    if (ret != 0) return ret;
 
     Vfs *devfs = NULL;
-    ret = tmpfs_mount(dir, &devfs);
-    vfs_vnode_rel(dir);
+    int ret = tmpfs_mount(NULL, &devfs);
     if (ret != 0) return ret;
+
+    // A tmpfs that only mounts through g_devfs_type, see devfs_op_mount
+    devfs->type = &g_devfs_type;
+    verify(vfs_register_type(&g_devfs_type) == 0);
 
     // Never dropped, so devfs is never unmounted
     vfs_vnode_hold(devfs->root);

@@ -31,4 +31,4 @@ int devfs_register_anonymous(DevOps *devops, void *devdata, Vnode **out_vnode);
 int devfs_mkdir(Vnode *parent, const char *name, usize namelen,
                 Vnode **out_vnode);
 void *devfs_get_data(Vnode *node);
-int devfs_init(Vfs *rootfs, Vfs **out_vfs);
+int devfs_init(Vfs **out_vfs);

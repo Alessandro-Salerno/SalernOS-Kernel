@@ -789,7 +789,8 @@ int tmpfs_mount(Vnode *mountpoint, Vfs **out_vfs) {
 }
 
 int tmpfs_new_orphan(Vfs *vfs, const VnodeAttr *attr, Vnode **out_vnode) {
-    assert(&g_tmpfs_type == vfs->type);
+    // Not the type, because devfs is a tmpfs with its own
+    assert(vfs->root->ops == &g_tmpfs_node_ops);
     if (attr->type == VNODE_TYPE_DIR) {
         *out_vnode = NULL;
         return EINVAL;
