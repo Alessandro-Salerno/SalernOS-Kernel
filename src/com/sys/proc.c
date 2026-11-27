@@ -124,13 +124,13 @@ int proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root, Vnode *cwd,
     signal_sigmask_init(&proc->pending_signals);
 
     // Must be the last step that can fail
-    spinlock_acq(&g_processes.lock);
+    spinlock_acq(&g_pid_namespace_lock);
     int ret = EAGAIN;
     if (g_next_pid <= CONFIG_PROC_MAX) {
         ret = radixtree_put_nolock(&g_processes, g_next_pid - 1, proc);
     }
     if (ret == 0) proc->pid = g_next_pid++;
-    spinlock_rel(&g_processes.lock);
+    spinlock_rel(&g_pid_namespace_lock);
     if (ret != 0) {
         vfs_vnode_rel(root);
         vfs_vnode_rel(cwd);
@@ -681,6 +681,45 @@ ProcSession *proc_new_session_nolock(Proc *leader, Vnode *tty) {
     log_debug("pid=%d is now leader of session sid=%d", leader->pid,
               session->sid);
     return session;
+}
+
+// TODO: there's a race window here that is harmful, but we don't care for now.
+// A process can be registered by fork right after a pass has finished, and
+// therefore it will miss that one process. This can be harmful during shutdown
+// because the newly added process does not receive SIGTERM/SIGKILL and the
+// system syncs and shuts down without informing it. This is rare and the kernel
+// needs a rewrite anyway, plus POSIX hints at the fact that this can happen in
+// conforming systems (both historical and current) in the fork() man page,
+// saying (in RATIONALE):
+//      Many historical implementations have timing windows where a signal sent
+//      to a process group (for example, an interactive SIGINT) just prior to or
+//      during execution of fork() is delivered to the parent following the
+//      fork() but not to the child because the fork() code clears the child's
+//      set of pending signals. This volume of IEEE Std 1003.1-2001 does not
+//      require, or even permit, this behavior. However, it is pragmatic to
+//      expect that problems of this nature may continue to exist in
+//      implementations that appear to conform to this volume of IEEE Std
+//      1003.1-2001 and pass available verification suites. This behavior is
+//      only a consequence of the implementation failing to make the interval
+//      between signal generation and delivery totally invisible.
+// Thoguh I disagree with them on the diagnosis: the problem is not the
+// two-phase approach, but rather the fact that the child process is not at all
+// visible when the signal is supposed to be marked pending. It manifests itself
+// way before delivery
+int proc_iter(ProcIterFn *cb, void *arg) {
+    spinlock_acq(&g_pid_namespace_lock);
+    pid_t max_pid = g_next_pid;
+    spinlock_rel(&g_pid_namespace_lock);
+
+    for (pid_t pid = 1; pid < max_pid; pid++) {
+        Proc *proc = proc_get_by_pid(pid);
+        if (proc == NULL) continue;
+        int ret = cb(proc, arg);
+        proc_rel(proc);
+        if (ret != 0) return ret;
+    }
+
+    return 0;
 }
 
 void proc_init(void) {

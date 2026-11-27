@@ -180,6 +180,26 @@ int signal_send_to_proc_group(pid_t pgid, int sig, Proc *sender) {
     return 0;
 }
 
+struct IterArg {
+    int sig;
+    Proc *sender;
+};
+
+static int send_to_iter(Proc *proc, void *arg_) {
+    struct IterArg *arg = arg_;
+    if (proc->pid == 1 || proc == arg->sender) return 0;
+    int ret = send_to_proc(proc, arg->sig, arg->sender);
+    if (ret == ESRCH) return 0;
+    return ret;
+}
+
+int signal_send_to_all(int sig, Proc *sender) {
+    // This is technically a protection, though laughable
+    if (sender != NULL && sender->pid != 1) return EPERM;
+    struct IterArg arg = {.sig = sig, .sender = sender};
+    return proc_iter(send_to_iter, &arg);
+}
+
 int signal_send_to_thread_nolock(struct Thread *thread, int sig,
                                  struct Proc *sender) {
     (void)sender;

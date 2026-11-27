@@ -86,6 +86,8 @@ typedef struct Proc {
     char executable_path[CONFIG_PATH_MAX];
 } Proc;
 
+typedef int ProcIterFn(Proc *proc, void *arg);
+
 int proc_new(VMMContext *vmm_context, pid_t parent_pid, Vnode *root, Vnode *cwd,
              Proc **out_proc);
 void proc_destroy(Proc *proc);
@@ -143,6 +145,7 @@ int proc_join_group(Proc *proc, ProcGroup *group);
 int proc_join_group_nolock(Proc *proc, ProcGroup *group);
 ProcGroup *proc_get_group_by_pgid(pid_t pgid);
 ProcSession *proc_new_session_nolock(Proc *leader, Vnode *tty);
+int proc_iter(ProcIterFn *cb, void *arg);
 void proc_init(void);
 
 static inline void proc_hold(Proc *proc) {

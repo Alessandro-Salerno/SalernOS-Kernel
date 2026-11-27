@@ -27,11 +27,7 @@ SYSCALL(syscall_kill) {
     SyscallRet ret = SYSCALL_BASE_OK();
     Thread *curr_thread = cpu_get_thread();
     Proc *curr_proc = curr_thread->proc;
-
-    if (pid == -1) {
-        // TODO: implement signal to all
-        return SYSCALL_ERR(ENOSYS);
-    }
+    bool all = pid == -1;
 
     if (pid == 0) {
         spinlock_acq(&curr_proc->pg_lock);
@@ -48,6 +44,7 @@ SYSCALL(syscall_kill) {
     }
 
     if (pid > 0) ret.err = signal_send_to_proc(pid, sig, curr_proc);
+    else if (all) ret.err = signal_send_to_all(sig, curr_proc);
     else ret.err = signal_send_to_proc_group(-pid, sig, curr_proc);
 
 skip_send:

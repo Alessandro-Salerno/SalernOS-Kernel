@@ -59,6 +59,7 @@ typedef struct SigFrame {
 void signal_sigset_empty(SignalSet *set);
 int signal_send_to_proc(pid_t pid, int sig, struct Proc *sender);
 int signal_send_to_proc_group(pid_t pgid, int sig, struct Proc *sender);
+int signal_send_to_all(int sig, struct Proc *sender);
 // Publish under signal_lock, then call kick after dropping it. The caller
 // keeps the thread alive across both operations
 void signal_kick(struct Thread *thread);
