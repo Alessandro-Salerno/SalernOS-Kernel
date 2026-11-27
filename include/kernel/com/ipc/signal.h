@@ -71,5 +71,7 @@ int signal_set_mask_nolock(SigMask *mask, int how, SignalSet *set,
                            SignalSet *oset);
 int signal_set_mask(SigMask *mask, int how, SignalSet *set, SignalSet *oset,
                     Spinlock *signal_lock);
+void signal_swap_mask(struct Thread *thread, SignalSet *new_mask);
+void signal_restore_mask(struct Thread *thread);
 int signal_check_nolock(void);
 int signal_check(void);

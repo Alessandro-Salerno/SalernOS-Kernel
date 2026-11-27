@@ -128,7 +128,7 @@ SYSCALL(syscall_readdir);
 SYSCALL(syscall_chdir);
 SYSCALL(syscall_clock_get);
 SYSCALL(syscall_faccessat);
-SYSCALL(syscall_poll);
+SYSCALL(syscall_ppoll);
 SYSCALL(syscall_readlinkat);
 SYSCALL(syscall_symlinkat);
 SYSCALL(syscall_unlinkat);

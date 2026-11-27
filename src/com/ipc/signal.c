@@ -230,8 +230,10 @@ restart:
 
     spinlock_acq(&proc->signal_lock);
     int sig = signal_check_nolock();
+    SigMask uc_sigmask = thread->masked_signals;
+    if (thread->has_saved_sigmask) uc_sigmask = thread->saved_sigmask;
 
-    if (sig == SIGNAL_NONE) goto end;
+    if (sig == SIGNAL_NONE) goto no_delivery;
 
     log_debug("tid=%d received signal %d", thread->tid, sig);
 
@@ -269,11 +271,11 @@ restart:
             spinlock_rel(&proc->signal_lock);
             goto restart;
         } else if (g_signal_properties[sig] & SA_IGNORE) {
-            goto end;
+            goto no_delivery;
         }
     }
 
-    if (sigaction == NULL || sigaction->sa_action == SIG_IGN) goto end;
+    if (sigaction == NULL || sigaction->sa_action == SIG_IGN) goto no_delivery;
 
     void (*handler)(int) = sigaction->sa_action;
     void (*restorer)(void) = sigaction->sa_restorer;
@@ -281,7 +283,8 @@ restart:
     SigFrame kframe;
     memset(&kframe, 0, sizeof(kframe));
     kframe.info.si_signo = sig;
-    kframe.uc.uc_sigmask.sig[0] = thread->masked_signals;
+    kframe.uc.uc_sigmask.sig[0] = uc_sigmask;
+    thread->has_saved_sigmask = false;
 
     thread->masked_signals |= sigaction->sa_mask.sig[0];
 
@@ -308,7 +311,14 @@ restart:
     context_signal_trampoline(sframe, ctx, stack, handler, sig);
     return;
 
-end:
+no_delivery:
+    if (thread->has_saved_sigmask) {
+        thread->has_saved_sigmask = false;
+        thread->masked_signals = thread->saved_sigmask;
+        spinlock_rel(&proc->signal_lock);
+        // The original mask may unblock signals the temporary one held
+        goto restart;
+    }
     spinlock_rel(&proc->signal_lock);
     return;
 
@@ -346,6 +356,27 @@ noset:
     }
 
     return 0;
+}
+
+void signal_swap_mask(Thread *thread, SignalSet *new_mask) {
+    assert(thread->proc != NULL);
+    assert(!thread->has_saved_sigmask);
+
+    spinlock_acq(&thread->proc->signal_lock);
+    thread->has_saved_sigmask = true;
+    thread->saved_sigmask = thread->masked_signals;
+    thread->masked_signals = new_mask->sig[0];
+    spinlock_rel(&thread->proc->signal_lock);
+}
+
+void signal_restore_mask(Thread *thread) {
+    assert(thread->proc != NULL);
+    assert(thread->has_saved_sigmask);
+
+    spinlock_acq(&thread->proc->signal_lock);
+    thread->has_saved_sigmask = false;
+    thread->masked_signals = thread->saved_sigmask;
+    spinlock_rel(&thread->proc->signal_lock);
 }
 
 int signal_set_mask(SigMask *mask, int how, SignalSet *set, SignalSet *oset,

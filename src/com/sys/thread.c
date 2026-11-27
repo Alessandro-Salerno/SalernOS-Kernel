@@ -118,6 +118,8 @@ static Thread *new_thread(Proc *proc, Context ctx) {
 
     signal_sigmask_init(&thread->pending_signals);
     signal_sigmask_init(&thread->masked_signals);
+    thread->has_saved_sigmask = false;
+    signal_sigmask_init(&thread->saved_sigmask);
 
     if (proc != NULL) proc_add_thread(proc, thread);
 

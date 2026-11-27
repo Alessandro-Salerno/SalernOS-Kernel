@@ -63,6 +63,8 @@ typedef struct Thread {
 
     SigMask pending_signals;
     SigMask masked_signals;
+    bool has_saved_sigmask;
+    SigMask saved_sigmask;
 
     // Each outstanding interval-timer callout owns a thread reference
     ThreadTimer real_timer;

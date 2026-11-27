@@ -337,8 +337,9 @@ void syscall_init(void) {
     syscall_register(0x28, "faccessat", syscall_faccessat, 2, SYSCALL_TYPE_INT,
                      "dir_fd", SYSCALL_TYPE_STR, "path");
 
-    syscall_register(0x29, "ppoll", syscall_poll, 3, SYSCALL_TYPE_PTR, "fds",
-                     SYSCALL_TYPE_INT, "nfds", SYSCALL_TYPE_PTR, "timespec");
+    syscall_register(0x29, "ppoll", syscall_ppoll, 4, SYSCALL_TYPE_PTR, "fds",
+                     SYSCALL_TYPE_INT, "nfds", SYSCALL_TYPE_PTR, "timespec",
+                     SYSCALL_TYPE_PTR, "sigmask");
 
     syscall_register(0x2A, "readlinkat", syscall_readlinkat, 4,
                      SYSCALL_TYPE_INT, "dir_fd", SYSCALL_TYPE_STR, "path",

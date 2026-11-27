@@ -24,17 +24,18 @@ _Static_assert(CONFIG_OPEN_MAX * (sizeof(Polled) + sizeof(struct pollfd)) <=
                    PAGE_SIZE,
                "poll state must fit the thread scratch page");
 
-// CREDIT: vloxei64/ke
-// SYSCALL: poll(struct pollfd fds[], nfds_t nfds, struct timespec *timeout)
-SYSCALL(syscall_poll) {
+// SYSCALL: ppoll(struct pollfd fds[], nfds_t nfds, struct timespec *timeout,
+// const sigset_t *sigmask)
+SYSCALL(syscall_ppoll) {
     SYSCALL_UNUSED_CONTEXT();
-    SYSCALL_UNUSED_START(4);
+    SYSCALL_UNUSED_START(5);
 
     u64 syscall_start = cpu_get_timestamp();
 
     struct pollfd *fds = SYSCALL_ARG(void *, 1);
     nfds_t nfds = SYSCALL_ARG(nfds_t, 2);
     struct timespec *timeout = SYSCALL_ARG(void *, 3);
+    const SignalSet *usigmask = SYSCALL_ARG(void *, 4);
 
     if (nfds > CONFIG_OPEN_MAX) return SYSCALL_ERR(EINVAL);
 
@@ -59,6 +60,15 @@ SYSCALL(syscall_poll) {
         } else {
             delay_ns = ktimeout.tv_sec * NANOS_PER_SEC + ktimeout.tv_nsec;
         }
+    }
+
+    bool swapped_mask = false;
+    if (usigmask != NULL) {
+        SignalSet sigmask;
+        int copy_ret = memcpy_from_user(&sigmask, usigmask, sizeof(SignalSet));
+        if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
+        signal_swap_mask(curr_thread, &sigmask);
+        swapped_mask = true;
     }
 
     Polled *polleds = curr_thread->scratch;
@@ -175,6 +185,7 @@ SYSCALL(syscall_poll) {
     copy_ret = memcpy_to_user(fds, kfds, nfds * sizeof(*kfds));
     if (copy_ret != 0) return SYSCALL_ERR(copy_ret);
 
+    if (!interrupted && swapped_mask) signal_restore_mask(curr_thread);
     if (interrupted && count + invalid_count == 0) return SYSCALL_ERR(EINTR);
 
     return SYSCALL_OK(count + invalid_count);
